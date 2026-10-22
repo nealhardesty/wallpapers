@@ -2,8 +2,10 @@
 
 Toy animated wallpapers: snow, rain, falling leaves, fireflies, a fireplace,
 northern lights, a fish tank, a Halloween night, an advent calendar, a
-self-playing 8-bit adventure, and more. Each one is a canvas animation that
-fills the screen and does nothing else.
+self-playing 8-bit adventure, and more. Each one is a full-screen canvas
+animation with no page around it. Most just play; some also respond to you.
+Click to feed the fish, light the jack-o'-lanterns, or take over Pixel
+Quest's hero with the arrow keys.
 
 They run in three places:
 
@@ -12,8 +14,9 @@ They run in three places:
 - **Chrome's new tab**, through a small extension.
 - **Android's home screen**, as a live wallpaper (planned).
 
-Everything is plain HTML, CSS and JavaScript. There's no build step, and
-nothing is fetched from the network except the Bing image of the day.
+Everything is plain HTML, CSS and JavaScript, with no build step. Most
+wallpapers work fully offline. The online ones, such as the Bing image of
+the day, need no API keys.
 
 > **Status: early.** The wallpapers are being moved in from an older
 > project. The plan and roadmap are in [SPEC.md](SPEC.md).
@@ -31,20 +34,28 @@ nothing is fetched from the network except the Bing image of the day.
 
 ## Development
 
-Requirements: `make`, Node.js 20 or later, Python 3 (for `make serve`), and
-Google Chrome or Chromium (for the tests). There are no npm packages to
-install.
+Requirements: `make`, `git`, Node.js 20 or later, and Python 3 (for
+`make serve`). There are no npm packages to install.
+
+First time in a fresh clone:
+
+```sh
+make hooks   # audit every commit, commit message and push
+make ci      # lint, audit and test: the same thing CI runs
+```
 
 Run `make` to list every target.
 
 | Target | What it does |
 |---|---|
-| `make hooks` | Install the git pre-commit hook (runs `make audit`) |
-| `make serve` | Serve `web/` at http://localhost:8000 |
-| `make lint` | Syntax-check every script |
-| `make audit` | Scan the repo for anything private (see below) |
+| `make hooks` | Install the git hooks in `.githooks/` |
+| `make serve` | Serve `web/` at http://localhost:8000 (`PORT=` to change) |
+| `make lint` | Syntax-check every script and JSON file |
+| `make audit` | Scan the working tree for anything private (see below) |
+| `make audit-staged` | Scan only what is staged for commit |
+| `make audit-history` | Scan every file version ever committed |
 | `make test` | Run the tests |
-| `make ci` | Everything CI runs: lint, audit, test |
+| `make ci` | Everything CI runs: lint, audit, audit-history, test |
 | `make clean` | Remove build output |
 
 ### Keeping it public-safe
@@ -62,6 +73,16 @@ This is a public repo, so `make audit` fails if it finds any of these:
 Put your own personal terms (names, hostnames, employer) one per line in
 `.audit-denylist` at the repo root. Git ignores that file, so the list
 stays private while every commit is still checked against it.
+
+With `make hooks` installed, the audit runs three times:
+
+- before each commit, on exactly what's staged
+- on each commit message
+- before each push, on the full history, since a secret that was committed
+  and then deleted is still public once pushed
+
+Findings are redacted in the output. If one is a false positive, add
+`audit-allow: <reason>` on that line or the line above.
 
 ## License
 

@@ -1,0 +1,3 @@
+#!/bin/sh
+# Block a commit that would put anything private into this public repo.
+exec node tools/audit.mjs --staged

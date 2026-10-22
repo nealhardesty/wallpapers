@@ -1,7 +1,9 @@
 # wallpapers — SPEC
 
-A set of toy animated wallpapers: canvas animations that fill the screen and
-do nothing else. They are extracted from a private homepage project into this
+A set of toy animated wallpapers: full-screen canvas animations with no page
+chrome around them. Most are ambient; some are interactive (pointer and/or
+keys: fishtank, halloween, neko, advent, quest), and the wallpaper contract
+treats input as a first-class, optional capability (§4.1, §4.5). They are extracted from a private homepage project into this
 **public** repo; that project is then retired, so this repo becomes the
 wallpapers' only home. They run in three hosts:
 
@@ -25,11 +27,18 @@ wallpapers' only home. They run in three hosts:
 - **Zero build for the web app.** Plain ES2020 classic scripts and static
   files, served as-is. No bundler, no npm runtime deps. Node (built-ins
   only) and headless Chrome are used for tooling and tests.
-- **No network at runtime, except Bing.** Every wallpaper is self-contained
-  and works offline, from `file://`, from `chrome-extension://` and from
-  Android assets. The one exception is the Bing image of the day (§4.6),
-  which is network-backed by nature and falls back to a plain wallpaper
-  offline.
+- **Offline by default; network is an opt-in capability.** Most wallpapers
+  are self-contained and work offline, from `file://`, from
+  `chrome-extension://` and from Android assets. Wallpapers that are online
+  by nature declare it (`network`, §4.1). Today that is the Bing image of
+  the day (§4.6); a weather-forecast wallpaper is planned. Every online
+  wallpaper must:
+  - show a sensible offline or error state, never a blank screen or a spinner
+  - list the hosts it talks to, which feed the audit allowlist, the
+    extension's `host_permissions` and Android's `INTERNET` permission
+  - **never need an API key**, since this repo is public. Prefer keyless
+    APIs (e.g. Open-Meteo for weather), or proxy through something the
+    owner runs privately, configured outside the repo.
 - **Everything has a `make` target** (see `AGENTS.md`).
 
 ---
@@ -139,12 +148,39 @@ Wallpapers.register({
   icon: '🐠',
   scripts: ['wallpapers/fishtank/fishtank.js'],   // loaded on first use
   interactive: true,                              // wants pointer input
+  network: false,                                 // or { hosts: ['www.bing.com'] }
   cost: 'high',                                   // hint for mobile defaults
+});
+
+// web/wallpapers/fishtank/defaults.js — every default value, and nothing else
+Wallpapers.defaults('fishtank', {
+  configVersion: 1,
+  theme: 'planted',
+  fishCount: 32,
+  bubbles: true,
+  // …
 });
 
 // web/wallpapers/fishtank/fishtank.js — the existing manager, wrapped
 Wallpapers.implement('fishtank', host => new FishTankAnimationManager(host));
 ```
+
+**Defaults live in their own file** (`defaults.js`, one per wallpaper). It
+replaces today's mix of inline objects, `defaults()` methods and the
+homepage's global `CONFIG`.
+
+- It is a script, not JSON, because Chrome blocks `fetch()` of local files
+  from `file://`.
+- It loads lazily with the wallpaper's code.
+- Saved settings are stored as **overrides only**: the keys the user
+  actually changed. A retuned default then reaches everyone who never
+  touched that setting.
+- Reset means deleting the overrides.
+- The settings schema (§4.4) holds labels and ranges; `defaults.js` holds
+  values.
+- A test checks that every schema key has a default, every default has a
+  schema entry or is internal (`configVersion`), and every default is
+  inside its range.
 
 Instance interface (the existing managers already mostly have this shape):
 
@@ -429,8 +465,26 @@ A Node script (built-ins only) that fails on:
 
 It also reads an optional **gitignored** `.audit-denylist`, where the owner
 lists personal terms (names, hosts, employer). The public repo never contains
-them, but every local commit is checked against them. `gitleaks` also runs if
-installed. It is wired into a pre-commit hook (`make hooks`) and CI.
+them, but every local commit is checked against them.
+
+Implemented in `tools/audit.mjs` (Phase 1), with four modes:
+
+| Mode | Scans | Wired to |
+|---|---|---|
+| `--tree` | tracked + untracked, not ignored | `make audit`, CI |
+| `--staged` | the index, i.e. exactly what is being committed | pre-commit hook |
+| `--message FILE` | the commit message (messages are public too) | commit-msg hook |
+| `--history` | every blob reachable from any ref, so a leak that was committed and later deleted is still caught | pre-push hook, `make audit-history`, CI |
+
+- File paths are checked as well as contents; image metadata is checked
+  in PNG, JPEG and WebP.
+- Findings are **redacted** (`abc…(32)`), because CI logs are public.
+- A false positive is allowed with `audit-allow: <why>` on the line or
+  the line above, so every exception is visible in review.
+- `make hooks` sets `core.hooksPath` to the tracked `.githooks/`.
+- The URL allowlist lives in `URL_ALLOW` in `tools/audit.mjs`, keyed by path
+  prefix. Online wallpapers add their hosts there. Phase 3 adds a test that
+  it matches each wallpaper's `network.hosts` and the extension manifest.
 
 ### 7.3 Third-party content
 
@@ -474,9 +528,9 @@ phase can mostly run in parallel.
 
 ### Phase 1: Scaffold and safety net (before any code lands)
 
-- [ ] 1.1 Makefile with `help` (default), `serve`, `lint`, `audit`, `test`, `ci`, `hooks`, `clean`. → `make` lists them.
-- [ ] 1.2 `tools/audit.mjs` and `.audit-denylist` support (gitignored). → seeded violations fail; a clean tree passes.
-- [ ] 1.3 Pre-commit hook via `make hooks`; CI workflow running `make ci`. → CI is green on an empty `web/`.
+- [x] 1.1 Makefile with `help` (default), `serve`, `lint`, `audit`, `audit-staged`, `audit-history`, `test`, `ci`, `hooks`, `clean`. → `make` lists them.
+- [x] 1.2 `tools/audit.mjs` (§7.2) with `.audit-denylist` support (gitignored), and `tools/audit.test.mjs`: 14 tests, including end-to-end runs in throwaway git repos. → seeded violations fail; the clean tree and history pass. The tests caught a bug before it shipped: CGNAT addresses needed five octets to match.
+- [x] 1.3 `.githooks/` pre-commit, commit-msg and pre-push hooks via `make hooks`; `.github/workflows/ci.yml` runs `make ci` with full history. → green locally; CI on push.
 
 ### Phase 2: Import (fresh copy, allowlist only)
 
@@ -495,6 +549,7 @@ phase can mostly run in parallel.
 - [ ] 3.5 Fix the cherry-blossoms resize-listener leak; centralise the visibility pause.
 - [ ] 3.6 Deep links (`#id`, `#advent?date=`) and namespaced `wp:` storage.
 - [ ] 3.7 Seasonal pseudo-wallpaper (§4.2). → unit test over all 12 months and a rollover at midnight on the 1st with a faked clock.
+- [ ] 3.8 Extract every wallpaper's defaults into `defaults.js` (§4.1); store user settings as overrides only. → the defaults/schema consistency test passes for all wallpapers.
 
 ### Phase 4: The panel
 
@@ -532,7 +587,9 @@ phase can mostly run in parallel.
 
 - Shuffle/playlist: rotate wallpapers every N minutes.
 - `prefers-reduced-motion`: slow, calm defaults.
-- New wallpapers, since this repo is now their home.
+- New wallpapers, since this repo is now their home. Planned: a **weather
+  forecast** wallpaper (network; a keyless API; location from geolocation
+  or a typed city, kept only in local storage).
 
 ---
 

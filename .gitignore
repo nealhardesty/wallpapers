@@ -147,3 +147,6 @@ vite.config.ts.timestamp-*
 
 # Turbo Repo
 .turbo
+
+# Personal terms the audit must never let through (see README)
+.audit-denylist

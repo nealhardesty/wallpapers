@@ -1,0 +1,3 @@
+#!/bin/sh
+# Last stop before history becomes public: scan every blob ever committed.
+exec node tools/audit.mjs --history
