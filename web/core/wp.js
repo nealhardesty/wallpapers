@@ -20,7 +20,7 @@
 
     // URL parameters. They override for this page load only; nothing here
     // is ever persisted (SPEC §4.2).
-    WP.PARAMS = ['w', 'panel', 'date', 'theme', 'host', 'hud', 'thumb', 'tier'];
+    WP.PARAMS = ['w', 'panel', 'date', 'theme', 'host', 'hud', 'thumb', 'tier', 'seed'];
 
     WP.parseParams = search => {
         const query = new URLSearchParams(search);
@@ -68,10 +68,31 @@
         return host === 'android' ? WP.TIERS.medium : WP.TIERS.high;
     };
 
+    // A small seeded random generator (mulberry32), so ?seed= makes any
+    // wallpaper reproducible: thumbnails, tests, benchmarks.
+    WP.seededRandom = seed => {
+        let a = seed >>> 0;
+        return () => {
+            a = (a + 0x6d2b79f5) >>> 0;
+            let t = Math.imul(a ^ (a >>> 15), 1 | a);
+            t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+            return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+        };
+    };
+
     // Frame pacing: is a frame due at `now`, given the last one and a cap?
     // A small tolerance stops a 30 fps cap on a 60 Hz display from landing
     // on every third tick because of timer jitter.
     WP.frameDue = (now, last, fps) => !fps || now - last >= 1000 / fps - 2;
+
+    // Each wallpaper's defaults.js and settings.js register here, so the
+    // stage (which runs the wallpaper) and the player (whose panel edits
+    // its settings) read the same values and schema.
+    const defaultsById = {}, schemaById = {};
+    WP.defaults = (id, values) => { defaultsById[id] = values; };
+    WP.defaultsOf = id => defaultsById[id] || null;
+    WP.schema = (id, controls) => { schemaById[id] = controls; };
+    WP.schemaOf = id => schemaById[id] || null;
 
     // localStorage as JSON; quiet when storage is blocked or full.
     WP.store = {

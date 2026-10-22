@@ -6,8 +6,10 @@
 //
 // The player talks to the stage only through postMessage, because file://
 // frames can't reach into each other. Messages carry a `wp` field:
-//   stage → player  ready {id} · key {key} · error {message}
-//   player → stage  settings · tier {tier} · pause · resume
+//   stage → player  ready {id}, key {key}, rebuild, corner {near},
+//                   toast {text, ms}, error {message}
+//   player → stage  apply {config}, key {key, shift}, tier {tier},
+//                   pause, resume
 
 (function (WP) {
     'use strict';
@@ -15,6 +17,10 @@
     const params = WP.parseParams(location.search);
     const embedded = window.parent !== window;
     const tell = message => embedded && window.parent.postMessage({ wp: message.type, ...message }, '*');
+
+    // ?seed= replaces Math.random before any wallpaper code runs, so the
+    // same seed draws the same scene.
+    if (params.seed) Math.random = WP.seededRandom(Number(params.seed) || 1);
 
     // ---- Frame pacing ---------------------------------------------------
     // Every module animates through requestAnimationFrame, so wrapping it
@@ -83,12 +89,11 @@
     // ---- Settings -----------------------------------------------------------
     // defaults.js registers values with WP.defaults(); the stored form is
     // overrides only, under wp:<id> (SPEC §4.1).
-    const registered = {};
-    WP.defaults = (wallpaper, values) => { registered[wallpaper] = values; };
+    const own = () => WP.defaultsOf(id) || {};
     WP.settings = {
-        defaults: () => WP.mergeSettings(registered[id] || {}, null),
-        load: () => WP.mergeSettings(registered[id] || {}, read(`wp:${id}`)),
-        save: config => { if (!params.thumb) write(`wp:${id}`, WP.diffSettings(registered[id] || {}, config)); },
+        defaults: () => WP.mergeSettings(own(), null),
+        load: () => WP.mergeSettings(own(), read(`wp:${id}`)),
+        save: config => { if (!params.thumb) write(`wp:${id}`, WP.diffSettings(own(), config)); },
         reset: () => write(`wp:${id}`, null),
     };
 
@@ -106,6 +111,8 @@
 
     // ---- Pause ----------------------------------------------------------------
     WP.stage = {
+        // For a wallpaper's own settings button (Pixel Quest's touch controls).
+        openPanel() { tell({ type: 'key', key: ',' }); },
         pause() { paused = true; },
         resume() {
             if (!paused) return;
@@ -116,27 +123,6 @@
     };
     document.addEventListener('visibilitychange', () => document.hidden ? WP.stage.pause() : WP.stage.resume());
 
-    // ---- Legacy dialog support -------------------------------------------------
-    // The imported settings dialogs call this homepage helper. It goes away
-    // with them when the panel's schema renderer lands (Phase 4).
-    window.createInfoIcon = (description, defaultValue) => {
-        const icon = document.createElement('span');
-        icon.className = 'wp-info';
-        icon.textContent = 'ⓘ';
-        const tip = document.createElement('div');
-        const title = document.createElement('div');
-        title.textContent = description;
-        tip.appendChild(title);
-        if (defaultValue) {
-            const value = document.createElement('div');
-            value.className = 'wp-info-default';
-            value.textContent = `Default: ${defaultValue}`;
-            tip.appendChild(value);
-        }
-        icon.appendChild(tip);
-        return icon;
-    };
-
     // ---- Boot -------------------------------------------------------------------
     const loadScript = src => new Promise((resolve, reject) => {
         const script = document.createElement('script');
@@ -146,24 +132,56 @@
         document.head.appendChild(script);
     });
 
-    function openSettings() {
-        if (WP.stage.manager?.showConfigDialog) WP.stage.manager.showConfigDialog();
+    // Settings changed in the panel. A wallpaper that can take them live
+    // implements applySettings(config); any other is rebuilt by the player.
+    function apply(config) {
+        const manager = WP.stage.manager;
+        if (manager?.applySettings) manager.applySettings(config);
+        else tell({ type: 'rebuild' });
+    }
+
+    // The wallpaper's declared keys (catalog `keys`), run here, where the
+    // wallpaper lives. A toast can report what changed.
+    function wallpaperKey(name, shift) {
+        const binding = entry.keys?.find(k => k.keys.some(key => key.toLowerCase() === name.toLowerCase()));
+        if (!binding || !WP.stage.manager) return false;
+        const said = binding.run(WP.stage.manager, { shift, key: name, toast: (text, ms) => tell({ type: 'toast', text, ms }) });
+        if (typeof said === 'string') tell({ type: 'toast', text: said });
+        return true;
     }
 
     // Keys the player owns, wherever focus is. Everything else stays with
-    // the wallpaper.
-    const PLAYER_KEYS = new Set([',', '[', ']', 'f', 'F']);
+    // the wallpaper, including its declared keys.
+    const PLAYER_KEYS = new Set([',', '[', ']', 'f', 'F', '?', 'Escape']);
     window.addEventListener('keydown', event => {
-        if (event.ctrlKey || event.metaKey || event.altKey || event.target.closest?.('input, select, textarea')) return;
-        if (!PLAYER_KEYS.has(event.key)) return;
-        if (embedded) tell({ type: 'key', key: event.key });
-        else if (event.key === ',') openSettings();
+        if (params.thumb || event.ctrlKey || event.metaKey || event.altKey || event.target.closest?.('input, select, textarea')) return;
+        if (PLAYER_KEYS.has(event.key)) tell({ type: 'key', key: event.key });
+        else if (wallpaperKey(event.key, event.shiftKey)) event.preventDefault();
     });
+
+    // The corner: the player shows its gear while the pointer is near the
+    // top-right corner, and a long press there opens settings on a touch
+    // screen, where there's no keyboard.
+    const CORNER = 72, HOLD_MS = 600;
+    const inCorner = event => event.clientX > innerWidth - CORNER && event.clientY < CORNER;
+    let near = false, hold = null;
+    window.addEventListener('pointermove', event => {
+        if (params.thumb) return;
+        if (event.pointerType === 'mouse' && inCorner(event) !== near) tell({ type: 'corner', near: near = !near });
+        if (hold && Math.hypot(event.clientX - hold.x, event.clientY - hold.y) > 12) clearTimeout(hold.timer), hold = null;
+    }, { passive: true });
+    document.addEventListener('pointerleave', () => { if (near) tell({ type: 'corner', near: near = false }); });
+    window.addEventListener('pointerdown', event => {
+        if (event.pointerType === 'mouse' || !inCorner(event)) return;
+        hold = { x: event.clientX, y: event.clientY, timer: setTimeout(() => { hold = null; tell({ type: 'key', key: ',' }); }, HOLD_MS) };
+    }, { passive: true });
+    window.addEventListener('pointerup', () => { if (hold) clearTimeout(hold.timer), hold = null; });
 
     window.addEventListener('message', event => {
         if (event.source !== window.parent || !event.data?.wp) return;
         const message = event.data;
-        if (message.wp === 'settings') openSettings();
+        if (message.wp === 'apply') apply(message.config);
+        else if (message.wp === 'key') wallpaperKey(message.key, message.shift);
         else if (message.wp === 'pause') WP.stage.pause();
         else if (message.wp === 'resume') WP.stage.resume();
         else if (message.wp === 'tier' && WP.TIERS[message.tier]) {
@@ -184,7 +202,6 @@
             manager.start();
             WP.stage.ready = true;
             tell({ type: 'ready', id });
-            if (!embedded && params.panel === 'open') openSettings();
         } catch (error) {
             WP.stage.error = String(error?.stack || error);
             tell({ type: 'error', id, message: String(error?.message || error) });

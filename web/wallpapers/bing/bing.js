@@ -1,12 +1,12 @@
 // Bing image of the day wallpaper.
 // Shows Bing's daily photo (today or up to 7 days back) as the page
-// background, with a small title/date overlay and a day picker with preview.
-// Extracted from the homepage's WallpaperManager; the JSON archive API is
-// blocked cross-origin outside the extension, hence the proxy fallbacks
-// (to be replaced per host, see SPEC §4.6).
+// background, with a small title and date overlay. The day is picked in the
+// panel. Extracted from the homepage's WallpaperManager.
 
 class BingWallpaperManager {
-    constructor() {
+    constructor(host) {
+        this.host = host;
+        this.config = WP.settings.load();
         this.currentBingImageInfo = null;
         this.bingImageInfoOverlay = null;
         this.wallpaperRequest = 0;
@@ -32,15 +32,10 @@ class BingWallpaperManager {
         this.hideBingImageInfo();
     }
 
-    showConfigDialog() {
-        this.showBingConfigDialog();
-    }
-
     async loadBingWallpaper() {
         const request = ++this.wallpaperRequest;
         try {
-            const config = this.loadWallpaperConfig();
-            const offset = config.bingOffset || 0;
+            const offset = this.config.bingOffset || 0;
             const imageUrl = await this.fetchBingImageUrl(offset);
             if (request !== this.wallpaperRequest) return;
             
@@ -57,89 +52,69 @@ class BingWallpaperManager {
                 
                 console.log('✅ Bing wallpaper loaded:', imageUrl);
             } else {
-                console.error('❌ Failed to load Bing wallpaper');
-                this.clear(); // Fallback to blank
+                this.showUnavailable();
             }
         } catch (error) {
             if (request !== this.wallpaperRequest) return;
-            console.error('❌ Error loading Bing wallpaper:', error);
-            this.clear(); // Fallback to blank
+            console.warn('Bing image of the day unavailable:', error.message);
+            this.showUnavailable();
         }
     }
 
+    // Every source failed: say so, and what would help, rather than leave a
+    // blank screen.
+    showUnavailable() {
+        this.clear();
+        const fromDisk = location.protocol === 'file:';
+        const note = document.createElement('div');
+        note.id = 'bing-unavailable';
+        note.style.cssText = `
+            position: fixed; left: 20px; bottom: ${this.host.insets.bottom + 20}px; max-width: 320px;
+            padding: 10px 14px; border-radius: 10px; background: rgba(16, 18, 26, 0.75);
+            color: #c9cede; font: 13px/1.45 ui-rounded, system-ui, sans-serif;
+        `;
+        note.textContent = fromDisk
+            ? 'Bing’s photo can’t be fetched from a page opened from disk. Serve the folder (make serve), or allow public proxies in this wallpaper’s settings.'
+            : 'Bing’s photo can’t be reached right now. It will show once the connection is back.';
+        document.body.appendChild(note);
+        this.bingImageInfoOverlay = note;
+    }
+
+    // Where the archive JSON comes from depends on the host (SPEC §4.6):
+    //  1. bing.json beside the page, when it's served over http(s): GitHub
+    //     Pages, `make serve`, the container. `make bing-json` writes it.
+    //  2. Bing itself, which only an extension (host permission) or the
+    //     Android app can reach; browsers refuse it cross-origin.
+    //  3. Public CORS proxies, only if this wallpaper's settings allow them.
     async fetchBingImageUrl(offset = 0) {
         const bingUrl = `https://www.bing.com/HPImageArchive.aspx?format=js&idx=${offset}&n=1&mkt=en-US`;
-        
-        // Try direct access first (works in Chrome extensions with host_permissions)
-        try {
-            console.log('🔍 Trying direct access to Bing API (Chrome extension)');
-            console.log(`   URL: ${bingUrl}`);
-            
-            const response = await fetch(bingUrl);
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-            
-            const data = await response.json();
-            if (data && data.images && data.images.length > 0) {
-                console.log('✅ Direct access successful!');
-                return this.processBingImageData(data);
-            } else {
-                throw new Error('No images found in direct response');
-            }
-        } catch (error) {
-            console.warn('❌ Direct access failed:', error.message);
-            console.log('🔄 Falling back to CORS proxy...');
+        const sources = [];
+        if (/^https?:$/.test(location.protocol)) {
+            sources.push({ name: 'bing.json', url: 'bing.json', parse: data => ({ images: data.images.slice(offset, offset + 1) }) });
         }
-        
-        // Fallback to CORS proxy services if direct access fails
-        const corsProxies = [
-            {
-                name: 'corsproxy.io',
-                url: `https://corsproxy.io/?${encodeURIComponent(bingUrl)}`,
-                parser: (response) => response
-            },
-            {
-                name: 'allorigins.win',
-                url: `https://api.allorigins.win/get?url=${encodeURIComponent(bingUrl)}`,
-                parser: (response) => JSON.parse(response.contents)
-            },
-            {
-                name: 'cors-anywhere (Heroku)',
-                url: `https://cors-anywhere.herokuapp.com/${bingUrl}`,
-                parser: (response) => response
-            }
-        ];
-        
-        for (const proxy of corsProxies) {
+        sources.push({ name: 'Bing', url: bingUrl, parse: data => data });
+        if (this.config.useProxies) {
+            sources.push(
+                { name: 'corsproxy.io', url: `https://corsproxy.io/?${encodeURIComponent(bingUrl)}`, parse: data => data },
+                { name: 'allorigins.win', url: `https://api.allorigins.win/get?url=${encodeURIComponent(bingUrl)}`, parse: data => JSON.parse(data.contents) },
+                { name: 'cors-anywhere', url: `https://cors-anywhere.herokuapp.com/${bingUrl}`, parse: data => data },
+            );
+        }
+
+        for (const source of sources) {
             try {
-                console.log(`🔍 Trying CORS proxy: ${proxy.name}`);
-                console.log(`   URL: ${proxy.url}`);
-                
-                const response = await fetch(proxy.url);
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-                
-                const proxyData = await response.json();
-                const data = proxy.parser(proxyData);
-                
-                if (data && data.images && data.images.length > 0) {
-                    console.log(`✅ Success with ${proxy.name}`);
-                    return this.processBingImageData(data);
-                } else {
-                    throw new Error('No images found in response');
-                }
+                const response = await fetch(source.url);
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                const data = source.parse(await response.json());
+                if (data?.images?.length) return this.processBingImageData(data);
+                throw new Error('no images in the response');
             } catch (error) {
-                console.warn(`❌ ${proxy.name} failed:`, error.message);
-                continue; // Try next proxy
+                console.warn(`Bing via ${source.name} failed: ${error.message}`);
             }
         }
-        
-        // If all methods fail, throw error
-        throw new Error('All access methods failed (direct + CORS proxies)');
+        throw new Error(`no source worked (tried ${sources.map(s => s.name).join(', ')})`);
     }
-    
+
     processBingImageData(data) {
         if (data.images && data.images.length > 0) {
             const imageInfo = data.images[0];
@@ -172,18 +147,18 @@ class BingWallpaperManager {
         overlay.id = 'bing-image-info-overlay';
         overlay.style.cssText = `
             position: fixed;
-            bottom: 60px; /* Above status bar */
+            bottom: ${this.host.insets.bottom + 16}px;
             left: 20px;
             background: rgba(0, 0, 0, 0.7);
             backdrop-filter: blur(10px);
             border: 1px solid rgba(255, 255, 255, 0.2);
-            border-radius: 4px;
-            padding: 6px 8px;
+            border-radius: 8px;
+            padding: 8px 12px;
             color: white;
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            font-size: 6px;
+            font-size: 11px;
             line-height: 1.2;
-            max-width: 200px;
+            max-width: 320px;
             z-index: 1000;
             pointer-events: auto;
             text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.8);
@@ -197,10 +172,10 @@ class BingWallpaperManager {
         // Built with textContent: the title comes from Bing's JSON and must
         // never be parsed as HTML on an extension page.
         const titleRow = document.createElement('div');
-        titleRow.style.cssText = 'font-weight: 600; margin-bottom: 2px; font-size: 6.5px; color: white;';
+        titleRow.style.cssText = 'font-weight: 600; margin-bottom: 2px; font-size: 12px; color: white;';
         titleRow.textContent = this.currentBingImageInfo.title;
         const metaRow = document.createElement('div');
-        metaRow.style.cssText = 'opacity: 0.9; font-size: 5.5px;';
+        metaRow.style.cssText = 'opacity: 0.9; font-size: 11px;';
         metaRow.append(`📅 ${formattedDate}`);
         const dot = document.createElement('span');
         dot.style.cssText = 'margin: 0 4px; opacity: 0.5;';
@@ -263,202 +238,4 @@ class BingWallpaperManager {
         return date.toLocaleDateString('en-US', options);
     }
 
-    formatDateForDisplay(offset) {
-        // Calculate the date for the given offset
-        const today = new Date();
-        const targetDate = new Date(today);
-        targetDate.setDate(today.getDate() - offset);
-        
-        // Format as MM/DD
-        const month = (targetDate.getMonth() + 1).toString().padStart(2, '0');
-        const day = targetDate.getDate().toString().padStart(2, '0');
-        
-        return `${month}/${day}`;
-    }
-
-    async loadPreviewImage(offset, previewImage, previewLoading) {
-        try {
-            // Show loading state
-            previewLoading.style.display = 'flex';
-            previewImage.style.display = 'none';
-            
-            // Fetch the image URL for the given offset
-            const imageUrl = await this.fetchBingImageUrl(offset);
-            
-            if (imageUrl) {
-                // Create a new image to test loading
-                const testImage = new Image();
-                testImage.onload = () => {
-                    // Image loaded successfully
-                    previewImage.src = imageUrl;
-                    previewImage.style.display = 'block';
-                    previewLoading.style.display = 'none';
-                };
-                testImage.onerror = () => {
-                    // Image failed to load
-                    previewLoading.textContent = 'Preview unavailable';
-                    previewLoading.style.display = 'flex';
-                    previewImage.style.display = 'none';
-                };
-                testImage.src = imageUrl;
-            } else {
-                throw new Error('No image URL available');
-            }
-        } catch (error) {
-            console.error('Failed to load preview image:', error);
-            previewLoading.textContent = 'Preview unavailable';
-            previewLoading.style.display = 'flex';
-            previewImage.style.display = 'none';
-        }
-    }
-
-    showBingConfigDialog() {
-        if (document.getElementById('bing-config-modal')) return; // Prevent multiple dialogs
-        
-        // Create modal overlay
-        const modal = document.createElement('div');
-        modal.id = 'bing-config-modal';
-        modal.style.position = 'fixed';
-        modal.style.top = '0';
-        modal.style.left = '0';
-        modal.style.width = '100%';
-        modal.style.height = '100%';
-        modal.style.backgroundColor = 'rgba(0, 0, 0, 0.5)';
-        modal.style.display = 'flex';
-        modal.style.alignItems = 'center';
-        modal.style.justifyContent = 'center';
-        modal.style.zIndex = '1000';
-        
-        // Create dialog
-        const dialog = document.createElement('div');
-        dialog.style.backgroundColor = 'var(--dark-surface)';
-        dialog.style.border = '1px solid var(--gray-700)';
-        dialog.style.borderRadius = '0.5rem';
-        dialog.style.padding = '1.5rem';
-        dialog.style.minWidth = '400px';
-        dialog.style.maxWidth = '500px';
-        dialog.style.color = 'var(--light-text)';
-        
-        // Load current config
-        const currentConfig = this.loadWallpaperConfig();
-        const currentOffset = currentConfig.bingOffset || 0;
-        
-        dialog.innerHTML = `
-            <h3 style="margin: 0 0 1rem 0; color: var(--light-text); font-size: 1.25rem;">🌄 Bing Wallpaper Configuration</h3>
-            
-            <div style="margin-bottom: 1rem;">
-                <p style="margin: 0 0 0.5rem 0; color: var(--gray-300); font-size: 0.9rem;">
-                    Choose which day's Bing image to display:
-                </p>
-                <div style="display: flex; align-items: center; justify-content: center; gap: 1.5rem; margin: 1rem 0;">
-                    <button id="bing-prev-day" style="padding: 0.75rem 1rem; background: var(--gray-600); color: white; border: none; border-radius: 0.25rem; cursor: pointer; font-size: 1.2rem; font-weight: bold; min-width: 3rem;" title="Previous day">
-                        &lt;
-                    </button>
-                    <div style="text-align: center; min-width: 80px;">
-                        <div id="bing-current-date" style="font-size: 1.1rem; font-weight: 600; color: var(--light-text);">
-                            ${this.formatDateForDisplay(currentOffset)}
-                        </div>
-                        <div style="font-size: 0.8rem; color: var(--gray-400); margin-top: 0.25rem;">
-                            ${currentOffset === 0 ? 'Today' : currentOffset === 1 ? 'Yesterday' : `${currentOffset} days ago`}
-                        </div>
-                    </div>
-                    <button id="bing-next-day" style="padding: 0.75rem 1rem; background: var(--gray-600); color: white; border: none; border-radius: 0.25rem; cursor: pointer; font-size: 1.2rem; font-weight: bold; min-width: 3rem;" title="Next day">
-                        &gt;
-                    </button>
-                </div>
-                <div style="text-align: center; margin: 1rem 0;">
-                    <div id="bing-preview-container" style="display: inline-block; border: 2px solid var(--gray-600); border-radius: 0.5rem; overflow: hidden; background: var(--gray-800);">
-                        <img id="bing-preview-image" src="" alt="Bing wallpaper preview" style="width: 256px; height: 144px; object-fit: cover; display: none;">
-                        <div id="bing-preview-loading" style="width: 256px; height: 144px; display: flex; align-items: center; justify-content: center; color: var(--gray-400); font-size: 0.9rem;">
-                            Loading preview...
-                        </div>
-                    </div>
-                </div>
-                <p style="margin: 0.5rem 0 0 0; color: var(--gray-400); font-size: 0.8rem; text-align: center;">
-                    Navigate through the last 7 days of Bing images
-                </p>
-            </div>
-            
-            <div style="display: flex; gap: 0.5rem; margin-top: 1.5rem; justify-content: flex-end;">
-                <button id="cancel-bing-config" style="padding: 0.5rem 1rem; background: var(--gray-600); color: white; border: none; border-radius: 0.25rem; cursor: pointer;">
-                    Cancel
-                </button>
-                <button id="apply-bing-config" style="padding: 0.5rem 1rem; background: var(--accent-blue); color: white; border: none; border-radius: 0.25rem; cursor: pointer;">
-                    Save
-                </button>
-            </div>
-        `;
-        
-        modal.appendChild(dialog);
-        document.body.appendChild(modal);
-        
-        // Add event listeners for arrow navigation
-        let selectedOffset = currentConfig.bingOffset || 0;
-        const maxOffset = 7;
-        
-        const updateDisplay = () => {
-            const dateDisplay = dialog.querySelector('#bing-current-date');
-            const descriptionDisplay = dialog.querySelector('#bing-current-date').nextElementSibling;
-            const prevButton = dialog.querySelector('#bing-prev-day');
-            const nextButton = dialog.querySelector('#bing-next-day');
-            const previewImage = dialog.querySelector('#bing-preview-image');
-            const previewLoading = dialog.querySelector('#bing-preview-loading');
-            
-            dateDisplay.textContent = this.formatDateForDisplay(selectedOffset);
-            descriptionDisplay.textContent = selectedOffset === 0 ? 'Today' : selectedOffset === 1 ? 'Yesterday' : `${selectedOffset} days ago`;
-            
-            // Enable/disable buttons based on limits
-            prevButton.disabled = selectedOffset >= maxOffset;
-            nextButton.disabled = selectedOffset <= 0;
-            prevButton.style.opacity = selectedOffset >= maxOffset ? '0.5' : '1';
-            nextButton.style.opacity = selectedOffset <= 0 ? '0.5' : '1';
-            
-            // Load preview image
-            this.loadPreviewImage(selectedOffset, previewImage, previewLoading);
-        };
-        
-        // Initialize display
-        updateDisplay();
-        
-        // Handle arrow button clicks
-        dialog.querySelector('#bing-prev-day').addEventListener('click', () => {
-            if (selectedOffset < maxOffset) {
-                selectedOffset++;
-                updateDisplay();
-            }
-        });
-        
-        dialog.querySelector('#bing-next-day').addEventListener('click', () => {
-            if (selectedOffset > 0) {
-                selectedOffset--;
-                updateDisplay();
-            }
-        });
-        
-        // Handle button clicks
-        dialog.querySelector('#cancel-bing-config').addEventListener('click', () => {
-            document.body.removeChild(modal);
-        });
-        
-        dialog.querySelector('#apply-bing-config').addEventListener('click', () => {
-            this.saveBingConfig(selectedOffset);
-            this.loadBingWallpaper(); // Reload with new offset
-            document.body.removeChild(modal);
-        });
-        
-        // Close on overlay click
-        modal.addEventListener('click', (e) => {
-            if (e.target === modal) {
-                document.body.removeChild(modal);
-            }
-        });
-    }
-
-    loadWallpaperConfig() {
-        return WP.settings.load();
-    }
-
-    saveBingConfig(offset) {
-        WP.settings.save({ ...this.loadWallpaperConfig(), bingOffset: offset });
-    }
 }

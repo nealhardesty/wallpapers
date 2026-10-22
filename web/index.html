@@ -6,12 +6,14 @@
 <meta name="description" content="Toy animated wallpapers: snow, rain, fireflies, a fish tank, a self-playing 8-bit adventure and more.">
 <title>Wallpapers</title>
 <!-- The player. Nothing shows but the wallpaper.
-       ,      settings
+       ,      wallpapers and settings (or hold the top-right corner)
        [ ]    previous / next wallpaper
        f      fullscreen
-     URL: ?w=<id> (this load only) · ?panel=open · ?tier=low|medium|high
+       ?      all keys
+     URL: ?w=<id> (this load only), ?panel=open, ?tier=low|medium|high.
      See SPEC.md §4. -->
 <link rel="stylesheet" href="core/theme.css">
+<link rel="stylesheet" href="core/panel.css">
 <style>
   iframe.stage {
     position: fixed;
@@ -45,10 +47,13 @@
 </style>
 <script src="core/wp.js"></script>
 <script src="wallpapers/catalog.js"></script>
+<script src="core/settings.js"></script>
+<script src="core/panel.js"></script>
 <script src="core/player.js"></script>
 </head>
 <body>
 <div id="toast" role="status" aria-live="polite"></div>
+<button id="gear" class="gear" type="button" aria-label="Wallpapers and settings (,)">⚙︎</button>
 <script>WP.player.start();</script>
 </body>
 </html>

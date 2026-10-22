@@ -1,7 +1,415 @@
-// Neko Animation Module
-// Imported without its sprites (assets/neko/), whose provenance and licensing
-// could not be established (SPEC §7.3). It stays disabled until the cat is
-// redrawn in code (roadmap 4.6); the behaviour below is what gets kept.
+// Neko: a cat that chases the pointer (or a finger), then washes, yawns,
+// scratches and naps. Behaviour after the classic Neko and oneko; the art is
+// our own, drawn in code (SPEC §7.3).
+// The cat, drawn in code: 16x16 pixel grids in the spirit of the original
+// oneko, coloured per coat. Letters: . clear, o outline, w fur, c light fur
+// (muzzle, chest, paws), p pink (ears, nose), e eyes. Left-facing poses are
+// mirrors of the right-facing ones.
+const NekoSprites = {
+    coats: {
+        classic: { name: "Classic white", o: "#1c1c22", w: "#fafaf6", c: "#ffffff", p: "#f096aa", e: "#1c1c22" },
+        black: { name: "Black", o: "#6e7284", w: "#26262e", c: "#34343e", p: "#c8788c", e: "#e6c85a" },
+        orange: { name: "Orange tabby", o: "#462814", w: "#f0a048", c: "#fff0dc", p: "#f096a0", e: "#283c1e", stripe: "#ce7628" },
+        gray: { name: "Grey tabby", o: "#282a30", w: "#9ca2aa", c: "#e8eaee", p: "#eb96a5", e: "#325a3c", stripe: "#707680" },
+        calico: { name: "Calico", o: "#28221e", w: "#faf8f0", c: "#ffffff", p: "#f096a5", e: "#3c5028", patch1: "#e8913a", patch2: "#2e2c32" },
+        tuxedo: { name: "Tuxedo", o: "#6e7284", w: "#24242c", c: "#fafafa", p: "#eb91a0", e: "#dcbe50" },
+        siamese: { name: "Siamese", o: "#3c2a22", w: "#f3e6d3", c: "#faf2e6", p: "#d28c8c", e: "#4682c8", point: "#6c4a3a" },
+        cow: { name: "Cow cat", o: "#1e1e22", w: "#fcfcfa", c: "#ffffff", p: "#f096aa", e: "#1e1e22", patch2: "#1e1e24" },
+    },
+
+    art: {
+        sit: [
+            '................',
+            '..o..........o..',
+            '.owo........owo.',
+            '.opwo......owpo.',
+            '.owwwoooooowwwo.',
+            '.owwwwwwwwwwwwo.',
+            'owwwwwwwwwwwwwwo',
+            'owweewwwwwweewwo',
+            'owwwwwwwwwwwwwwo',
+            '.owwwwcppcwwwwo.',
+            '..owwwccccwwwo..',
+            '..owwccccccwwo..',
+            '.owwwccccccwwwoo',
+            '.owwwccccccwwwow',
+            '.owcccowwocccwoo',
+            '..ooo.oooo.ooo..',
+        ],
+        yawn: [
+            '................',
+            '..o..........o..',
+            '.owo........owo.',
+            '.opwo......owpo.',
+            '.owwwoooooowwwo.',
+            '.owwwwwwwwwwwwo.',
+            'owwwwwwwwwwwwwwo',
+            'owwooowwwwooowwo',
+            'owwwwwwwwwwwwwwo',
+            '.owwwwcooocwwwo.',
+            '..owwwcopocwwo..',
+            '..owwccooocwwo..',
+            '.owwwccccccwwwoo',
+            '.owwwccccccwwwow',
+            '.owcccowwocccwoo',
+            '..ooo.oooo.ooo..',
+        ],
+        wash: [
+            '................',
+            '..o..........o..',
+            '.owo........owo.',
+            '.opwo......owpo.',
+            '.owwwoooooowwwo.',
+            '.owwwwwwwwwwwwo.',
+            'owwwwwwwwwwwwwwo',
+            'owwooowwwwooowwo',
+            'owwwwwwwwocccowo',
+            '.owwwwcppocccco.',
+            '..owwwccccocccwo',
+            '..owwccccccoowwo',
+            '.owwwccccccwwwoo',
+            '.owwwccccccwwwow',
+            '.owcccowwowwwwoo',
+            '..ooo.oooo.ooo..',
+        ],
+        scratch1: [
+            '................',
+            '..o..........o..',
+            '.owo........owo.',
+            '.opwo......owpo.',
+            '.owwwoooooowwwo.',
+            '.owwwwwwwwwwwwoo',
+            'owwwwwwwwwwwwocc',
+            'owwooowwwwooowcc',
+            'owwwwwwwwwwwwwco',
+            '.owwwwcppcwwwcco',
+            '..owwwccccwwwco.',
+            '..owwccccccwwo..',
+            '.owwwccccccwwo..',
+            '.owwwccccccwwo..',
+            '.owcccowwocccwoo',
+            '..ooo.oooo.ooo..',
+        ],
+        scratch2: [
+            '................',
+            '..o..........o..',
+            '.owo........owo.',
+            '.opwo......owpo.',
+            '.owwwoooooowwwo.',
+            '.owwwwwwwwwwwwo.',
+            'owwwwwwwwwwwwwoo',
+            'owwooowwwwooowcc',
+            'owwwwwwwwwwwwwcc',
+            '.owwwwcppcwwwwco',
+            '..owwwccccwwwcco',
+            '..owwccccccwwco.',
+            '.owwwccccccwwo..',
+            '.owwwccccccwwo..',
+            '.owcccowwocccwoo',
+            '..ooo.oooo.ooo..',
+        ],
+        sleep1: [
+            '................',
+            '................',
+            '................',
+            '................',
+            '................',
+            '................',
+            '......oooooo....',
+            '....oowwwwwwoo..',
+            '...owwwwwwwwwwo.',
+            '..owwwwwwwwwwwwo',
+            '.o.owwwwwwwwwwwo',
+            'owoowwwwwwwwwwwo',
+            'owwwooowwwwwwwo.',
+            'opwwwwwooooooo..',
+            '.occccwwwwwwo...',
+            '..ooooooooooo...',
+        ],
+        sleep2: [
+            '................',
+            '................',
+            '................',
+            '................',
+            '................',
+            '......oooooo....',
+            '....oowwwwwwoo..',
+            '...owwwwwwwwwwo.',
+            '..owwwwwwwwwwwwo',
+            '..owwwwwwwwwwwwo',
+            '.o.owwwwwwwwwwwo',
+            'owoowwwwwwwwwwwo',
+            'owwwooowwwwwwwo.',
+            'opwwwwwooooooo..',
+            '.occccwwwwwwo...',
+            '..ooooooooooo...',
+        ],
+        right1: [
+            '................',
+            '................',
+            '...........o.o..',
+            '..........owowo.',
+            '..........owpwwo',
+            '..oo.....owwwwwo',
+            '.owwooooowwwewwo',
+            '.o.owwwwwwwwwcpo',
+            '....owwwwwwwwcco',
+            '...owwwwwwwwwoo.',
+            '...owwwwwwwwwo..',
+            '...owcoooowcwo..',
+            '..owco....oco...',
+            '..oco.....oco...',
+            '..oo.......oo...',
+            '................',
+        ],
+        right2: [
+            '................',
+            '................',
+            '...........o.o..',
+            '..........owowo.',
+            '..........owpwwo',
+            '.........owwwwwo',
+            '..oooooooowwewwo',
+            '.owwwwwwwwwwwcpo',
+            'o.owwwwwwwwwwcco',
+            '..owwwwwwwwwwoo.',
+            '..owwwwwwwwwwo..',
+            '...oco.oooocwo..',
+            '....oco..owco...',
+            '.....oco.oco....',
+            '......oo.oo.....',
+            '................',
+        ],
+        up1: [
+            '................',
+            '..o..........o..',
+            '.owo........owo.',
+            '.owwo......owwo.',
+            '.owwwoooooowwwo.',
+            '.owwwwwwwwwwwwo.',
+            'owwwwwwwwwwwwwwo',
+            'owwwwwwwwwwwwwwo',
+            '.owwwwwwwwwwwwo.',
+            '..owwwwwwwwwwo..',
+            '..owwwwwwwwwwo..',
+            '..owwwwwwwwwwo..',
+            '..owwwwwwwwwwo..',
+            '..ocwoowwoowco..',
+            '..oco..ow..ooo..',
+            '...o...oo.....o.',
+        ],
+        up2: [
+            '................',
+            '..o..........o..',
+            '.owo........owo.',
+            '.owwo......owwo.',
+            '.owwwoooooowwwo.',
+            '.owwwwwwwwwwwwo.',
+            'owwwwwwwwwwwwwwo',
+            'owwwwwwwwwwwwwwo',
+            '.owwwwwwwwwwwwo.',
+            '..owwwwwwwwwwo..',
+            '..owwwwwwwwwwo..',
+            '..owwwwwwwwwwo..',
+            '..owwwwwwwwwwo..',
+            '..owcoowwoocwo..',
+            '..ooo..wo..oco..',
+            '..o.....oo..o...',
+        ],
+        down1: [
+            '................',
+            '..o..........o..',
+            '.owo........owo.',
+            '.opwo......owpo.',
+            '.owwwoooooowwwo.',
+            '.owwwwwwwwwwwwo.',
+            'owwwwwwwwwwwwwwo',
+            'owweewwwwwweewwo',
+            'owwwwwwwwwwwwwwo',
+            '.owwwwcppcwwwwo.',
+            '..owwwccccwwwo..',
+            '..owwccccccwwo..',
+            '..owwccccccwwo..',
+            '..ocwoowwoowco..',
+            '..oco..oo..ooo..',
+            '...o............',
+        ],
+        down2: [
+            '................',
+            '..o..........o..',
+            '.owo........owo.',
+            '.opwo......owpo.',
+            '.owwwoooooowwwo.',
+            '.owwwwwwwwwwwwo.',
+            'owwwwwwwwwwwwwwo',
+            'owweewwwwwweewwo',
+            'owwwwwwwwwwwwwwo',
+            '.owwwwcppcwwwwo.',
+            '..owwwccccwwwo..',
+            '..owwccccccwwo..',
+            '..owwccccccwwo..',
+            '..owcoowwoocwo..',
+            '..ooo..oo..oco..',
+            '............o...',
+        ],
+        upclaw1: [
+            '..oo........oo..',
+            '.occo......occo.',
+            '.owco......ocwo.',
+            '.owwo......owwo.',
+            '.owwwoooooowwwo.',
+            '.owwwwwwwwwwwwo.',
+            'owwwwwwwwwwwwwwo',
+            'owwwwwwwwwwwwwwo',
+            '.owwwwwwwwwwwwo.',
+            '..owwwwwwwwwwo..',
+            '..owwwwwwwwwwo..',
+            '..owwwwwwwwwwo..',
+            '..owwwwwwwwwwo..',
+            '..owwoowwoowwo..',
+            '..ocoo.oo.ooco..',
+            '...o........o...',
+        ],
+        upclaw2: [
+            '................',
+            '..oo........oo..',
+            '.occo......occo.',
+            '.owco......ocwo.',
+            '.owwwoooooowwwo.',
+            '.owwwwwwwwwwwwo.',
+            'owwwwwwwwwwwwwwo',
+            'owwwwwwwwwwwwwwo',
+            '.owwwwwwwwwwwwo.',
+            '..owwwwwwwwwwo..',
+            '..owwwwwwwwwwo..',
+            '..owwwwwwwwwwo..',
+            '..owwwwwwwwwwo..',
+            '..owwoowwoowwo..',
+            '..ocoo.oo.ooco..',
+            '...o........o...',
+        ],
+        rightclaw1: [
+            '..............oo',
+            '...........o.occ',
+            '..........owoocc',
+            '..........owpwwo',
+            '.........owwwwwo',
+            '.........owwewwo',
+            '........owwwwcpo',
+            '........owwwwcco',
+            '.......owwwwwoco',
+            '.......owwwwwocc',
+            '......owwwwwwooo',
+            '...oo.owwwwwwo..',
+            '..owwoowwwwwwo..',
+            '..o..owcooocwo..',
+            '.....oco...oco..',
+            '.....oo.....oo..',
+        ],
+        rightclaw2: [
+            '................',
+            '...........o.ooo',
+            '..........owoocc',
+            '..........owpwoc',
+            '.........owwwwwo',
+            '.........owwewwo',
+            '........owwwwcpo',
+            '........owwwwcco',
+            '.......owwwwwooo',
+            '.......owwwwwocc',
+            '......owwwwwwoco',
+            '...oo.owwwwwwo.o',
+            '..owwoowwwwwwo..',
+            '..o..owcooocwo..',
+            '.....oco...oco..',
+            '.....oo.....oo..',
+        ],
+        downclaw1: [
+            '................',
+            '..o..........o..',
+            '.owo........owo.',
+            '.opwo......owpo.',
+            '.owwwoooooowwwo.',
+            '.owwwwwwwwwwwwo.',
+            'owwwwwwwwwwwwwwo',
+            'owweewwwwwweewwo',
+            'owwwwwwwwwwwwwwo',
+            '.owwwwcppcwwwwo.',
+            '..owwwccccwwwo..',
+            '..owwccccccwwo..',
+            '.owwccccccccwwo.',
+            'occco......occco',
+            'o.c.o......o.c.o',
+            '................',
+        ],
+        downclaw2: [
+            '................',
+            '..o..........o..',
+            '.owo........owo.',
+            '.opwo......owpo.',
+            '.owwwoooooowwwo.',
+            '.owwwwwwwwwwwwo.',
+            'owwwwwwwwwwwwwwo',
+            'owweewwwwwweewwo',
+            'owwwwwwwwwwwwwwo',
+            '.owwwwcppcwwwwo.',
+            '..owwwccccwwwo..',
+            '..owwccccccwwo..',
+            '.owwccccccccwwo.',
+            '.occo......occo.',
+            '.oco........oco.',
+            '................',
+        ],
+    },
+
+    // Fur gets the coat's pattern: tabby bands, siamese points, patches.
+    colour(coat, letter, x, y) {
+        if (letter === 'w') {
+            if (coat.stripe && y % 3 === 0) return coat.stripe;
+            if (coat.point && (y <= 4 || y >= 14)) return coat.point;
+            const cell = (((x / 4) | 0) * 73856093 ^ ((y / 4) | 0) * 19349663) >>> 0;
+            if (coat.patch1 && cell % 7 === 0) return coat.patch1;
+            if (coat.patch2 && cell % 5 === 1) return coat.patch2;
+        }
+        return coat[letter];
+    },
+
+    paint(rows, coat, mirror) {
+        const canvas = document.createElement('canvas');
+        canvas.width = canvas.height = 16;
+        const ctx = canvas.getContext('2d');
+        rows.forEach((row, y) => [...row].forEach((letter, x) => {
+            if (letter === '.') return;
+            ctx.fillStyle = this.colour(coat, letter, x, y);
+            ctx.fillRect(mirror ? 15 - x : x, y, 1, 1);
+        }));
+        return canvas;
+    },
+
+    // Every sprite name the behaviour code asks for.
+    build(coatName) {
+        const coat = this.coats[coatName] || this.coats.classic;
+        const a = this.art;
+        const out = {};
+        const set = (name, rows, mirror = false) => { out[name] = this.paint(rows, coat, mirror); };
+        set('awake', a.sit);
+        for (const fp of ['up', 'upright', 'right', 'downright', 'down', 'downleft', 'left', 'upleft']) out[`fp_${fp}`] = out.awake;
+        set('sleep1', a.sleep1); set('sleep2', a.sleep2);
+        set('yawn2', a.sit); set('yawn3', a.yawn);
+        set('scratch1', a.scratch1); set('scratch2', a.scratch2);
+        set('wash2', a.wash);
+        for (const n of [1, 2]) {
+            set(`up${n}`, a[`up${n}`]); set(`down${n}`, a[`down${n}`]);
+            set(`right${n}`, a[`right${n}`]); set(`left${n}`, a[`right${n}`], true);
+            out[`upright${n}`] = out[`downright${n}`] = out[`right${n}`];
+            out[`upleft${n}`] = out[`downleft${n}`] = out[`left${n}`];
+            set(`upclaw${n}`, a[`upclaw${n}`]); set(`downclaw${n}`, a[`downclaw${n}`]);
+            set(`rightclaw${n}`, a[`rightclaw${n}`]); set(`leftclaw${n}`, a[`rightclaw${n}`], true);
+        }
+        return out;
+    },
+};
+
 class NekoAnimationManager {
     constructor() {
         this.canvas = null;
@@ -80,105 +488,29 @@ class NekoAnimationManager {
         if (!this.canvas) return;
         this.canvas.width = window.innerWidth;
         this.canvas.height = window.innerHeight;
+        // Resizing resets the context, smoothing included: keep pixels crisp.
+        this.ctx.imageSmoothingEnabled = false;
     }
 
     async loadSprites() {
-        const themeBasePath = `assets/neko/${this.config.theme}/`;
-
-        // Define sprite mappings based on original neko states
-        const spriteMap = {
-            // Basic states
-            awake: 'Awake.ico',
-            sleep1: 'sleep1.ico',
-            sleep2: 'sleep2.ico',
-            yawn2: 'yawn2.ico',
-            yawn3: 'yawn3.ico',
-            scratch1: 'scratch1.ico',
-            scratch2: 'scratch2.ico',
-            wash2: 'wash2.ico',
-
-            // Movement sprites
-            up1: 'Up1.ico',
-            up2: 'Up2.ico',
-            upright1: 'Upright1.ico',
-            upright2: 'Upright2.ico',
-            right1: 'Right1.ico',
-            right2: 'right2.ico',
-            downright1: 'Downright1.ico',
-            downright2: 'downright2.ico',
-            down1: 'Down1.ico',
-            down2: 'down2.ico',
-            downleft1: 'downleft1.ico',
-            downleft2: 'Downleft2.ico',
-            left1: 'left1.ico',
-            left2: 'left2.ico',
-            upleft1: 'Upleft1.ico',
-            upleft2: 'Upleft2.ico',
-
-            // Claw sprites
-            upclaw1: 'upclaw1.ico',
-            upclaw2: 'upclaw2.ico',
-            rightclaw1: 'rightclaw1.ico',
-            rightclaw2: 'Rightclaw2.ico',
-            downclaw1: 'downclaw1.ico',
-            downclaw2: 'downclaw2.ico',
-            leftclaw1: 'leftclaw1.ico',
-            leftclaw2: 'leftclaw2.ico',
-
-            // Footprint sprites (when stationary)
-            fp_up: 'fp_up.ico',
-            fp_upright: 'fp_upright.ico',
-            fp_right: 'fp_right.ico',
-            fp_downright: 'fp_downright.ico',
-            fp_down: 'fp_down.ico',
-            fp_downleft: 'fp_downleft.ico',
-            fp_left: 'fp_left.ico',
-            fp_upleft: 'fp_upleft.ico'
-        };
-
-        this.sprites = {};
-
-        // Load all sprites
-        for (const [key, filename] of Object.entries(spriteMap)) {
-            try {
-                const img = new Image();
-                await new Promise((resolve, reject) => {
-                    img.onload = resolve;
-                    img.onerror = reject;
-                    img.src = themeBasePath + filename;
-                });
-                this.sprites[key] = img;
-            } catch (error) {
-                console.warn(`Failed to load sprite ${filename}:`, error);
-                // Use a fallback or create a simple colored rectangle
-                this.sprites[key] = this.createFallbackSprite();
-            }
-        }
-    }
-
-    createFallbackSprite() {
-        const canvas = document.createElement('canvas');
-        canvas.width = 32;
-        canvas.height = 32;
-        const ctx = canvas.getContext('2d');
-        ctx.fillStyle = '#FF6B6B';
-        ctx.fillRect(0, 0, 32, 32);
-        ctx.fillStyle = '#FFF';
-        ctx.font = '20px Arial';
-        ctx.textAlign = 'center';
-        ctx.fillText('🐱', 16, 22);
-        return canvas;
+        this.sprites = NekoSprites.build(this.config.coat);
     }
 
     setupMouseTracking() {
-        document.addEventListener('mousemove', (e) => {
+        // Pointer events, so a finger works as well as a mouse.
+        const follow = (e) => {
             this.mousePosition.x = e.clientX;
             this.mousePosition.y = e.clientY;
             this.lastMouseMove = Date.now();
-        });
+        };
+        document.addEventListener('pointermove', follow);
+        document.addEventListener('pointerdown', follow);
     }
 
     initializeNeko() {
+        // Until a pointer moves, the cat settles in the middle rather than
+        // chasing the top-left corner.
+        this.mousePosition = { x: window.innerWidth / 2, y: window.innerHeight / 2 };
         this.neko = {
             x: window.innerWidth / 2,
             y: window.innerHeight / 2,
@@ -229,8 +561,10 @@ class NekoAnimationManager {
         const dy = this.mousePosition.y - this.neko.y;
         const distance = Math.sqrt(dx * dx + dy * dy);
 
-        // Update state based on mouse proximity and time
-        if (distance < 32) {
+        // Update state based on mouse proximity and time. Clawing at the
+        // pointer only while it's recent: a resting pointer would otherwise
+        // keep the cat clawing forever, never idling or sleeping.
+        if (distance < 32 && timeSinceMouseMove < this.config.idleTimeout) {
             // Close to mouse - claw or scratch
             if (this.neko.state !== this.States.CLAW && this.neko.state !== this.States.SCRATCH) {
                 this.neko.state = Math.random() < 0.5 ? this.States.CLAW : this.States.SCRATCH;
@@ -248,8 +582,9 @@ class NekoAnimationManager {
                 this.neko.isMoving = false;
             }
         } else if (timeSinceMouseMove > this.config.idleTimeout) {
-            // Mouse hasn't moved recently - idle behaviors
-            if (this.neko.state === this.States.MOVE) {
+            // Mouse hasn't moved recently - idle behaviors, now and then
+            if (this.neko.state === this.States.MOVE
+                || (this.neko.state === this.States.STOP && this.neko.stateTimer > 180)) {
                 const idleStates = [this.States.STOP, this.States.WASH, this.States.YAWN];
                 this.neko.state = idleStates[Math.floor(Math.random() * idleStates.length)];
                 this.neko.stateTimer = 0;
@@ -473,7 +808,23 @@ class NekoAnimationManager {
                 size,
                 size
             );
+            if (this.neko.state === this.States.SLEEP) this.drawZs(size);
         }
+    }
+
+    // Three z's drifting up and away from a sleeping cat.
+    drawZs(size) {
+        const t = performance.now() / 1000;
+        const ctx = this.ctx;
+        ctx.save();
+        ctx.fillStyle = '#d7dcef';
+        for (let i = 0; i < 3; i++) {
+            const phase = (t * 0.45 + i / 3) % 1;
+            ctx.globalAlpha = Math.sin(phase * Math.PI) * 0.85;
+            ctx.font = `600 ${Math.round(size * (0.22 + phase * 0.18))}px ui-rounded, system-ui, sans-serif`;
+            ctx.fillText('z', this.neko.x + size * (0.25 + phase * 0.35), this.neko.y - size * (0.2 + phase * 0.6));
+        }
+        ctx.restore();
     }
 
     animate() {
@@ -483,227 +834,6 @@ class NekoAnimationManager {
         this.draw();
 
         this.animationId = requestAnimationFrame(() => this.animate());
-    }
-
-    async changeTheme(newTheme) {
-        this.config.theme = newTheme;
-        await this.loadSprites();
-        this.saveConfig();
-        console.log('Neko theme changed to:', newTheme);
-    }
-
-    showConfigDialog() {
-        if (document.getElementById('neko-config-modal')) return;
-
-        const modal = document.createElement('div');
-        modal.id = 'neko-config-modal';
-        modal.style.cssText = `
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background-color: rgba(0, 0, 0, 0.5); display: flex;
-            align-items: center; justify-content: center; z-index: 1000;
-        `;
-
-        const dialog = document.createElement('div');
-        dialog.style.cssText = `
-            background-color: var(--dark-surface); border: 1px solid var(--gray-700);
-            border-radius: 0.5rem; padding: 1.5rem; min-width: 400px; max-width: 500px;
-            max-height: 80vh; overflow-y: auto; color: var(--light-text);
-        `;
-
-        // Get available themes
-        const themes = this.getAvailableThemes();
-
-        dialog.innerHTML = `
-            <h3 style="margin: 0 0 1rem 0; color: var(--light-text); font-size: 1.25rem;">🐱 Neko Configuration</h3>
-
-            <div style="display: grid; gap: 1rem;">
-                <div class="config-group">
-                    <h4 style="margin: 0 0 0.5rem 0; color: var(--gray-300); font-size: 1rem;">🎨 Appearance</h4>
-                    <label style="display: block; margin-bottom: 0.5rem;">
-                        Theme:
-                        <select id="neko-theme" style="width: 100%; margin-top: 0.25rem; padding: 0.25rem; background: var(--gray-600); color: var(--light-text); border: 1px solid var(--gray-500); border-radius: 0.25rem;">
-                            ${themes.map(theme =>
-                                `<option value="${theme}" ${theme === this.config.theme ? 'selected' : ''}>${this.formatThemeName(theme)}</option>`
-                            ).join('')}
-                        </select>
-                    </label>
-                    <label style="display: block; margin-bottom: 0.5rem;">
-                        Size: <span id="neko-size-value">${this.config.size}px</span>
-                        <input type="range" id="neko-size" min="16" max="64" value="${this.config.size}"
-                               style="width: 100%; margin-top: 0.25rem;">
-                    </label>
-                </div>
-
-                <div class="config-group">
-                    <h4 style="margin: 0 0 0.5rem 0; color: var(--gray-300); font-size: 1rem;">🏃 Behavior</h4>
-                    <label style="display: block; margin-bottom: 0.5rem;">
-                        Speed: <span id="neko-speed-value">${this.config.speed}</span>
-                        <input type="range" id="neko-speed" min="1" max="8" value="${this.config.speed}"
-                               style="width: 100%; margin-top: 0.25rem;">
-                    </label>
-                    <label style="display: block; margin-bottom: 0.5rem;">
-                        Animation Speed: <span id="neko-anim-speed-value">${this.config.animationSpeed}</span>
-                        <input type="range" id="neko-anim-speed" min="4" max="20" value="${this.config.animationSpeed}"
-                               style="width: 100%; margin-top: 0.25rem;">
-                    </label>
-                    <label style="display: block; margin-bottom: 0.5rem;">
-                        Idle Timeout: <span id="neko-idle-value">${(this.config.idleTimeout / 1000).toFixed(1)}s</span>
-                        <input type="range" id="neko-idle" min="2000" max="20000" step="1000" value="${this.config.idleTimeout}"
-                               style="width: 100%; margin-top: 0.25rem;">
-                    </label>
-                    <label style="display: block; margin-bottom: 0.5rem;">
-                        Sleep Timeout: <span id="neko-sleep-value">${(this.config.sleepTimeout / 1000).toFixed(1)}s</span>
-                        <input type="range" id="neko-sleep" min="5000" max="60000" step="5000" value="${this.config.sleepTimeout}"
-                               style="width: 100%; margin-top: 0.25rem;">
-                    </label>
-                </div>
-            </div>
-
-            <div style="display: flex; gap: 0.5rem; margin-top: 1.5rem; justify-content: flex-end;">
-                <button id="reset-neko-config" style="padding: 0.5rem 1rem; background: var(--gray-600); color: white; border: none; border-radius: 0.25rem; cursor: pointer;">
-                    Reset to Defaults
-                </button>
-                <button id="cancel-neko-config" style="padding: 0.5rem 1rem; background: var(--gray-600); color: white; border: none; border-radius: 0.25rem; cursor: pointer;">
-                    Cancel
-                </button>
-                <button id="apply-neko-config" style="padding: 0.5rem 1rem; background: var(--accent-blue); color: white; border: none; border-radius: 0.25rem; cursor: pointer;">
-                    Apply
-                </button>
-            </div>
-        `;
-
-        modal.appendChild(dialog);
-        document.body.appendChild(modal);
-
-        // Add info icons to labels
-        this.addNekoConfigInfoIcons(dialog);
-
-        this.attachConfigEventListeners(dialog);
-
-        dialog.querySelector('#reset-neko-config').addEventListener('click', () => {
-            this.resetConfigDialog(dialog);
-        });
-
-        dialog.querySelector('#cancel-neko-config').addEventListener('click', () => {
-            document.body.removeChild(modal);
-        });
-
-        dialog.querySelector('#apply-neko-config').addEventListener('click', () => {
-            this.applyConfig(dialog);
-            document.body.removeChild(modal);
-        });
-
-        modal.addEventListener('click', (e) => {
-            if (e.target === modal) {
-                document.body.removeChild(modal);
-            }
-        });
-    }
-
-    getAvailableThemes() {
-        // Return all available themes from assets/neko directory
-        return [
-            'ace', 'air', 'alien', 'black', 'black2', 'blue', 'blue-marine',
-            'blue-tabby', 'boobookitty', 'brown-bsd-daemon', 'brown-dog',
-            'calico', 'calico-tabby', 'captain-goodnight', 'caz', 'coke-bottle',
-            'colourful', 'dave', 'deedee', 'dog', 'doom', 'earth', 'face',
-            'fancy', 'ff3mog', 'fire', 'ghetto', 'ghost', 'gray', 'green-ghost',
-            'holiday', 'jess', 'kina', 'kuramecha', 'lucky', 'lucy', 'lucy-dog',
-            'marmalade', 'mermaid', 'metroid', 'mike', 'mini', 'moka', 'multi',
-            'neko', 'nekocool', 'neon', 'orange', 'pac-man', 'peach', 'penguin',
-            'penguin-2', 'pink', 'pink-nose-neko', 'rainbow', 'red-bsd-daemon',
-            'robot', 'rocket', 'rose', 'royal', 'silver', 'silversky', 'skunk',
-            'socks', 'sonic', 'spirit', 'spooky', 'tabby', 'tentacle',
-            'tie-fighter', 'turtle', 'usa', 'valentine', 'water', 'white',
-            'worms', 'zelda3'
-        ];
-    }
-
-    formatThemeName(theme) {
-        return theme.split('-').map(word =>
-            word.charAt(0).toUpperCase() + word.slice(1)
-        ).join(' ');
-    }
-
-    attachConfigEventListeners(dialog) {
-        const sliders = [
-            { id: 'neko-size', valueId: 'neko-size-value', format: (v) => v + 'px' },
-            { id: 'neko-speed', valueId: 'neko-speed-value', format: (v) => v },
-            { id: 'neko-anim-speed', valueId: 'neko-anim-speed-value', format: (v) => v },
-            { id: 'neko-idle', valueId: 'neko-idle-value', format: (v) => (parseInt(v) / 1000).toFixed(1) + 's' },
-            { id: 'neko-sleep', valueId: 'neko-sleep-value', format: (v) => (parseInt(v) / 1000).toFixed(1) + 's' }
-        ];
-
-        sliders.forEach(slider => {
-            const element = dialog.querySelector(`#${slider.id}`);
-            const valueElement = dialog.querySelector(`#${slider.valueId}`);
-
-            element.addEventListener('input', (e) => {
-                valueElement.textContent = slider.format(e.target.value);
-            });
-        });
-    }
-
-    addNekoConfigInfoIcons(dialog) {
-        const configs = [
-            { label: 'Theme:', description: 'Choose from different neko sprite styles and characters', default: 'Classic neko' },
-            { label: 'Size:', description: 'Size of the neko sprite in pixels', default: '32px' },
-            { label: 'Speed:', description: 'How fast neko moves when following the mouse', default: '3 px/frame' },
-            { label: 'Animation Speed:', description: 'Frames between sprite changes (lower = faster animation)', default: '8 frames' },
-            { label: 'Idle Timeout:', description: 'Time before neko starts idle behaviors when mouse stops', default: '5.0s' },
-            { label: 'Sleep Timeout:', description: 'Time before neko falls asleep when mouse is inactive', default: '15.0s' }
-        ];
-
-        configs.forEach(config => {
-            const labels = dialog.querySelectorAll('label');
-            for (const label of labels) {
-                if (label.textContent.includes(config.label)) {
-                    const valueSpan = label.querySelector('span[id$="-value"]');
-                    if (valueSpan) {
-                        const icon = createInfoIcon(config.description, config.default);
-                        valueSpan.parentNode.insertBefore(icon, valueSpan.nextSibling);
-                    }
-                    break;
-                }
-            }
-        });
-    }
-
-    resetConfigDialog(dialog) {
-        const defaults = WP.settings.defaults();
-
-        // Reset sliders
-        Object.keys(defaults).forEach(key => {
-            if (key === 'theme') return;
-            const element = dialog.querySelector(`#neko-${key.replace(/([A-Z])/g, '-$1').toLowerCase()}`);
-            if (element) {
-                element.value = defaults[key];
-                element.dispatchEvent(new Event('input'));
-            }
-        });
-
-        // Reset theme selector
-        dialog.querySelector('#neko-theme').value = defaults.theme;
-    }
-
-    async applyConfig(dialog) {
-        const oldTheme = this.config.theme;
-
-        this.config.theme = dialog.querySelector('#neko-theme').value;
-        this.config.size = parseInt(dialog.querySelector('#neko-size').value);
-        this.config.speed = parseInt(dialog.querySelector('#neko-speed').value);
-        this.config.animationSpeed = parseInt(dialog.querySelector('#neko-anim-speed').value);
-        this.config.idleTimeout = parseInt(dialog.querySelector('#neko-idle').value);
-        this.config.sleepTimeout = parseInt(dialog.querySelector('#neko-sleep').value);
-
-        this.saveConfig();
-
-        // Reload sprites if theme changed
-        if (oldTheme !== this.config.theme) {
-            await this.loadSprites();
-        }
-
-        console.log('Neko config applied:', this.config);
     }
 
     destroy() {

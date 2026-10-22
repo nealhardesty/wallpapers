@@ -1,0 +1,27 @@
+// Settings for Falling Leaves, as the panel shows them (SPEC §4.4). The
+// values and their defaults live in defaults.js.
+WP.schema('leaves', [
+    { group: '🍃 Leaves' },
+    { key: 'maxLeaves', label: 'Max Leaves', type: 'range', min: 20, max: 200, step: 1 },
+    { key: 'spawnRate', label: 'Spawn Rate', type: 'range', min: 0.005, max: 0.1, step: 0.005, unit: '%', scale: 100, digits: 1 },
+    { key: 'fallSpeed', label: 'Fall Speed', type: 'range', min: 0.5, max: 8, step: 0.5, digits: 1 },
+    { key: 'swayAmount', label: 'Sway Amount', type: 'range', min: 0, max: 5, step: 0.5, digits: 1 },
+    { key: 'leafOpacity', label: 'Leaf Opacity', type: 'range', min: 0.3, max: 1, step: 0.05, unit: '%', scale: 100 },
+    { group: '🍁 Ground' },
+    { key: 'collectLeaves', label: 'Collect Leaves on the Ground', type: 'toggle' },
+    { key: 'preSeedPile', label: 'Start With a Pile Already There', type: 'toggle' },
+    { key: 'pileDepth', label: 'Pile Depth', type: 'range', min: 0, max: 0.5, step: 0.01, unit: '% of screen', scale: 100 },
+    { key: 'pileUnevenness', label: 'Pile Unevenness', type: 'range', min: 0, max: 1, step: 0.05, unit: '%', scale: 100 },
+    { key: 'pileDensity', label: 'Pile Density', type: 'range', min: 0.4, max: 3, step: 0.1, unit: '%', scale: 100 },
+    { key: 'maxSettled', label: 'Max Collected', type: 'range', min: 100, max: 20000, step: 100 },
+    { group: '🌬️ Wind' },
+    { key: 'windChance', label: 'Wind Chance', type: 'range', min: 0.001, max: 0.02, step: 0.001, unit: '%', scale: 100, digits: 2 },
+    { key: 'windIntensity', label: 'Wind Intensity', type: 'range', min: 3, max: 25, step: 1 },
+    { group: '🎨 Appearance' },
+    { key: 'seasonalColors', label: 'Seasonal Colors', type: 'select', options: [['autumn', '🍂 Autumn (Reds, Oranges, Golds)'], ['late_autumn', '🟤 Late Autumn (Browns, Tans)'], ['early_winter', '⚫ Early Winter (Grays, Browns)']] },
+    { key: 'leafTypes', label: 'Leaf types', type: 'multi', options: [['maple', '🍁 Maple'], ['oak', '🌰 Oak'], ['birch', '🌿 Birch'], ['elm', '🌱 Elm']] },
+    { group: '⚙️ Advanced', advanced: true },
+    { key: 'fallSpeedVariation', label: 'Fall Speed Variation', type: 'range', min: 0, max: 4, step: 0.1, digits: 1 },
+    { key: 'leafSizeVariation', label: 'Leaf Size Variation', type: 'range', min: 0, max: 1, step: 0.05, unit: '%', scale: 100 },
+    { key: 'windDuration', label: 'Gust Length', type: 'range', min: 60, max: 900, step: 10, unit: 's', scale: 0.01666667, digits: 1 },
+]);

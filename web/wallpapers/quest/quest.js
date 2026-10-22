@@ -550,7 +550,7 @@ class QuestAnimationManager {
             const ONCE = { attack: 1, interact: 1, bomb: 1 };
             on(document, 'keydown', (e) => {
                 if (e.target && /input|textarea|select/i.test(e.target.tagName)) return;
-                if (e.target && e.target.closest && e.target.closest('[contenteditable],#quest-config-modal')) return;
+                if (e.target && e.target.closest && e.target.closest('[contenteditable]')) return;
                 // Cmd/Ctrl shortcuts: macOS never sends the matching keyup, so
                 // treating Cmd+S as "hold S" would leave the hero stuck walking
                 if (e.metaKey || e.ctrlKey || e.altKey) return;
@@ -582,7 +582,7 @@ class QuestAnimationManager {
         }
         if (this.config.clickToGuide) {
             on(document, 'click', (e) => {
-                if (e.target && e.target.closest && e.target.closest('a,button,input,select,textarea,label,[contenteditable],#quest-config-modal,#quest-touch')) return;
+                if (e.target && e.target.closest && e.target.closest('a,button,input,select,textarea,label,[contenteditable],#quest-touch')) return;
                 this.guideTo(e.clientX, e.clientY);
             });
         }
@@ -725,7 +725,7 @@ class QuestAnimationManager {
             this.paused = !this.paused;
             this.syncTouchPause();
         });
-        button(mini, 'qt-mini', '\u2699\ufe0f', 'Settings', () => this.showConfigDialog());
+        button(mini, 'qt-mini', '\u2699\ufe0f', 'Settings', () => WP.stage.openPanel());
         // Bomb is the odd one out -- situational, and only once the bag has
         // turned up -- so it is the small one, furthest from the thumb
         button(main, 'qt-mini qt-bomb', '\ud83d\udca3', 'Bomb \u2014 once you have the bag', () => {
@@ -754,7 +754,6 @@ class QuestAnimationManager {
         document.addEventListener('visibilitychange', onBlur);
 
         this.touch = { root, pause, paused: null, onBlur };
-        this.applyTouchFlags();
         this.syncTouchPause();
     }
 
@@ -787,28 +786,6 @@ class QuestAnimationManager {
         const label = this.paused ? 'Resume' : 'Pause';
         this.touch.pause.title = label;
         this.touch.pause.setAttribute('aria-label', label);
-    }
-
-    // While the settings dialog is open the controller stays on screen as a
-    // live preview of what the fields describe, but takes no presses: the
-    // dialog owns the pointer, and taps pass straight through to it.
-    setTouchInert(inert) {
-        this._touchInert = inert;
-        this.applyTouchFlags();
-    }
-
-    // A peek lifts the controller in front of the dialog, for the moment
-    // someone is dragging the size slider on a phone, where the dialog would
-    // otherwise be covering the very thing they are sizing.
-    setTouchPeek(peek) {
-        this._touchPeek = peek;
-        this.applyTouchFlags();
-    }
-
-    applyTouchFlags() {
-        if (!this.touch) return;
-        this.touch.root.classList.toggle('qt-inert', !!this._touchInert);
-        this.touch.root.classList.toggle('qt-peek', !!this._touchPeek);
     }
 
     injectTouchStyles() {
@@ -855,8 +832,6 @@ class QuestAnimationManager {
             #quest-touch[data-pos="top"] { align-items: flex-start; }
             #quest-touch[data-swap] { flex-direction: row-reverse; }
             #quest-touch > * { pointer-events: auto; touch-action: none; }
-            #quest-touch.qt-inert > * { pointer-events: none; }
-            #quest-touch.qt-peek { z-index: 1001; }
 
             #quest-touch .qt-pad {
                 display: grid;
@@ -5593,259 +5568,14 @@ class QuestAnimationManager {
         out.drawImage(this.crtCanvas, 0, 0);
     }
 
-    // -----------------------------------------------------------------------
-    // Settings dialog
-    // -----------------------------------------------------------------------
-    showConfigDialog() {
-        if (document.getElementById('quest-config-modal')) return;
-        const QA = QuestArt, D = QuestEngineData, c = this.config;
-        this.setTouchInert(true);
-
-        const modal = document.createElement('div');
-        modal.id = 'quest-config-modal';
-        modal.style.cssText = `
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background-color: rgba(0, 0, 0, 0.5); display: flex;
-            align-items: center; justify-content: center; z-index: 1000;
-            padding: 12px; box-sizing: border-box; transition: opacity 0.15s ease;
-        `;
-        const dialog = document.createElement('div');
-        dialog.style.cssText = `
-            background-color: var(--dark-surface, #1f2430); border: 1px solid var(--gray-700, #3a4150);
-            border-radius: 0.5rem; padding: 1.5rem; width: min(560px, 100%); box-sizing: border-box;
-            max-height: 100%; overflow-y: auto; color: var(--light-text, #e8e8ee);
-            font-family: -apple-system, BlinkMacSystemFont, sans-serif; font-size: 14px;
-        `;
-
-        const sel = 'width: 100%; margin-top: 0.25rem; padding: 0.25rem; background: var(--gray-600, #4a5160); color: var(--light-text, #e8e8ee); border: 1px solid var(--gray-500, #5a6170); border-radius: 0.25rem;';
-        const opt = (obj, cur, label = (k, v) => v.name) => Object.entries(obj).map(([k, v]) => `<option value="${k}" ${cur === k ? 'selected' : ''}>${label(k, v)}</option>`).join('');
-        const heroOpts = `<option value="random" ${c.hero === 'random' ? 'selected' : ''}>🎲 Surprise me (new hero every quest)</option>` +
-            opt(QA.HEROES, c.hero, (k, v) => `${v.icon} ${v.name}`);
-        const simple = (pairs, cur) => pairs.map(([k, n]) => `<option value="${k}" ${String(cur) === String(k) ? 'selected' : ''}>${n}</option>`).join('');
-        const group = (title, body) => `<div class="config-group"><h4 style="margin: 0 0 0.5rem 0; color: var(--gray-300, #c0c4cc); font-size: 1rem;">${title}</h4>${body}</div>`;
-        const select = (label, id, options) => `<label style="display: block; margin-bottom: 0.5rem;">${label}<select id="${id}" style="${sel}">${options}</select></label>`;
-        const check = (label, id, on) => `<label style="display: flex; align-items: center; margin-bottom: 0.5rem;"><input type="checkbox" id="${id}" ${on ? 'checked' : ''} style="margin-right: 0.5rem;">${label}</label>`;
-        const slider = (label, id, min, max, step, value, shown) => `<label style="display: block; margin-bottom: 0.5rem;">${label}: <span id="${id}-value">${shown}</span><input type="range" id="${id}" min="${min}" max="${max}" step="${step}" value="${value}" style="width: 100%; margin-top: 0.25rem;"></label>`;
-
-        const keys = [
-            ['Arrows <span style="opacity:.6">or</span> W A S D', 'Move'],
-            ['Space <span style="opacity:.6">or</span> J', 'Attack &mdash; also cuts bushes'],
-            ['E <span style="opacity:.6">or</span> K', 'Interact &mdash; unlock doors, read signs'],
-            ['B', 'Drop a bomb (once you have the bag)'],
-            ['Enter', 'Pause / resume'],
-            ['Esc', 'Hand control back to the autopilot']
-        ];
-        const touchPositions = [['bottom', 'Bottom corners'], ['middle', 'Middle sides'], ['top', 'Top corners']];
-        const kbd = 'display:inline-block; padding:1px 5px; border:1px solid var(--gray-500, #5a6170); border-bottom-width:2px; border-radius:3px; background:var(--gray-600, #4a5160); font:inherit; font-size:0.72rem; white-space:nowrap;';
-        const keyref = `<div id="qc-keyref" style="margin-top:0.25rem; border-top:1px solid var(--gray-700, #3a4150); padding-top:0.5rem;">
-            <table style="width:100%; border-collapse:collapse; font-size:0.78rem;">
-                ${keys.map(([k, what]) => `<tr>
-                    <td style="padding:2px 8px 2px 0; white-space:nowrap;"><span style="${kbd}">${k}</span></td>
-                    <td style="padding:2px 0; color:var(--gray-300, #c0c4cc);">${what}</td>
-                </tr>`).join('')}
-            </table>
-        </div>`;
-        const touchref = `<div style="margin-top:0.75rem; border-top:1px solid var(--gray-700, #3a4150); padding-top:0.6rem;">
-            ${check('On-screen controls (for a phone or tablet)', 'qc-touch', c.touchControls)}
-            <div id="qc-touch-opts">
-                <p style="margin: 0 0 0.5rem 0; color: var(--gray-400, #9aa0aa); font-size: 0.78rem; line-height: 1.45;">
-                    A D-pad on one side, attack &middot; interact &middot; bomb &middot; pause &middot; settings on the other.
-                </p>
-                ${slider('Size', 'qc-touch-scale', 0.6, 2, 0.1, c.touchScale, Math.round((c.touchScale || 1) * 100) + '%')}
-                ${select('Position:', 'qc-touch-pos', simple(touchPositions, c.touchPosition || 'bottom'))}
-                ${check('Swap sides (D-pad on the right)', 'qc-touch-swap', c.touchSwap)}
-            </div>
-        </div>`;
-
-        dialog.innerHTML = `
-            <h3 style="margin: 0 0 0.25rem 0; font-size: 1.25rem;">🗡️ Pixel Quest</h3>
-            <p style="margin: 0 0 1rem 0; color: var(--gray-400, #9aa0aa); font-size: 0.8rem;">A self-playing adventure. Pick a hero, build a world, then sit back.</p>
-            <div style="display: grid; gap: 1rem;">
-                ${group('🦸 Hero',
-                    select('Hero:', 'qc-hero', heroOpts) +
-                    select('Look:', 'qc-variant', '') +
-                    select('Hat:', 'qc-hat', opt(QA.HATS, c.hat)) +
-                    select('Companion:', 'qc-companion', (() => {
-                        const groups = { '': [], 'Friends': [], 'Kittens': [], 'Cows': [], 'Parades': [] };
-                        for (const [k, v] of Object.entries(QA.COMPANIONS)) {
-                            const g = k === 'none' ? '' : v.party ? 'Parades' : (k.startsWith('kitten') || k.startsWith('coon')) ? 'Kittens' : k.startsWith('calf') ? 'Cows' : 'Friends';
-                            groups[g].push(`<option value="${k}" ${c.companion === k ? 'selected' : ''}>${v.name}</option>`);
-                        }
-                        return Object.entries(groups).map(([g, o]) => g ? `<optgroup label="${g}">${o.join('')}</optgroup>` : o.join('')).join('');
-                    })()) +
-                    `<label style="display: block; margin-bottom: 0.5rem;">Name (blank for a random one):<input type="text" id="qc-name" maxlength="14" value="${(c.heroName || '').replace(/"/g, '&quot;')}" style="${sel}"></label>` +
-                    `<div id="qc-preview" style="display:flex; gap:6px; align-items:flex-end; min-height:48px; margin-top:0.25rem;"></div>`
-                )}
-                ${group('🗺️ World',
-                    select('Size:', 'qc-world-size', simple([['tiny', 'Tiny (3×3 screens)'], ['small', 'Small (4×3)'], ['medium', 'Medium (6×4)'], ['large', 'Large (8×5)'], ['huge', 'Huge (10×7)']], c.worldSize)) +
-                    select('Theme:', 'qc-world-theme', opt(QA.WORLD_THEMES, c.worldTheme)) +
-                    slider('Dungeons', 'qc-dungeons', 0, 8, 1, c.dungeonCount, c.dungeonCount) +
-                    select('Secret cow level:', 'qc-cow', simple([['sometimes', 'Sometimes (there is no cow level)'], ['always', 'Always'], ['never', 'Never']], c.cowLevel || 'sometimes')) +
-                    select('Screen size:', 'qc-room-size', simple([['cozy', 'Cozy (big pixels)'], ['classic', 'Classic'], ['roomy', 'Roomy'], ['vast', 'Vast (tiny pixels)']], c.roomSize)) +
-                    `<label style="display: block; margin-bottom: 0.5rem;">World seed (0 = new world every quest):<input type="number" id="qc-seed" min="0" step="1" value="${c.seed || 0}" style="${sel}"></label>`
-                )}
-                ${group('⚔️ Challenge',
-                    select('Difficulty:', 'qc-difficulty', opt(D.DIFFICULTY, c.difficulty)) +
-                    slider('Monster density', 'qc-density', 0, 2, 0.1, c.enemyDensity, Math.round(c.enemyDensity * 100) + '%') +
-                    slider('Game speed', 'qc-speed', 0.25, 3, 0.25, c.gameSpeed, c.gameSpeed + 'x')
-                )}
-                ${group('🎨 Look &amp; Feel',
-                    select('Palette:', 'qc-palette', opt(D.FILTERS, c.palette)) +
-                    select('Day &amp; night:', 'qc-daynight', simple([['off', 'Always daytime'], ['short', 'Quick days (3 min)'], ['normal', 'Normal (7 min)'], ['long', 'Long days (15 min)']], c.dayNight)) +
-                    select('Screen transitions:', 'qc-transition', simple([['scroll', 'Scroll (classic)'], ['fade', 'Fade'], ['iris', 'Iris']], c.transition)) +
-                    select('Status bar:', 'qc-hud', simple([['top', 'Top'], ['bottom', 'Bottom'], ['off', 'Hidden']], c.hud)) +
-                    select('Frame rate:', 'qc-fps', simple([[60, '60 fps (smooth)'], [30, '30 fps (lighter)']], c.fpsCap)) +
-                    check('CRT scanlines', 'qc-crt', c.crt) +
-                    check('Weather', 'qc-weather', c.weather) +
-                    check('Wildlife (butterflies, chickens...)', 'qc-critters', c.critters) +
-                    check('Minimap', 'qc-minimap', c.minimap) +
-                    check('Thought bubbles', 'qc-thoughts', c.thoughts) +
-                    check('Signs &amp; cave dialogue', 'qc-dialogue', c.dialogue) +
-                    check('Story intro', 'qc-story', c.story)
-                )}
-                ${group('🎮 Playing along',
-                    check('Keyboard play (take over whenever you like)', 'qc-keyboard', c.keyboard) +
-                    check('Click to send the hero somewhere', 'qc-clickguide', c.clickToGuide) +
-                    `<p style="margin: 0.25rem 0 0.5rem 0; color: var(--gray-400, #9aa0aa); font-size: 0.78rem; line-height: 1.45;">
-                        Press a key and the hero is yours. The autopilot takes back over
-                        ${QUEST_MANUAL_HOLD} seconds after you stop — or right away on Esc.
-                    </p>` +
-                    keyref +
-                    touchref
-                )}
-            </div>
-            <div style="display: flex; gap: 0.5rem; margin-top: 1.5rem; justify-content: flex-end; flex-wrap: wrap;">
-                <button id="qc-new" style="padding: 0.5rem 1rem; background: #6c3cb8; color: white; border: none; border-radius: 0.25rem; cursor: pointer; margin-right: auto;">🌍 New Quest</button>
-                <button id="qc-reset" style="padding: 0.5rem 1rem; background: var(--gray-600, #4a5160); color: white; border: none; border-radius: 0.25rem; cursor: pointer;">Reset</button>
-                <button id="qc-cancel" style="padding: 0.5rem 1rem; background: var(--gray-600, #4a5160); color: white; border: none; border-radius: 0.25rem; cursor: pointer;">Cancel</button>
-                <button id="qc-apply" style="padding: 0.5rem 1rem; background: var(--accent-blue, #3b82f6); color: white; border: none; border-radius: 0.25rem; cursor: pointer;">Apply</button>
-            </div>
-        `;
-        modal.appendChild(dialog);
-        document.body.appendChild(modal);
-
-        const $ = (id) => dialog.querySelector('#' + id);
-        const fillVariants = (keepIdx) => {
-            const hk = $('qc-hero').value;
-            const vs = $('qc-variant');
-            if (hk === 'random') { vs.innerHTML = '<option value="0">(chosen at random)</option>'; vs.disabled = true; return; }
-            vs.disabled = false;
-            vs.innerHTML = QA.HEROES[hk].variants.map((v, i) => `<option value="${i}" ${i === keepIdx ? 'selected' : ''}>${v.name}</option>`).join('');
-        };
-        const preview = () => {
-            const box = $('qc-preview');
-            box.innerHTML = '';
-            const hk = $('qc-hero').value;
-            if (hk === 'random') return;
-            const set = this.sprites.hero(hk, +$('qc-variant').value || 0, $('qc-hat').value);
-            for (const [d, f] of [['down', 0], ['right', 0], ['up', 0], ['left', 1]]) {
-                const cv = document.createElement('canvas');
-                cv.width = 48; cv.height = 60;
-                cv.style.imageRendering = 'pixelated';
-                const x = cv.getContext('2d');
-                x.imageSmoothingEnabled = false;
-                x.drawImage(set[d][f], 0, 0, 16, 20, 0, 0, 48, 60);
-                box.appendChild(cv);
-            }
-            const ck = $('qc-companion').value;
-            const cdef = QA.COMPANIONS[ck];
-            for (const member of (cdef && cdef.party) || (ck !== 'none' ? [ck] : [])) {
-                const cs = this.sprites.companion(member);
-                const cv = document.createElement('canvas');
-                cv.width = 30; cv.height = 30;
-                cv.style.imageRendering = 'pixelated';
-                const x = cv.getContext('2d');
-                x.imageSmoothingEnabled = false;
-                x.drawImage(cs.frames[0], 0, 0, 10, 10, 0, 0, 30, 30);
-                box.appendChild(cv);
-            }
-        };
-        fillVariants(c.heroVariant || 0);
-        preview();
-        $('qc-hero').addEventListener('change', () => { fillVariants(0); preview(); });
-        for (const id of ['qc-variant', 'qc-hat', 'qc-companion']) $(id).addEventListener('change', preview);
-        const syncKeyref = () => {
-            const on = $('qc-keyboard').checked;
-            $('qc-keyref').style.opacity = on ? '1' : '0.4';
-        };
-        $('qc-keyboard').addEventListener('change', syncKeyref);
-        syncKeyref();
-        const syncTouch = () => {
-            $('qc-touch-opts').style.opacity = $('qc-touch').checked ? '1' : '0.4';
-        };
-        syncTouch();
-        const live = [['qc-dungeons', v => v], ['qc-density', v => Math.round(v * 100) + '%'], ['qc-speed', v => v + 'x'], ['qc-touch-scale', v => Math.round(v * 100) + '%']];
-        for (const [id, fmt] of live) if ($(id)) $(id).addEventListener('input', (e) => { $(id + '-value').textContent = fmt(parseFloat(e.target.value)); });
-
-        const readTouch = () => ({
-            touchControls: $('qc-touch').checked, touchScale: parseFloat($('qc-touch-scale').value),
-            touchPosition: $('qc-touch-pos').value, touchSwap: $('qc-touch-swap').checked
-        });
-        // Live preview: the controller on screen is the one the fields
-        // describe, restyled as they change and never written to the config,
-        // so Cancel still leaves everything as it was.
-        let peekTimer = null;
-        const previewTouch = () => {
-            const v = readTouch();
-            if (!v.touchControls) this.destroyTouchControls();
-            else if (!this.touch) this.setupTouchControls(v);
-            else this.styleTouchControls(v);
-            syncTouch();
-            // On a phone the dialog fills the screen, so for as long as a
-            // touch setting is being changed the controller comes in front of
-            // it and the dialog fades back. Both settle once the hand is off.
-            this.setTouchPeek(true);
-            modal.style.opacity = '0.45';
-            clearTimeout(peekTimer);
-            peekTimer = setTimeout(() => {
-                this.setTouchPeek(false);
-                modal.style.opacity = '';
-            }, 600);
-        };
-        for (const id of ['qc-touch', 'qc-touch-scale', 'qc-touch-pos', 'qc-touch-swap']) {
-            $(id).addEventListener('input', previewTouch);
-        }
-
-        const onKey = (e) => { if (e.key === 'Escape') { e.preventDefault(); close(); } };
-        const close = () => {
-            if (modal.parentNode) modal.parentNode.removeChild(modal);
-            document.removeEventListener('keydown', onKey, true);
-            clearTimeout(peekTimer);
-            this._touchPeek = false;
-            this._touchInert = false;
-            // Back to whatever is actually configured, preview discarded
-            this.setupTouchControls();
-        };
-        const read = () => ({
-            hero: $('qc-hero').value, heroVariant: parseInt($('qc-variant').value) || 0, hat: $('qc-hat').value,
-            companion: $('qc-companion').value, heroName: $('qc-name').value.trim(),
-            cowLevel: $('qc-cow').value,
-            worldSize: $('qc-world-size').value, worldTheme: $('qc-world-theme').value, dungeonCount: parseInt($('qc-dungeons').value),
-            roomSize: $('qc-room-size').value, seed: Math.max(0, parseInt($('qc-seed').value) || 0),
-            difficulty: $('qc-difficulty').value, enemyDensity: parseFloat($('qc-density').value), gameSpeed: parseFloat($('qc-speed').value),
-            palette: $('qc-palette').value, dayNight: $('qc-daynight').value, transition: $('qc-transition').value, hud: $('qc-hud').value,
-            fpsCap: parseInt($('qc-fps').value), crt: $('qc-crt').checked, weather: $('qc-weather').checked,
-            critters: $('qc-critters').checked, minimap: $('qc-minimap').checked, thoughts: $('qc-thoughts').checked,
-            dialogue: $('qc-dialogue').checked, story: $('qc-story').checked,
-            keyboard: $('qc-keyboard').checked, clickToGuide: $('qc-clickguide').checked,
-            ...readTouch()
-        });
-        $('qc-cancel').addEventListener('click', close);
-        // Capture phase, so Esc shuts the dialog before the game sees it
-        document.addEventListener('keydown', onKey, true);
-        modal.addEventListener('click', (e) => { if (e.target === modal) close(); });
-        $('qc-reset').addEventListener('click', () => {
-            Object.assign(this.config, this.defaults());
-            close();
-            this.saveConfig();
-            this.showConfigDialog();
-        });
-        $('qc-apply').addEventListener('click', () => { const next = read(); close(); this.applyConfig(next, false); });
-        $('qc-new').addEventListener('click', () => { const next = read(); close(); this.applyConfig(next, true); });
-    }
-
     defaults() {
         return WP.settings.defaults();
+    }
+
+    // Settings from the panel: applied without starting a new world, unless
+    // a world setting changed (applyConfig decides).
+    applySettings(next) {
+        this.applyConfig(next, false);
     }
 
     applyConfig(next, forceNew) {

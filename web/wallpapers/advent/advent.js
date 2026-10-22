@@ -161,7 +161,8 @@ class AdventCalendarAnimationManager {
             this.dayOffset = Math.round((date - today) / 86400000);
         }
         if (params.theme && ADVENT_THEMES.some(t => t.id === params.theme)) {
-            this.config.themeByMonth[this.now().getMonth() + 1] = params.theme;
+            // For this visit only: kept out of config, so it's never saved.
+            this.themeOverride = { month: this.now().getMonth() + 1, id: params.theme };
         }
     }
 
@@ -196,7 +197,7 @@ class AdventCalendarAnimationManager {
     }
 
     pickTheme(year, month, holidays) {
-        const choice = this.config.themeByMonth[month];
+        const choice = this.themeOverride?.month === month ? this.themeOverride.id : this.config.themeByMonth[month];
         if (choice && choice !== 'auto') {
             const t = ADVENT_THEMES.find(x => x.id === choice);
             if (t) return t;
@@ -2243,192 +2244,6 @@ class AdventCalendarAnimationManager {
     // -----------------------------------------------------------------------
     // Settings dialog
     // -----------------------------------------------------------------------
-
-    showConfigDialog() {
-        if (document.getElementById('advent-config-modal')) return;
-        const m = this.model || (() => { const d = this.now(); return { year: d.getFullYear(), month: d.getMonth() + 1, holidays: AdventHolidays.forMonth(d.getFullYear(), d.getMonth() + 1) }; })();
-        const c = this.config;
-        const monthName = new Date(m.year, m.month - 1, 1).toLocaleString(undefined, { month: 'long' });
-        const { holidayThemes, seasonal } = this.themesForMonth(m.year, m.month, m.holidays);
-        const others = ADVENT_THEMES.filter(t => !holidayThemes.includes(t) && !seasonal.includes(t));
-        const chosen = c.themeByMonth[m.month] || 'auto';
-        const opt = (t) => `<option value="${t.id}" ${chosen === t.id ? 'selected' : ''}>${t.emoji} ${t.name}</option>`;
-        const autoName = this.pickTheme(m.year, m.month, m.holidays);
-        const holidayList = m.holidays.length
-            ? m.holidays.map(h => `${h.emoji} ${h.name} (${monthName} ${h.day})`).join(' · ')
-            : 'No holidays this month';
-
-        const select = 'width: 100%; margin-top: 0.25rem; padding: 0.25rem; background: var(--gray-600); color: var(--light-text); border: 1px solid var(--gray-500); border-radius: 0.25rem;';
-        const h4 = 'margin: 0 0 0.5rem 0; color: var(--gray-300); font-size: 1rem;';
-        const note = 'margin: 0.25rem 0 0 0; color: var(--gray-400); font-size: 0.78rem;';
-
-        const modal = document.createElement('div');
-        modal.id = 'advent-config-modal';
-        modal.style.cssText = `
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background-color: rgba(0, 0, 0, 0.5); display: flex;
-            align-items: center; justify-content: center; z-index: 1000;
-        `;
-        const dialog = document.createElement('div');
-        dialog.style.cssText = `
-            background-color: var(--dark-surface, #1f2430); border: 1px solid var(--gray-700, #444);
-            border-radius: 0.5rem; padding: 1.5rem; min-width: 430px; max-width: 540px;
-            max-height: 85vh; overflow-y: auto; color: var(--light-text, #eee);
-        `;
-        dialog.innerHTML = `
-            <h3 style="margin: 0 0 1rem 0; color: var(--light-text); font-size: 1.25rem;">🗓️ Advent Calendar</h3>
-            <div style="display: grid; gap: 1rem;">
-                <div class="config-group">
-                    <h4 style="${h4}">🎨 Theme</h4>
-                    <label style="display: block; margin-bottom: 0.5rem;">
-                        Theme for ${monthName}:
-                        <select id="adv-theme" style="${select}">
-                            <option value="auto" ${chosen === 'auto' ? 'selected' : ''}>✨ Automatic (currently ${autoName.emoji} ${autoName.name})</option>
-                            ${holidayThemes.length ? `<optgroup label="Holiday themes">${holidayThemes.map(opt).join('')}</optgroup>` : ''}
-                            <optgroup label="${monthName} themes">${seasonal.map(opt).join('')}</optgroup>
-                            <optgroup label="From other months">${others.map(opt).join('')}</optgroup>
-                        </select>
-                    </label>
-                    <label style="display: flex; align-items: center; margin-bottom: 0.5rem;">
-                        <input type="checkbox" id="adv-holiday-themes" ${c.holidayThemes ? 'checked' : ''} style="margin-right: 0.5rem;">
-                        Automatic picks a holiday theme in holiday months
-                    </label>
-                    <label style="display: flex; align-items: center; margin-bottom: 0.5rem;">
-                        <input type="checkbox" id="adv-holiday-stars" ${c.holidayStars ? 'checked' : ''} style="margin-right: 0.5rem;">
-                        Big star doors on holidays
-                    </label>
-                    <p style="${note}">${holidayList}</p>
-                </div>
-
-                <div class="config-group">
-                    <h4 style="${h4}">🚪 Doors</h4>
-                    <label style="display: block; margin-bottom: 0.5rem;">
-                        Arrangement:
-                        <select id="adv-layout" style="${select}">
-                            <option value="scatter" ${c.layout === 'scatter' ? 'selected' : ''}>🎁 Scattered, like a real advent calendar</option>
-                            <option value="ordered" ${c.layout === 'ordered' ? 'selected' : ''}>🔢 In order</option>
-                            <option value="week" ${c.layout === 'week' ? 'selected' : ''}>📅 Weekly calendar grid</option>
-                        </select>
-                    </label>
-                    <label style="display: block; margin-bottom: 0.5rem;">
-                        When a new day arrives:
-                        <select id="adv-ceremony" style="${select}">
-                            <option value="grand" ${c.ceremony === 'grand' ? 'selected' : ''}>🎉 Grand opening, then show the treat big</option>
-                            <option value="door" ${c.ceremony === 'door' ? 'selected' : ''}>🚪 Swing the door open, keep it on the wall</option>
-                            <option value="click" ${c.ceremony === 'click' ? 'selected' : ''}>👆 Wiggle until I open it myself</option>
-                            <option value="quiet" ${c.ceremony === 'quiet' ? 'selected' : ''}>🤫 Already open, no fuss</option>
-                        </select>
-                    </label>
-                    <label style="display: block; margin-bottom: 0.5rem;">
-                        Big treat stays up for: <span id="adv-spotlight-value">${c.spotlightSeconds ? c.spotlightSeconds + 's' : 'until clicked'}</span>
-                        <input type="range" id="adv-spotlight" min="0" max="20" step="1" value="${c.spotlightSeconds}" style="width: 100%; margin-top: 0.25rem;">
-                    </label>
-                    <label style="display: flex; align-items: center; margin-bottom: 0.5rem;">
-                        <input type="checkbox" id="adv-catchup" ${c.catchUp ? 'checked' : ''} style="margin-right: 0.5rem;">
-                        Days I missed pop open one by one when I come back
-                    </label>
-                    <p style="${note}">Click an open door to replay its treat. Closed doors will tell you how many sleeps are left.</p>
-                </div>
-
-                <div class="config-group">
-                    <h4 style="${h4}">✨ Atmosphere</h4>
-                    <label style="display: flex; align-items: center; margin-bottom: 0.5rem;">
-                        <input type="checkbox" id="adv-particles" ${c.particles ? 'checked' : ''} style="margin-right: 0.5rem;">
-                        Falling snow, leaves, petals and friends
-                    </label>
-                    <label style="display: block; margin-bottom: 0.5rem;">
-                        Amount: <span id="adv-particle-amount-value">${Math.round(c.particleAmount * 100)}%</span>
-                        <input type="range" id="adv-particle-amount" min="0.2" max="2.5" step="0.1" value="${c.particleAmount}" style="width: 100%; margin-top: 0.25rem;">
-                    </label>
-                    <label style="display: block; margin-bottom: 0.5rem;">
-                        Open doors:
-                        <select id="adv-ambient" style="${select}">
-                            <option value="lively" ${c.ambient === 'lively' ? 'selected' : ''}>🎠 Every treat plays all the time</option>
-                            <option value="gentle" ${c.ambient === 'gentle' ? 'selected' : ''}>🍃 Gentle (older treats play slower)</option>
-                            <option value="still" ${c.ambient === 'still' ? 'selected' : ''}>🖼️ Still pictures, only today plays</option>
-                        </select>
-                    </label>
-                    <label style="display: block; margin-bottom: 0.5rem;">
-                        Frame rate:
-                        <select id="adv-fps" style="${select}">
-                            <option value="60" ${+c.fps === 60 ? 'selected' : ''}>60 fps (silky)</option>
-                            <option value="30" ${+c.fps === 30 ? 'selected' : ''}>30 fps (recommended)</option>
-                            <option value="20" ${+c.fps === 20 ? 'selected' : ''}>20 fps (battery saver)</option>
-                        </select>
-                    </label>
-                    <label style="display: block; margin-bottom: 0.5rem;">
-                        Sharpness:
-                        <select id="adv-quality" style="${select}">
-                            <option value="high" ${c.quality === 'high' ? 'selected' : ''}>💎 Retina sharp</option>
-                            <option value="balanced" ${c.quality === 'balanced' ? 'selected' : ''}>⚖️ Balanced</option>
-                        </select>
-                    </label>
-                </div>
-            </div>
-
-            <div style="display: flex; gap: 0.5rem; margin-top: 1.5rem; justify-content: flex-end; flex-wrap: wrap;">
-                <button id="replay-advent" style="padding: 0.5rem 1rem; background: var(--gray-600, #555); color: white; border: none; border-radius: 0.25rem; cursor: pointer; margin-right: auto;">
-                    🎁 Open today's door again
-                </button>
-                <button id="reset-advent-config" style="padding: 0.5rem 1rem; background: var(--gray-600, #555); color: white; border: none; border-radius: 0.25rem; cursor: pointer;">Reset</button>
-                <button id="cancel-advent-config" style="padding: 0.5rem 1rem; background: var(--gray-600, #555); color: white; border: none; border-radius: 0.25rem; cursor: pointer;">Cancel</button>
-                <button id="apply-advent-config" style="padding: 0.5rem 1rem; background: var(--accent-blue, #3b82f6); color: white; border: none; border-radius: 0.25rem; cursor: pointer;">Apply</button>
-            </div>
-        `;
-        modal.appendChild(dialog);
-        document.body.appendChild(modal);
-
-        const $ = (id) => dialog.querySelector('#' + id);
-        $('adv-spotlight').addEventListener('input', (e) => { $('adv-spotlight-value').textContent = +e.target.value ? e.target.value + 's' : 'until clicked'; });
-        $('adv-particle-amount').addEventListener('input', (e) => { $('adv-particle-amount-value').textContent = Math.round(e.target.value * 100) + '%'; });
-        const close = () => modal.remove();
-        $('cancel-advent-config').addEventListener('click', close);
-        modal.addEventListener('click', (e) => { if (e.target === modal) close(); });
-        $('replay-advent').addEventListener('click', () => {
-            close();
-            if (this.isEnabled) this.replayToday();
-        });
-        $('reset-advent-config').addEventListener('click', () => {
-            const d = this.defaults();
-            $('adv-theme').value = 'auto';
-            $('adv-holiday-themes').checked = d.holidayThemes;
-            $('adv-holiday-stars').checked = d.holidayStars;
-            $('adv-layout').value = d.layout;
-            $('adv-ceremony').value = d.ceremony;
-            $('adv-spotlight').value = d.spotlightSeconds; $('adv-spotlight').dispatchEvent(new Event('input'));
-            $('adv-catchup').checked = d.catchUp;
-            $('adv-particles').checked = d.particles;
-            $('adv-particle-amount').value = d.particleAmount; $('adv-particle-amount').dispatchEvent(new Event('input'));
-            $('adv-ambient').value = d.ambient;
-            $('adv-fps').value = String(d.fps);
-            $('adv-quality').value = d.quality;
-        });
-        $('apply-advent-config').addEventListener('click', () => {
-            const before = JSON.stringify([c.themeByMonth[m.month], c.holidayThemes, c.holidayStars, c.layout, c.particles, c.particleAmount, c.quality]);
-            c.themeByMonth[m.month] = $('adv-theme').value;
-            c.holidayThemes = $('adv-holiday-themes').checked;
-            c.holidayStars = $('adv-holiday-stars').checked;
-            c.layout = $('adv-layout').value;
-            c.ceremony = $('adv-ceremony').value;
-            c.spotlightSeconds = parseInt($('adv-spotlight').value, 10);
-            c.catchUp = $('adv-catchup').checked;
-            c.particles = $('adv-particles').checked;
-            c.particleAmount = parseFloat($('adv-particle-amount').value);
-            c.ambient = $('adv-ambient').value;
-            c.fps = parseInt($('adv-fps').value, 10);
-            c.quality = $('adv-quality').value;
-            this.saveConfig();
-            close();
-            const after = JSON.stringify([c.themeByMonth[m.month], c.holidayThemes, c.holidayStars, c.layout, c.particles, c.particleAmount, c.quality]);
-            if (this.isEnabled && before !== after) {
-                // Theme, layout or resolution changes rebuild the month from scratch
-                this.resizeCanvas();
-                this.model = null;
-                this.rebuild(false);
-            }
-            console.log('Advent config applied:', c);
-        });
-    }
 
     defaults() {
         return WP.settings.defaults();

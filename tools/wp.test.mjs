@@ -113,3 +113,67 @@ test('network: every online wallpaper\'s hosts are on the audit allowlist', () =
         for (const host of entry.network) assert.ok(allowed.includes(host), `${entry.id}: ${host} missing from URL_ALLOW`);
     }
 });
+
+// Every wallpaper with settings: its schema and defaults.js must agree.
+function schemaFor(id) {
+    const sandbox = vm.createContext({ URLSearchParams, Date });
+    vm.runInContext(readFileSync(join(WEB, 'core/wp.js'), 'utf8'), sandbox);
+    vm.runInContext(readFileSync(join(WEB, 'wallpapers', id, 'defaults.js'), 'utf8'), sandbox);
+    vm.runInContext(readFileSync(join(WEB, 'wallpapers', id, 'settings.js'), 'utf8'), sandbox);
+    return { schema: sandbox.WP.schemaOf(id), defaults: sandbox.WP.defaultsOf(id) };
+}
+const withSettings = WP.catalog.filter(e => !e.pseudo && existsSync(join(WEB, 'wallpapers', e.id, 'settings.js')));
+
+test('schema: every wallpaper with code has settings.js', () => {
+    for (const entry of WP.catalog.filter(e => !e.pseudo && e.scripts.length)) {
+        assert.ok(existsSync(join(WEB, 'wallpapers', entry.id, 'settings.js')), `${entry.id}/settings.js`);
+    }
+});
+
+test('schema: every control has a default, and every default a control', () => {
+    for (const { id } of withSettings) {
+        const { schema, defaults } = schemaFor(id);
+        const keys = new Set(schema.filter(c => c.key).map(c => c.key));
+        for (const key of keys) assert.ok(key in defaults, `${id}: control ${key} has no default`);
+        for (const key of Object.keys(defaults)) {
+            if (key !== 'configVersion') assert.ok(keys.has(key), `${id}: default ${key} has no control`);
+        }
+    }
+});
+
+test('schema: every default fits its control (range, step grid, options)', () => {
+    for (const { id } of withSettings) {
+        const { schema, defaults } = schemaFor(id);
+        for (const c of schema.filter(c => c.key)) {
+            const value = c.get ? c.get(defaults) : defaults[c.key];
+            const where = `${id}.${c.key}`;
+            if (c.type === 'range') {
+                assert.ok(value >= c.min && value <= c.max, `${where}: ${value} outside ${c.min}..${c.max}`);
+                const steps = (value - c.min) / c.step;
+                assert.ok(Math.abs(steps - Math.round(steps)) < 1e-6, `${where}: ${value} is off the ${c.step} step grid, so the slider would round it`);
+            } else if (c.type === 'select') {
+                const options = typeof c.options === 'function' ? c.options(defaults) : c.options;
+                assert.ok(options.some(([v]) => JSON.stringify(v) === JSON.stringify(value)), `${where}: ${JSON.stringify(value)} isn't an option`);
+            } else if (c.type === 'toggle') {
+                assert.equal(typeof value, 'boolean', where);
+            } else if (c.type === 'multi') {
+                assert.ok(Array.isArray(value) && value.every(v => c.options.some(([o]) => o === v)), where);
+            } else if (c.type === 'colors') {
+                assert.ok(Array.isArray(value) && value.every(v => /^#[0-9a-f]{6}$/i.test(v)), where);
+            } else {
+                assert.ok(['number', 'text', 'color'].includes(c.type), `${where}: unknown type ${c.type}`);
+            }
+            assert.equal(typeof c.label === 'function' ? typeof c.label() : typeof c.label, 'string', `${where}: label`);
+        }
+    }
+});
+
+test('thumbnails: every offline wallpaper has a small one', () => {
+    for (const entry of WP.catalog.filter(e => !e.pseudo && !e.disabled && !e.network && e.id !== 'blank')) {
+        const path = join(WEB, 'wallpapers', entry.id, 'thumb.webp');
+        assert.ok(existsSync(path), `${entry.id}: run make thumbnails`);
+        const bytes = readFileSync(path);
+        assert.equal(bytes.toString('latin1', 8, 12), 'WEBP', `${entry.id}: not a WebP`);
+        assert.ok(bytes.length < 40 * 1024, `${entry.id}: thumbnail over 40 KB`);
+    }
+});

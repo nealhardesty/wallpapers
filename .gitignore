@@ -153,3 +153,6 @@ vite.config.ts.timestamp-*
 
 # Self-signed dev certificate and key (make cert)
 .cert/
+
+# Bing's images of the day, fetched by make bing-json (Pages makes its own)
+web/bing.json

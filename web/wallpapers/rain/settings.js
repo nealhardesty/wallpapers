@@ -1,0 +1,26 @@
+// Settings for Rain, as the panel shows them (SPEC §4.4). The
+// values and their defaults live in defaults.js.
+WP.schema('rain', [
+    { group: '💧 Raindrops' },
+    { key: 'maxRaindrops', label: 'Max Raindrops', type: 'range', min: 50, max: 900, step: 1, help: 'Maximum number of raindrops visible on screen simultaneously' },
+    { key: 'spawnRate', label: 'Spawn Rate', type: 'range', min: 0.1, max: 8, step: 0.1, unit: '/frame', digits: 1, help: 'New raindrops per frame at 60fps (higher = heavier rainfall)' },
+    { key: 'dropSpeed', label: 'Drop Speed', type: 'range', min: 5, max: 30, step: 1, help: 'Base fall speed; each depth layer scales it' },
+    { key: 'rainOpacity', label: 'Rain Opacity', type: 'range', min: 0.1, max: 1, step: 0.1, unit: '%', scale: 100, help: 'Transparency level of raindrops (lower = more subtle)' },
+    { group: '💨 Wind' },
+    { key: 'windChance', label: 'Wind Chance', type: 'range', min: 0.001, max: 0.01, step: 0.001, unit: '%', scale: 100, digits: 2, help: 'Probability per frame that wind starts affecting rain direction' },
+    { key: 'windIntensity', label: 'Wind Intensity', type: 'range', min: 2, max: 20, step: 1, help: 'Horizontal force applied to raindrops during wind events' },
+    { group: '🌊 Puddles & Splashes' },
+    { key: 'puddleRate', label: 'Puddle Rate', type: 'range', min: 0, max: 1, step: 0.1, unit: '%', scale: 100, help: 'Probability that raindrops create puddles when hitting the ground' },
+    { key: 'splashRate', label: 'Splash Rate', type: 'range', min: 0, max: 1, step: 0.1, unit: '%', scale: 100, help: 'Probability that raindrops create splash effects on impact' },
+    { key: 'maxPuddles', label: 'Max Puddles', type: 'range', min: 10, max: 100, step: 1, help: 'Maximum number of puddles that can exist on screen' },
+    { group: '⚡ Storm' },
+    { key: 'lightning', label: 'Lightning', type: 'toggle' },
+    { key: 'lightningChance', label: 'Strike Frequency', type: 'range', min: 0.01, max: 0.6, step: 0.01, unit: '/s', digits: 2 },
+    { key: 'groundMist', label: 'Ground Mist', type: 'toggle' },
+    { group: '⚙️ Advanced', advanced: true },
+    { key: 'dropSpeedVariation', label: 'Speed Variation', type: 'range', min: 0, max: 15, step: 0.5, digits: 1 },
+    { key: 'dropLength', label: 'Drop Length', type: 'range', min: 5, max: 60, step: 1, unit: 'px' },
+    { key: 'dropWidth', label: 'Drop Width', type: 'range', min: 0.5, max: 5, step: 0.5, unit: 'px', digits: 1 },
+    { key: 'windDuration', label: 'Gust Length', type: 'range', min: 60, max: 900, step: 10, unit: 's', scale: 0.01666667, digits: 1 },
+    { key: 'puddleOpacity', label: 'Puddle Opacity', type: 'range', min: 0, max: 1, step: 0.05, unit: '%', scale: 100 },
+]);

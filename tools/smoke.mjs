@@ -6,23 +6,24 @@
 //   node tools/smoke.mjs fishtank quest  just these stages (skips the player suite)
 //
 // Stage suite, every wallpaper on stage.html?w=<id> with fresh storage: it
-// boots, draws, opens its settings, logs no errors, makes no unexpected
-// network request, saves nothing on a fresh run (defaults.js is exact) and
-// writes no storage outside its own namespace.
+// boots, draws, logs no errors, makes no unexpected network request, saves
+// nothing on a fresh run (defaults.js is exact) and writes no storage
+// outside its own namespace.
 //
 // Player suite, index.html: Seasonal on first run, ?w= without persisting,
-// keys switch and persist, a full cycle leaks nothing, ?panel=open, ?tier=low
-// really scales and caps, and pause really stops frames.
+// keys switch and persist, a full cycle leaks nothing, ?tier=low really
+// scales and caps, pause really stops frames, and the panel: it opens and
+// closes, every wallpaper's settings render and round-trip into the running
+// wallpaper, Reset, key help, declared wallpaper keys, and the corner gear.
 //
 // All network is intercepted: local files load, Bing gets fixtures, anything
 // else fails the run. Screenshots land in dist/smoke/. CHROME_PATH picks the
 // browser.
 
-import { spawn, execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { launch, sleep } from './chrome.mjs';
 
 const ROOT = resolve(import.meta.dirname, '..');
 const WEB = pathToFileURL(join(ROOT, 'web')).href;
@@ -33,68 +34,6 @@ const READY_MS = 10000;
 // A 1x1 PNG standing in for Bing's photo.
 const PIXEL = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64');
 const BING_JSON = { images: [{ url: '/th?id=smoke-fixture.jpg', copyright: 'Smoke fixture (Test)', copyrightlink: 'https://www.bing.com/', startdate: '20261022' }] };
-
-const sleep = ms => new Promise(r => setTimeout(r, ms));
-
-function findChrome() {
-    const candidates = [
-        process.env.CHROME_PATH,
-        '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-        '/Applications/Chromium.app/Contents/MacOS/Chromium',
-    ];
-    for (const name of ['google-chrome', 'google-chrome-stable', 'chromium', 'chromium-browser']) {
-        try { candidates.push(execFileSync('which', [name]).toString().trim()); } catch {}
-    }
-    const found = candidates.find(path => path && existsSync(path));
-    if (!found) throw new Error('No Chrome found; set CHROME_PATH');
-    return found;
-}
-
-async function launch() {
-    const profile = mkdtempSync(join(tmpdir(), 'wallpapers-smoke-'));
-    const args = ['--headless=new', '--remote-debugging-port=0', `--user-data-dir=${profile}`,
-        '--no-first-run', '--no-default-browser-check', '--window-size=1280,800', '--hide-scrollbars',
-        '--mute-audio', 'about:blank'];
-    // Ubuntu 24.04 runners block the sandbox's user namespaces.
-    if (process.env.CI) args.unshift('--no-sandbox');
-    const chrome = spawn(findChrome(), args, { stdio: 'ignore' });
-    const portFile = join(profile, 'DevToolsActivePort');
-    for (let i = 0; i < 100 && !existsSync(portFile); i++) await sleep(100);
-    const port = readFileSync(portFile, 'utf8').split('\n')[0];
-    const pages = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json();
-    const page = pages.find(p => p.type === 'page');
-    return { chrome, profile, cdp: await connect(page.webSocketDebuggerUrl) };
-}
-
-function connect(url) {
-    return new Promise((resolveConnect, reject) => {
-        const socket = new WebSocket(url);
-        const pending = new Map();
-        const listeners = new Map();
-        let nextId = 1;
-        const cdp = {
-            send(method, params = {}) {
-                const id = nextId++;
-                socket.send(JSON.stringify({ id, method, params }));
-                return new Promise((ok, fail) => pending.set(id, { ok, fail, method }));
-            },
-            on(method, fn) { listeners.set(method, fn); },
-            close() { socket.close(); },
-        };
-        socket.onopen = () => resolveConnect(cdp);
-        socket.onerror = reject;
-        socket.onmessage = ({ data }) => {
-            const message = JSON.parse(data);
-            if (message.id && pending.has(message.id)) {
-                const { ok, fail, method } = pending.get(message.id);
-                pending.delete(message.id);
-                message.error ? fail(new Error(`${method}: ${message.error.message}`)) : ok(message.result);
-            } else if (listeners.has(message.method)) {
-                listeners.get(message.method)(message.params);
-            }
-        };
-    });
-}
 
 // ---- Page plumbing ----------------------------------------------------------
 
@@ -163,38 +102,34 @@ async function fresh(url) {
 
 // ---- In-page probes -----------------------------------------------------------
 
-// How much is drawn: distinct colour-and-alpha buckets across every canvas,
-// sampled at 48x48. Alpha counts, so white snow on a transparent canvas
-// registers by how much of it there is.
+// How much is drawn, across every canvas sampled at 96x96: distinct
+// colour-and-alpha buckets, plus partial coverage, since a few white flakes
+// on a transparent canvas are drawn even if they're all one colour. Fails
+// only a fully clear canvas, or one painted a single flat colour.
 const DRAWN = `(() => {
+    const size = 96;
     const probe = document.createElement('canvas');
-    probe.width = probe.height = 48;
+    probe.width = probe.height = size;
     const ctx = probe.getContext('2d', { willReadFrequently: true });
     let best = 0;
     for (const canvas of document.querySelectorAll('canvas')) {
         if (!canvas.width || !canvas.height || !canvas.isConnected) continue;
-        ctx.clearRect(0, 0, 48, 48);
-        try { ctx.drawImage(canvas, 0, 0, 48, 48); } catch { continue; }
-        const data = ctx.getImageData(0, 0, 48, 48).data, colours = new Set();
-        for (let i = 0; i < data.length; i += 4) if (data[i + 3]) colours.add((data[i] >> 4) << 12 | (data[i + 1] >> 4) << 8 | (data[i + 2] >> 4) << 4 | data[i + 3] >> 4);
-        best = Math.max(best, colours.size);
+        ctx.clearRect(0, 0, size, size);
+        try { ctx.drawImage(canvas, 0, 0, size, size); } catch { continue; }
+        const data = ctx.getImageData(0, 0, size, size).data, colours = new Set();
+        let covered = 0;
+        for (let i = 0; i < data.length; i += 4) {
+            if (!data[i + 3]) continue;
+            covered++;
+            colours.add((data[i] >> 4) << 12 | (data[i + 1] >> 4) << 8 | (data[i + 2] >> 4) << 4 | data[i + 3] >> 4);
+        }
+        const partial = covered > 0 && covered < size * size;
+        best = Math.max(best, colours.size >= 2 ? colours.size : partial ? 2 : colours.size);
     }
     return best;
 })()`;
 
-// A settings dialog: a fixed overlay with controls in it.
-const DIALOG_OPEN = `[...document.querySelectorAll('body > *')].some(el => getComputedStyle(el).position === 'fixed' && el.querySelector('input, select, button'))`;
-
-const OPEN_DIALOG = `(() => {
-    const manager = WP.stage.manager;
-    if (!manager.showConfigDialog) return 'none';
-    const before = new Set(document.querySelectorAll('body > *'));
-    manager.showConfigDialog();
-    const added = [...document.querySelectorAll('body > *')].filter(el => !before.has(el));
-    const dialog = added.find(el => getComputedStyle(el).position === 'fixed' && el.querySelector('input, select, button'));
-    added.forEach(el => el.remove());
-    return dialog ? 'ok' : 'missing';
-})()`;
+const PANEL_OPEN = `(() => { const p = document.getElementById('panel'); return !!p && !p.hidden; })()`;
 
 // Defaults are exact if a fresh run's config saves as nothing, and the only
 // storage written is the wallpaper's own namespaced state.
@@ -224,13 +159,18 @@ async function stage(id, entry) {
     const { data } = await cdp.send('Page.captureScreenshot', { format: 'png' });
     writeFileSync(join(SHOTS, `${id}.png`), Buffer.from(data, 'base64'));
     const storage = ready ? await evaluate(STORAGE) : null;
-    const dialog = ready ? await evaluate(OPEN_DIALOG).catch(e => (record(`settings: ${e.message}`), 'error')) : 'skipped';
 
     if (drawn < 2 && id !== 'blank') record(entry.network ? 'background photo not shown' : 'nothing drawn');
-    if (dialog === 'missing') record('settings dialog did not appear');
     if (storage?.diff?.length) record(`fresh run would save: ${storage.diff.join(', ')} (defaults.js out of step)`);
     if (storage?.foreign?.length) record(`wrote storage outside its namespace: ${storage.foreign.join(', ')}`);
-    return { readyMs, drawn, dialog, problems: current.problems };
+    return { readyMs, drawn, problems: current.problems };
+}
+
+async function press(key) {
+    const text = key.length === 1 ? key : undefined;
+    await cdp.send('Input.dispatchKeyEvent', { type: 'keyDown', key, text, ...(key.startsWith('Arrow') ? { code: key, windowsVirtualKeyCode: { ArrowLeft: 37, ArrowUp: 38, ArrowRight: 39, ArrowDown: 40 }[key] } : {}), ...(key === 'Escape' ? { windowsVirtualKeyCode: 27, code: 'Escape' } : {}) });
+    await cdp.send('Input.dispatchKeyEvent', { type: 'keyUp', key });
+    await sleep(150);
 }
 
 async function playerSuite(catalog) {
@@ -283,10 +223,106 @@ async function playerSuite(catalog) {
         return frames === 1 && !canvases;
     });
 
-    await check('?panel=open opens settings inside the stage', async () => {
+    await check('?panel=open opens the panel; Esc and , close and reopen it', async () => {
         await fresh(`${WEB}/index.html?w=rain&panel=open`);
         await playerReady();
-        return !!await waitFor(() => inStage(DIALOG_OPEN), 3000);
+        if (!await waitFor(() => evaluate(PANEL_OPEN), 3000)) return record('panel not open on load');
+        await press('Escape');
+        if (await evaluate(PANEL_OPEN)) record('Esc did not close the panel');
+        await press(',');
+        if (!await evaluate(PANEL_OPEN)) record(', did not reopen the panel');
+        return true;
+    });
+
+    // Every wallpaper, through the real panel: its controls render, and a
+    // change reaches storage and then the running wallpaper.
+    for (const entry of catalog.filter(e => !e.pseudo && !e.disabled && e.id !== 'blank')) {
+        await check(`panel round-trip: ${entry.id}`, async () => {
+            current.network = !!entry.network;
+            await fresh(`${WEB}/index.html?w=${entry.id}&panel=open`);
+            await playerReady();
+            await waitFor(() => evaluate(`document.querySelectorAll('#panel .setting').length`), 4000);
+            const rendered = await evaluate(`document.querySelectorAll('#panel .setting').length`);
+            const expected = await evaluate(`WP.schemaOf('${entry.id}').filter(c => c.key).length`);
+            if (rendered !== expected) record(`${rendered} controls rendered; the schema has ${expected}`);
+            // Change the first slider (or select) the way a person would.
+            const changed = await evaluate(`(() => {
+                const row = document.querySelector('#panel .setting-range') || document.querySelector('#panel .setting-select');
+                const input = row.querySelector('input, select');
+                if (input.type === 'range') {
+                    const min = +input.min, max = +input.max, step = +input.step;
+                    let v = Math.round((min + (max - min) * 0.37) / step) * step + min % step;
+                    v = +(Math.min(max, Math.max(min, v))).toFixed(6);
+                    if (+input.value === v) v = +(Math.min(max, v + step)).toFixed(6);
+                    input.value = v;
+                    input.dispatchEvent(new Event('input', { bubbles: true }));
+                } else {
+                    input.selectedIndex = (input.selectedIndex + 1) % input.options.length;
+                    input.dispatchEvent(new Event('change', { bubbles: true }));
+                }
+                const key = row.dataset.key;
+                return { key, stored: (JSON.parse(localStorage.getItem('wp:${entry.id}')) || {})[key] };
+            })()`);
+            if (changed.stored === undefined) return record(`${changed.key} wasn't saved`);
+            const live = await waitFor(async () => {
+                const value = await inStage(`WP.stage.ready && JSON.stringify(WP.stage.manager.config['${changed.key}'])`).catch(() => null);
+                return value === JSON.stringify(changed.stored) && value;
+            }, 5000);
+            if (!live) record(`${changed.key} never reached the running wallpaper`);
+            return true;
+        });
+    }
+
+    await check('Reset takes two clicks and clears the overrides', async () => {
+        await fresh(`${WEB}/index.html?w=rain&panel=open`);
+        await playerReady();
+        await waitFor(() => evaluate(PANEL_OPEN), 3000);
+        await evaluate(`(() => { const i = document.querySelector('#panel input[type=range]'); i.value = i.min; i.dispatchEvent(new Event('input', { bubbles: true })); })()`);
+        if (!await evaluate(`!!localStorage.getItem('wp:rain')`)) return record('no override to reset');
+        const reset = `[...document.querySelectorAll('#panel .action')].find(b => b.textContent.startsWith('Reset')).click()`;
+        await evaluate(reset);
+        if (!await evaluate(`!!localStorage.getItem('wp:rain')`)) record('one click reset without confirming');
+        await evaluate(reset);
+        if (await evaluate(`!!localStorage.getItem('wp:rain')`)) record('overrides still stored after confirming');
+        return true;
+    });
+
+    await check('? lists the wallpaper’s own keys; Quest’s N reaches Quest', async () => {
+        await fresh(`${WEB}/index.html?w=quest`);
+        await playerReady();
+        await press('?');
+        const help = await evaluate(`(() => { const h = document.querySelector('.help'); return h && !h.hidden && h.textContent; })()`);
+        if (!help || !help.includes('New quest')) record('key help missing or without Quest’s keys');
+        await press('Escape');
+        const before = await inStage('WP.stage.manager.questNumber');
+        await press('n');
+        const toast = await waitFor(() => evaluate(`document.getElementById('toast').classList.contains('show') && document.getElementById('toast').textContent`), 2000);
+        const after = await inStage('WP.stage.manager.questNumber');
+        if (!toast?.includes('new quest')) record(`no toast for N (got ${JSON.stringify(toast)})`);
+        if (!(after > before)) record('N did not start a new quest');
+        return true;
+    });
+
+    await check('advent’s arrow keys time-travel, with the date as a toast', async () => {
+        await fresh(`${WEB}/index.html?w=advent`);
+        await playerReady();
+        const before = await inStage('WP.stage.manager.dayOffset');
+        await press('ArrowRight');
+        const toast = await waitFor(() => evaluate(`document.getElementById('toast').classList.contains('show') && document.getElementById('toast').textContent`), 2000);
+        if (await inStage('WP.stage.manager.dayOffset') !== before + 1) record('→ did not move a day forward');
+        if (!toast || !/\d/.test(toast)) record(`no date toast (got ${JSON.stringify(toast)})`);
+        return true;
+    });
+
+    await check('the corner gear appears when the pointer comes near', async () => {
+        await fresh(`${WEB}/index.html?w=rain`);
+        await playerReady();
+        const width = await evaluate('innerWidth');
+        await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 200, y: 300 });
+        await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: width - 20, y: 20 });
+        const shown = await waitFor(() => evaluate(`document.getElementById('gear').classList.contains('show')`), 2000);
+        if (!shown) record('gear did not appear');
+        return true;
     });
 
     await check('?tier=low lays out at half size and caps the frame rate', async () => {
@@ -337,14 +373,14 @@ async function main(only) {
         const ids = only.length ? only : catalog.filter(e => !e.pseudo).map(e => e.id);
 
         let failed = 0;
-        console.log('stage              ready   drawn  settings  result');
+        console.log('stage              ready   drawn  result');
         for (const id of ids) {
             const entry = catalog.find(e => e.id === id);
             if (!entry) throw new Error(`unknown wallpaper ${id}`);
             const r = await stage(id, entry);
             const verdict = !r.problems.length ? '✓' : entry.disabled ? `– disabled: ${entry.disabled}` : '✗';
             if (verdict === '✗') failed++;
-            console.log(`${id.padEnd(18)} ${String(r.readyMs).padStart(5)}ms ${String(r.drawn).padStart(6)}  ${r.dialog.padEnd(8)}  ${verdict}`);
+            console.log(`${id.padEnd(18)} ${String(r.readyMs).padStart(5)}ms ${String(r.drawn).padStart(6)}  ${verdict}`);
             if (verdict === '✗') for (const p of [...new Set(r.problems)]) console.log(`    ${p}`);
         }
         if (!only.length) {

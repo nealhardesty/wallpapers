@@ -3,7 +3,7 @@
 .DEFAULT_GOAL := help
 PORT ?= 8000
 
-.PHONY: help hooks serve serve-https cert docker-build docker-run lint audit audit-staged audit-history test smoke ci clean
+.PHONY: help hooks serve serve-https cert bing-json thumbnails docker-build docker-run lint audit audit-staged audit-history test smoke ci clean
 
 help: ## List every target
 	@awk 'BEGIN {FS = ":.*## "} /^[a-zA-Z0-9_-]+:.*## / {printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -20,6 +20,12 @@ serve-https: ## Serve web/ over https at https://localhost:8443, making a self-s
 
 cert: ## Make a fresh self-signed dev certificate in .cert/ (localhost + LAN addresses)
 	@node tools/serve.mjs --cert-only
+
+bing-json: ## Fetch Bing's last eight images of the day into web/bing.json (for served pages)
+	@node tools/bing.mjs
+
+thumbnails: ## Regenerate the panel's wallpaper thumbnails (committed; review the changes)
+	@node tools/thumbnails.mjs
 
 docker-build: ## Build the container image (wallpapers:latest)
 	docker build -t wallpapers .
