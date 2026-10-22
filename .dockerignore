@@ -1,0 +1,4 @@
+# Only web/ and the server go into the image (see Dockerfile).
+*
+!web/
+!tools/serve.mjs

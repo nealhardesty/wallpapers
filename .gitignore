@@ -150,3 +150,6 @@ vite.config.ts.timestamp-*
 
 # Personal terms the audit must never let through (see README)
 .audit-denylist
+
+# Self-signed dev certificate and key (make cert)
+.cert/

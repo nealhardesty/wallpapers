@@ -3,7 +3,7 @@
 .DEFAULT_GOAL := help
 PORT ?= 8000
 
-.PHONY: help hooks serve lint audit audit-staged audit-history test smoke ci clean
+.PHONY: help hooks serve serve-https cert docker-build docker-run lint audit audit-staged audit-history test smoke ci clean
 
 help: ## List every target
 	@awk 'BEGIN {FS = ":.*## "} /^[a-zA-Z0-9_-]+:.*## / {printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -12,9 +12,20 @@ hooks: ## Install git hooks: audit on commit, commit message and push
 	git config core.hooksPath .githooks
 	@echo "hooks installed from .githooks/"
 
-serve: ## Serve web/ at http://localhost:8000 (override with PORT=)
-	@test -d web || { echo "web/ does not exist yet (roadmap phase 2)"; exit 1; }
-	python3 -m http.server $(PORT) --directory web
+serve: ## Serve web/ at http://localhost:8000 (PORT=, HOST=0.0.0.0 for the LAN)
+	@PORT=$(PORT) node tools/serve.mjs
+
+serve-https: ## Serve web/ over https at https://localhost:8443, making a self-signed cert if needed
+	@PORT=$(or $(HTTPS_PORT),8443) node tools/serve.mjs --https
+
+cert: ## Make a fresh self-signed dev certificate in .cert/ (localhost + LAN addresses)
+	@node tools/serve.mjs --cert-only
+
+docker-build: ## Build the container image (wallpapers:latest)
+	docker build -t wallpapers .
+
+docker-run: ## Run the container at http://localhost:8000 (PORT= to change)
+	docker run --rm -it --read-only -p $(PORT):8000 --name wallpapers wallpapers
 
 lint: ## Syntax-check every script and JSON file
 	@node tools/lint.mjs
