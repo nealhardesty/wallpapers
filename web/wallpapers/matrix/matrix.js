@@ -9,39 +9,14 @@ class MatrixAnimationManager {
         this.columnCount = 0;
 
         // Configuration
-        this.config = {
-            speed: 0.75,
-            fontSize: 14,
-            theme: 'classic',
-            density: 0.98,
-            fadeTrails: true,
-            characterChangeRate: 0.1,
-            tailLength: 0.15 // Percentage of screen height (0.15 = 15%)
-        };
+        this.config = WP.settings.load();
 
-        this.loadStoredConfig();
         this.setupThemes();
         this.setupCharacterSets();
     }
 
-    loadStoredConfig() {
-        try {
-            const stored = localStorage.getItem('matrixConfig');
-            if (stored) {
-                const config = JSON.parse(stored);
-                Object.assign(this.config, config);
-            }
-        } catch (error) {
-            console.error('Failed to load matrix config:', error);
-        }
-    }
-
     saveConfig() {
-        try {
-            localStorage.setItem('matrixConfig', JSON.stringify(this.config));
-        } catch (error) {
-            console.error('Failed to save matrix config:', error);
-        }
+        WP.settings.save(this.config);
     }
 
     setupThemes() {
@@ -490,15 +465,7 @@ class MatrixAnimationManager {
     }
 
     resetConfigDialog(dialog) {
-        const defaults = {
-            speed: 0.75,
-            fontSize: 14,
-            density: 0.98,
-            characterChangeRate: 0.1,
-            tailLength: 0.15,
-            theme: 'classic',
-            fadeTrails: true
-        };
+        const defaults = WP.settings.defaults();
 
         Object.keys(defaults).forEach(key => {
             if (key === 'theme' || key === 'fadeTrails') return;

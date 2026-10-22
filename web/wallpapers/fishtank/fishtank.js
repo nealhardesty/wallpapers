@@ -99,7 +99,8 @@ function ftSampleCurve(controls, t) {
 }
 
 class FishTankAnimationManager {
-    constructor() {
+    constructor(host) {
+        this.host = host;
         this.canvas = null;
         this.ctx = null;
         this.isEnabled = false;
@@ -149,68 +150,15 @@ class FishTankAnimationManager {
         this.currentTarget = 0;
         this.listeners = [];
 
-        this.config = {
-            configVersion: 1,
+        this.config = WP.settings.load();
 
-            // Livestock
-            fishCount: 22,
-            population: 'community',
-            swimSpeed: 1.0,
-            schooling: 1.0,
-
-            // Tank
-            waterTheme: 'planted',
-            waterLevel: 0.055,
-            plantDensity: 1.0,
-            foregroundPlants: true,
-            hardscape: 'both',
-            snail: true,
-            statusBarHeight: 44,
-
-            // Rendering
-            quality: 'auto',          // auto | high | balanced | performance
-
-            // Light and water
-            lightIntensity: 1.0,
-            causticStrength: 1.0,
-            godRays: true,
-            depthBlur: true,
-            bubbleRate: 1.0,
-            motes: true,
-
-            // Interaction
-            cursorMode: 'curious',   // curious | shy | off
-            clickToFeed: true
-        };
-
-        this.loadStoredConfig();
         this.setupWaterThemes();
         this.setupSpecies();
         this.setupPopulations();
     }
 
-    loadStoredConfig() {
-        try {
-            const stored = localStorage.getItem('fishtankConfig');
-            if (stored) {
-                const config = JSON.parse(stored);
-                // Tank geometry and species data changed shape between
-                // versions, so older saves are discarded rather than merged
-                if (config.configVersion === this.config.configVersion) {
-                    Object.assign(this.config, config);
-                }
-            }
-        } catch (error) {
-            console.error('Failed to load fishtank config:', error);
-        }
-    }
-
     saveConfig() {
-        try {
-            localStorage.setItem('fishtankConfig', JSON.stringify(this.config));
-        } catch (error) {
-            console.error('Failed to save fishtank config:', error);
-        }
+        WP.settings.save(this.config);
     }
 
     // -----------------------------------------------------------------------
@@ -545,7 +493,7 @@ class FishTankAnimationManager {
     get floorBase() {
         // The gravel line sits above the homepage status bar so bottom
         // dwellers stay visible instead of grubbing about behind the footer
-        return this.h - this.config.statusBarHeight - this.h * 0.11;
+        return this.h - this.host.insets.bottom - this.h * 0.11;
     }
 
     // Height of the gravel bed at a given x, interpolated from the height field
@@ -3165,15 +3113,7 @@ class FishTankAnimationManager {
     }
 
     defaults() {
-        return {
-            fishCount: 22, population: 'community', swimSpeed: 1.0, schooling: 1.0,
-            waterTheme: 'planted', plantDensity: 1.0, foregroundPlants: true,
-            hardscape: 'both', snail: true,
-            lightIntensity: 1.0, causticStrength: 1.0, godRays: true, depthBlur: true,
-            bubbleRate: 1.0, motes: true,
-            cursorMode: 'curious', clickToFeed: true,
-            quality: 'auto'
-        };
+        return WP.settings.defaults();
     }
 
     resetConfigDialog(dialog) {

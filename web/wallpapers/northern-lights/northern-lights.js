@@ -187,51 +187,11 @@ class NorthernLightsAnimationManager {
         this.terrain = null;   // ridges and snow, drawn over the aurora
         this.trees = null;     // near treeline, drawn over the reflection
 
-        this.config = {
-            configVersion: 3,
-            curtainCount: 3,
-            brightness: 1.0,
-            colorScheme: 'classic',
-            curtainHeight: 1.0,
-            rayDensity: 1.0,
-            foldAmount: 1.0,
-            driftSpeed: 1.0,
-            shimmerSpeed: 1.0,
-            substorms: true,
-            activity: 0.5,
-            bloom: 0.9,
-            starCount: 260,
-            starBrightness: 0.8,
-            horizon: 0.76,
-            silhouette: true,
-            reflection: true
-        };
-
-        this.loadStoredConfig();
-    }
-
-    loadStoredConfig() {
-        try {
-            const stored = localStorage.getItem('northernLightsConfig');
-            if (stored) {
-                const config = JSON.parse(stored);
-                // The old animation was flat sine-wave ribbons; none of its
-                // tuning means anything to the perspective curtain model.
-                if (config.configVersion === this.config.configVersion) {
-                    Object.assign(this.config, config);
-                }
-            }
-        } catch (error) {
-            console.error('Failed to load northern lights config:', error);
-        }
+        this.config = WP.settings.load();
     }
 
     saveConfig() {
-        try {
-            localStorage.setItem('northernLightsConfig', JSON.stringify(this.config));
-        } catch (error) {
-            console.error('Failed to save northern lights config:', error);
-        }
+        WP.settings.save(this.config);
     }
 
     async init() {
@@ -1071,24 +1031,7 @@ class NorthernLightsAnimationManager {
     }
 
     resetConfigDialog(dialog) {
-        const defaults = {
-            curtainCount: 3,
-            brightness: 1.0,
-            curtainHeight: 1.0,
-            rayDensity: 1.0,
-            driftSpeed: 1.0,
-            foldAmount: 1.0,
-            shimmerSpeed: 1.0,
-            substorms: true,
-            activity: 0.5,
-            bloom: 0.9,
-            starCount: 260,
-            starBrightness: 0.8,
-            horizon: 0.76,
-            silhouette: true,
-            reflection: true,
-            colorScheme: 'classic'
-        };
+        const defaults = WP.settings.defaults();
 
         Object.keys(defaults).forEach(key => {
             const element = dialog.querySelector(`#${key.replace(/([A-Z])/g, '-$1').toLowerCase()}`);

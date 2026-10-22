@@ -114,7 +114,8 @@ const FIREPLACE_BRICK_STYLES = {
 };
 
 class FireplaceAnimationManager {
-    constructor() {
+    constructor(host) {
+        this.host = host;
         this.canvas = null;
         this.ctx = null;
 
@@ -166,92 +167,19 @@ class FireplaceAnimationManager {
         this.draftTimer = 0;
 
         this.bedTop = 0;
-        this.temporaryStatusBarHeight = null; // set to 0 by the UI hide mode
 
         this.noiseField = null;
         this.noiseSize = 128;
 
-        this.config = {
-            configVersion: 1,
-
-            // Fire
-            intensity: 1.0,
-            flameHeight: 1.5,
-            flameSpread: 1.0,
-            flameDensity: 1.0,
-            turbulence: 1.0,
-            flickerAmount: 0.55,
-            flickerSpeed: 1.0,
-            draftStrength: 0.35,
-
-            // Colour
-            palette: 'hardwood',
-            heat: 1.0,
-            flameOpacity: 1.0,
-
-            // Logs
-            showLogs: true,
-            logCount: 4,
-            logScale: 1.0,
-            logThickness: 2.5,
-            emberGlow: 1.0,
-            coalCount: 660,
-            popEvents: true,
-            popRate: 1.0,
-
-            // Atmosphere
-            roomGlow: 1.0,
-            glowRadius: 1.0,
-            backgroundDarkness: 0.88,
-            brickBackground: 'none',   // 'none' | 'subtle' | 'semi' | 'visible'
-            sparks: true,
-            sparkRate: 1.0,
-            smoke: true,
-            smokeOpacity: 0.22,
-
-            // Companion
-            companion: 'none',        // 'none' | 'cat' | 'dog'
-            companionActivity: 3.0,
-
-            // Decorations
-            decorations: 'none',      // 'none' | 'auto' | 'holiday' | 'halloween' | 'birthday'
-
-            // Performance
-            maxParticles: 1400,
-            softness: 2,          // flame buffer downscale; higher is softer and cheaper
-
-            statusBarHeight: 44
-        };
-
-        this.loadStoredConfig();
-    }
-
-    loadStoredConfig() {
-        try {
-            const stored = localStorage.getItem('fireplaceConfig');
-            if (stored) {
-                const config = JSON.parse(stored);
-                if (config.configVersion === this.config.configVersion) {
-                    Object.assign(this.config, config);
-                }
-            }
-        } catch (error) {
-            console.error('Failed to load fireplace config:', error);
-        }
+        this.config = WP.settings.load();
     }
 
     saveConfig() {
-        try {
-            localStorage.setItem('fireplaceConfig', JSON.stringify(this.config));
-        } catch (error) {
-            console.error('Failed to save fireplace config:', error);
-        }
+        WP.settings.save(this.config);
     }
 
     groundLevel() {
-        const barHeight = this.temporaryStatusBarHeight !== null
-            ? this.temporaryStatusBarHeight
-            : this.config.statusBarHeight;
+        const barHeight = this.host.insets.bottom;
         return this.canvas.height - barHeight;
     }
 
@@ -2595,40 +2523,7 @@ class FireplaceAnimationManager {
     }
 
     defaults() {
-        return {
-            intensity: 1.0,
-            flameHeight: 1.5,
-            flameSpread: 1.0,
-            flameDensity: 1.0,
-            turbulence: 1.0,
-            flickerAmount: 0.55,
-            flickerSpeed: 1.0,
-            draftStrength: 0.35,
-            palette: 'hardwood',
-            heat: 1.0,
-            flameOpacity: 1.0,
-            showLogs: true,
-            logCount: 4,
-            logScale: 1.0,
-            logThickness: 2.5,
-            emberGlow: 1.0,
-            coalCount: 660,
-            popEvents: true,
-            popRate: 1.0,
-            roomGlow: 1.0,
-            glowRadius: 1.0,
-            backgroundDarkness: 0.88,
-            brickBackground: 'none',
-            sparks: true,
-            sparkRate: 1.0,
-            smoke: true,
-            smokeOpacity: 0.22,
-            companion: 'none',
-            companionActivity: 3.0,
-            decorations: 'none',
-            maxParticles: 1400,
-            softness: 2
-        };
+        return WP.settings.defaults();
     }
 
     resetConfigDialog(dialog) {

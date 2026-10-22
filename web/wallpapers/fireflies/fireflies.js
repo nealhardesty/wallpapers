@@ -12,60 +12,13 @@ class FirefliesAnimationManager {
         this.glowSprites = [];
 
         // Configuration
-        this.config = {
-            configVersion: 2,
-            maxFireflies: 200,
-            spawnRate: 0.05,
-            baseSpeed: 0.8,
-            speedVariation: 0.6,
-            glowSize: 4,
-            glowIntensity: 0.9,
-            flashPeriod: 1.9,        // seconds between flashes
-            flashPeriodVariation: 0.3,
-            flashWidth: 0.17,        // fraction of the cycle actually lit
-            emberGlow: 0.2,          // faint glow while dark, so they never vanish
-            synchronize: true,
-            syncStrength: 0.25,
-            syncRadius: 240,
-            fadeInTime: 180,
-            fadeOutTime: 120,
-            lifespan: 1800, // frames (30 seconds at 60fps)
-            lifespanVariation: 600,
-            directionChangeRate: 0.01,
-            groupingTendency: 0.002,
-            avoidanceRadius: 40,
-            attractionRadius: 80,
-            colorScheme: 'classic', // classic, rainbow, cool, warm
-            brightness: 0.8,
-            tailLength: 0.4 // length of each firefly's light trail; 0 = none
-        };
+        this.config = WP.settings.load();
 
-        this.loadStoredConfig();
         this.setupColorSchemes();
     }
 
-    loadStoredConfig() {
-        try {
-            const stored = localStorage.getItem('firefliesConfig');
-            if (stored) {
-                const config = JSON.parse(stored);
-                // Pulsing was replaced by a flash cycle and motion became
-                // time-based, so older saved values no longer translate
-                if (config.configVersion === this.config.configVersion) {
-                    Object.assign(this.config, config);
-                }
-            }
-        } catch (error) {
-            console.error('Failed to load fireflies config:', error);
-        }
-    }
-
     saveConfig() {
-        try {
-            localStorage.setItem('firefliesConfig', JSON.stringify(this.config));
-        } catch (error) {
-            console.error('Failed to save fireflies config:', error);
-        }
+        WP.settings.save(this.config);
     }
 
     setupColorSchemes() {
@@ -219,6 +172,15 @@ class FirefliesAnimationManager {
         this.fireflies = [];
         this.lastTime = 0;
         if (this.glowSprites.length === 0) this.buildGlowSprites();
+        // Open mid-evening: seed the population the spawn rate settles at,
+        // already faded in, rather than a dark screen for the first seconds.
+        const settled = Math.min(this.config.maxFireflies, Math.round(this.config.spawnRate * this.config.lifespan));
+        for (let i = 0; i < settled; i++) {
+            const firefly = this.createFirefly();
+            const lit = Math.max(0, firefly.maxAge - this.config.fadeInTime - this.config.fadeOutTime);
+            firefly.age = this.config.fadeInTime + Math.random() * lit;
+            this.fireflies.push(firefly);
+        }
         this.animate();
         console.log('Fireflies animation started');
     }
@@ -765,24 +727,7 @@ class FirefliesAnimationManager {
     }
 
     resetConfigDialog(dialog) {
-        const defaults = {
-            maxFireflies: 200,
-            spawnRate: 0.05,
-            lifespan: 1800,
-            glowSize: 4,
-            brightness: 0.8,
-            tailLength: 0.4,
-            flashPeriod: 1.9,
-            flashWidth: 0.17,
-            synchronize: true,
-            syncStrength: 0.25,
-            syncRadius: 240,
-            baseSpeed: 0.8,
-            directionChangeRate: 0.01,
-            groupingTendency: 0.002,
-            avoidanceRadius: 40,
-            colorScheme: 'classic'
-        };
+        const defaults = WP.settings.defaults();
 
         Object.keys(defaults).forEach(key => {
             if (key === 'colorScheme') return;

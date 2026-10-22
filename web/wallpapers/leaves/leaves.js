@@ -1,6 +1,7 @@
 // Falling Leaves Animation Module
 class LeavesAnimationManager {
-    constructor() {
+    constructor(host) {
+        this.host = host;
         this.canvas = null;
         this.ctx = null;
         this.leaves = [];
@@ -16,7 +17,6 @@ class LeavesAnimationManager {
         this.pileSegment = 12;              // px per height-field column
         // Almost all of a leaf's bulk stays on its own column; see applyPile
         this.pileSpread = [0.86, 0.06, 0.01];
-        this.temporaryStatusBarHeight = null; // set to 0 by the UI hide mode
 
         // Per-column share of the maximum depth. This is what turns the drift
         // into separate banks instead of one level carpet: a column's leaves
@@ -35,56 +35,13 @@ class LeavesAnimationManager {
         this.leafSprites = null;
 
         // Configuration
-        this.config = {
-            configVersion: 3,
-            collectLeaves: true,
-            preSeedPile: true,
-            maxSettled: 14000,
-            // Fraction of the viewport height the deepest bank may reach
-            pileDepth: 0.2,
-            pileUnevenness: 0.6,
-            pileDensity: 1.5,
-            statusBarHeight: 44,
-            maxLeaves: 80,
-            spawnRate: 0.06,
-            fallSpeed: 2,
-            fallSpeedVariation: 1.5,
-            swayAmount: 1.5,
-            windChance: 0.003,
-            windIntensity: 12,
-            windDuration: 240,
-            leafTypes: ['maple', 'oak', 'birch', 'elm'],
-            seasonalColors: 'autumn', // autumn, late_autumn, early_winter
-            leafOpacity: 0.85,
-            leafSizeVariation: 0.4
-        };
+        this.config = WP.settings.load();
 
-        this.loadStoredConfig();
         this.setupLeafData();
     }
 
-    loadStoredConfig() {
-        try {
-            const stored = localStorage.getItem('leavesConfig');
-            if (stored) {
-                const config = JSON.parse(stored);
-                // Fall speed and sway changed meaning when the motion became
-                // time-based, so older saved values no longer translate
-                if (config.configVersion === this.config.configVersion) {
-                    Object.assign(this.config, config);
-                }
-            }
-        } catch (error) {
-            console.error('Failed to load leaves config:', error);
-        }
-    }
-
     saveConfig() {
-        try {
-            localStorage.setItem('leavesConfig', JSON.stringify(this.config));
-        } catch (error) {
-            console.error('Failed to save leaves config:', error);
-        }
+        WP.settings.save(this.config);
     }
 
     // Smooth interpolation of radius between polar control points
@@ -281,9 +238,7 @@ class LeavesAnimationManager {
 
     // Ground line: the leaves rest on top of the status bar, not behind it
     groundLevel() {
-        const barHeight = this.temporaryStatusBarHeight !== null
-            ? this.temporaryStatusBarHeight
-            : this.config.statusBarHeight;
+        const barHeight = this.host.insets.bottom;
         return this.canvas.height - barHeight;
     }
 
@@ -1085,23 +1040,7 @@ class LeavesAnimationManager {
     }
 
     resetConfigDialog(dialog) {
-        const defaults = {
-            maxLeaves: 80,
-            spawnRate: 0.06,
-            fallSpeed: 2,
-            swayAmount: 1.5,
-            leafOpacity: 0.8,
-            windChance: 0.003,
-            windIntensity: 12,
-            seasonalColors: 'autumn',
-            leafTypes: ['maple', 'oak', 'birch', 'elm'],
-            collectLeaves: true,
-            preSeedPile: true,
-            pileDepth: 0.2,
-            pileUnevenness: 0.6,
-            pileDensity: 1.5,
-            maxSettled: 14000
-        };
+        const defaults = WP.settings.defaults();
 
         // Reset sliders
         Object.keys(defaults).forEach(key => {

@@ -10,7 +10,8 @@ const RAIN_LAYERS = [
 ];
 
 class RainAnimationManager {
-    constructor() {
+    constructor(host) {
+        this.host = host;
         this.canvas = null;
         this.ctx = null;
         this.raindrops = [];
@@ -27,63 +28,18 @@ class RainAnimationManager {
         this.bolt = null;
         this.boltLife = 0;
         this.flickers = [];
-        this.temporaryStatusBarHeight = null;
 
         // Configuration
-        this.config = {
-            configVersion: 2,
-            maxRaindrops: 400,
-            spawnRate: 2.6,
-            dropSpeed: 12,
-            dropSpeedVariation: 6,
-            dropLength: 20,
-            dropWidth: 2,
-            windChance: 0.001,
-            windIntensity: 8,
-            windDuration: 180,
-            puddleRate: 0.3,
-            maxPuddles: 50,
-            splashRate: 0.8,
-            rainOpacity: 0.7,
-            puddleOpacity: 0.4,
-            lightning: true,
-            lightningChance: 0.07,
-            groundMist: true,
-            statusBarHeight: 44
-        };
-
-        this.loadStoredConfig();
-    }
-
-    loadStoredConfig() {
-        try {
-            const stored = localStorage.getItem('rainConfig');
-            if (stored) {
-                const config = JSON.parse(stored);
-                // Speeds became per-second and the misspelled puddeOpacity key
-                // was corrected, so older saved values no longer apply
-                if (config.configVersion === this.config.configVersion) {
-                    Object.assign(this.config, config);
-                }
-            }
-        } catch (error) {
-            console.error('Failed to load rain config:', error);
-        }
+        this.config = WP.settings.load();
     }
 
     groundLevel() {
-        const barHeight = this.temporaryStatusBarHeight !== null
-            ? this.temporaryStatusBarHeight
-            : this.config.statusBarHeight;
+        const barHeight = this.host.insets.bottom;
         return this.canvas.height - barHeight;
     }
 
     saveConfig() {
-        try {
-            localStorage.setItem('rainConfig', JSON.stringify(this.config));
-        } catch (error) {
-            console.error('Failed to save rain config:', error);
-        }
+        WP.settings.save(this.config);
     }
 
     async init() {
@@ -731,20 +687,7 @@ class RainAnimationManager {
     }
 
     resetConfigDialog(dialog) {
-        const defaults = {
-            maxRaindrops: 400,
-            spawnRate: 2.6,
-            dropSpeed: 12,
-            rainOpacity: 0.7,
-            windChance: 0.001,
-            windIntensity: 8,
-            puddleRate: 0.3,
-            splashRate: 0.8,
-            maxPuddles: 50,
-            lightning: true,
-            lightningChance: 0.07,
-            groundMist: true
-        };
+        const defaults = WP.settings.defaults();
 
         Object.keys(defaults).forEach(key => {
             const element = dialog.querySelector(`#${key.replace(/([A-Z])/g, '-$1').toLowerCase()}`);

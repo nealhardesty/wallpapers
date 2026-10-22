@@ -156,7 +156,8 @@ const HW_BANDS = [
 const HW_MARGIN = 40;
 
 class HalloweenAnimationManager {
-    constructor() {
+    constructor(host) {
+        this.host = host;
         this.canvas = null;
         this.ctx = null;
         this.animationId = null;
@@ -212,107 +213,16 @@ class HalloweenAnimationManager {
         this.listeners = [];
         this._onResize = null;
 
-        this.config = this.defaultConfig();
-        this.loadConfig();
+        this.config = WP.settings.load();
     }
 
     defaultConfig() {
-        return {
-            configVersion: 4,
-
-            // Scene
-            theme: 'classic',
-            scenePreset: 'graveyard',
-            castle: true,
-            castleSize: 1.0,
-            grass: true,
-            sceneSeed: 0,            // 0 picks a fresh scene every start
-            horizon: 0.62,
-            statusBarHeight: 44,
-            parallax: 1.0,
-
-            // Jack-o'-lanterns
-            pumpkinCount: 14,
-            pumpkinSize: 1.0,
-            litFraction: 0.8,
-            flicker: 1.0,
-            lightIntensity: 1.0,
-            faceLight: true,
-            breathing: true,
-
-            // Sky
-            moon: true,
-            moonPhase: 0.82,
-            starCount: 240,
-            cloudBands: true,
-
-            // Weather
-            fog: true,
-            fogDensity: 0.8,
-            lightning: true,
-            lightningRate: 1.0,
-            wind: 1.0,
-
-            // Critters
-            bats: true,
-            batCount: 36,
-            ghosts: true,
-            ghostCount: 5,
-            zombies: true,
-            zombieCount: 4,
-            spiders: true,
-
-            // Webs. Off by default: a web pinned across the corners of the
-            // viewport sits in front of the page content rather than in the
-            // scene, which not everyone wants on a homepage.
-            webs: false,
-            webCount: 5,
-            webOpacity: 0.3,
-            webSag: 1.0,
-            dew: true,
-
-            // Falling
-            candyCount: 40,
-            candyFallSpeed: 2,
-            candySize: 1.0,
-            fallingLeaves: true,
-            leafCount: 40,
-
-            // Render
-            quality: 'auto',
-            bloom: true,
-            bloomStrength: 1.0,
-            vignette: true,
-            grain: 0.35,
-
-            // Interaction
-            interactive: true,
-            clickToToggle: true
-        };
-    }
-
-    loadConfig() {
-        try {
-            const stored = localStorage.getItem('halloweenConfig');
-            if (!stored) return;
-            const saved = JSON.parse(stored);
-            // Every key changed meaning when the shower became a scene, so a
-            // config from an older version is discarded rather than merged
-            if (saved && saved.configVersion === this.config.configVersion) {
-                Object.assign(this.config, saved);
-            }
-        } catch (error) {
-            console.error('Failed to load Halloween config:', error);
-        }
+        return WP.settings.defaults();
     }
 
     saveConfig(config) {
         if (config) Object.assign(this.config, config);
-        try {
-            localStorage.setItem('halloweenConfig', JSON.stringify(this.config));
-        } catch (error) {
-            console.error('Failed to save Halloween config:', error);
-        }
+        WP.settings.save(this.config);
     }
 
     get theme() {
@@ -323,10 +233,9 @@ class HalloweenAnimationManager {
         return HW_PRESETS[this.config.scenePreset] || HW_PRESETS.graveyard;
     }
 
-    // Ground plane. The homepage keeps a footer along the bottom, so the
-    // horizon and the near band are measured against the visible area.
+    // Ground plane, measured against the area the host keeps clear.
     get usableHeight() {
-        return Math.max(200, this.h - this.config.statusBarHeight);
+        return Math.max(200, this.h - this.host.insets.bottom);
     }
 
     get horizonY() {

@@ -345,7 +345,9 @@ class LayeredWindSystem {
 
 // Snow Animation Manager
 class SnowAnimationManager {
-    constructor() {
+    constructor(host) {
+        this.host = host;
+        this.config = WP.settings.load();
         this.canvas = null;
         this.ctx = null;
         this.isEnabled = false;
@@ -357,7 +359,7 @@ class SnowAnimationManager {
         this.assetsLoaded = false;
 
         // Layered snow system
-        this.layerCount = CONFIG.snow.layerCount || 5; // Configurable number of layers
+        this.layerCount = this.config.layerCount || 5; // Configurable number of layers
         this.snowLayers = []; // Array of arrays, each containing snowflakes for that layer
         this.windSystem = null;
 
@@ -367,7 +369,6 @@ class SnowAnimationManager {
         // Snow accumulation
         this.snowBankHeights = []; // Array to track snow height across screen width
         this.accumulationWidth = 5; // Width of each accumulation segment
-        this.temporaryStatusBarHeight = null; // Used for hide mode
 
         // Animation state
         this.animationId = null;
@@ -387,20 +388,12 @@ class SnowAnimationManager {
             await this.loadAssets();
             
             // Initialize systems
-            this.windSystem = new LayeredWindSystem(CONFIG.snow, this.layerCount);
+            this.windSystem = new LayeredWindSystem(this.config, this.layerCount);
             this.createTrees();
             this.initSnowAccumulation();
             this.initSnowLayers();
             
-            // Set seasonal default
-            this.isEnabled = this.getSeasonalDefault();
-            
             this.isInitialized = true;
-            
-            // Start animation if enabled
-            if (this.isEnabled) {
-                this.start();
-            }
         } catch (error) {
             console.error('Failed to initialize snow animation:', error);
         }
@@ -460,7 +453,7 @@ class SnowAnimationManager {
 
     createTrees() {
         this.trees = [];
-        const config = CONFIG.snow;
+        const config = this.config;
         
         for (let i = 0; i < config.treeCount; i++) {
             const x = Math.random() * this.canvas.width;
@@ -487,10 +480,10 @@ class SnowAnimationManager {
     }
 
     updateSnowAccumulation() {
-        const config = CONFIG.snow;
+        const config = this.config;
         // Use temporary status bar height if set (for hide mode), otherwise use config
-        const statusBarHeight = this.temporaryStatusBarHeight !== null ? this.temporaryStatusBarHeight : config.statusBarHeight;
-        const groundLevel = this.canvas.height - statusBarHeight;
+        const bottomInset = this.host.insets.bottom;
+        const groundLevel = this.canvas.height - bottomInset;
 
         // Check each snowflake in each layer for ground collision
         this.snowLayers.forEach((layer, layerIndex) => {
@@ -557,10 +550,10 @@ class SnowAnimationManager {
     renderSnowAccumulation() {
         if (!this.ctx || this.snowBankHeights.length === 0) return;
 
-        const config = CONFIG.snow;
+        const config = this.config;
         // Use temporary status bar height if set (for hide mode), otherwise use config
-        const statusBarHeight = this.temporaryStatusBarHeight !== null ? this.temporaryStatusBarHeight : config.statusBarHeight;
-        const groundLevel = this.canvas.height - statusBarHeight;
+        const bottomInset = this.host.insets.bottom;
+        const groundLevel = this.canvas.height - bottomInset;
         
         this.ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
         this.ctx.strokeStyle = 'rgba(240, 240, 240, 0.8)';
@@ -615,7 +608,7 @@ class SnowAnimationManager {
     }
 
     spawnSnowflakes() {
-        const config = CONFIG.snow;
+        const config = this.config;
         const totalSnowflakes = this.getTotalSnowflakeCount();
 
         if (totalSnowflakes < config.maxSnowflakes && Math.random() < config.spawnRate) {
@@ -716,10 +709,10 @@ class SnowAnimationManager {
         }
         
         console.log('▶️ Starting snow animation with config:', {
-            treeCount: CONFIG.snow.treeCount,
-            maxSnowflakes: CONFIG.snow.maxSnowflakes,
-            spawnRate: CONFIG.snow.spawnRate,
-            snowSpeed: CONFIG.snow.snowSpeed
+            treeCount: this.config.treeCount,
+            maxSnowflakes: this.config.maxSnowflakes,
+            spawnRate: this.config.spawnRate,
+            snowSpeed: this.config.snowSpeed
         });
         
         this.isEnabled = true;
@@ -763,13 +756,108 @@ class SnowAnimationManager {
         }
     }
 
-    getSeasonalDefault() {
-        const currentMonth = new Date().getMonth();
-        return CONFIG.snow.enabledMonths.includes(currentMonth);
+    // -----------------------------------------------------------------------
+    // Settings dialog (ported from the homepage, which used to own it)
+    // -----------------------------------------------------------------------
+
+    // id, config key, slider range, how the value reads, what it does.
+    static get SETTINGS() {
+        const fixed = (digits, unit = '') => v => parseFloat(v).toFixed(digits) + unit;
+        return [
+            { group: '🌲 Trees' },
+            { id: 'tree-count', key: 'treeCount', label: 'Tree Count', min: 0, max: 400, step: 1, format: v => v, help: 'Number of trees scattered across the background' },
+            { id: 'tree-scale', key: 'treeScale', label: 'Tree Scale', min: 0.5, max: 8, step: 0.1, format: fixed(1, 'x'), help: 'Size multiplier for the trees' },
+            { group: '❄️ Snowflakes' },
+            { id: 'max-snowflakes', key: 'maxSnowflakes', label: 'Max Snowflakes', min: 10, max: 6400, step: 1, format: v => v, help: 'Most snowflakes on screen at once' },
+            { id: 'spawn-rate', key: 'spawnRate', label: 'Spawn Rate', min: 0.01, max: 1.2, step: 0.01, format: v => (parseFloat(v) * 100).toFixed(1) + '%', help: 'Chance per frame that a new snowflake appears (higher = denser snowfall)' },
+            { id: 'snow-speed', key: 'snowSpeed', label: 'Snow Speed', min: 1, max: 60, step: 0.5, format: fixed(1), help: 'Base falling speed, in pixels per frame at 60 fps' },
+            { id: 'speed-variation', key: 'snowSpeedVariation', label: 'Speed Variation', min: 0.5, max: 20, step: 0.1, format: fixed(1), help: 'Random speed variation for each snowflake (± pixels)' },
+            { id: 'layer-count', key: 'layerCount', label: 'Depth Layers', min: 1, max: 10, step: 1, format: v => v, help: 'Depth layers for parallax (more layers = more depth)' },
+            { group: '💨 Wind' },
+            { id: 'wind-chance', key: 'windChance', label: 'Wind Chance', min: 0.001, max: 0.04, step: 0.001, format: v => (parseFloat(v) * 100).toFixed(2) + '%', help: 'Chance per frame that a gust starts' },
+            { id: 'wind-intensity', key: 'windIntensity', label: 'Wind Intensity', min: 5, max: 240, step: 1, format: v => v, help: 'Strongest sideways push, in pixels per frame' },
+            { id: 'wind-duration', key: 'windDuration', label: 'Wind Duration', min: 120, max: 2400, step: 30, format: v => (parseFloat(v) / 60).toFixed(1) + 's', help: 'How long a gust lasts, including ramping up and down' },
+            { group: '🏔️ Accumulation' },
+            { id: 'accumulation-rate', key: 'accumulationRate', label: 'Accumulation Rate', min: 0.01, max: 8, step: 0.01, format: fixed(2), help: 'How much snow builds up per landing snowflake' },
+            { id: 'max-accumulation', key: 'maxAccumulation', label: 'Max Accumulation', min: 1, max: 800, step: 1, format: v => v + 'px', help: 'Tallest the snow banks grow' },
+        ];
     }
 
-    isSeasonallyEnabled() {
-        return this.getSeasonalDefault();
+    showConfigDialog() {
+        if (document.getElementById('snow-config-modal')) return;
+        const settings = SnowAnimationManager.SETTINGS;
+        const defaults = WP.settings.defaults();
+
+        const modal = document.createElement('div');
+        modal.id = 'snow-config-modal';
+        modal.style.cssText = `
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background-color: rgba(0, 0, 0, 0.5); display: flex;
+            align-items: center; justify-content: center; z-index: 1000;
+        `;
+        const dialog = document.createElement('div');
+        dialog.style.cssText = `
+            background-color: var(--dark-surface); border: 1px solid var(--gray-700);
+            border-radius: 0.5rem; padding: 1.5rem; min-width: 400px; max-width: 500px;
+            max-height: 80vh; overflow-y: auto; color: var(--light-text);
+        `;
+
+        const rows = settings.map(s => s.group
+            ? `</div><div class="config-group"><h4 style="margin: 0 0 0.5rem 0; color: var(--gray-300); font-size: 1rem;">${s.group}</h4>`
+            : `<label style="display: block; margin-bottom: 0.5rem;">
+                   ${s.label}: <span id="${s.id}-value">${s.format(this.config[s.key])}</span>
+                   <input type="range" id="${s.id}" min="${s.min}" max="${s.max}" step="${s.step}" value="${this.config[s.key]}"
+                          style="width: 100%; margin-top: 0.25rem;">
+               </label>`).join('');
+        dialog.innerHTML = `
+            <h3 style="margin: 0 0 1rem 0; color: var(--light-text); font-size: 1.25rem;">❄️ Snow Configuration</h3>
+            <div style="display: grid; gap: 1rem;"><div>${rows}</div></div>
+            <div style="display: flex; gap: 0.5rem; margin-top: 1.5rem; justify-content: flex-end;">
+                <button id="reset-snow-config" style="padding: 0.5rem 1rem; background: var(--gray-600); color: white; border: none; border-radius: 0.25rem; cursor: pointer;">Reset to Defaults</button>
+                <button id="cancel-snow-config" style="padding: 0.5rem 1rem; background: var(--gray-600); color: white; border: none; border-radius: 0.25rem; cursor: pointer;">Cancel</button>
+                <button id="apply-snow-config" style="padding: 0.5rem 1rem; background: var(--accent-blue); color: white; border: none; border-radius: 0.25rem; cursor: pointer;">Apply</button>
+            </div>
+        `;
+        modal.appendChild(dialog);
+        document.body.appendChild(modal);
+
+        for (const s of settings) {
+            if (s.group) continue;
+            const input = dialog.querySelector(`#${s.id}`);
+            const value = dialog.querySelector(`#${s.id}-value`);
+            value.after(createInfoIcon(s.help, s.format(defaults[s.key])));
+            input.addEventListener('input', () => { value.textContent = s.format(input.value); });
+        }
+
+        const close = () => modal.remove();
+        dialog.querySelector('#reset-snow-config').addEventListener('click', () => {
+            for (const s of settings) {
+                if (s.group) continue;
+                const input = dialog.querySelector(`#${s.id}`);
+                input.value = defaults[s.key];
+                input.dispatchEvent(new Event('input'));
+            }
+        });
+        dialog.querySelector('#cancel-snow-config').addEventListener('click', close);
+        dialog.querySelector('#apply-snow-config').addEventListener('click', () => {
+            const next = {};
+            for (const s of settings) if (!s.group) next[s.key] = parseFloat(dialog.querySelector(`#${s.id}`).value);
+            this.applyConfig(next);
+            close();
+        });
+        modal.addEventListener('click', event => { if (event.target === modal) close(); });
+    }
+
+    applyConfig(next) {
+        Object.assign(this.config, next);
+        WP.settings.save(this.config);
+        if (!this.isInitialized) return;
+        // Rebuild everything the settings shape. The homepage swapped in a
+        // plain WindSystem here, which has no per-layer effects, and cleared
+        // a snowflake list that no longer existed.
+        this.layerCount = this.config.layerCount || 5;
+        this.windSystem = new LayeredWindSystem(this.config, this.layerCount);
+        if (this.isEnabled) this.start();
     }
 
     destroy() {

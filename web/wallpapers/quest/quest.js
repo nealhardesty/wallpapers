@@ -359,14 +359,8 @@ const QUEST_STUCK_CLEAR = 12;
 const QUEST_STUCK_FIGHTING = 25;
 
 class QuestAnimationManager {
-    // The homepage builds this with no options. A page that hosts the game on
-    // its own passes a storageKey so its settings live apart from the
-    // homepage's, defaults for a first run (and for Reset), and pinned values
-    // the page always forces -- those also drop out of the settings dialog.
-    constructor({ storageKey = 'questConfig', defaults = {}, pinned = {} } = {}) {
-        this.storageKey = storageKey;
-        this.pageDefaults = defaults;
-        this.pinned = pinned;
+    constructor(host) {
+        this.host = host;
         this.canvas = null;
         this.ctx = null;
         this.isEnabled = false;
@@ -379,59 +373,7 @@ class QuestAnimationManager {
         this.lightCanvas = null;
         this.listeners = [];
 
-        this.config = {
-            configVersion: 1,
-
-            // Hero
-            hero: 'cat',               // any key of QuestArt.HEROES, or 'random'
-            heroVariant: 0,
-            hat: 'none',
-            companion: 'fairy',
-            heroName: '',
-
-            // World
-            worldSize: 'medium',       // tiny | small | medium | large | huge
-            worldTheme: 'mixed',
-            dungeonCount: 3,
-            cowLevel: 'sometimes',     // sometimes | always | never
-            roomSize: 'classic',       // cozy | classic | roomy | vast
-            seed: 0,                   // 0 = a new world every quest
-
-            // Challenge
-            difficulty: 'normal',
-            enemyDensity: 1.0,
-
-            // Presentation
-            gameSpeed: 1.0,
-            palette: 'none',
-            crt: false,
-            dayNight: 'normal',        // off | short | normal | long
-            weather: true,
-            critters: true,
-            hud: 'top',                // top | bottom | off
-            minimap: true,
-            thoughts: true,
-            dialogue: true,
-            story: true,
-            transition: 'scroll',      // scroll | fade | iris
-            dim: 0.2,
-            fpsCap: 60,
-            statusBarHeight: 44,
-
-            // Interaction (the standalone page turns these on)
-            keyboard: false,
-            clickToGuide: false,
-
-            // On-screen touch controller: off until someone asks for it
-            touchControls: false,
-            touchScale: 1.0,
-            touchPosition: 'bottom',   // bottom | middle | top
-            touchSwap: false           // D-pad on the right instead
-        };
-
-        Object.assign(this.config, defaults);
-        this.loadStoredConfig();
-        Object.assign(this.config, pinned);
+        this.config = WP.settings.load();
         this.resetState();
     }
 
@@ -461,24 +403,8 @@ class QuestAnimationManager {
     // -----------------------------------------------------------------------
     // Config persistence
     // -----------------------------------------------------------------------
-    loadStoredConfig() {
-        try {
-            const stored = localStorage.getItem(this.storageKey);
-            if (stored) {
-                const config = JSON.parse(stored);
-                if (config.configVersion === this.config.configVersion) Object.assign(this.config, config);
-            }
-        } catch (error) {
-            console.error('Failed to load quest config:', error);
-        }
-    }
-
     saveConfig() {
-        try {
-            localStorage.setItem(this.storageKey, JSON.stringify(this.config));
-        } catch (error) {
-            console.error('Failed to save quest config:', error);
-        }
+        WP.settings.save(this.config);
     }
 
     // -----------------------------------------------------------------------
@@ -505,7 +431,7 @@ class QuestAnimationManager {
     computeLayout() {
         const c = this.config;
         const W = window.innerWidth;
-        const H = Math.max(200, window.innerHeight - (c.statusBarHeight || 0));
+        const H = Math.max(200, window.innerHeight - this.host.insets.bottom);
         const targetCols = { cozy: 14, classic: 18, roomy: 24, vast: 30 }[c.roomSize] || 18;
         const hudH = c.hud === 'off' ? 0 : 16;
         let cols = targetCols;
@@ -4572,7 +4498,7 @@ class QuestAnimationManager {
     viewport() {
         const L = this.layout, dpr = this.dpr;
         const W = window.innerWidth * dpr;
-        const H = (window.innerHeight - (this.config.statusBarHeight || 0)) * dpr;
+        const H = (window.innerHeight - this.host.insets.bottom) * dpr;
         const s = Math.min(W / L.lowW, H / L.lowH);
         return { s, x: Math.round((W - L.lowW * s) / 2), y: Math.round((H - L.lowH * s) / 2), w: L.lowW * s, h: L.lowH * s };
     }
@@ -4602,10 +4528,6 @@ class QuestAnimationManager {
         out.fillRect(0, 0, this.canvas.width, this.canvas.height);
         out.drawImage(this.low, 0, 0, L.lowW, L.lowH, v.x, v.y, v.w, v.h);
         if (this.config.crt) this.drawCRT(out, v);
-        if (this.config.dim > 0) {
-            out.fillStyle = `rgba(0,0,0,${this.config.dim})`;
-            out.fillRect(0, 0, this.canvas.width, this.canvas.height);
-        }
     }
 
     drawWorld(ctx) {
@@ -5772,7 +5694,6 @@ class QuestAnimationManager {
                     select('Day &amp; night:', 'qc-daynight', simple([['off', 'Always daytime'], ['short', 'Quick days (3 min)'], ['normal', 'Normal (7 min)'], ['long', 'Long days (15 min)']], c.dayNight)) +
                     select('Screen transitions:', 'qc-transition', simple([['scroll', 'Scroll (classic)'], ['fade', 'Fade'], ['iris', 'Iris']], c.transition)) +
                     select('Status bar:', 'qc-hud', simple([['top', 'Top'], ['bottom', 'Bottom'], ['off', 'Hidden']], c.hud)) +
-                    ('dim' in this.pinned ? '' : slider('Dim behind page', 'qc-dim', 0, 0.8, 0.05, c.dim, Math.round(c.dim * 100) + '%')) +
                     select('Frame rate:', 'qc-fps', simple([[60, '60 fps (smooth)'], [30, '30 fps (lighter)']], c.fpsCap)) +
                     check('CRT scanlines', 'qc-crt', c.crt) +
                     check('Weather', 'qc-weather', c.weather) +
@@ -5853,7 +5774,7 @@ class QuestAnimationManager {
             $('qc-touch-opts').style.opacity = $('qc-touch').checked ? '1' : '0.4';
         };
         syncTouch();
-        const live = [['qc-dungeons', v => v], ['qc-density', v => Math.round(v * 100) + '%'], ['qc-speed', v => v + 'x'], ['qc-dim', v => Math.round(v * 100) + '%'], ['qc-touch-scale', v => Math.round(v * 100) + '%']];
+        const live = [['qc-dungeons', v => v], ['qc-density', v => Math.round(v * 100) + '%'], ['qc-speed', v => v + 'x'], ['qc-touch-scale', v => Math.round(v * 100) + '%']];
         for (const [id, fmt] of live) if ($(id)) $(id).addEventListener('input', (e) => { $(id + '-value').textContent = fmt(parseFloat(e.target.value)); });
 
         const readTouch = () => ({
@@ -5903,7 +5824,7 @@ class QuestAnimationManager {
             roomSize: $('qc-room-size').value, seed: Math.max(0, parseInt($('qc-seed').value) || 0),
             difficulty: $('qc-difficulty').value, enemyDensity: parseFloat($('qc-density').value), gameSpeed: parseFloat($('qc-speed').value),
             palette: $('qc-palette').value, dayNight: $('qc-daynight').value, transition: $('qc-transition').value, hud: $('qc-hud').value,
-            dim: $('qc-dim') ? parseFloat($('qc-dim').value) : c.dim, fpsCap: parseInt($('qc-fps').value), crt: $('qc-crt').checked, weather: $('qc-weather').checked,
+            fpsCap: parseInt($('qc-fps').value), crt: $('qc-crt').checked, weather: $('qc-weather').checked,
             critters: $('qc-critters').checked, minimap: $('qc-minimap').checked, thoughts: $('qc-thoughts').checked,
             dialogue: $('qc-dialogue').checked, story: $('qc-story').checked,
             keyboard: $('qc-keyboard').checked, clickToGuide: $('qc-clickguide').checked,
@@ -5914,7 +5835,7 @@ class QuestAnimationManager {
         document.addEventListener('keydown', onKey, true);
         modal.addEventListener('click', (e) => { if (e.target === modal) close(); });
         $('qc-reset').addEventListener('click', () => {
-            Object.assign(this.config, this.defaults(), this.pageDefaults, this.pinned);
+            Object.assign(this.config, this.defaults());
             close();
             this.saveConfig();
             this.showConfigDialog();
@@ -5923,23 +5844,13 @@ class QuestAnimationManager {
         $('qc-new').addEventListener('click', () => { const next = read(); close(); this.applyConfig(next, true); });
     }
 
-    // Deliberately omits keyboard and clickToGuide: those are set by the page
-    // the game is embedded in (the standalone page turns both on through its
-    // own defaults), so resetting must not quietly disable playing along.
     defaults() {
-        return {
-            hero: 'cat', heroVariant: 0, hat: 'none', companion: 'fairy', heroName: '',
-            worldSize: 'medium', worldTheme: 'mixed', dungeonCount: 3, cowLevel: 'sometimes', roomSize: 'classic', seed: 0,
-            difficulty: 'normal', enemyDensity: 1.0, gameSpeed: 1.0,
-            palette: 'none', crt: false, dayNight: 'normal', weather: true, critters: true,
-            hud: 'top', minimap: true, thoughts: true, dialogue: true, story: true, transition: 'scroll', dim: 0.2, fpsCap: 60,
-            touchControls: false, touchScale: 1.0, touchPosition: 'bottom', touchSwap: false
-        };
+        return WP.settings.defaults();
     }
 
     applyConfig(next, forceNew) {
         const before = { ...this.config };
-        Object.assign(this.config, next, this.pinned);
+        Object.assign(this.config, next);
         this.saveConfig();
         if (!this.isEnabled) return;
         const worldKeys = ['worldSize', 'worldTheme', 'dungeonCount', 'cowLevel', 'roomSize', 'seed', 'difficulty', 'enemyDensity'];

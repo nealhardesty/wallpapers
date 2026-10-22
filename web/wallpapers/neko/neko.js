@@ -37,38 +37,13 @@ class NekoAnimationManager {
         };
 
         // Configuration
-        this.config = {
-            theme: 'neko',
-            speed: 3,
-            size: 32,
-            idleTimeout: 5000, // ms before idle animations
-            sleepTimeout: 15000, // ms before sleep
-            animationSpeed: 8, // frames between sprite changes
-            enableSounds: false
-        };
+        this.config = WP.settings.load();
 
         this.sprites = {};
-        this.loadStoredConfig();
-    }
-
-    loadStoredConfig() {
-        try {
-            const stored = localStorage.getItem('nekoConfig');
-            if (stored) {
-                const config = JSON.parse(stored);
-                Object.assign(this.config, config);
-            }
-        } catch (error) {
-            console.error('Failed to load neko config:', error);
-        }
     }
 
     saveConfig() {
-        try {
-            localStorage.setItem('nekoConfig', JSON.stringify(this.config));
-        } catch (error) {
-            console.error('Failed to save neko config:', error);
-        }
+        WP.settings.save(this.config);
     }
 
     async init() {
@@ -695,14 +670,7 @@ class NekoAnimationManager {
     }
 
     resetConfigDialog(dialog) {
-        const defaults = {
-            theme: 'neko',
-            size: 32,
-            speed: 3,
-            animationSpeed: 8,
-            idleTimeout: 5000,
-            sleepTimeout: 15000
-        };
+        const defaults = WP.settings.defaults();
 
         // Reset sliders
         Object.keys(defaults).forEach(key => {

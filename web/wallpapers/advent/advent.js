@@ -22,7 +22,8 @@
 // always render at full rate.
 
 class AdventCalendarAnimationManager {
-    constructor() {
+    constructor(host) {
+        this.host = host;
         this.canvas = null;
         this.ctx = null;
         this.isEnabled = false;
@@ -53,61 +54,21 @@ class AdventCalendarAnimationManager {
         // Time travel for previews: days added to the real date
         this.dayOffset = 0;
 
-        this.config = {
-            configVersion: 1,
-
-            // Theme: per-month choice, 'auto' lets holidays and the year pick
-            themeByMonth: {},
-            holidayThemes: true,
-            holidayStars: true,
-
-            // Doors
-            layout: 'scatter',         // scatter | ordered | week
-            ceremony: 'grand',         // grand | door | click | quiet
-            spotlightSeconds: 8,
-            catchUp: true,
-
-            // Atmosphere
-            particles: true,
-            particleAmount: 1.0,
-            ambient: 'lively',         // lively | gentle | still
-            fps: 30,
-            quality: 'high',           // high | balanced
-
-            statusBarHeight: 44
-        };
-
-        this.loadStoredConfig();
-    }
-
-    loadStoredConfig() {
-        try {
-            const stored = localStorage.getItem('adventConfig');
-            if (stored) {
-                const config = JSON.parse(stored);
-                if (config.configVersion === this.config.configVersion) {
-                    Object.assign(this.config, config);
-                }
-            }
-        } catch (error) {
-            console.error('Failed to load advent config:', error);
-        }
+        this.config = WP.settings.load();
     }
 
     saveConfig() {
-        try {
-            localStorage.setItem('adventConfig', JSON.stringify(this.config));
-        } catch (error) {
-            console.error('Failed to save advent config:', error);
-        }
+        WP.settings.save(this.config);
     }
 
+    // Calendar state that isn't a setting, kept by the host under
+    // wp:advent:<key> so it can't collide with other wallpapers.
     storageGet(key) {
-        try { return localStorage.getItem(key); } catch (e) { return null; }
+        return this.host.storage.get(key);
     }
 
     storageSet(key, value) {
-        try { localStorage.setItem(key, value); } catch (e) { /* private window */ }
+        this.host.storage.set(key, value);
     }
 
     // -----------------------------------------------------------------------
@@ -188,6 +149,20 @@ class AdventCalendarAnimationManager {
 
     static dateKey(d) {
         return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    }
+
+    // ?date=YYYY-MM-DD time-travels; ?theme=<id> picks this month's theme.
+    // Called before init() (catalog prepare hook).
+    applyParams(params) {
+        const date = AdventCalendarAnimationManager.parseKey(params.date);
+        if (date) {
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            this.dayOffset = Math.round((date - today) / 86400000);
+        }
+        if (params.theme && ADVENT_THEMES.some(t => t.id === params.theme)) {
+            this.config.themeByMonth[this.now().getMonth() + 1] = params.theme;
+        }
     }
 
     static parseKey(key) {
@@ -379,7 +354,7 @@ class AdventCalendarAnimationManager {
         const m = this.model;
         const theme = m.theme;
         const margin = Math.max(14, Math.min(this.w, this.h) * 0.035);
-        const bottomPad = this.config.statusBarHeight;
+        const bottomPad = this.host.insets.bottom;
         const area = { x: margin, y: margin, w: this.w - margin * 2, h: this.h - margin * 2 - bottomPad };
 
         const isHouse = theme.frame === 'house';
@@ -2456,10 +2431,6 @@ class AdventCalendarAnimationManager {
     }
 
     defaults() {
-        return {
-            holidayThemes: true, holidayStars: true, layout: 'scatter', ceremony: 'grand',
-            spotlightSeconds: 8, catchUp: true, particles: true, particleAmount: 1.0,
-            ambient: 'lively', fps: 30, quality: 'high'
-        };
+        return WP.settings.defaults();
     }
 }

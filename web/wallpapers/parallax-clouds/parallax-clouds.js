@@ -9,42 +9,13 @@ class ParallaxCloudsAnimationManager {
         this.time = 0;
 
         // Configuration
-        this.config = {
-            layerCount: 4,
-            cloudDensity: 0.7,
-            baseSpeed: 0.3,
-            speedMultiplier: 1.5,
-            cloudScale: 1.0,
-            colorTheme: 'classic_mario', // classic_mario, underwater, desert, volcano, ice, night, sunset
-            pixelSize: 4,
-            smoothing: false,
-            windVariation: 0.2,
-            verticalFloat: 0.3,
-            floatSpeed: 0.01
-        };
+        this.config = WP.settings.load();
 
-        this.loadStoredConfig();
         this.setupColorThemes();
     }
 
-    loadStoredConfig() {
-        try {
-            const stored = localStorage.getItem('parallaxCloudsConfig');
-            if (stored) {
-                const config = JSON.parse(stored);
-                Object.assign(this.config, config);
-            }
-        } catch (error) {
-            console.error('Failed to load parallax clouds config:', error);
-        }
-    }
-
     saveConfig() {
-        try {
-            localStorage.setItem('parallaxCloudsConfig', JSON.stringify(this.config));
-        } catch (error) {
-            console.error('Failed to save parallax clouds config:', error);
-        }
+        WP.settings.save(this.config);
     }
 
     setupColorThemes() {
@@ -519,18 +490,7 @@ class ParallaxCloudsAnimationManager {
     }
 
     resetConfigDialog(dialog) {
-        const defaults = {
-            pixelSize: 4,
-            cloudScale: 1.0,
-            layerCount: 4,
-            cloudDensity: 0.7,
-            baseSpeed: 0.3,
-            speedMultiplier: 1.5,
-            windVariation: 0.2,
-            verticalFloat: 0.3,
-            colorTheme: 'classic_mario',
-            smoothing: false
-        };
+        const defaults = WP.settings.defaults();
 
         // Reset sliders
         Object.keys(defaults).forEach(key => {

@@ -17,37 +17,12 @@ class CherryBlossomAnimationManager {
     }
 
     loadConfig() {
-        const stored = localStorage.getItem('cherryBlossomConfig');
-        if (stored) {
-            try {
-                return JSON.parse(stored);
-            } catch (error) {
-                console.error('Failed to parse stored cherry blossom config:', error);
-            }
-        }
-        return {
-            petalCount: 150,
-            fallSpeed: 1.5,
-            windChance: 0.003,
-            windStrength: 3,
-            windDuration: 180,
-            swayAmount: 2,
-            petalSize: 1.0,
-            showBranches: true,
-            branchCount: 8,
-            petalColors: ['#ffb7c5', '#ffc0cb', '#ff69b4', '#ffd1dc', '#ffe4e1'],
-            fadeEnabled: true,
-            rotationSpeed: 1.0
-        };
+        return WP.settings.load();
     }
 
     saveConfig(config) {
-        try {
-            localStorage.setItem('cherryBlossomConfig', JSON.stringify(config));
-            this.config = { ...config };
-        } catch (error) {
-            console.error('Failed to save cherry blossom config:', error);
-        }
+        WP.settings.save(config);
+        this.config = { ...config };
     }
 
     start() {
@@ -64,6 +39,7 @@ class CherryBlossomAnimationManager {
         if (!this.isRunning) return;
 
         this.isRunning = false;
+        window.removeEventListener('resize', this.onResize);
         if (this.animationId) {
             cancelAnimationFrame(this.animationId);
             this.animationId = null;
@@ -89,7 +65,8 @@ class CherryBlossomAnimationManager {
         this.canvas.style.pointerEvents = 'none';
 
         this.resizeCanvas();
-        window.addEventListener('resize', () => this.resizeCanvas());
+        this.onResize = () => this.resizeCanvas();
+        window.addEventListener('resize', this.onResize);
 
         this.ctx = this.canvas.getContext('2d');
         document.body.appendChild(this.canvas);

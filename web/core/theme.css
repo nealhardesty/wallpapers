@@ -1,0 +1,63 @@
+/* Shared tokens and base styles for the player and the stage. */
+
+:root {
+    --dark-bg: #111827;
+    --dark-surface: #1f2937;
+    --light-text: #f9fafb;
+    --accent-blue: #3b82f6;
+    --gray-300: #d1d5db;
+    --gray-400: #9ca3af;
+    --gray-500: #6b7280;
+    --gray-600: #4b5563;
+    --gray-700: #374151;
+    --gray-800: #1f2937;
+    color-scheme: dark;
+}
+
+html, body {
+    margin: 0;
+    height: 100%;
+    overflow: hidden;
+    color: var(--light-text);
+    font: 14px/1.4 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+}
+/* Only the root is painted. Wallpaper canvases sit at z-index -1, which a
+   body with a background of its own would cover. */
+html { background: #000; }
+body { background: transparent; }
+
+/* Info icon with a hover tooltip, used by the imported settings dialogs. */
+.wp-info {
+    position: relative;
+    display: inline-block;
+    width: 12px;
+    margin-left: 5px;
+    font-size: 12px;
+    line-height: 12px;
+    text-align: center;
+    color: var(--gray-400);
+    cursor: help;
+    user-select: none;
+}
+.wp-info > div {
+    display: none;
+    position: absolute;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 10001;
+    width: max-content;
+    max-width: 300px;
+    padding: 8px 12px;
+    border: 1px solid var(--gray-600);
+    border-radius: 6px;
+    background: var(--dark-surface);
+    color: var(--light-text);
+    font-size: 12px;
+    line-height: 1.4;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    pointer-events: none;
+}
+.wp-info:hover > div { display: block; }
+.wp-info > div > div:first-child { font-weight: 500; margin-bottom: 4px; }
+.wp-info-default { color: var(--gray-300); font-size: 11px; }

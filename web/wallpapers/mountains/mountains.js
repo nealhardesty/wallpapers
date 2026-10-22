@@ -8,47 +8,13 @@ class MountainsAnimationManager {
         this.animationId = null;
 
         // Configuration
-        this.config = {
-            configVersion: 2, // Bumped when the generator changes shape meaningfully
-            layers: 4, // Number of mountain ranges (0 = furthest)
-            mountainsPerLayer: 3, // Peaks visible per screen width
-            baseSpeed: 0.4, // Base scrolling speed (for closest layer)
-            speedMultiplier: 0.6, // Speed reduction for each layer back (background slower)
-            colorPalette: 'blue', // blue, purple, sunset, monochrome, green
-            invertPalette: false, // false = lighter in back (haze), true = lighter in front
-            mountainHeight: 0.55, // Peak height of the furthest range, as a fraction of canvas
-            heightVariation: 0.35, // Random peak-to-peak height variation
-            peakiness: 0.55, // Ruggedness of the ridgeline (midpoint-displacement roughness)
-            ridgeLines: true, // Draw a lit ridge line along each silhouette
-            snowCaps: true // Snow on the high peaks of the taller ranges
-        };
+        this.config = WP.settings.load();
 
-        this.loadStoredConfig();
         this.setupColorPalettes();
     }
 
-    loadStoredConfig() {
-        try {
-            const stored = localStorage.getItem('mountainsConfig');
-            if (stored) {
-                const config = JSON.parse(stored);
-                // Configs saved against the old peak-blob generator tune badly
-                // against the ridgeline generator, so drop them
-                if (config.configVersion === this.config.configVersion) {
-                    Object.assign(this.config, config);
-                }
-            }
-        } catch (error) {
-            console.error('Failed to load mountains config:', error);
-        }
-    }
-
     saveConfig() {
-        try {
-            localStorage.setItem('mountainsConfig', JSON.stringify(this.config));
-        } catch (error) {
-            console.error('Failed to save mountains config:', error);
-        }
+        WP.settings.save(this.config);
     }
 
     setupColorPalettes() {
@@ -553,19 +519,7 @@ class MountainsAnimationManager {
     }
 
     resetConfigDialog(dialog) {
-        const defaults = {
-            layers: 4,
-            mountainsPerLayer: 3,
-            mountainHeight: 0.55,
-            heightVariation: 0.35,
-            peakiness: 0.55,
-            baseSpeed: 0.4,
-            speedMultiplier: 0.6,
-            colorPalette: 'blue',
-            invertPalette: false,
-            ridgeLines: true,
-            snowCaps: true
-        };
+        const defaults = WP.settings.defaults();
 
         // Reset sliders
         Object.keys(defaults).forEach(key => {

@@ -28,44 +28,12 @@ class StarfieldAnimationManager {
     }
 
     loadConfig() {
-        const defaults = {
-            configVersion: 2,
-            warpSpeed: 3,
-            baseStarCount: 260,
-            maxStarCount: 900,
-            starSize: 2,
-            trailLength: 0.6,
-            galaxyApproachEnabled: true,
-            galaxyApproachDuration: 60000, // 60 seconds
-            colorMode: 'realistic', // 'realistic', 'white', 'rainbow', 'blue'
-            densityMode: 'uniform', // 'center', 'edges', 'uniform'
-            twinkle: true,
-            milkyWay: true
-        };
-
-        const stored = localStorage.getItem('starfieldConfig');
-        if (stored) {
-            try {
-                const parsed = JSON.parse(stored);
-                // Configs saved before the projection was fixed were tuned
-                // against broken motion, so they are not worth carrying over
-                if (parsed.configVersion === defaults.configVersion) {
-                    return { ...defaults, ...parsed };
-                }
-            } catch (error) {
-                console.error('Failed to parse stored starfield config:', error);
-            }
-        }
-        return defaults;
+        return WP.settings.load();
     }
 
     saveConfig(config) {
-        try {
-            localStorage.setItem('starfieldConfig', JSON.stringify(config));
-            this.config = { ...config };
-        } catch (error) {
-            console.error('Failed to save starfield config:', error);
-        }
+        WP.settings.save(config);
+        this.config = { ...config };
     }
 
     start() {

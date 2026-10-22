@@ -455,25 +455,10 @@ class BingWallpaperManager {
     }
 
     loadWallpaperConfig() {
-        const stored = localStorage.getItem('wallpaperConfig');
-        if (stored) {
-            try {
-                return JSON.parse(stored);
-            } catch (error) {
-                console.error('Failed to parse stored wallpaper config:', error);
-            }
-        }
-        return { bingOffset: 0 };
+        return WP.settings.load();
     }
 
     saveBingConfig(offset) {
-        try {
-            const config = this.loadWallpaperConfig();
-            config.bingOffset = offset;
-            localStorage.setItem('wallpaperConfig', JSON.stringify(config));
-            console.log('✅ Saved Bing config:', config);
-        } catch (error) {
-            console.error('Failed to save Bing config:', error);
-        }
+        WP.settings.save({ ...this.loadWallpaperConfig(), bingOffset: offset });
     }
 }
