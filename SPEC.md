@@ -114,6 +114,7 @@ wallpapers/
 │   │   ├── panel.js             # unified switcher + settings overlay
 │   │   ├── settings.js          # renders a wallpaper's settings schema into controls
 │   │   └── theme.css            # tokens (was the homepage's CSS variables)
+│   ├── dev/                     # harness.html + legacy-shims.js (Phase 2 test bed)
 │   ├── wallpapers/
 │   │   └── <id>/                # one folder per wallpaper: scripts + its own assets
 │   └── icons/
@@ -205,9 +206,21 @@ Instance interface (the existing managers already mostly have this shape):
   Old homepage settings are not migrated automatically: the extension is a
   new identity with its own storage. The README gives a one-line console
   snippet that dumps the old keys in the panel's Import format.
-- Deep links (decided) replace the old per-wallpaper pages: `index.html#fishtank`
-  selects a wallpaper. The `advent` page's `?date=` and `?theme=` become
-  `#advent?date=2026-12-25`. No `quest.html`-style stub pages are kept.
+- **URL parameters (decided).** They override for **this page load only**:
+  nothing is persisted, the saved choice and Seasonal are untouched, and a
+  reload without them returns to normal. They replace the old
+  per-wallpaper pages; no `quest.html`-style stubs are kept.
+
+  | Parameter | Effect |
+  |---|---|
+  | `w=<id>` | Show this wallpaper instead of the saved one, e.g. `index.html?w=fishtank`. An unknown id is ignored, with a console warning |
+  | `panel=open` | Open the switcher and settings panel on load (closes as usual with `,` or `Esc`) |
+  | `date=YYYY-MM-DD`, `theme=<id>` | Passed to the wallpaper as `host.params`. Advent uses them for time travel and themes, e.g. `?w=advent&date=2026-12-25` |
+  | `host=android`, `hud=1`, `thumb=1` | Host simulation (§4.3), performance HUD (§4.8), thumbnail mode (§4.7) |
+
+  Picking a wallpaper in the panel while `w=` is active does persist, as
+  usual, and drops `w=` from the address bar (`history.replaceState`), so
+  a reload shows what was picked.
 - Pauses every wallpaper on `visibilitychange`, centrally, instead of relying
   on rAF throttling. Snow already does this in its standalone fork.
 - **Seasonal** (decided) is a pseudo-wallpaper in the strip and the
@@ -346,7 +359,7 @@ The panel strip shows a picture of each wallpaper, not just a name.
   - Seasonal's tile is the current month's thumbnail with a calendar badge.
   - Bing's tile is the live photo once fetched, or a placeholder.
 - **Live:** the focused or hovered tile comes alive by loading
-  `index.html?thumb=1#<id>` in a small iframe. Only one plays at a time, and
+  `index.html?thumb=1&w=<id>` in a small iframe. Only one plays at a time, and
   thumb mode turns off input, panel and persistence. The same files run, so
   there is no second renderer to maintain. It is skipped on Android and
   under `prefers-reduced-motion`.
@@ -592,7 +605,7 @@ and starfield (typical) on a real device, and picks one strategy.
 - `web/` is copied into assets at build time and served through
   `WebViewAssetLoader` (`https://appassets.androidplatform.net/`), so
   `localStorage` has a stable origin.
-- `index.html?host=android#<id>`.
+- `index.html?host=android` (the saved wallpaper; never `w=`, so the panel's choice sticks).
 - Performance and power follow §4.8: pause when invisible; Auto with a
   Medium ceiling at 30 fps; power, battery and thermal signals pushed into
   JS; the surface shrunk with `setFixedSize`.
@@ -701,6 +714,11 @@ Implemented in `tools/audit.mjs` (Phase 1), with four modes:
   leaks globals beyond its registration.
 - `make audit`: §7.2.
 - `make ci` = lint + audit + test; GitHub Actions runs only this.
+- `make smoke` (Phase 2, in `make ci`): every wallpaper booted in headless
+  Chrome through `web/dev/harness.html`. It must draw, open its settings and
+  log no errors. All network is intercepted and anything unexpected fails
+  the run. Screenshots go to `dist/smoke/`. Grows into the full
+  `make test` browser suite above in Phase 3.
 - `make bench`: performance budgets per wallpaper per tier (§4.8). Manual,
   not in CI.
 - `make thumbnails`: regenerates the committed thumbnails (§4.7). Not part
@@ -726,11 +744,21 @@ phase can mostly run in parallel.
 
 ### Phase 2: Import (fresh copy, allowlist only)
 
-- [ ] 2.1 Copy the 16 wallpaper modules and the Bing parts of wallpaper.js into `web/wallpapers/<id>/`; nothing else. → `make audit` passes.
-- [ ] 2.2 Diff the snow.html and leaves.html forks against their modules; merge any improvements (e.g. snow's visibility pause); drop the forks.
-- [ ] 2.3 Don't import the snow PNGs; make the canvas drawing the only path. Import neko.js **without** `assets/neko/`; it stays disabled until 4.6.
-- [ ] 2.4 THIRD_PARTY.md. LICENSE stays MIT.
-- [ ] 2.5 Commit. → each wallpaper runs in a throwaway harness page with no errors.
+- [x] 2.1 Copied the 16 wallpaper modules (19 files, 1.69 MB) byte-for-byte from the source commit with `git show`, not from its working tree. Carved Bing out of `WallpaperManager` into `bing/bing.js` (`BingWallpaperManager`, same `start`/`stop`/`showConfigDialog` shape). → `make audit` passes.
+  - Security fix on the way in: Bing's overlay put text from Bing's JSON into `innerHTML` and followed `copyrightlink` unchecked. It now builds its DOM with `textContent` and follows `https:` links only.
+- [x] 2.2 Diffed the forks.
+  - `leaves.html` is the module minus its settings, plus a tuned preset (Appendix A).
+  - `snow.html` is a simplified rewrite (no wind propagation or linked layers) with one real improvement: rebuilding the snow banks on resize. Merged as `resampleSnowAccumulation()`, which stretches existing banks to the new width instead of clearing them.
+  - The fork's visibility pause is left for 3.5, which centralises it for every wallpaper.
+  - Forks dropped.
+- [x] 2.3 The snow PNGs are gone; `SnowSprites` in `snow.js` draws a three-tier pixel fir (bright edge, snowy tops, star) and seven flakes in code. The `image.complete` checks became `width > 0` so canvases draw. neko.js was imported without `assets/neko/`, with a header note; the harness marks it disabled until 4.6.
+- [x] 2.4 `THIRD_PARTY.md`: origin, inspirations (xsnow, Neko/oneko, 8-bit adventures, The Matrix) with nothing copied, Bing photos and the proxies. LICENSE stays MIT.
+- [x] 2.5 `web/dev/harness.html` boots any one raw module (gallery, `?w=<id>`, `c` settings, `[`/`]` switch). `web/dev/legacy-shims.js` holds the homepage globals the modules still need (`CONFIG.snow`, `createInfoIcon`, the latter now built with text nodes), to be deleted in Phase 3. `make smoke` (`tools/smoke.mjs`, DevTools protocol over Node's built-in WebSocket, no deps):
+  - boots every wallpaper and checks that it draws, opens its settings dialog and logs no errors
+  - intercepts **all** network: local files load, Bing gets fixtures, anything else is blocked and fails the run, so "offline" is tested, not assumed
+  - saves screenshots to `dist/smoke/`
+
+  Runs in `make ci`. → 16/16 pass; neko is skipped as expected.
 
 ### Phase 3: Core
 
@@ -739,7 +767,7 @@ phase can mostly run in parallel.
 - [ ] 3.3 Replace `statusBarHeight` and `temporaryStatusBarHeight` with host insets.
 - [ ] 3.4 Decouple snow from `CONFIG` and `homepageApp`; move its settings in; fix the `WindSystem` swap bug.
 - [ ] 3.5 Fix the cherry-blossoms resize-listener leak; centralise the visibility pause.
-- [ ] 3.6 Deep links (`#id`, `#advent?date=`) and namespaced `wp:` storage.
+- [ ] 3.6 URL parameters (`w=`, `panel=open`, `date=`, `theme=`; §4.2), never persisted, and namespaced `wp:` storage. → a test that `?w=` shows the wallpaper and leaves storage unchanged.
 - [ ] 3.7 Seasonal pseudo-wallpaper (§4.2). → unit test over all 12 months and a rollover at midnight on the 1st with a faked clock.
 - [ ] 3.8 Extract every wallpaper's defaults into `defaults.js` (§4.1); store user settings as overrides only. → the defaults/schema consistency test passes for all wallpapers.
 - [ ] 3.9 `core/perf.js`: `host.requestFrame`, `host.createCanvas`, `onQuality`, idle frames, pinned tiers (no governor yet); switch every module's rAF and canvas setup over. → the fps cap and renderScale visibly apply to all wallpapers; a hidden tab uses zero frames (test).
@@ -751,7 +779,7 @@ phase can mostly run in parallel.
       snow · rain · leaves · fireflies · fireplace · northern-lights · parallax-clouds · mountains · starfield · cherry-blossoms · halloween · neko · matrix · fishtank · advent · quest
 - [ ] 4.3 `panel.js`: switcher strip, settings pane, live apply, Reset, keys list, Export/Import.
 - [ ] 4.4 Key map (§4.5), key help overlay, touch corner hot zone.
-- [ ] 4.5 Quest and advent standalone keys become declared `keys`. → `index.html#quest` plays like `quest.html` did.
+- [ ] 4.5 Quest and advent standalone keys become declared `keys`. → `index.html?w=quest` plays like `quest.html` did.
 - [ ] 4.6 Redraw neko: code-drawn sprite bank (8 directions × 2 frames, idle, yawn, scratch, wash, sleep, 4 wall claws), coat variants, pointer events so it follows a finger. → visual check against the classic oneko behaviours; zero image files.
 - [ ] 4.7 Bing: `host.fetchBing()` per host, overlay and day picker in the panel, offline fallback. → test with a fixture `bing.json` and a failing fetch.
 - [ ] 4.8 Thumbnails (§4.7): seeds where needed, `make thumbnails`, committed WebPs, live preview iframe for the focused tile. → the strip shows 18 tiles (16 + Seasonal + Bing) offline.
@@ -793,5 +821,33 @@ phase can mostly run in parallel.
 
 ## Open questions
 
-None open. Every question in the planning round was answered and folded in above.
-New questions go here, each with a recommendation.
+1. **Which defaults win in 3.8**: the standalone pages' tuned presets
+   (Appendix A; rec., since standalone is now the main host) or the
+   homepage's values? Example: snow as a dense, treeless blizzard on black,
+   or the homepage's 10 trees and 100 flakes. A third option is shipping
+   both as named presets in the panel.
+
+---
+
+## Appendix A: legacy standalone pages, to bring back
+
+The old per-wallpaper pages are replaced by deep links (§4.2). Their tuned
+settings and keys are recorded here so Phases 3.8 (defaults) and 4.5
+(declared keys) can bring them back. Each page assumed no status bar
+(`statusBarHeight: 0`), which host insets now cover.
+
+| Page | Tuned settings (standalone preset) | Keys and URL params |
+|---|---|---|
+| `snow.html` | Black background; `treeCount 0`, `maxSnowflakes 4000`, `spawnRate 0.4`, `snowSpeed 7`, `snowSpeedVariation 1.5`, `layerCount 10`, `windIntensity 8`, `accumulationRate 0.05`, `maxAccumulation 12`: a dense, treeless blizzard | `f` fullscreen |
+| `leaves.html` | Background `#0b0a08`; `maxLeaves 90`, `spawnRate 0.07`, `fallSpeed 2`, `swayAmount 1.5`, `windIntensity 12`, `windDuration 240`, `preSeedPile`, `pileDepth 0.35`, `pileUnevenness 0.6`, `pileDensity 1.5`, `maxSettled 14000`, `leafOpacity 0.85` | `f` |
+| `fireplace.html` | On a fresh run only: `brickBackground 'subtle'`, `logThickness 2.5` | `f` |
+| `fishtank.html` | `population 'community'`, `fishCount 26`, `waterTheme 'planted'`, `hardscape 'both'`, `plantDensity 1.2`, `lightIntensity 1.05`, `cursorMode 'curious'`, `clickToFeed`; all effects on | `f` |
+| `halloween.html` | `theme 'classic'`, `scenePreset 'graveyard'`, `pumpkinCount 13`, `batCount 40`, `ghostCount 5`, `zombieCount 4`, `webs false`, `grain 0.35`, `starCount 260`, `moonPhase 0.82`, `candyCount 40`, `leafCount 40` | `f` |
+| `advent.html` | `layout 'scatter'`, `ceremony 'grand'`, `spotlightSeconds 8`, `ambient 'lively'`, `fps 30` | `←`/`→` ±1 day (Shift ±7), `↑`/`↓` ±1 month, `0` today, `t` next theme (Shift back), `r` replay today, `s` settings, `f`; a toast shows the date. `?date=YYYY-MM-DD`, `?theme=<id>` |
+| `quest.html` | Separate storage key (`questStandaloneConfig`); `keyboard` and `clickToGuide` **on**, `companion 'fairy'`, `worldSize 'medium'`, `hud 'top'`, `story`, `transition 'scroll'`; touch controls off | `f`; `n` new quest; `h` next hero; `v` next look; `t` next hat; `m` companion; `p` palette; `c`/`o` settings; `?` key help; arrows/WASD, Space, `j`/`k`/`e`/`b`, Enter to play; click to send the hero; a ⚙️ button |
+
+**Proposed for 3.8 (see Open questions):** the standalone values become
+each wallpaper's `defaults.js` where they differ, since the standalone page
+is now the primary host, with Quest's keyboard and click-to-guide on by
+default.
+

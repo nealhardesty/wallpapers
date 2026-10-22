@@ -3,7 +3,7 @@
 .DEFAULT_GOAL := help
 PORT ?= 8000
 
-.PHONY: help hooks serve lint audit audit-staged audit-history test ci clean
+.PHONY: help hooks serve lint audit audit-staged audit-history test smoke ci clean
 
 help: ## List every target
 	@awk 'BEGIN {FS = ":.*## "} /^[a-zA-Z0-9_-]+:.*## / {printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -28,10 +28,13 @@ audit-staged: ## Scan only what is staged for commit
 audit-history: ## Scan every blob ever committed
 	@node tools/audit.mjs --history
 
-test: ## Run the tests
+test: ## Run the unit tests
 	@node --test 'tools/*.test.mjs'
 
-ci: lint audit audit-history test ## Everything CI runs
+smoke: ## Boot every wallpaper in headless Chrome (needs Chrome; CHROME_PATH to override)
+	@node tools/smoke.mjs
+
+ci: lint audit audit-history test smoke ## Everything CI runs
 
 clean: ## Remove build output
 	rm -rf dist

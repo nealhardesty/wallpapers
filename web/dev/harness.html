@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Wallpaper harness</title>
+<!--
+  Dev harness: boots one imported wallpaper module, raw, with only the
+  legacy shims it needs. One wallpaper per page load, because the modules
+  still declare top-level classes (Phase 3 wraps them).
+
+    harness.html            gallery
+    harness.html?w=fishtank run one wallpaper
+    &panel=open             ...with its settings open on load
+
+  Keys: c settings · [ / ] previous / next · g gallery
+  tools/smoke.mjs drives this page headlessly (make smoke).
+-->
+<style>
+  :root {
+    --dark-bg: #111827; --dark-surface: #1f2937; --light-text: #f9fafb;
+    --accent-blue: #3b82f6; --gray-300: #d1d5db; --gray-400: #9ca3af;
+    --gray-500: #6b7280; --gray-600: #4b5563; --gray-700: #374151; --gray-800: #1f2937;
+  }
+  html, body { margin: 0; min-height: 100%; background: #000; color: var(--light-text);
+    font: 14px/1.4 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; }
+  #gallery { max-width: 760px; margin: 0 auto; padding: 32px 16px; }
+  #gallery h1 { font-size: 20px; font-weight: 600; margin: 0 0 4px; }
+  #gallery p { color: var(--gray-400); margin: 0 0 20px; }
+  #gallery ul { list-style: none; padding: 0; margin: 0;
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+  #gallery a { display: block; padding: 12px; border-radius: 8px; background: var(--dark-surface);
+    color: inherit; text-decoration: none; border: 1px solid var(--gray-700); }
+  #gallery a:hover, #gallery a:focus-visible { border-color: var(--accent-blue); outline: none; }
+  #gallery small { display: block; color: var(--gray-400); margin-top: 2px; }
+  #chip { position: fixed; left: 12px; bottom: 12px; z-index: 2000; padding: 6px 10px;
+    border-radius: 6px; background: rgba(17, 24, 39, 0.8); font-size: 12px; color: var(--gray-300);
+    transition: opacity 0.6s; pointer-events: none; }
+  #chip.faded { opacity: 0; }
+</style>
+<script src="legacy-shims.js"></script>
+</head>
+<body>
+<script>
+// id → scripts (relative to web/) and how to construct the manager.
+const HARNESS_CATALOG = {
+    'snow':            { scripts: ['snow/snow.js'], make: () => new SnowAnimationManager() },
+    'rain':            { scripts: ['rain/rain.js'], make: () => new RainAnimationManager() },
+    'leaves':          { scripts: ['leaves/leaves.js'], make: () => new LeavesAnimationManager() },
+    'fireflies':       { scripts: ['fireflies/fireflies.js'], make: () => new FirefliesAnimationManager() },
+    'fireplace':       { scripts: ['fireplace/fireplace.js'], make: () => new FireplaceAnimationManager() },
+    'northern-lights': { scripts: ['northern-lights/northern-lights.js'], make: () => new NorthernLightsAnimationManager() },
+    'parallax-clouds': { scripts: ['parallax-clouds/parallax-clouds.js'], make: () => new ParallaxCloudsAnimationManager() },
+    'mountains':       { scripts: ['mountains/mountains.js'], make: () => new MountainsAnimationManager() },
+    'starfield':       { scripts: ['starfield/starfield.js'], make: () => new StarfieldAnimationManager() },
+    'cherry-blossoms': { scripts: ['cherry-blossoms/cherry-blossoms.js'], make: () => new CherryBlossomAnimationManager() },
+    'halloween':       { scripts: ['halloween/halloween.js'], make: () => new HalloweenAnimationManager() },
+    'neko':            { scripts: ['neko/neko.js'], make: () => new NekoAnimationManager(),
+                         disabled: 'sprites not imported; redrawn in roadmap 4.6' },
+    'matrix':          { scripts: ['matrix/matrix.js'], make: () => new MatrixAnimationManager() },
+    'fishtank':        { scripts: ['fishtank/fishtank.js'], make: () => new FishTankAnimationManager() },
+    'advent':          { scripts: ['advent/advent-treats.js', 'advent/advent.js'], make: () => new AdventCalendarAnimationManager() },
+    'quest':           { scripts: ['quest/quest-art.js', 'quest/quest-world.js', 'quest/quest.js'], make: () => new QuestAnimationManager() },
+    'bing':            { scripts: ['bing/bing.js'], make: () => new BingWallpaperManager(), network: true },
+};
+const IDS = Object.keys(HARNESS_CATALOG);
+
+// Read by tools/smoke.mjs.
+window.harness = { catalog: HARNESS_CATALOG, id: null, manager: null, ready: false, error: null };
+
+function loadScript(src) {
+    return new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = src;
+        script.onload = resolve;
+        script.onerror = () => reject(new Error(`failed to load ${src}`));
+        document.head.appendChild(script);
+    });
+}
+
+function showGallery() {
+    const gallery = document.createElement('main');
+    gallery.id = 'gallery';
+    gallery.innerHTML = '<h1>Wallpaper harness</h1><p>Raw imported modules, one per page. Keys while running: <b>c</b> settings · <b>[</b> <b>]</b> previous/next · <b>g</b> gallery.</p><ul></ul>';
+    for (const id of IDS) {
+        const item = document.createElement('li');
+        const link = document.createElement('a');
+        link.href = `?w=${id}`;
+        link.textContent = id;
+        const note = HARNESS_CATALOG[id].disabled || (HARNESS_CATALOG[id].network ? 'uses network' : '');
+        if (note) {
+            const small = document.createElement('small');
+            small.textContent = note;
+            link.appendChild(small);
+        }
+        item.appendChild(link);
+        gallery.querySelector('ul').appendChild(item);
+    }
+    document.body.appendChild(gallery);
+    window.harness.ready = true;
+}
+
+async function run(id) {
+    const entry = HARNESS_CATALOG[id];
+    harness.id = id;
+    document.title = `${id} · harness`;
+    const chip = document.createElement('div');
+    chip.id = 'chip';
+    chip.textContent = `${id}${entry.disabled ? ` (disabled: ${entry.disabled})` : ''} · c settings · [ ] switch · g gallery`;
+    document.body.appendChild(chip);
+    setTimeout(() => chip.classList.add('faded'), 3000);
+
+    for (const src of entry.scripts) await loadScript(`../wallpapers/${src}`);
+    const manager = harness.manager = entry.make();
+    if (manager.init) await manager.init();
+    manager.start();
+    if (params.get('panel') === 'open') harness.openConfig();
+    harness.ready = true;
+}
+
+harness.openConfig = () => {
+    const manager = harness.manager;
+    if (!manager || !manager.showConfigDialog) return false;
+    manager.showConfigDialog();
+    return true;
+};
+
+document.addEventListener('keydown', event => {
+    if (!harness.id || event.ctrlKey || event.metaKey || event.altKey) return;
+    if (event.target.closest('input, select, textarea')) return;
+    const step = { '[': -1, ']': 1 }[event.key];
+    if (step) location.search = `?w=${IDS[(IDS.indexOf(harness.id) + step + IDS.length) % IDS.length]}`;
+    else if (event.key === 'g') location.search = '';
+    else if (event.key === 'c') harness.openConfig();
+});
+
+const params = new URLSearchParams(location.search);
+const requested = params.get('w');
+if (requested && HARNESS_CATALOG[requested]) {
+    run(requested).catch(error => {
+        harness.error = String(error && error.stack || error);
+        console.error(error);
+    });
+} else {
+    showGallery();
+}
+</script>
+</body>
+</html>

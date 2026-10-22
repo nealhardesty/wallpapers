@@ -18,8 +18,8 @@ Everything is plain HTML, CSS and JavaScript, with no build step. Most
 wallpapers work fully offline. The online ones, such as the Bing image of
 the day, need no API keys.
 
-> **Status: early.** The wallpapers are being moved in from an older
-> project. The plan and roadmap are in [SPEC.md](SPEC.md).
+> **Status: early.** The wallpapers have been moved in from an older
+> project; the page that ties them together comes next. The plan and roadmap are in [SPEC.md](SPEC.md).
 
 ## Use
 
@@ -34,7 +34,8 @@ the day, need no API keys.
 
 ## Development
 
-Requirements: `make`, `git`, Node.js 20 or later, and Python 3 (for
+Requirements: `make`, `git`, Node.js 22 or later, Google Chrome or Chromium
+(for `make smoke`; set `CHROME_PATH` if it isn't found), and Python 3 (for
 `make serve`). There are no npm packages to install.
 
 First time in a fresh clone:
@@ -54,9 +55,22 @@ Run `make` to list every target.
 | `make audit` | Scan the working tree for anything private (see below) |
 | `make audit-staged` | Scan only what is staged for commit |
 | `make audit-history` | Scan every file version ever committed |
-| `make test` | Run the tests |
-| `make ci` | Everything CI runs: lint, audit, audit-history, test |
+| `make test` | Run the unit tests |
+| `make smoke` | Boot every wallpaper in headless Chrome; screenshots go to `dist/smoke/` |
+| `make ci` | Everything CI runs: lint, audit, audit-history, test, smoke |
 | `make clean` | Remove build output |
+
+### Trying a single wallpaper
+
+While the main page is being built (roadmap phase 3), `web/dev/harness.html`
+runs any one wallpaper on its own. Open it straight from disk, or via
+`make serve` at http://localhost:8000/dev/harness.html.
+
+- `?w=fishtank` picks a wallpaper
+- `&panel=open` opens its settings on load
+- `c` opens its settings
+- `[` and `]` switch to the previous or next wallpaper
+- `g` goes back to the gallery
 
 ### Keeping it public-safe
 
