@@ -14,8 +14,9 @@ wallpapers' only home. They run in three hosts:
 3. **Android live wallpaper**: a future app in `android/` that runs the same
    web code behind the home screen.
 
-> Status: **phases 1–3 done** (2026-10-22). The player, the stage and all
-> wallpapers run from `web/index.html`; next up is Phase 4, the panel.
+> Status: **phases 1–4 done** (2026-10-22). The player, the stage, the
+> panel and all 17 wallpapers (Neko redrawn) run from `web/index.html`; next
+> up is Phase 5, the Chrome extension and GitHub Pages.
 
 ---
 
@@ -312,112 +313,162 @@ The host kind is detected from `location` and a `?host=` override.
 `?host=android` lets a desktop browser simulate the Android host (a 48 px
 bottom inset and the Medium ceiling) for testing.
 
-### 4.4 Settings schema and the unified panel
+### 4.4 Settings schema and the panel (built in Phase 4)
 
-The homepage has 17 hand-built modal dialogs, each with its own markup and
-Save/Cancel. Halloween already generates its dialog from a data spec
-(`controlSpec()`). Generalise that pattern. Every wallpaper
-describes its settings as data, and `core/settings.js` renders them:
+**Settings are data.** Each wallpaper has `wallpapers/<id>/settings.js`,
+next to its `defaults.js`. `core/settings.js` renders it:
 
 ```js
-settings() {
-  return [
-    { group: 'Water' },
-    { key: 'theme', type: 'select', label: 'Water', options: [['planted', 'Planted'], …] },
-    { key: 'fishCount', type: 'range', label: 'Fish', min: 4, max: 80, step: 1, help: '…' },
-    { key: 'bubbles', type: 'toggle', label: 'Airstone' },
-  ];
-}
+WP.schema('fishtank', [
+    { group: '🐟 Livestock' },
+    { key: 'fishCount', label: 'Fish Count', type: 'range', min: 4, max: 80, step: 1, help: '…' },
+    { key: 'swimSpeed', label: 'Swim Speed', type: 'range', min: 0.3, max: 2.5, step: 0.05, unit: '×', digits: 2 },
+    { key: 'population', label: 'Stocking', type: 'select', options: [['community', '🐟 Community'], …] },
+    { group: '⚙️ Advanced', advanced: true },            // collapsed by default
+    { key: 'waterLevel', label: 'Gap Above the Water', type: 'range', …, unit: '%', scale: 100, digits: 1 },
+]);
 ```
 
-**Decided.** Payoff: one consistent look, **live preview** (changes apply as you drag, and
-there is no Save/Cancel, just *Reset to defaults*), no `createInfoIcon` or CSS
-variable coupling, and settings work identically on Android (§6.3).
+- **Types:**
+  - `range`: `min`, `max`, `step`, shown as value × `scale` with `unit` to
+    `digits` places
+  - `select`: options as a list, or as a function of the config, e.g.
+    Quest's Look follows the chosen hero
+  - `toggle`, `multi` (chips over an array), `colors` (a palette editor),
+    `number`, `text` and `color`
+- **Accessors:** `get(config)` and `set(config, value)`, e.g. advent's
+  "theme for this month" inside a per-month map. Labels may be functions.
+- **How the schemas were made:**
+  - A one-off tool opened each legacy dialog in headless Chrome and read
+    every control.
+  - It then found each control's config key and unit by changing one
+    control at a time and pressing the dialog's own Apply.
+  - 272 controls carried over. Hand polish followed: groups, labels, a
+    multi-select for leaf types.
+  - 26 values the dialogs never exposed now have controls under Advanced.
+  - Five sliders whose step couldn't hold the real default (so Apply
+    silently rounded it) got finer steps.
+- **Tested:**
+  - unit tests: every control has a default and every default a control;
+    every default is inside its range, on the step grid, and among its
+    options
+  - smoke: every wallpaper's panel renders every control, and a change
+    reaches storage and then the running wallpaper
+- **The old dialogs are gone,** about 3,900 lines across 17 modules, found
+  by reachability from `showConfigDialog`. Each deleted block was checked
+  to be a whole method, and dynamic calls such as advent's `frame_*`
+  painters were reviewed. Their stale "Default:" tooltips went with them:
+  defaults now come from `defaults.js`.
 
-**The panel** is one overlay that combines the switcher and the settings:
+**The panel** (`core/panel.js`, `core/panel.css`) lives in the player
+page, not the stage, so it survives stage rebuilds. It reads and writes
+settings directly (storage is shared) and tells the player to apply them:
+
+- **Applying:**
+  - A wallpaper with `applySettings(config)` takes changes live: snow,
+    Halloween (rebuilds only for keys that change baked layers), and Quest
+    (keeps the world unless a world setting changed).
+  - Any other wallpaper is rebuilt by the player behind a crossfade,
+    debounced 400 ms so a slider drag rebuilds once.
+- **Look:**
+  - Smoked glass over the live wallpaper.
+  - **Its accent follows the wallpaper on screen** (`accent` in the
+    catalog): fire orange, aurora green, petal pink. Each picker tile is
+    washed in its own wallpaper's colour.
+  - System rounded type.
+  - A right-hand drawer on desktop; a bottom sheet on phones.
+- **Layout, top to bottom:**
+  - A filmstrip of every wallpaper, with thumbnails (§4.7). The current
+    one is centred; a vertical wheel scrolls it sideways; hovering or
+    focusing a tile plays a live preview.
+  - The settings, grouped, with Advanced collapsed. A dot appears next to
+    any changed setting; clicking it resets that setting, and its tooltip
+    names the default.
+  - Performance (Auto, Low, Medium, High, §4.8), Reset (two clicks, no
+    blocking dialog), Export and Import (all settings as JSON, e.g. to move
+    a tuned setup to the phone), and key hints, hidden on touch screens.
+- **Opening it:**
+  - `,` toggles it; `Esc` closes it; `?panel=open` opens it on load.
+  - On a touch screen, a long press in the top-right corner.
+  - With a mouse, a ⚙︎ gear fades in when the pointer nears that corner.
+  - While it's open, wallpaper keys are suspended.
 
 ```
-┌──────────────────────────────────────────────────────────────┐
-│ 🗓 Seasonal  ❄️ Snow  🌧 Rain  🍂 Leaves  ✨ Fireflies  …    │  ← thumbnail strip (§4.7)
-├──────────────────────────────────────────────────────────────┤
-│ 🐠 Fish Tank                                    [↺ Reset]    │
-│  Water ▾ Planted     Fish ━━━━●━━━ 32     Airstone [on]      │  ← schema-rendered, applies live
-│  Keys: click feed · double-click tap glass · drag stir       │  ← the wallpaper's declared keys
-├──────────────────────────────────────────────────────────────┤
-│ , close · ←/→ switch · F fullscreen · ? help     [Export ⤓] │
-└──────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────┐
+│ 🐠 Fish Tank                     × │
+│ ▕Matrix▏▕Fish Tank▏▕Advent▏▕Pix…   │  ← filmstrip with thumbnails; live preview on hover
+│ 🐟 Livestock                    ⌃  │
+│ Stocking                           │
+│ [🐟 Community                 ▾]   │
+│ • Fish Count                   34  │  ← • = changed; click to reset
+│ ━━━━━━━━━━━━━●━━━━━━━━━━           │
+│ ⚙️ Advanced                     ⌄  │  ← collapsed
+├────────────────────────────────────┤
+│ Performance [Auto|Low|Medium|High] │
+│ Reset   Export   Import            │
+│ ←→ switch   ? all keys   Esc close │
+└────────────────────────────────────┘
 ```
 
-- Hidden by default; nothing but the wallpaper shows.
-- Translucent and anchored to an edge, so the live wallpaper stays visible
-  behind it while you tune.
-- **Open key (decided):** `,` opens and closes it, and `Esc` closes it.
-  On touch screens, a long press in a corner hot zone opens it.
-- While the panel is open, wallpaper shortcuts are suspended. That fixes the
-  homepage's clashes (advent's Escape, `c`/`s`/`o` settings keys).
-- `F` toggles fullscreen everywhere.
-- Export and import of all settings as JSON. A good fit for moving tuned
-  settings to the phone.
-
-### 4.5 Keyboard map (target)
+### 4.5 Keyboard map (built in Phase 4)
 
 | Key | Where | Action |
 |---|---|---|
-| `,` | everywhere | open/close panel (today: the wallpaper's own settings) |
-| `Esc` | panel open | close panel |
-| `[` / `]` | everywhere | previous/next wallpaper, remembered (built in Phase 3) |
-| `←` / `→` | panel open | previous/next wallpaper |
-| `F` | everywhere | fullscreen (built in Phase 3) |
-| `?` | everywhere | key help overlay |
-| wallpaper keys | panel closed | e.g. quest `N`/`H`/`V`/`T`/`M`/`P`, advent arrows/`T`/`R` |
+| `,` | everywhere | open or close the panel |
+| `Esc` | everywhere | close the key help, then the panel |
+| `[` / `]` | everywhere | previous or next wallpaper (remembered) |
+| `←` / `→` | panel open | previous or next wallpaper |
+| `F` | everywhere | fullscreen |
+| `?` | everywhere | key help, listing the current wallpaper's own keys too |
+| wallpaper keys | panel closed | declared in the catalog (`keys`), run inside the stage, and may answer with a toast. Quest: `N` new quest, `H` hero, `V` look, `T` hat, `M` companion, `P` palette. Advent: `←`/`→` a day (with Shift, a week), `↑`/`↓` a month, `0` today, `T` theme, `R` replay |
 
 Keys are ignored when Ctrl, Meta or Alt is held, or when focus is in a form
 field. The player's keys work wherever focus is: the stage forwards `,`
 `[` `]` `f` to the player when it has focus.
 
-### 4.6 Bing image of the day (decided: keep it all)
+### 4.6 Bing image of the day (built in Phase 4, Pages job in Phase 5)
 
 The photos load straight from `bing.com`, since plain image loads aren't
 subject to CORS. Only the JSON archive API
 (`HPImageArchive.aspx?format=js&idx=N&n=1`) is blocked cross-origin, so
-each host gets that JSON its own way, behind one function, `host.fetchBing(idx)`:
+`fetchBingImageUrl` in `bing/bing.js` tries each source in turn:
 
-| Host | How it gets the JSON | Third-party proxy? |
+| Source | When it works | Third party sees it? |
 |---|---|---|
-| extension | Direct fetch, allowed by `host_permissions: ["https://www.bing.com/*"]` | no |
-| android | Native fetch through a JS bridge, or the asset loader intercepting the request; no CORS in native code | no |
-| GitHub Pages | Same-origin `bing.json`: a scheduled GitHub Action (`make bing-json`) fetches the last 8 days daily and publishes the metadata with the site. It stores only URLs, titles and copyright text, never the images | no |
-| `file://` / `make serve` | `make serve` serves a local `bing.json` built by `make bing-json`. Raw `file://` falls back to the public CORS proxies only if the user turns that on in Bing's settings, with a note saying a third party sees the request | opt-in only |
+| `bing.json` beside the page | the page is served over http(s): GitHub Pages, `make serve`, the container. `make bing-json` (`tools/bing.mjs`) writes it, keeping only image path, credit, credit link and date. Gitignored; Pages makes its own (phase 5) | no |
+| Bing directly | the extension (`host_permissions`) or the Android app (native fetch, phase 6); browsers refuse it cross-origin | no |
+| public CORS proxies | only with **"Use public proxies when opened from disk"** on in Bing's Advanced settings (off by default) | yes, and the setting says so |
 
-Kept from the homepage: the info overlay (title, date, link to the photo)
-and the 0–7-day picker with preview. Both move into the schema and panel.
-The overlay respects host insets. Offline, or when every source fails, it
-falls back to `blank` and shows "Bing unavailable" in the panel.
+When every source fails, a quiet note in the corner says why and what would
+help ("serve the folder, or allow public proxies"), instead of a black
+screen. Kept from the homepage: the info overlay (title, date, link). It now
+sits above the host inset at a readable size (it was 6 px), and is built
+with `textContent`, never HTML from Bing. The day picker became a panel
+select: Today, Yesterday, then weekday dates.
 
-The overlay links to `bing.com` pages, so on Android a tap opens the
-browser.
+### 4.7 Thumbnails (built in Phase 4)
 
-### 4.7 Thumbnails (decided)
-
-The panel strip shows a picture of each wallpaper, not just a name.
-
-- **Static:** `make thumbnails` drives headless Chrome to run each wallpaper
-  at 1280×800 with a fixed random seed, wait for it to settle (e.g. snow has
-  fallen, fish are swimming), and save a 320×200 WebP to
-  `web/wallpapers/<id>/thumb.webp`, about 10–20 KB each. The files are
-  committed, so thumbnails work offline, on Android and from `file://`.
-  - Seasonal's tile is the current month's thumbnail with a calendar badge.
-  - Bing's tile is the live photo once fetched, or a placeholder.
-- **Live:** the focused or hovered tile comes alive by loading
-  `index.html?thumb=1&w=<id>` in a small iframe. Only one plays at a time, and
-  thumb mode turns off input, panel and persistence. The same files run, so
-  there is no second renderer to maintain. It is skipped on Android and
-  under `prefers-reduced-motion`.
-- The same images feed the README gallery and the Pages site's social
-  preview.
-- Wallpapers that need it get a `seed` option so thumbnails are
-  reproducible. `make thumbnails` reports which images changed, so
-  regenerating them is a deliberate commit, not CI churn.
+- **Static:** `make thumbnails` (`tools/thumbnails.mjs`) renders every
+  offline wallpaper in headless Chrome at 1280×800 and saves a 320×200 WebP
+  to `web/wallpapers/<id>/thumb.webp`. They're 1–9 KB each, committed, so
+  they work offline, on Android and from `file://`.
+  - It uses `?seed=7`: the stage replaces `Math.random` with a seeded
+    generator before any wallpaper code loads, so any wallpaper is
+    reproducible without per-module seed options (also useful for tests and
+    `make bench`). Frame timing still varies, so re-renders differ slightly;
+    the tool reports which images changed, so committing new ones is a
+    deliberate step.
+  - Per-wallpaper settle times, and a few render-only presets for a better
+    picture: Quest skips its story, Neko is large and orange, fireflies glow
+    bigger. Thumb mode never saves.
+  - Seasonal's tile shows this month's pick with a calendar badge. Blank
+    and Bing have none: Bing's tile stays a colour wash.
+- **Live:** hovering or focusing a tile for 450 ms plays that wallpaper in
+  the tile. That's `stage.html?w=<id>&thumb=1&tier=low&seed=7`, laid out at
+  4× and scaled down. One at a time; not for the wallpaper already showing;
+  skipped on Android and under reduced motion. Thumb mode ignores keys and
+  the corner, and never saves.
+- A unit test checks every offline wallpaper has a WebP under 40 KB.
 
 ### 4.8 Performance tiers and power budget
 
@@ -765,7 +816,7 @@ Implemented in `tools/audit.mjs` (Phase 1), with four modes:
 
 | Item | Concern | Proposed action |
 |---|---|---|
-| Neko sprites (79 themes, 20 MB) | Copied from an MIT repo, but that repo doesn't credit the sprites; they trace back to decades of Neko skin packs by many authors. Several themes are trademarked characters (Sonic, Pac-Man, Metroid, Zelda, Doom, TIE fighter, Coke). Filenames have inconsistent case (`Awake.ico` vs `awake.ico`): 78 of 79 themes break on case-sensitive hosts such as Android and Linux. | **Decided: redraw.** Neko becomes code-drawn pixel art with coat variants, drawn the way Pixel Quest draws its cats, keeping the classic oneko behaviours (chase, yawn, scratch, wash, sleep, wall claws). This drops 20 MB and every provenance question. None of the old sprites are imported. |
+| Neko sprites (79 themes, 20 MB) | Copied from an MIT repo, but that repo doesn't credit the sprites; they trace back to decades of Neko skin packs by many authors. Several themes are trademarked characters (Sonic, Pac-Man, Metroid, Zelda, Doom, TIE fighter, Coke). Filenames have inconsistent case (`Awake.ico` vs `awake.ico`): 78 of 79 themes break on case-sensitive hosts such as Android and Linux. | **Done (phase 4.6).** Neko is code-drawn pixel art (`NekoSprites` in `neko.js`) with eight coats, keeping the classic behaviours (chase, yawn, scratch, wash, sleep, wall claws). 20 MB and every provenance question dropped; none of the old sprites were imported. |
 | Snow sprites (`tannenbaum.png`, `snow00–06.png`) | Look like xsnow's art. xsnow is GPL-3+ (older versions non-free). Provenance unverified. | Delete. snow.js already has a canvas fallback; make it the only path and improve it. |
 | Pixel Quest text | Affectionate parodies ("IT'S A SECRET TO EVERYBODY", Lonk, Zelderp). | Keep; parody is low risk. Note it in THIRD_PARTY.md. |
 | Fonts | System fonts only (`ui-rounded`, Courier New, emoji). | Nothing to ship. |
@@ -790,13 +841,18 @@ GitHub Actions runs only that.
     - every script and `defaults.js` exists and registers its own id with
       JSON-safe values
     - every online wallpaper's hosts are on the audit allowlist
+    - every schema agrees with its defaults: each control has a default and
+      each default a control, every default in range, on the step grid and
+      among the options
+    - every offline wallpaper has a small WebP thumbnail
 - `make smoke`: headless Chrome over the DevTools protocol (Node's built-in
   WebSocket), against the real pages on `file://`, as a user opens them.
   All network is intercepted: anything but local files and Bing's fixtures
   fails the run.
   - **Stage suite:** every wallpaper on `stage.html?w=<id>` with fresh
     storage. It must:
-    - boot, draw and open its settings, logging no errors
+    - boot and draw (distinct colours, or partial coverage on a transparent
+      canvas), logging no errors
     - **save nothing on a fresh run**, proving its `defaults.js` matches
       what the module actually uses
     - write no storage outside `wp:<id>:*`
@@ -809,7 +865,14 @@ GitHub Actions runs only that.
     - `]` switches, persists and drops `w=`
     - a full cycle through every wallpaper leaves exactly one stage and no
       canvases in the player
-    - `?panel=open` opens settings inside the stage
+    - `?panel=open` opens the panel, and `Esc` and `,` close and reopen it
+    - **every wallpaper's panel round-trips:** all its schema controls
+      render; moving the first slider (or option) writes the override, and
+      the running wallpaper ends up with the value, live or after a rebuild
+    - Reset takes two clicks and clears the overrides
+    - `?` help lists the wallpaper's own keys; Quest's `N` starts a new
+      quest; advent's `→` moves a day, with a date toast
+    - the corner gear appears when the pointer comes near
     - `?tier=low` lays out at half size and caps the frame rate
     - pause produces zero frames and resume restarts them
 - `make lint`: `node --check` on every script, one file at a time, plus
@@ -819,6 +882,8 @@ GitHub Actions runs only that.
   not in CI.
 - `make thumbnails`: regenerates the committed thumbnails (§4.7). Not part
   of `make ci`; the tests only check that every wallpaper has one.
+- `tools/chrome.mjs` holds the shared headless-Chrome plumbing (launch,
+  DevTools protocol connection) used by the smoke test and the thumbnails.
 
 ---
 
@@ -886,15 +951,24 @@ phase can mostly run in parallel.
 
 ### Phase 4: The panel
 
-- [ ] 4.1 `settings.js` schema renderer: range, select, toggle, color, group, help.
-- [ ] 4.2 Migrate settings to the schema, one wallpaper per commit (halloween first, as it is nearly there). 16 checkboxes:
-      snow · rain · leaves · fireflies · fireplace · northern-lights · parallax-clouds · mountains · starfield · cherry-blossoms · halloween · neko · matrix · fishtank · advent · quest
-- [ ] 4.3 `panel.js`: switcher strip, settings pane, live apply, Reset, keys list, Export/Import.
-- [ ] 4.4 Key map (§4.5), key help overlay, touch corner hot zone.
-- [ ] 4.5 Quest and advent standalone keys become declared `keys`. → `index.html?w=quest` plays like `quest.html` did.
-- [ ] 4.6 Redraw neko: code-drawn sprite bank (8 directions × 2 frames, idle, yawn, scratch, wash, sleep, 4 wall claws), coat variants, pointer events so it follows a finger. → visual check against the classic oneko behaviours; zero image files.
-- [ ] 4.7 Bing: `host.fetchBing()` per host, overlay and day picker in the panel, offline fallback. → test with a fixture `bing.json` and a failing fetch.
-- [ ] 4.8 Thumbnails (§4.7): seeds where needed, `make thumbnails`, committed WebPs, live preview iframe for the focused tile. → the strip shows 18 tiles (16 + Seasonal + Bing) offline.
+- [x] 4.1 `core/settings.js` schema renderer: range, select (static or config-dependent options), toggle, multi, colors, number, text and color; groups, collapsed Advanced, help text, live readouts, and per-setting reset dots that name the default.
+- [x] 4.2 Every wallpaper's settings are schema data (`settings.js`), extracted from the legacy dialogs by a probing tool and hand-polished (§4.4); the dialogs are deleted (about 3,900 lines). → unit tests check schema against defaults; smoke checks each wallpaper's panel end to end.
+- [x] 4.3 `core/panel.js`: filmstrip picker, settings, live apply or debounced rebuild, two-click Reset, Export/Import, Performance row, the accent following the wallpaper. → smoke: open and close, Reset, and every panel's round trip.
+- [x] 4.4 Key map (§4.5); `?` key help, including the wallpaper's own keys; a corner long-press on touch screens; a ⚙︎ gear that fades in near the corner for a mouse. → smoke: `?` help, and the gear.
+- [x] 4.5 Quest's and advent's old page keys are declared `keys` in the catalog, run in the stage, with toasts (the advent date, the new hero's name). → smoke: Quest's `N` starts a new quest; advent's `→` moves a day with a date toast.
+- [x] 4.6 Neko redrawn in code:
+  - 19 hand-made 16×16 sprites; left-facing poses mirrored.
+  - 8 coats as palettes and pattern rules: classic, black, orange and grey tabby, calico, tuxedo, siamese points, cow cat.
+  - Follows pointer events, so a finger works.
+  - Floating z's while asleep; a dusk background so dark coats show; sizes in 16 px steps for crisp pixels.
+  - Fixed on the way:
+    - the cat chased the top-left corner until a pointer moved
+    - a resting pointer kept it clawing forever, never idling or sleeping
+    - resizing turned image smoothing back on
+  - → screenshots: running, clawing, asleep; zero image files.
+- [x] 4.7 Bing (§4.6): `bing.json` beside the page, Bing directly, public proxies only by opt-in; a helpful note instead of a black screen; `make bing-json`; overlay readable and above the inset; it keeps a `config` like every other module. → screenshots: today's photo over http; the note from disk. The scheduled Pages job is phase 5.2.
+- [x] 4.8 Thumbnails (§4.7): `?seed=` reproducibility in the stage, `make thumbnails`, 16 committed WebPs (1–9 KB), tile backgrounds, live previews on hover and focus. Shared Chrome plumbing moved to `tools/chrome.mjs`. → unit test: every offline wallpaper has one.
+- [x] 4.9 Also: advent's `?theme=` is a runtime override and never saved; the smoke draw metric counts partial coverage, so sparse scenes such as snow and fireflies don't flake; the first-run hint is touch-aware.
 
 ### Phase 5: Chrome and hosting
 
@@ -964,6 +1038,25 @@ or hour.
   use, CC BY 4.0, attribution shown in a corner. One request covers hourly
   and daily data, plus sunrise and sunset for a time-of-day tint. Hosts:
   `api.open-meteo.com`, `geocoding-api.open-meteo.com`.
+  - **The request** (owner's example, verified to work without a key; the
+    coordinates here are a public landmark, Times Square):
+
+    ```
+    https://api.open-meteo.com/v1/forecast?latitude=40.758&longitude=-73.9855
+      &current=temperature_2m,weather_code
+      &hourly=temperature_2m,precipitation_probability,weather_code
+      &daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max,weather_code
+      &temperature_unit=fahrenheit&wind_speed_unit=mph&precipitation_unit=inch
+      &timezone=America/New_York&forecast_days=3
+    ```
+
+    `weather_code` is the WMO code: 0 clear; 1–3 partly cloudy; 45/48
+    fog; 51–67 drizzle and rain; 71–77 snow; 80–82 showers; 95–99
+    thunderstorms. Each code maps to one small animated scene.
+  - `forecast_days` goes up to 16, so 5 works for the five-day view. Use
+    `timezone=auto` to follow the location. Pick the units from the locale.
+  - Coordinates are rounded to about 0.1° before the request (§10.1). A real
+    location never appears in this repo, in docs, tests or fixtures.
 - **Look:** a row of day cards, or a 24-hour ribbon, each with a tiny looping
   scene: sun rays turning, clouds drifting, rain or snow falling, a
   lightning flicker. These reuse particle ideas from rain and snow, drawn in

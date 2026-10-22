@@ -37,17 +37,35 @@ SPEC.md §4 has the full contract. The short version:
    - `defaults.js`: `WP.defaults('<id>', { configVersion: 1, ... })`. Every
      setting's default value, and nothing else. Plain JSON-safe values. Bump
      `configVersion` when a setting changes meaning.
+   - `settings.js`: `WP.schema('<id>', [...])`. How the panel shows each
+     setting: `{ group }` headings (`advanced: true` for the collapsed
+     ones), and `{ key, label, type, ... }` controls. Copy the format from
+     an existing wallpaper; SPEC §4.4 lists the types. Every default needs
+     a control, every control a default, and defaults must sit on their
+     slider's step grid.
+   - `thumb.webp`: from `make thumbnails` (add a settle time or a
+     render-only preset in `tools/thumbnails.mjs` if the first seconds
+     aren't representative).
 2. **Catalog.** Add an entry to `web/wallpapers/catalog.js`:
-   - `id`, `name`, `icon` (one emoji), `scripts`, and `make: host => new YourManager(host)`
+   - required: `id`, `name`, `icon` (one emoji), `accent` (the panel's
+     colour while it shows), `scripts`, and
+     `make: host => new YourManager(host)`
    - when they apply: `interactive`, `motion: 'slow'`, `network: [hosts]`,
-     `cost`, `background`
-3. **The manager.** `constructor(host)`, optional `async init()`,
-   `start()`, `stop()`, `showConfigDialog()`.
+     `cost`, `background`, `keys` (declared shortcuts:
+     `{ keys: [event.key…], label, run(manager, { shift, key }) }`, which
+     may return a toast)
+3. **The manager.** `constructor(host)`, optional `async init()`, `start()`,
+   `stop()`.
    - Settings: `this.config = WP.settings.load()` and
      `WP.settings.save(this.config)`. Never touch `localStorage` directly.
      State that isn't a setting goes through `host.storage`.
-   - Draw on your own full-screen canvas: `position: fixed`, `z-index: -1`,
-     `pointer-events: none`. Interactive wallpapers listen on `document`.
+   - Changes from the panel: implement `applySettings(config)` to take them
+     live. Without it, the player rebuilds the wallpaper, which is always
+     correct.
+   - **No settings dialog of your own.** The panel renders `settings.js`.
+   - Draw on your own full-screen canvas: `position: fixed`,
+     `z-index: -1`, `pointer-events: none`. Interactive wallpapers listen
+     on `document`, using pointer events so touch works.
    - Animate only with `requestAnimationFrame` (the stage paces and pauses
      it), and move by elapsed time from its timestamp, not per frame.
    - Keep ground lines above `host.insets.bottom`.
@@ -60,23 +78,24 @@ SPEC.md §4 has the full contract. The short version:
      blank.
    - Prefer art drawn in code. Anything not ours needs a clear licence and
      a line in `THIRD_PARTY.md`.
+   - No real locations, names or personal details in code, docs, tests or
+     fixtures.
 5. **Cheap by default** (SPEC §4.8):
    - no per-frame `getImageData`/`putImageData`, `shadowBlur` or `ctx.filter`
    - cache static layers
    - pool particles
    - check it at `?tier=low`
 6. **Verify.**
-   - `make ci` must pass. The smoke test boots your wallpaper with fresh
-     storage and fails if it doesn't draw, can't open its settings, logs an
-     error, touches the network, writes storage outside `wp:<id>:*`, or
-     would save anything on a fresh run (i.e. `defaults.js` doesn't match
-     what the code uses).
+   - `make ci` must pass. The tests fail if your schema and defaults
+     disagree, or the thumbnail is missing. The smoke test boots your
+     wallpaper fresh and fails if it doesn't draw, logs an error, touches
+     the network, writes storage outside `wp:<id>:*`, or would save anything
+     on a fresh run. It also drives your panel: every control must render,
+     and a change must reach the running wallpaper.
    - Look at `dist/smoke/<id>.png`.
-   - Try `web/index.html?w=<id>`, `?w=<id>&tier=low` and
+   - Try `web/index.html?w=<id>&panel=open`, `?w=<id>&tier=low` and
      `?w=<id>&host=android`.
-7. **Docs.** Add the wallpaper to SPEC.md §2 and, once it's in the menu, to
-   the README.
-
+7. **Docs.** Add the wallpaper to SPEC.md §2 and to the README's list.
 ---
 
 ## Coding Behavioral Guidelines 

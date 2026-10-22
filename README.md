@@ -9,8 +9,8 @@ Quest's hero with the arrow keys.
 
 They run in three places:
 
-- **A web page**: open it and you see only the wallpaper. Press `,` for its
-  settings, `[` and `]` to switch.
+- **A web page**: open it and you see only the wallpaper. Press `,` for the
+  wallpaper picker and settings, `[` and `]` to switch.
 - **Chrome's new tab**, through a small extension.
 - **Android's home screen**, as a live wallpaper (planned).
 
@@ -18,8 +18,9 @@ Everything is plain HTML, CSS and JavaScript, with no build step. Most
 wallpapers work fully offline. The online ones, such as the Bing image of
 the day, need no API keys.
 
-> **Status: working.** Open `web/index.html` and it plays. Next comes a proper
-> picker and settings panel; the plan and roadmap are in [SPEC.md](SPEC.md).
+> **Status: working.** Open `web/index.html` and it plays, with a picker and
+> settings panel. Next: the Chrome extension and a hosted copy. The plan and
+> roadmap are in [SPEC.md](SPEC.md).
 
 ## Use
 
@@ -31,15 +32,40 @@ December.
 
 | Key | Action |
 |---|---|
+| `,` | The panel: every wallpaper, and the current one's settings |
 | `[` / `]` | Previous / next wallpaper (remembered) |
-| `,` | This wallpaper's settings |
+| `←` / `→` | Switch, while the panel is open |
 | `f` | Fullscreen |
+| `?` | All keys, including the current wallpaper's own |
+| `Esc` | Close |
+
+On a touch screen, hold the top-right corner to open the panel. With a
+mouse, a gear appears when you move toward that corner.
+
+**The panel:**
+- Every wallpaper, with a thumbnail. Hover one for a moment to see it play.
+- The current wallpaper's settings, which take effect as you change them.
+  A dot marks anything you've changed; click it to put that setting back.
+- Performance (Auto, Low, Medium, High). Low draws fewer pixels and frames,
+  which is easier on batteries.
+- Reset, plus Export and Import, to move your settings to another browser.
+
+**Some wallpapers have their own keys** (press `?` to see them):
+- Pixel Quest: `N` new quest, `H` hero, `V` look, `T` hat, `M` companion,
+  `P` palette. Arrows or WASD and Space take over the hero.
+- Advent calendar: arrows time-travel, `0` today, `T` theme, `R` replay.
 
 **Wallpapers:** Seasonal 📅, Blank ⬛, Snow ❄️, Rain 🌧️, Falling Leaves 🍂,
 Fireflies ✨, Fireplace 🔥, Northern Lights 🌌, Parallax Clouds ☁️,
 Mountains 🏔️, Starfield 🌠, Cherry Blossoms 🌸, Halloween Night 🎃,
 Matrix 🟩, Fish Tank 🐠, Advent Calendar 🎁, Pixel Quest ⚔️, and the Bing
-Image of the Day 🖼️. Neko 🐈 is coming back, redrawn.
+Image of the Day 🖼️, and Neko 🐈, a pixel cat that chases your pointer
+(or finger), washes, yawns and naps.
+
+The Bing photo needs a connection, and a browser only lets a page reach it
+when the page is served: run `make bing-json` and then `make serve`. Opened
+straight from disk, it explains this instead (or uses public proxies, if you
+allow them in its settings).
 
 **URL options**, for this visit only; nothing is saved:
 
@@ -49,6 +75,7 @@ Image of the Day 🖼️. Neko 🐈 is coming back, redrawn.
 | `?panel=open` | Open its settings on load |
 | `?w=advent&date=2026-12-25` | Time-travel the advent calendar (`&theme=` picks a theme) |
 | `?tier=low` | Low, medium or high performance tier (fewer pixels and frames on low) |
+| `?seed=7` | The same random scene every time |
 
 `web/stage.html?w=<id>` shows a single wallpaper on its own, without the
 player around it.
@@ -79,6 +106,8 @@ Run `make` to list every target.
 | `make serve` | Serve `web/` at http://localhost:8000 (`PORT=` to change, `HOST=0.0.0.0` to reach it from a phone) |
 | `make serve-https` | The same over https at https://localhost:8443, with a self-signed certificate made on first use |
 | `make cert` | Make a fresh self-signed certificate in `.cert/` (localhost and your LAN addresses) |
+| `make bing-json` | Fetch Bing's last eight images of the day into `web/bing.json`, so the Bing wallpaper works when served |
+| `make thumbnails` | Re-render the panel's wallpaper thumbnails (they're committed: review the changes) |
 | `make docker-build` | Build the container image `wallpapers` |
 | `make docker-run` | Run it at http://localhost:8000 (read-only, unprivileged) |
 | `make lint` | Syntax-check every script and JSON file |
@@ -101,8 +130,8 @@ browser features only work on secure pages.
 ### Adding a wallpaper
 
 See "Building a new wallpaper" in [AGENTS.md](AGENTS.md). In short: a folder
-under `web/wallpapers/`, a `defaults.js`, an entry in `catalog.js`, and
-`make ci`.
+under `web/wallpapers/` with the code, `defaults.js` and `settings.js`, an
+entry in `catalog.js`, `make thumbnails`, and `make ci`.
 
 ### Keeping it public-safe
 
