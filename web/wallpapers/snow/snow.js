@@ -1,6 +1,65 @@
 // Snow animation functionality
 
 // Tree class for snow animation
+// Snow sprites, drawn in code: an homage to the classic xsnow pixel art,
+// built once into small canvases that drawImage() treats like images.
+const SnowSprites = {
+    // Paint a pixel pattern ('#' = on) in one colour.
+    pattern(rows, color = '#ffffff') {
+        const canvas = document.createElement('canvas');
+        canvas.width = rows[0].length;
+        canvas.height = rows.length;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = color;
+        rows.forEach((row, y) => [...row].forEach((c, x) => c === '#' && ctx.fillRect(x, y, 1, 1)));
+        return canvas;
+    },
+
+    // Seven flakes, from soft specks to tiny crystals.
+    flakes() {
+        return [
+            ['##', '##'],
+            ['.#.', '###', '.#.'],
+            ['..#..', '.###.', '#####', '.###.', '..#..'],
+            ['#.#.#', '.###.', '##.##', '.###.', '#.#.#'],
+            ['...#...', '...#...', '..###..', '#######', '..###..', '...#...', '...#...'],
+            ['...#...', '.#.#.#.', '..###..', '#######', '..###..', '.#.#.#.', '...#...'],
+            ['#.....#', '.#...#.', '..#.#..', '...#...', '..#.#..', '.#...#.', '#.....#'],
+        ].map(rows => this.pattern(rows));
+    },
+
+    // A 56x56 three-tier pixel fir: deep green boughs with a bright edge,
+    // snow settled on the upper edges, a trunk and a star.
+    tree() {
+        const size = 56, cx = 28;
+        const canvas = document.createElement('canvas');
+        canvas.width = canvas.height = size;
+        const ctx = canvas.getContext('2d');
+        const px = (x, y, color) => { ctx.fillStyle = color; ctx.fillRect(x, y, 1, 1); };
+        const tiers = [[26, 50, 26], [14, 36, 18], [4, 22, 12]];  // top, bottom, half-width; bottom tier first
+
+        ctx.fillStyle = '#5b3a1e';
+        ctx.fillRect(cx - 2, 49, 4, 7);
+
+        for (const [top, bottom, halfWidth] of tiers) {
+            // Half-width at a row: a concave bough that flares toward its tips.
+            const reach = y => (y < top || y > bottom) ? -1 : halfWidth * Math.pow((y - top) / (bottom - top), 0.8);
+            const inside = (x, y) => Math.abs(x - cx) <= reach(y);
+            for (let y = top; y <= bottom; y++) {
+                for (let x = 0; x < size; x++) {
+                    if (!inside(x, y)) continue;
+                    const edge = !inside(x - 1, y) || !inside(x + 1, y) || !inside(x, y - 1) || !inside(x, y + 1);
+                    const snowy = !inside(x, y - 1) && ((x * 73856093) ^ (y * 19349663)) % 5 < 3;
+                    px(x, y, snowy ? '#f4f8ff' : edge ? '#7cfc00' : '#1f6f2b');
+                }
+            }
+        }
+
+        for (const [dx, dy] of [[0, 0], [-1, 1], [1, 1], [0, 1], [0, 2]]) px(cx + dx, 1 + dy, '#ffd84a');
+        return canvas;
+    },
+};
+
 class Tree {
     constructor(x, y, scale = 1.0) {
         this.x = x;
@@ -9,7 +68,7 @@ class Tree {
     }
 
     draw(ctx, image) {
-        if (image && image.complete && image.width > 0 && image.height > 0) {
+        if (image && image.width > 0 && image.height > 0) {
             // Draw actual tree image
             const width = image.width * this.scale;
             const height = image.height * this.scale;
@@ -85,7 +144,7 @@ class Snowflake {
     }
 
     draw(ctx) {
-        if (this.image && this.image.complete) {
+        if (this.image && this.image.width > 0) {
             ctx.save();
             ctx.translate(this.x, this.y);
             ctx.rotate(this.rotation);
@@ -369,7 +428,20 @@ class SnowAnimationManager {
         document.body.insertBefore(this.canvas, document.body.firstChild);
         
         // Handle window resize
-        window.addEventListener('resize', () => this.resizeCanvas());
+        window.addEventListener('resize', () => {
+            this.resizeCanvas();
+            this.resampleSnowAccumulation();
+        });
+    }
+
+    // Stretch the existing snow banks to the new width, so a resize keeps
+    // the snow that has fallen instead of leaving the old segment count.
+    resampleSnowAccumulation() {
+        const old = this.snowBankHeights;
+        const segments = Math.ceil(this.canvas.width / this.accumulationWidth);
+        if (!old.length || old.length === segments) return;
+        this.snowBankHeights = Array.from({ length: segments },
+            (_, i) => old[Math.min(old.length - 1, Math.floor(i * old.length / segments))]);
     }
 
     resizeCanvas() {
@@ -380,84 +452,10 @@ class SnowAnimationManager {
     }
 
     async loadAssets() {
-        const loadImage = (src) => {
-            return new Promise((resolve, reject) => {
-                const img = new Image();
-                img.onload = () => {
-                    if (img.width === 0 || img.height === 0) {
-                        resolve(null); // Return null for empty images
-                    } else {
-                        resolve(img);
-                    }
-                };
-                img.onerror = () => {
-                    resolve(null); // Return null instead of rejecting
-                };
-                img.src = src;
-            });
-        };
-
-        try {
-            // Load tree image
-            this.treeImage = await loadImage('assets/tannenbaum.png');
-            
-            // Load snowflake images
-            for (let i = 0; i < 7; i++) {
-                const img = await loadImage(`assets/snow0${i}.png`);
-                if (img) {
-                    this.snowImages.push(img);
-                } else {
-                    this.snowImages.push(this.createFallbackSnowflake());
-                }
-            }
-            
-            this.assetsLoaded = true;
-        } catch (error) {
-            console.error('Failed to load snow assets:', error);
-            // Don't throw - we have fallbacks
-            this.assetsLoaded = true;
-        }
-    }
-
-    createFallbackSnowflake() {
-        // Create a small canvas with a simple snowflake drawing
-        const canvas = document.createElement('canvas');
-        canvas.width = 16;
-        canvas.height = 16;
-        const ctx = canvas.getContext('2d');
-        
-        // Draw a simple snowflake
-        ctx.fillStyle = 'white';
-        ctx.strokeStyle = 'white';
-        ctx.lineWidth = 2;
-        
-        // Draw a simple star/snowflake pattern
-        const centerX = 8;
-        const centerY = 8;
-        const radius = 6;
-        
-        ctx.beginPath();
-        for (let i = 0; i < 8; i++) {
-            const angle = (i * Math.PI * 2) / 8;
-            const x = centerX + Math.cos(angle) * radius;
-            const y = centerY + Math.sin(angle) * radius;
-            if (i === 0) {
-                ctx.moveTo(centerX, centerY);
-            }
-            ctx.lineTo(x, y);
-            ctx.moveTo(centerX, centerY);
-        }
-        ctx.stroke();
-        
-        // Add center dot
-        ctx.beginPath();
-        ctx.arc(centerX, centerY, 2, 0, Math.PI * 2);
-        ctx.fill();
-        
-        // Convert canvas to image
-        const img = new Image();
-        img.src = canvas.toDataURL();
-        return img;
+        // Drawn in code, so there are no image files to fetch or license.
+        this.treeImage = SnowSprites.tree();
+        this.snowImages = SnowSprites.flakes();
+        this.assetsLoaded = true;
     }
 
     createTrees() {

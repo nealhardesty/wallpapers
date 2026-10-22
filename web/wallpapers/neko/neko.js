@@ -1,4 +1,7 @@
 // Neko Animation Module
+// Imported without its sprites (assets/neko/), whose provenance and licensing
+// could not be established (SPEC §7.3). It stays disabled until the cat is
+// redrawn in code (roadmap 4.6); the behaviour below is what gets kept.
 class NekoAnimationManager {
     constructor() {
         this.canvas = null;
