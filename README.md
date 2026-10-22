@@ -9,8 +9,8 @@ Quest's hero with the arrow keys.
 
 They run in three places:
 
-- **A web page**: open it and you see only the wallpaper. Press `,` for the
-  wallpaper picker and its settings.
+- **A web page**: open it and you see only the wallpaper. Press `,` for its
+  settings, `[` and `]` to switch.
 - **Chrome's new tab**, through a small extension.
 - **Android's home screen**, as a live wallpaper (planned).
 
@@ -18,25 +18,51 @@ Everything is plain HTML, CSS and JavaScript, with no build step. Most
 wallpapers work fully offline. The online ones, such as the Bing image of
 the day, need no API keys.
 
-> **Status: early.** The wallpapers have been moved in from an older
-> project; the page that ties them together comes next. The plan and roadmap are in [SPEC.md](SPEC.md).
+> **Status: working.** Open `web/index.html` and it plays. Next comes a proper
+> picker and settings panel; the plan and roadmap are in [SPEC.md](SPEC.md).
 
 ## Use
 
-*Coming with the first wallpapers (roadmap phases 2–5).*
+Open `web/index.html`, straight from disk or through `make serve`. You see
+only the wallpaper. On first run it's **Seasonal**: snow from January to
+April, the fish tank in May and November, fireflies in summer, falling
+leaves in September, Halloween in October and the advent calendar in
+December.
 
 | Key | Action |
 |---|---|
-| `,` | Open or close the wallpaper picker and settings |
-| `Esc` | Close the panel |
-| `F` | Toggle fullscreen |
-| `?` | Show the keys |
+| `[` / `]` | Previous / next wallpaper (remembered) |
+| `,` | This wallpaper's settings |
+| `f` | Fullscreen |
+
+**Wallpapers:** Seasonal 📅, Blank ⬛, Snow ❄️, Rain 🌧️, Falling Leaves 🍂,
+Fireflies ✨, Fireplace 🔥, Northern Lights 🌌, Parallax Clouds ☁️,
+Mountains 🏔️, Starfield 🌠, Cherry Blossoms 🌸, Halloween Night 🎃,
+Matrix 🟩, Fish Tank 🐠, Advent Calendar 🎁, Pixel Quest ⚔️, and the Bing
+Image of the Day 🖼️. Neko 🐈 is coming back, redrawn.
+
+**URL options**, for this visit only; nothing is saved:
+
+| Add to the URL | Effect |
+|---|---|
+| `?w=fishtank` | Show this wallpaper |
+| `?panel=open` | Open its settings on load |
+| `?w=advent&date=2026-12-25` | Time-travel the advent calendar (`&theme=` picks a theme) |
+| `?tier=low` | Low, medium or high performance tier (fewer pixels and frames on low) |
+
+`web/stage.html?w=<id>` shows a single wallpaper on its own, without the
+player around it.
 
 ## Development
 
-Requirements: `make`, `git`, Node.js 22 or later, Google Chrome or Chromium
-(for `make smoke`; set `CHROME_PATH` if it isn't found), and Python 3 (for
-`make serve`). There are no npm packages to install.
+Requirements:
+- `make`, `git` and Node.js 22 or later
+- Google Chrome or Chromium, for `make smoke` (set `CHROME_PATH` if it isn't
+  found)
+- `openssl`, for `make serve-https`
+- Docker, for the container
+
+There are no npm packages to install.
 
 First time in a fresh clone:
 
@@ -50,7 +76,11 @@ Run `make` to list every target.
 | Target | What it does |
 |---|---|
 | `make hooks` | Install the git hooks in `.githooks/` |
-| `make serve` | Serve `web/` at http://localhost:8000 (`PORT=` to change) |
+| `make serve` | Serve `web/` at http://localhost:8000 (`PORT=` to change, `HOST=0.0.0.0` to reach it from a phone) |
+| `make serve-https` | The same over https at https://localhost:8443, with a self-signed certificate made on first use |
+| `make cert` | Make a fresh self-signed certificate in `.cert/` (localhost and your LAN addresses) |
+| `make docker-build` | Build the container image `wallpapers` |
+| `make docker-run` | Run it at http://localhost:8000 (read-only, unprivileged) |
 | `make lint` | Syntax-check every script and JSON file |
 | `make audit` | Scan the working tree for anything private (see below) |
 | `make audit-staged` | Scan only what is staged for commit |
@@ -60,17 +90,19 @@ Run `make` to list every target.
 | `make ci` | Everything CI runs: lint, audit, audit-history, test, smoke |
 | `make clean` | Remove build output |
 
-### Trying a single wallpaper
+### HTTPS and phones
 
-While the main page is being built (roadmap phase 3), `web/dev/harness.html`
-runs any one wallpaper on its own. Open it straight from disk, or via
-`make serve` at http://localhost:8000/dev/harness.html.
+To try the wallpapers on a phone, serve them on your network:
+`HOST=0.0.0.0 make serve-https`, then open the printed address. The
+certificate is self-signed, so the browser warns once. Accept it, or trust
+`.cert/cert.pem` on the device. HTTPS matters off localhost because some
+browser features only work on secure pages.
 
-- `?w=fishtank` picks a wallpaper
-- `&panel=open` opens its settings on load
-- `c` opens its settings
-- `[` and `]` switch to the previous or next wallpaper
-- `g` goes back to the gallery
+### Adding a wallpaper
+
+See "Building a new wallpaper" in [AGENTS.md](AGENTS.md). In short: a folder
+under `web/wallpapers/`, a `defaults.js`, an entry in `catalog.js`, and
+`make ci`.
 
 ### Keeping it public-safe
 

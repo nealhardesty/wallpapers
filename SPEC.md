@@ -14,8 +14,8 @@ wallpapers' only home. They run in three hosts:
 3. **Android live wallpaper**: a future app in `android/` that runs the same
    web code behind the home screen.
 
-> Status: **planned**. All planning decisions are made (2026-10-22). The
-> roadmap (§9) is the work queue; next up is Phase 1.
+> Status: **phases 1–3 done** (2026-10-22). The player, the stage and all
+> wallpapers run from `web/index.html`; next up is Phase 4, the panel.
 
 ---
 
@@ -105,22 +105,24 @@ extension's ID), icons, `scripts/`, `.claude/`, `.cursor/`.
 ```
 wallpapers/
 ├── web/                         # the product: a static site, zero build
-│   ├── index.html               # the player: wallpaper only, panel hidden
-│   ├── manifest.json            # Chrome MV3; web/ loads unpacked as-is
+│   ├── index.html               # the player: wallpaper only (core/player.js)
+│   ├── stage.html               # one wallpaper, in an iframe or alone (core/stage.js)
+│   ├── manifest.json            # Chrome MV3; web/ loads unpacked as-is (phase 5)
 │   ├── core/
-│   │   ├── registry.js          # Wallpapers.register() + catalog metadata
-│   │   ├── player.js            # select/start/stop, lazy loading, persistence, deep links
-│   │   ├── host.js              # host adapter: insets, visibility, input, storage, scroll offset
-│   │   ├── panel.js             # unified switcher + settings overlay
-│   │   ├── settings.js          # renders a wallpaper's settings schema into controls
-│   │   └── theme.css            # tokens (was the homepage's CSS variables)
-│   ├── dev/                     # harness.html + legacy-shims.js (Phase 2 test bed)
+│   │   ├── wp.js                # WP namespace + pure logic: seasons, params, settings, tiers, pacing
+│   │   ├── player.js            # chooses, mounts and crossfades stages; global keys
+│   │   ├── stage.js             # host, frame pacing, DPR cap, settings, messaging, boot
+│   │   ├── panel.js             # unified switcher + settings overlay (phase 4)
+│   │   ├── settings.js          # schema renderer (phase 4)
+│   │   └── theme.css            # tokens and base styles
 │   ├── wallpapers/
-│   │   └── <id>/                # one folder per wallpaper: scripts + its own assets
+│   │   ├── catalog.js           # every wallpaper's metadata, in menu order
+│   │   └── <id>/                # defaults.js + the wallpaper's scripts and assets
 │   └── icons/
-├── tools/                       # node scripts (built-ins only): tests, audit, thumbnails
+├── tools/                       # node scripts (built-ins only): audit, lint, serve, smoke, tests
 ├── android/                     # Gradle project (phase 6)
 ├── .github/workflows/ci.yml     # runs `make ci`
+├── Dockerfile                   # the site in a container, served by tools/serve.mjs
 ├── Makefile
 ├── README.md                    # setup and use
 ├── SPEC.md                      # this file
@@ -136,71 +138,113 @@ integrated.
 
 ## 4. Architecture
 
-### 4.1 Wallpaper contract
+### 4.1 The player, the stage and the wallpaper contract
 
-Each wallpaper registers metadata eagerly and loads its code lazily, so a new
-tab only parses the 20–500 KB it needs instead of 1.7 MB.
+**Every wallpaper runs in its own iframe, the stage** (`stage.html?w=<id>`),
+which the player (`index.html`) creates, crossfades in and throws away.
+Decided in Phase 3, replacing the plan to wrap each module and adopt
+per-module host APIs. Why:
+
+- **Nothing can leak between wallpapers.** Dropping the iframe drops every
+  global, listener, timer, canvas and animation loop, so the modules don't
+  need wrapping (old task 3.2) or per-module leak fixes, and their
+  top-level class names can't collide.
+- **Pacing, pause and DPR for every module, with no module changes.**
+  `core/stage.js` loads before any wallpaper code and replaces
+  `requestAnimationFrame` (fps cap, pause, per-frame timing for the
+  governor) and the [Replaceable] `devicePixelRatio` (the tier's DPR cap).
+  Every module animates only through rAF; none uses `setInterval`.
+- **Render scale for free.** The player lays the stage out at
+  `renderScale` × the window and scales it back up with a CSS transform, so
+  the wallpaper renders fewer pixels without knowing it.
+- **Crossfades:** two stages, fading opacity.
+- **One page, many uses:** the same `stage.html` serves thumbnails' live
+  previews (§4.7), Android (§6) and direct links.
+
+The player and stage talk **only through `postMessage`**. On `file://`,
+Chrome makes frames cross-origin to each other, so neither can reach into
+the other, though `localStorage` is shared. That was tested before
+building on it.
+
+| Direction | Message | Meaning |
+|---|---|---|
+| stage → player | `ready {id}` | booted and drawing; the player fades it in |
+| stage → player | `key {key}` | a player key (`,` `[` `]` `f`) pressed while the stage has focus |
+| stage → player | `error {id, message}` | boot failed; the player shows a toast and the stage anyway |
+| player → stage | `settings` | open the wallpaper's settings |
+| player → stage | `tier {tier}` | apply a tier's fps and DPR (the player rescales the iframe) |
+| player → stage | `pause` / `resume` | stop and restart frames |
+
+**The catalog** (`web/wallpapers/catalog.js`) lists every wallpaper in menu
+order: `id`, `name`, `icon`, `scripts`, `make(host)`, an optional
+`prepare(manager, host)` hook (run before `init()`), `background`,
+`interactive`, `motion` (`'slow'` gets the slow fps cap), `network`
+(hosts), `cost`, `disabled` (why), and `pseudo` (Seasonal). It's one small
+file, so the player can show names and icons without loading any wallpaper
+code, and the stage loads only the chosen wallpaper's `defaults.js` and
+scripts.
 
 ```js
-// web/wallpapers/fishtank/meta.js — tiny, always loaded
-Wallpapers.register({
-  id: 'fishtank',
-  name: 'Fish Tank',
-  icon: '🐠',
-  scripts: ['wallpapers/fishtank/fishtank.js'],   // loaded on first use
-  interactive: true,                              // wants pointer input
-  network: false,                                 // or { hosts: ['www.bing.com'] }
-  cost: 'high',                                   // hint for mobile defaults
-});
+// web/wallpapers/catalog.js
+{ id: 'fishtank', name: 'Fish Tank', icon: '🐠', scripts: ['fishtank/fishtank.js'],
+  make: host => new FishTankAnimationManager(host), cost: 'high', interactive: true },
 
-// web/wallpapers/fishtank/defaults.js — every default value, and nothing else
-Wallpapers.defaults('fishtank', {
-  configVersion: 1,
-  theme: 'planted',
-  fishCount: 32,
-  bubbles: true,
-  // …
+// web/wallpapers/fishtank/defaults.js: every default value, and nothing else
+WP.defaults('fishtank', {
+    configVersion: 1,
+    fishCount: 26,
+    waterTheme: 'planted',
+    // …
 });
-
-// web/wallpapers/fishtank/fishtank.js — the existing manager, wrapped
-Wallpapers.implement('fishtank', host => new FishTankAnimationManager(host));
 ```
 
-**Defaults live in their own file** (`defaults.js`, one per wallpaper). It
-replaces today's mix of inline objects, `defaults()` methods and the
-homepage's global `CONFIG`.
+**Defaults live in their own file** (`defaults.js`, one per wallpaper),
+replacing the old mix of inline objects, `defaults()` methods, dialog Reset
+copies and the homepage's global `CONFIG`. Where the old standalone pages
+were tuned differently from the homepage, the standalone values won
+(Appendix A).
 
 - It is a script, not JSON, because Chrome blocks `fetch()` of local files
   from `file://`.
-- It loads lazily with the wallpaper's code.
-- Saved settings are stored as **overrides only**: the keys the user
-  actually changed. A retuned default then reaches everyone who never
-  touched that setting.
-- Reset means deleting the overrides.
-- The settings schema (§4.4) holds labels and ranges; `defaults.js` holds
-  values.
-- A test checks that every schema key has a default, every default has a
-  schema entry or is internal (`configVersion`), and every default is
-  inside its range.
+- Modules read and write settings through `WP.settings`:
+  - `load()`: defaults merged with stored overrides
+  - `save(config)`: writes only what differs from defaults, under `wp:<id>`
+  - `defaults()`: a fresh copy, used by Reset
+  - `reset()`: deletes the overrides
+- Saved settings are **overrides only**: a retuned default reaches everyone
+  who never touched that setting. Overrides from another `configVersion`,
+  and keys the defaults no longer have, are dropped.
+- State that isn't a setting (advent's last-seen day) goes through
+  `host.storage`, under `wp:<id>:<key>`.
+- Tests:
+  - the smoke test runs every wallpaper fresh and fails if its config would
+    save anything, so each `defaults.js` matches what the module actually
+    uses
+  - the unit tests check every `defaults.js` registers its own id with
+    JSON-safe values
+  - Phase 4 adds a check that every schema key has a default, and the
+    reverse
 
-Instance interface (the existing managers already mostly have this shape):
+**Instance interface**, as the imported managers have it today, and where
+Phase 4 and 6 take it:
 
-| Member | Required | Meaning |
+| Member | Now | Meaning |
 |---|---|---|
-| `start()` / `stop()` | yes | Begin and end drawing. `stop()` must cancel rAF, remove its canvas and remove **every** listener. |
-| `destroy()` | yes | Release everything; the instance is never reused. |
-| `settings()` | yes | Returns the settings schema (§4.4) plus current values. |
-| `applySettings(values)` | yes | Applies live; persists through `host.storage`. |
-| `onInsets(insets)` | no | Host chrome changed size (replaces `temporaryStatusBarHeight`). |
-| `onScroll(x, y)` | no | Android home-screen page offset 0..1, for parallax (§6.4). |
-| `onQuality(q)` | yes | Tier or rung changed: scale counts, rebuild buffers, toggle effects (§4.8). |
-| `keys` | no | Declared shortcuts `{ key, label, run }`, listed in the panel and dispatched only while the panel is closed. |
+| constructor `(host)` | yes | `make(host)` in the catalog. Modules with a ground line keep `host` and read `host.insets`. |
+| `init()` | optional | async setup before `start()` |
+| `start()` / `stop()` | yes | begin and end drawing. Leaks no longer outlive a switch (the iframe goes), but `stop()` still cancels its rAF |
+| `showConfigDialog()` | yes | the module's own dialog until the Phase 4 schema renderer replaces it |
+| `settings()` / `applySettings(values)` | phase 4 | schema plus live apply |
+| `onQuality(q)` | phase 6 | scale counts, rebuild buffers, toggle effects (§4.8). fps, DPR and render scale already apply without it |
+| `onScroll(x, y)` | phase 6 | Android home-screen page offset 0..1, for parallax (§6.4) |
+| `keys` | phase 4 | declared shortcuts `{ key, label, run }`, listed in the panel and dispatched only while it's closed |
 
 ### 4.2 Player (`core/player.js`)
 
-- Owns the current wallpaper. Switching is `stop()` → `destroy()` →
-  create → `start()`, with a short crossfade. It replaces the homepage's
-  hand-written `setXWallpaper()` and `stopAllAnimations()` switches.
+- Owns the current wallpaper. Switching mounts a new stage, fades it in on
+  `ready` (or after 4 s regardless), then removes the old one. It replaces
+  the homepage's hand-written `setXWallpaper()` and `stopAllAnimations()`
+  switches.
 - Persists the choice under a namespaced key (`wp:current`). Every
   wallpaper's settings live under `wp:<id>` and keep a `configVersion`.
   Old homepage settings are not migrated automatically: the extension is a
@@ -216,19 +260,22 @@ Instance interface (the existing managers already mostly have this shape):
   | `w=<id>` | Show this wallpaper instead of the saved one, e.g. `index.html?w=fishtank`. An unknown id is ignored, with a console warning |
   | `panel=open` | Open the switcher and settings panel on load (closes as usual with `,` or `Esc`) |
   | `date=YYYY-MM-DD`, `theme=<id>` | Passed to the wallpaper as `host.params`. Advent uses them for time travel and themes, e.g. `?w=advent&date=2026-12-25` |
+  | `tier=low\|medium\|high` | Pin a performance tier for this load (§4.8), e.g. to see Low on a desktop |
   | `host=android`, `hud=1`, `thumb=1` | Host simulation (§4.3), performance HUD (§4.8), thumbnail mode (§4.7) |
 
   Picking a wallpaper in the panel while `w=` is active does persist, as
   usual, and drops `w=` from the address bar (`history.replaceState`), so
   a reload shows what was picked.
-- Pauses every wallpaper on `visibilitychange`, centrally, instead of relying
-  on rAF throttling. Snow already does this in its standalone fork.
+- Every wallpaper pauses on `visibilitychange`, centrally, in the stage's
+  frame pacer. No frames are produced while hidden, and the pacer restarts
+  cleanly on return.
 - **Seasonal** (decided) is a pseudo-wallpaper in the strip and the
   first-run default. It plays the wallpaper for the current month, using
   that wallpaper's own saved settings. It checks again at the top of every
-  hour, so it rolls over on the 1st without a reload. Picking any real
-  wallpaper turns Seasonal off; picking Seasonal turns it back on. The table
-  lives once, in `player.js`:
+  hour (the player checks every minute), so it rolls over on the 1st
+  without a reload. Picking any real wallpaper turns Seasonal off; picking
+  Seasonal turns it back on. The table lives once, as `WP.SEASONS` in
+  `core/wp.js`:
 
   | Months | Wallpaper |
   |---|---|
@@ -242,27 +289,28 @@ Instance interface (the existing managers already mostly have this shape):
 
   It uses the local calendar month, so it is Northern-Hemisphere only.
 
-### 4.3 Host adapter (`core/host.js`)
+### 4.3 Host (`WP.host`, built in `core/stage.js`)
 
-One object passed to every wallpaper, so the wallpapers never know where
-they run:
+One object, passed to every wallpaper's constructor and also available as
+`WP.host`, so the wallpapers never know where they run:
 
 ```js
 host = {
   kind: 'standalone' | 'extension' | 'android',
-  insets: { top, right, bottom, left },   // px kept clear, e.g. Android nav bar; 0 elsewhere
-  storage: { get(key), set(key, value) }, // localStorage today, swappable
-  quality: { tier, fps, renderScale, dpr, density, effects, motion },  // §4.8, live
-  power: { charging, level, saver, thermal },                          // §4.8, live
-  requestFrame(cb), createCanvas(opts), idleUntil(ms),                 // §4.8
-  pointer: EventTarget,                   // where interactive wallpapers listen
+  id: 'fishtank',                         // this stage's wallpaper
+  params: { date, theme, … },             // URL parameters (§4.2)
+  insets: { top, right, bottom, left },   // px kept clear, e.g. Android's gesture bar; 0 elsewhere
+  storage: { get(key), set(key, value) }, // non-setting state, under wp:<id>:<key>
+  quality: { tier, fps, renderScale, dpr, density, slowFps },  // the current tier (§4.8)
+  frames: { count, workMs },              // from the frame pacer, for the governor and tests
   reducedMotion: boolean,                 // prefers-reduced-motion
+  // phase 6: power { charging, level, saver, thermal } and idleUntil(ms) (§4.8)
 }
 ```
 
-The host is detected from `location` and a `?host=` override.
-`?host=android` lets a desktop browser simulate the Android host
-(insets, dpr cap, touch-only) for testing.
+The host kind is detected from `location` and a `?host=` override.
+`?host=android` lets a desktop browser simulate the Android host (a 48 px
+bottom inset and the Medium ceiling) for testing.
 
 ### 4.4 Settings schema and the unified panel
 
@@ -315,15 +363,17 @@ variable coupling, and settings work identically on Android (§6.3).
 
 | Key | Where | Action |
 |---|---|---|
-| `,` | everywhere | open/close panel |
+| `,` | everywhere | open/close panel (today: the wallpaper's own settings) |
 | `Esc` | panel open | close panel |
+| `[` / `]` | everywhere | previous/next wallpaper, remembered (built in Phase 3) |
 | `←` / `→` | panel open | previous/next wallpaper |
-| `F` | everywhere | fullscreen |
+| `F` | everywhere | fullscreen (built in Phase 3) |
 | `?` | everywhere | key help overlay |
 | wallpaper keys | panel closed | e.g. quest `N`/`H`/`V`/`T`/`M`/`P`, advent arrows/`T`/`R` |
 
 Keys are ignored when Ctrl, Meta or Alt is held, or when focus is in a form
-field.
+field. The player's keys work wherever focus is: the stage forwards `,`
+`[` `]` `f` to the player when it has focus.
 
 ### 4.6 Bing image of the day (decided: keep it all)
 
@@ -449,32 +499,35 @@ they are stricter. "Battery-aware" can be switched off in the panel.
 - Desktop, standalone and extension: Auto, ceiling High, battery-aware.
 - Android: Auto, **ceiling Medium at 30 fps**.
 
-#### What wallpapers implement
+#### What the core does, and what wallpapers implement
 
-The contract (§4.1) gains a little, and most of it replaces boilerplate
-every module already has:
+Built in Phase 3, with no module changes:
+- **Frame pacing.** The stage replaces `requestAnimationFrame` before any
+  wallpaper code loads. It enforces the tier's fps cap (the slow cap for
+  `motion: 'slow'`) by skipping display ticks, pauses when hidden or told
+  to, and times every frame into `host.frames` for the governor.
+- **DPR cap.** It replaces the [Replaceable] `devicePixelRatio`, so the
+  modules that size by it (fishtank, halloween, advent, quest) see the
+  tier's cap.
+- **Render scale.** The player lays the stage out at `renderScale` × the
+  window and scales it up (§4.1).
+- **Pinned tiers.** `?tier=`, then the saved `wp:performance` mode, then the
+  host default (`WP.resolveTier`).
 
-- **`host.requestFrame(cb)`** replaces `requestAnimationFrame`. It enforces
-  the fps cap (skips display ticks), pauses when hidden, times the callback
-  for the governor, and passes a clamped `dt`. Switching to it is a
-  mechanical change in each module.
-- **`host.createCanvas({ alpha, pixelated })`** replaces each module's
-  canvas setup. It sizes the backing store to CSS size × dpr cap ×
-  renderScale, and resizes it on tier change, resize and inset change.
+Still per wallpaper (phase 6):
 - **`onQuality(q)`**, where `q = { tier, fps, renderScale, dpr, density,
   effects: Set, motion }`. The module scales its counts, rebuilds its
-  offscreen buffers at `renderScale`, and toggles its effects.
+  offscreen buffers, and toggles its effects.
 - **Idle frames.** A frame callback may return `false` ("nothing changed")
   or call `host.idleUntil(ms)`. The core then produces no frames, and
   Android doesn't post the surface, until there is input, a timer or the
   deadline. Advent between door animations, a sleeping neko, paused quest
   and Bing (a still image: **0 fps**) then cost almost nothing.
-- **Meta** declares `effects`, ordered most expensive first (the order the
-  governor sheds them), and `motion`:
+- **Catalog** entries declare `effects`, ordered most expensive first (the
+  order the governor sheds them), alongside the existing `motion`:
 
   ```js
   effects: [['depthBlur', 'high'], ['caustics', 'medium'], ['godRays', 'medium'], ['glass', 'low']],
-  motion: 'normal',
   ```
 
 #### Techniques catalogue (applied across modules)
@@ -573,6 +626,25 @@ every module already has:
     README, and the corner hot zone works with a mouse too.
 - **Homepage-as-URL alternative:** point Chrome's "Open a specific page" at
   the hosted URL. No extension needed, but the page doesn't replace the new tab.
+- **Local web server** (`tools/serve.mjs`, Node built-ins only):
+  - `make serve`: http on port 8000.
+  - `make serve-https`: https on 8443, with a self-signed certificate made
+    by `openssl` on first use and kept in the gitignored `.cert/`. The
+    certificate covers localhost and the machine's LAN addresses.
+    `make cert` remakes it.
+  - `HOST=0.0.0.0` makes either reachable from a phone. HTTPS matters there:
+    a LAN address isn't a secure context, and the battery API (§4.8) needs
+    one.
+  - Files are sent with `Cache-Control: no-cache` and `Last-Modified`, so
+    edits show on reload and unchanged files cost a 304. Paths are confined
+    to `web/`, and encoded `../` gets a 403.
+- **Container:** the `Dockerfile` runs that same server on
+  `node:22-alpine`.
+  - It holds only `web/` and `tools/serve.mjs` (`.dockerignore` is an
+    allowlist), runs as the unprivileged `node` user, and works with
+    `--read-only`. It has a health check.
+  - Plain http; TLS belongs to the reverse proxy in front of it.
+  - `make docker-build`, `make docker-run`.
 
 ---
 
@@ -702,23 +774,47 @@ Implemented in `tools/audit.mjs` (Phase 1), with four modes:
 
 ## 8. Testing
 
-- `make test`: a Node script drives headless Chrome (the homepage's
-  fixture approach, with no npm deps). For every wallpaper at 360, 800 and
-  1440 px it checks that:
-  - the wallpaper starts and draws non-blank pixels within 2 s
-  - there are no console errors
-  - `stop()` leaves no canvas, no rAF and no listeners
-  - the panel opens with `,` and every schema control round-trips through
-    storage
-- `make lint`: `node --check` on every script, plus a check that no wallpaper
-  leaks globals beyond its registration.
+Everything runs from `make ci` (lint, audit, audit-history, test, smoke);
+GitHub Actions runs only that.
+
+- `make test`: Node unit tests (`tools/*.test.mjs`), no browser.
+  - `audit.test.mjs`: every audit rule, plus real throwaway git repos.
+  - `wp.test.mjs`: loads `core/wp.js` and the catalog into a Node `vm`,
+    the same classic scripts the browser runs. It checks:
+    - Seasonal for every month and across New Year
+    - URL parameters
+    - the settings merge and diff: versions, stale keys, round trip
+    - tier precedence
+    - frame pacing on a simulated 60 Hz display (the 30 and 20 fps caps
+      hold)
+    - every script and `defaults.js` exists and registers its own id with
+      JSON-safe values
+    - every online wallpaper's hosts are on the audit allowlist
+- `make smoke`: headless Chrome over the DevTools protocol (Node's built-in
+  WebSocket), against the real pages on `file://`, as a user opens them.
+  All network is intercepted: anything but local files and Bing's fixtures
+  fails the run.
+  - **Stage suite:** every wallpaper on `stage.html?w=<id>` with fresh
+    storage. It must:
+    - boot, draw and open its settings, logging no errors
+    - **save nothing on a fresh run**, proving its `defaults.js` matches
+      what the module actually uses
+    - write no storage outside `wp:<id>:*`
+
+    Screenshots go to `dist/smoke/`.
+  - **Player suite**, on `index.html`. It reaches into the cross-origin
+    `file://` stage through per-frame execution contexts. It checks:
+    - the first run shows Seasonal
+    - `?w=` persists nothing
+    - `]` switches, persists and drops `w=`
+    - a full cycle through every wallpaper leaves exactly one stage and no
+      canvases in the player
+    - `?panel=open` opens settings inside the stage
+    - `?tier=low` lays out at half size and caps the frame rate
+    - pause produces zero frames and resume restarts them
+- `make lint`: `node --check` on every script, one file at a time, plus
+  JSON parsing.
 - `make audit`: §7.2.
-- `make ci` = lint + audit + test; GitHub Actions runs only this.
-- `make smoke` (Phase 2, in `make ci`): every wallpaper booted in headless
-  Chrome through `web/dev/harness.html`. It must draw, open its settings and
-  log no errors. All network is intercepted and anything unexpected fails
-  the run. Screenshots go to `dist/smoke/`. Grows into the full
-  `make test` browser suite above in Phase 3.
 - `make bench`: performance budgets per wallpaper per tier (§4.8). Manual,
   not in CI.
 - `make thumbnails`: regenerates the committed thumbnails (§4.7). Not part
@@ -762,15 +858,31 @@ phase can mostly run in parallel.
 
 ### Phase 3: Core
 
-- [ ] 3.1 `registry.js`, `player.js`, `host.js`, `theme.css`; lazy script loading. → the player switches between all wallpapers with no leaked canvases or listeners (test).
-- [ ] 3.2 Wrap each module (no leaked globals); give every module the same lifecycle (`start`/`stop`/`destroy`).
-- [ ] 3.3 Replace `statusBarHeight` and `temporaryStatusBarHeight` with host insets.
-- [ ] 3.4 Decouple snow from `CONFIG` and `homepageApp`; move its settings in; fix the `WindSystem` swap bug.
-- [ ] 3.5 Fix the cherry-blossoms resize-listener leak; centralise the visibility pause.
-- [ ] 3.6 URL parameters (`w=`, `panel=open`, `date=`, `theme=`; §4.2), never persisted, and namespaced `wp:` storage. → a test that `?w=` shows the wallpaper and leaves storage unchanged.
-- [ ] 3.7 Seasonal pseudo-wallpaper (§4.2). → unit test over all 12 months and a rollover at midnight on the 1st with a faked clock.
-- [ ] 3.8 Extract every wallpaper's defaults into `defaults.js` (§4.1); store user settings as overrides only. → the defaults/schema consistency test passes for all wallpapers.
-- [ ] 3.9 `core/perf.js`: `host.requestFrame`, `host.createCanvas`, `onQuality`, idle frames, pinned tiers (no governor yet); switch every module's rAF and canvas setup over. → the fps cap and renderScale visibly apply to all wallpapers; a hidden tab uses zero frames (test).
+- [x] 3.1 The player and the stage (§4.1).
+  - The player is `index.html` + `core/player.js`; the stage is `stage.html` + `core/stage.js`.
+  - Shared pure logic lives in `core/wp.js`, wallpaper metadata in `wallpapers/catalog.js`, styles in `core/theme.css`.
+  - Wallpaper code loads lazily inside the stage. Crossfades; `,` settings, `[`/`]` switch, `f` fullscreen; a first-run hint.
+  - Before building on it, I checked that `file://` frames share `localStorage` and can only talk by `postMessage`.
+  - → smoke: a full cycle leaves one stage and no canvases in the player.
+- [x] 3.2 ~~Wrap each module~~ Superseded by the stage iframe: a dropped iframe takes every global, listener and loop with it, and class names can't collide.
+- [x] 3.3 `statusBarHeight` and `temporaryStatusBarHeight` are gone from every module and default. The eight modules with a ground line read `host.insets.bottom`; `?host=android` simulates a 48 px gesture bar. Quest's homepage-only "dim behind page" is gone too.
+- [x] 3.4 Snow:
+  - No `CONFIG`, no `homepageApp`, and no self-start in season; the player's Seasonal choice owns that.
+  - Its settings dialog is ported in from the homepage, with tooltip defaults read from `defaults.js`; the old strings had drifted.
+  - Fixed two latent bugs in Apply: it swapped in the wrong wind class, and it cleared a snowflake list that no longer existed.
+- [x] 3.5 The cherry-blossoms resize-listener leak is fixed. The visibility pause is central, in the stage's frame pacer. → smoke: pause produces zero frames.
+- [x] 3.6 URL parameters `w=`, `panel=open`, `date=`, `theme=`, `tier=`, `host=` (§4.2), never persisted; picking a wallpaper drops `w=`. Advent's `?date=`/`?theme=` became `applyParams()`. Storage is namespaced: `wp:current`, `wp:<id>`, `wp:<id>:<key>`, `wp:performance`, `wp:hinted`. → smoke: `?w=` persists nothing; every stage writes only its own namespace.
+- [x] 3.7 Seasonal, as decided. → unit tests: every month, and the New Year rollover.
+- [x] 3.8 Every wallpaper has `defaults.js`; settings are stored as overrides only (`WP.settings`).
+  - The standalone presets won, and are checked programmatically against the old pages: snow, leaves, fishtank, halloween, advent, quest, fireplace.
+  - Duplicate defaults (inline objects, `defaults()` methods, Reset copies) collapsed into one source.
+  - → smoke: a fresh run of every wallpaper saves nothing. The schema half of the consistency check comes with Phase 4.
+- [x] 3.9 Tiers without module changes: the stage's rAF pacer (fps cap, slow-motion cap, pause, frame timing) and DPR cap, plus the player's render scale. Pinned by `?tier=`, `wp:performance` or the host default. → smoke: `?tier=low` lays out at half size and runs starfield at its 10 fps slow cap.
+  - Per-module `onQuality` and idle frames moved to phase 6 (§4.8).
+- [x] 3.10 Found by the new smoke test and fixed:
+  - Fireflies sat black for about 5 s after every load. It now opens with its steady-state population already lit.
+  - A body background in the theme covered every `z-index: -1` canvas.
+- [x] 3.11 Also asked for and delivered: `make serve` / `serve-https` / `cert` (`tools/serve.mjs`) and the `Dockerfile` with `make docker-build` / `docker-run` (§5).
 
 ### Phase 4: The panel
 
@@ -809,23 +921,116 @@ phase can mostly run in parallel.
 - [ ] 7.1 Parity check: every wallpaper, setting and key from the homepage works here. → a checklist walk-through on the extension and on Pages.
 - [ ] 7.2 Owner switches Chrome to this extension and archives the private repo. Its links, weather and search are out of scope for this repo.
 
-### Later, maybe
+---
 
-- Shuffle/playlist: rotate wallpapers every N minutes.
-- `prefers-reduced-motion`: slow, calm defaults.
-- New wallpapers, since this repo is now their home. Planned: a **weather
-  forecast** wallpaper (network; a keyless API; location from geolocation
-  or a typed city, kept only in local storage).
+## 10. Ideas
+
+Every idea for the future lives here, numbered so it can be referred to.
+Ideas aren't commitments; one becomes a roadmap task when the owner picks it.
+
+### 10.1 Shared groundwork: a `location` capability
+
+Ideas 10.2 and 10.4 need to know where the user is. 10.3 needs only the
+timezone, which the browser already knows without asking. Location becomes
+a host capability, like `network`:
+
+- The catalog declares `needs: ['location']`. The panel explains why, and
+  offers a typed place as the alternative to granting permission.
+- **Sources, in order:**
+  1. A place the user typed, geocoded once with Open-Meteo's keyless
+     geocoding API and stored locally.
+  2. The browser's Geolocation API: a permission prompt, secure contexts
+     only (localhost, https, the extension).
+  3. On Android, the app's own `ACCESS_COARSE_LOCATION`, requested from the
+     settings activity and pushed into the stage through the host.
+- **Coarse is enough.** Coordinates are rounded to about 0.1° (~10 km)
+  before they're stored or sent anywhere. They stay in local storage and
+  go only to the provider that needs them.
+- **Stage iframes:** geolocation is blocked in a cross-origin iframe unless
+  it has `allow="geolocation"`, and on `file://` every stage is
+  cross-origin. The player sets that attribute only for wallpapers that
+  declare the need.
+- **Android spike:** a live wallpaper isn't a foreground app, so live
+  location may need `ACCESS_BACKGROUND_LOCATION`. Using the last known
+  location, refreshed while the settings activity is open, probably avoids
+  that. Verify before promising anything.
+
+### 10.2 Weather forecast (owner)
+
+A 5-day forecast, or today hour by hour, with small animations on each day
+or hour.
+
+- **Data:** Open-Meteo. No API key, CORS-enabled, free for non-commercial
+  use, CC BY 4.0, attribution shown in a corner. One request covers hourly
+  and daily data, plus sunrise and sunset for a time-of-day tint. Hosts:
+  `api.open-meteo.com`, `geocoding-api.open-meteo.com`.
+- **Look:** a row of day cards, or a 24-hour ribbon, each with a tiny looping
+  scene: sun rays turning, clouds drifting, rain or snow falling, a
+  lightning flicker. These reuse particle ideas from rain and snow, drawn in
+  code. The background follows the current sky.
+- **Cost:** refresh every 30–60 minutes, and idle frames (§4.8) between
+  animation ticks. One of the cheapest wallpapers.
+- **Offline:** shows the last forecast with "updated 3 h ago", never a
+  blank screen.
+- **Units:** follow the locale: °F in the US, °C elsewhere, as the old
+  homepage did.
+
+### 10.3 World clock (owner)
+
+Several timezones, plus the local one.
+
+- **No network, and no location permission:** the local zone comes from
+  `Intl.DateTimeFormat().resolvedOptions().timeZone`, and DST comes free
+  from `Intl`.
+- **Default zones are generic** (local, UTC, New York, London, Tokyo); the
+  user edits the list in settings. Nothing personal ships as a default.
+- **Look** (suggestion): analog faces, or a world map with the day/night
+  terminator sweeping across it. The terminator comes from the sun's
+  position, computed in code, with the cities as dots showing their times.
+  The coastline would come from Natural Earth (public domain), simplified to
+  under ~50 KB.
+- **Cost:** redraws once a second, idle in between. Close to free, and a
+  showcase for idle frames.
+
+### 10.4 Map of where you are (owner)
+
+Street, terrain or satellite, centred on the current position.
+
+- **Google Maps needs an API key and billing** for every web product
+  (Maps JavaScript, Static Maps, Map Tiles), and its terms forbid caching
+  tiles or drawing them outside Google's own SDK. That clashes with §1's
+  no-keys rule. If the owner wants Google anyway, the user pastes their own
+  referrer-restricted key into the wallpaper's settings. It's stored
+  locally and never in the repo, which §1 allows.
+- **Keyless options** (check each provider's current terms before use):
+  - street: OpenFreeMap (vector, no key, no registration) or CARTO raster
+    basemaps (attribution, non-commercial limits)
+  - terrain: OpenTopoMap (CC BY-SA, fair use)
+  - satellite: EOX Sentinel-2 cloudless (attribution; some years
+    CC BY-NC-SA)
+- **Rendering:** our own small raster-tile renderer on canvas: no WebGL
+  (which failed in Android wallpapers in the prior art, §6.1) and no
+  vendored map library. Tiles are cached in Cache Storage, which is both
+  polite to the provider and works offline.
+- **Animation:** a slow Ken Burns drift around the position, a pulsing
+  location dot, and a day/night tint from the sun's position.
+
+### 10.5 Smaller ideas
+
+- Shuffle/playlist: rotate wallpapers every N minutes (was "later, maybe").
+- `prefers-reduced-motion`: slow, calm defaults (was "later, maybe").
+- *Suggestions:*
+  - an **orrery**: the solar system as it is right now, computed in code,
+    no network
+  - a **moon and sky**: tonight's real moon phase and the bright planets
+  - an **ISS tracker**: keyless public APIs; it pairs with 10.4's map
+  - a **lava lamp**: metaballs; cheap with idle-free slow motion
 
 ---
 
 ## Open questions
 
-1. **Which defaults win in 3.8**: the standalone pages' tuned presets
-   (Appendix A; rec., since standalone is now the main host) or the
-   homepage's values? Example: snow as a dense, treeless blizzard on black,
-   or the homepage's 10 trees and 100 flakes. A third option is shipping
-   both as named presets in the panel.
+None open. New questions go here, each with a recommendation.
 
 ---
 

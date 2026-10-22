@@ -26,6 +26,57 @@ through the root `Makefile`.
 - Mention new targets in the Development section of `README.md`.
 
 
+
+## Building a new wallpaper
+
+SPEC.md §4 has the full contract. The short version:
+
+1. **Files.** Create `web/wallpapers/<id>/` (lowercase, hyphenated id) with:
+   - `<id>.js`: a manager class, e.g. `class TidePoolAnimationManager`.
+     Split big wallpapers into several files, loaded in order.
+   - `defaults.js`: `WP.defaults('<id>', { configVersion: 1, ... })`. Every
+     setting's default value, and nothing else. Plain JSON-safe values. Bump
+     `configVersion` when a setting changes meaning.
+2. **Catalog.** Add an entry to `web/wallpapers/catalog.js`:
+   - `id`, `name`, `icon` (one emoji), `scripts`, and `make: host => new YourManager(host)`
+   - when they apply: `interactive`, `motion: 'slow'`, `network: [hosts]`,
+     `cost`, `background`
+3. **The manager.** `constructor(host)`, optional `async init()`,
+   `start()`, `stop()`, `showConfigDialog()`.
+   - Settings: `this.config = WP.settings.load()` and
+     `WP.settings.save(this.config)`. Never touch `localStorage` directly.
+     State that isn't a setting goes through `host.storage`.
+   - Draw on your own full-screen canvas: `position: fixed`, `z-index: -1`,
+     `pointer-events: none`. Interactive wallpapers listen on `document`.
+   - Animate only with `requestAnimationFrame` (the stage paces and pauses
+     it), and move by elapsed time from its timestamp, not per frame.
+   - Keep ground lines above `host.insets.bottom`.
+   - Look alive on the first frame: seed the scene, don't fade in from
+     black.
+4. **Public-repo rules.**
+   - No API keys.
+   - No network unless declared in the catalog's `network` *and* allowed in
+     `URL_ALLOW` in `tools/audit.mjs`, with an offline state that isn't
+     blank.
+   - Prefer art drawn in code. Anything not ours needs a clear licence and
+     a line in `THIRD_PARTY.md`.
+5. **Cheap by default** (SPEC §4.8):
+   - no per-frame `getImageData`/`putImageData`, `shadowBlur` or `ctx.filter`
+   - cache static layers
+   - pool particles
+   - check it at `?tier=low`
+6. **Verify.**
+   - `make ci` must pass. The smoke test boots your wallpaper with fresh
+     storage and fails if it doesn't draw, can't open its settings, logs an
+     error, touches the network, writes storage outside `wp:<id>:*`, or
+     would save anything on a fresh run (i.e. `defaults.js` doesn't match
+     what the code uses).
+   - Look at `dist/smoke/<id>.png`.
+   - Try `web/index.html?w=<id>`, `?w=<id>&tier=low` and
+     `?w=<id>&host=android`.
+7. **Docs.** Add the wallpaper to SPEC.md §2 and, once it's in the menu, to
+   the README.
+
 ---
 
 ## Coding Behavioral Guidelines 
