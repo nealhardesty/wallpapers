@@ -192,6 +192,7 @@ Instance interface (the existing managers already mostly have this shape):
 | `applySettings(values)` | yes | Applies live; persists through `host.storage`. |
 | `onInsets(insets)` | no | Host chrome changed size (replaces `temporaryStatusBarHeight`). |
 | `onScroll(x, y)` | no | Android home-screen page offset 0..1, for parallax (§6.4). |
+| `onQuality(q)` | yes | Tier or rung changed: scale counts, rebuild buffers, toggle effects (§4.8). |
 | `keys` | no | Declared shortcuts `{ key, label, run }`, listed in the panel and dispatched only while the panel is closed. |
 
 ### 4.2 Player (`core/player.js`)
@@ -238,8 +239,9 @@ host = {
   kind: 'standalone' | 'extension' | 'android',
   insets: { top, right, bottom, left },   // px kept clear, e.g. Android nav bar; 0 elsewhere
   storage: { get(key), set(key, value) }, // localStorage today, swappable
-  dpr: Math.min(devicePixelRatio, cap),   // per-host cap (Android may use 1–1.5)
-  quality: 'auto' | 'high' | 'balanced' | 'performance',
+  quality: { tier, fps, renderScale, dpr, density, effects, motion },  // §4.8, live
+  power: { charging, level, saver, thermal },                          // §4.8, live
+  requestFrame(cb), createCanvas(opts), idleUntil(ms),                 // §4.8
   pointer: EventTarget,                   // where interactive wallpapers listen
   reducedMotion: boolean,                 // prefers-reduced-motion
 }
@@ -354,6 +356,193 @@ The panel strip shows a picture of each wallpaper, not just a name.
   reproducible. `make thumbnails` reports which images changed, so
   regenerating them is a deliberate commit, not CI churn.
 
+### 4.8 Performance tiers and power budget
+
+Several wallpapers are expensive: fishtank, northern lights, halloween,
+fireplace, and quest with a palette. On a laptop that costs fan noise; on a
+phone it costs the battery, all day, behind the home screen. So performance
+is a **core service**, not a per-wallpaper afterthought. Wallpapers describe
+what they can shed, and the core decides how much to shed, from the user's
+choice, measured frame cost and the device's power state.
+
+#### The three tiers
+
+A tier is a named **budget**, not a bag of ad-hoc flags. Every wallpaper reads
+the same knobs:
+
+| Knob | Low | Medium | High | What it buys |
+|---|---|---|---|---|
+| `fps` cap | 20 | 30 | display rate (60–120) | Fewer frames; the biggest single battery lever |
+| `renderScale` | 0.5 | 0.75 | 1.0 | Canvas backing store vs CSS pixels; the browser or compositor upscales. Fill cost falls with the square of the scale |
+| `dpr` cap | 1 | 1.5 | 2 | Stops 3× phone screens tripling the pixel count |
+| `density` | 0.35 | 0.65 | 1.0 | Multiplier on particle and entity counts (snowflakes, fish, bats, leaves, stars) |
+| `effects` | only `low` effects | up to `medium` | all | Named expensive features each wallpaper declares (bloom, depth blur, caustics, grain…) |
+| slow-motion fps | 10 | 15 | 30 | Cap for wallpapers declared `motion: 'slow'` (aurora, mountains, starfield, clouds), which look the same at lower rates |
+
+Low should look **intentionally calm**, not broken: fewer, larger flakes
+beat many blurry ones. Each wallpaper's Low is reviewed by eye, and the
+thumbnails (§4.7) are always shot at High.
+
+#### Modes: Auto, Low, Medium, High
+
+A global setting (`wp:performance`) holds the mode, with optional
+per-wallpaper overrides ("Follow global" by default).
+
+- **Low / Medium / High** pin the tier.
+- **Auto** (the default) is a governor (`core/perf.js`) that moves along a
+  fine-grained **ladder** between a floor (Low) and a ceiling (the host's
+  default, lowered by power policy). It doesn't jump between the three
+  presets. Rungs, from top to bottom:
+
+  ```
+  High → density 0.85 → renderScale 0.85 → shed effects one at a time
+       → Medium → density 0.5 → renderScale 0.6 → shed effects
+       → Low → fps 15 → fps 10
+  ```
+
+  - **What it measures:** for each frame, the time spent inside the
+    wallpaper's frame callback (`performance.now()` around it), plus
+    late frames.
+  - **Budget:** the callback must stay under **50%** of the frame interval
+    at the current fps. That leaves room for the compositor, and on
+    Android for the surface copy.
+  - **Step down:** when p90 is over budget for 2 s.
+  - **Step up:** one rung, after 20 s with p90 under 25%. If a step up fails
+    within 5 s, that rung is locked out for 5 minutes, so it never flaps.
+  - **Memory:** the settled rung is remembered per wallpaper per device
+    (`wp:perf:<id>`), so the next start begins there instead of at the top.
+    No janky first second on every new tab.
+  - **Replaces** the hand-rolled auto-quality in fishtank and halloween,
+    and their High / Balanced / Performance settings.
+
+#### Power policy: lowering the ceiling
+
+Signals lower the ceiling Auto works under, and override a pinned tier when
+they are stricter. "Battery-aware" can be switched off in the panel.
+
+| Signal | Web source | Android source | Effect |
+|---|---|---|---|
+| Not visible | `visibilitychange` | `Engine.onVisibilityChanged(false)` | **Pause**: no frames, no timers |
+| Battery saver on | — | `PowerManager.isPowerSaveMode()` + `ACTION_POWER_SAVE_MODE_CHANGED` | Ceiling Low, fps 15 |
+| On battery, under 20% | `navigator.getBattery()` (Chrome on laptops) | `BatteryManager` sticky intent | Ceiling Low |
+| On battery | same | same | Ceiling Medium |
+| Charging | same | same | The user's choice stands |
+| Thermal: moderate | — | `PowerManager.getCurrentThermalStatus()` + listener (API 29+; ignored on 26–28) | One tier lower |
+| Thermal: severe and above | — | same | Low and 10 fps. At `critical`, pause and hold the last frame |
+| Reduced motion | `prefers-reduced-motion` | `ANIMATOR_DURATION_SCALE == 0` | Slow-motion profile at the Low fps |
+| Wallpaper picker preview | — | `Engine.isPreview()` | High: it's brief and it's the sales pitch |
+
+**Host defaults:**
+- Desktop, standalone and extension: Auto, ceiling High, battery-aware.
+- Android: Auto, **ceiling Medium at 30 fps**.
+
+#### What wallpapers implement
+
+The contract (§4.1) gains a little, and most of it replaces boilerplate
+every module already has:
+
+- **`host.requestFrame(cb)`** replaces `requestAnimationFrame`. It enforces
+  the fps cap (skips display ticks), pauses when hidden, times the callback
+  for the governor, and passes a clamped `dt`. Switching to it is a
+  mechanical change in each module.
+- **`host.createCanvas({ alpha, pixelated })`** replaces each module's
+  canvas setup. It sizes the backing store to CSS size × dpr cap ×
+  renderScale, and resizes it on tier change, resize and inset change.
+- **`onQuality(q)`**, where `q = { tier, fps, renderScale, dpr, density,
+  effects: Set, motion }`. The module scales its counts, rebuilds its
+  offscreen buffers at `renderScale`, and toggles its effects.
+- **Idle frames.** A frame callback may return `false` ("nothing changed")
+  or call `host.idleUntil(ms)`. The core then produces no frames, and
+  Android doesn't post the surface, until there is input, a timer or the
+  deadline. Advent between door animations, a sleeping neko, paused quest
+  and Bing (a still image: **0 fps**) then cost almost nothing.
+- **Meta** declares `effects`, ordered most expensive first (the order the
+  governor sheds them), and `motion`:
+
+  ```js
+  effects: [['depthBlur', 'high'], ['caustics', 'medium'], ['godRays', 'medium'], ['glass', 'low']],
+  motion: 'normal',
+  ```
+
+#### Techniques catalogue (applied across modules)
+
+- **Never** call `getImageData`/`putImageData` per frame.
+  - Quest's palettes become palette-swapped sprite sheets, built once when
+    the palette changes.
+  - Fishtank's caustics become a small (128²) caustic texture, regenerated
+    at ≤ 10 fps and drawn scaled with `lighter` compositing.
+- **No live `shadowBlur` or `ctx.filter`.** Bake glows into sprite caches,
+  such as a matrix glyph atlas with the glow included, and advent doors.
+  Get depth-of-field blur by drawing distant layers into a downscaled
+  buffer and upscaling, which blurs for free.
+- **Bloom** runs at 1/8 resolution on Medium and is off on Low.
+- **Static layers** (backgrounds, hills, tank glass, castle) are rendered
+  once per resize or tier change, never per frame.
+- **Object pools** for particles, so garbage-collection pauses don't show
+  up as jank.
+- **Spatial grids** for O(n²) flocking (halloween's bats).
+
+#### Per-wallpaper plan
+
+| Wallpaper | Expensive today | Medium | Low |
+|---|---|---|---|
+| fishtank | `ctx.filter` depth blur, per-frame caustics `putImageData`, god rays, glass | Downscale-blur depth, caustic texture at 10 fps | No depth blur (distant fish dimmed instead), no caustics, density 0.35 |
+| northern-lights | Full-resolution aurora, bloom chain, reflection | Bloom 1/8, reflection at half resolution | No bloom or reflection; slow-motion fps |
+| halloween | Bloom, grain, 3 fog banks, boids | Bloom 1/8, grain off, 2 fog banks | No bloom or grain, 1 fog bank, bats ×0.35, gridded boids |
+| fireplace | 4 full-screen buffers, up to 1,400 particles | Buffers at renderScale | Plus sparks ×0.35, smoke off |
+| quest | Per-frame palette filter, CRT, light canvas | Palette sheets (every tier), CRT off | Light map at half resolution; 30 fps is plenty for 8-bit |
+| leaves | 14k-leaf pile buffer, falling leaves | Pile cap 6k | Pile cap 2k, density |
+| advent | `shadowBlur` doors, confetti | Baked door art; idle between animations | Plus less confetti |
+| matrix | `shadowBlur` on every glyph | Glyph atlas with baked glow | Plus fewer columns |
+| starfield, mountains, parallax-clouds | Many layers | `motion: 'slow'` | Plus density |
+| snow, rain, cherry-blossoms, fireflies | Particle counts, glow | Density | Density, smaller glow sprites |
+| neko | Trivial | Idle while asleep | Same |
+| bing | A still image | 0 fps; redraw on resize only | Same |
+
+#### In the panel
+
+- A global **Performance** row: `Auto · Low · Medium · High`, a
+  Battery-aware toggle, and a live readout such as
+  `⚡ Medium · 30 fps · 4.1 ms/frame · on battery · rung 6/12`.
+- Each thumbnail carries a cost badge (⚡ / ⚡⚡ / ⚡⚡⚡) taken from
+  `make bench`, so you can see the expensive ones before you pick.
+- `?hud=1` shows a small corner overlay with fps, frame ms, tier, rung and
+  power state. It's for tuning; it's never on by default.
+
+#### Measuring it
+
+- **`make bench`:** headless Chrome driven over the DevTools protocol, with
+  Node's built-in `WebSocket` and no deps.
+  - Every wallpaper at every tier, for 10 s, at a phone viewport
+    (412×915, dpr 2.625).
+  - 4× CPU throttling (`Emulation.setCPUThrottlingRate`).
+  - Records p50/p95 callback ms, effective fps and main-thread busy %
+    (`Performance.getMetrics` TaskDuration).
+  - Writes `bench/results.json` and prints a table.
+  - **Budgets:** at 4× throttle every wallpaper must stay under 25% busy on
+    Low and under 50% on Medium. A miss is a bug.
+  - Not in CI, because shared runners are too noisy; it's run before
+    releases and after performance work.
+- **`make android-bench`** (phase 6): over `adb`.
+  - Resets `dumpsys batterystats`, runs each wallpaper at each tier for
+    10 minutes, then collects `dumpsys gfxinfo` and the battery stats.
+  - Estimates mAh per hour per wallpaper per tier, and records the table
+    in this SPEC. That's the real answer to "does Low actually save
+    battery?"
+
+#### Android specifics
+
+- **Shrink the surface itself.** `SurfaceHolder.setFixedSize(w × s, h × s)`
+  makes the wallpaper surface smaller and lets the system compositor
+  upscale it in hardware. Under strategy 1 (VirtualDisplay) the WebView
+  viewport shrinks with it, so every cost shrinks.
+- **Copy only new frames.** Under strategy 2 (`draw()` copy), the engine
+  copies only when JS reports a new frame. With idle frames this means
+  zero copies while static.
+- **Power signals into JS.** The engine pushes them through
+  `evaluateJavascript("wp.power({...})")`; `host.power` holds the latest.
+- **Frame pacing.** The native side follows `Choreographer`, at the fps cap.
+
 ---
 
 ## 5. Hosts: standalone and Chrome
@@ -404,8 +593,9 @@ and starfield (typical) on a real device, and picks one strategy.
   `WebViewAssetLoader` (`https://appassets.androidplatform.net/`), so
   `localStorage` has a stable origin.
 - `index.html?host=android#<id>`.
-- Pauses JS (player pause) on `onVisibilityChanged(false)`. Caps frame rate
-  (30 fps default). Defaults to a lower quality under power saver.
+- Performance and power follow §4.8: pause when invisible; Auto with a
+  Medium ceiling at 30 fps; power, battery and thermal signals pushed into
+  JS; the surface shrunk with `setFixedSize`.
 - Touch: `setTouchEventsEnabled(true)` and forward touches to the WebView,
   so the neko cat follows a finger and taps feed the fish.
 
@@ -430,8 +620,8 @@ the data-driven schema.
   cherry-blossoms, neko and matrix.
 - Use pointer events instead of mouse-only listeners in halloween, fishtank,
   neko and advent.
-- Apply a consistent DPR cap. Respect host quality in fishtank, northern
-  lights, halloween and fireplace.
+- Implement the tiers in every wallpaper, following the per-wallpaper plan
+  in §4.8.
 - Neko: load sprites in parallel (they currently load one at a time and block
   startup), or replace them entirely (§7.3).
 
@@ -511,6 +701,8 @@ Implemented in `tools/audit.mjs` (Phase 1), with four modes:
   leaks globals beyond its registration.
 - `make audit`: §7.2.
 - `make ci` = lint + audit + test; GitHub Actions runs only this.
+- `make bench`: performance budgets per wallpaper per tier (§4.8). Manual,
+  not in CI.
 - `make thumbnails`: regenerates the committed thumbnails (§4.7). Not part
   of `make ci`; the tests only check that every wallpaper has one.
 
@@ -550,6 +742,7 @@ phase can mostly run in parallel.
 - [ ] 3.6 Deep links (`#id`, `#advent?date=`) and namespaced `wp:` storage.
 - [ ] 3.7 Seasonal pseudo-wallpaper (§4.2). → unit test over all 12 months and a rollover at midnight on the 1st with a faked clock.
 - [ ] 3.8 Extract every wallpaper's defaults into `defaults.js` (§4.1); store user settings as overrides only. → the defaults/schema consistency test passes for all wallpapers.
+- [ ] 3.9 `core/perf.js`: `host.requestFrame`, `host.createCanvas`, `onQuality`, idle frames, pinned tiers (no governor yet); switch every module's rAF and canvas setup over. → the fps cap and renderScale visibly apply to all wallpapers; a hidden tab uses zero frames (test).
 
 ### Phase 4: The panel
 
@@ -571,10 +764,15 @@ phase can mostly run in parallel.
 
 ### Phase 6: Mobile readiness, then Android
 
-- [ ] 6.1 Time-based stepping, pointer events, DPR and quality caps (§6.5). → `?host=android` at 360 px is smooth in Chrome's CPU-throttled devtools.
+- [ ] 6.1 Time-based stepping and pointer events (§6.5).
+- [ ] 6.1a Tiers in every wallpaper, following the §4.8 plan and techniques (no per-frame pixel reads, baked glows, density, effects). One wallpaper per commit; the heavy ones first:
+      fishtank · northern-lights · halloween · fireplace · quest · leaves · advent · matrix · starfield · mountains · parallax-clouds · snow · rain · cherry-blossoms · fireflies · neko · bing
+- [ ] 6.1b `make bench`, plus the budgets. → every wallpaper is under 25% busy on Low and under 50% on Medium at 4× throttle; results committed; thumbnails get ⚡ badges.
+- [ ] 6.1c Auto governor (ladder, hysteresis, per-wallpaper memory) and web power policy (`getBattery`, reduced motion); Performance row and `?hud=1`. → simulated slow frames step down within 3 s and recover without flapping (unit tests with a fake clock).
 - [ ] 6.2 **Spike A0:** VirtualDisplay vs `draw()` on a real device; record the numbers here.
 - [ ] 6.3 `android/` Gradle project; `make android-build`, `android-install`, `android-logcat`; assets synced from `web/`.
-- [ ] 6.4 Engine: visibility pause, fps cap, touch forwarding, settings activity (§6.3).
+- [ ] 6.4 Engine: visibility pause, touch forwarding, settings activity (§6.3), power/thermal/battery bridge, `setFixedSize` render scaling, copy-only-new-frames (§4.8).
+- [ ] 6.4a `make android-bench`: mAh per hour per wallpaper per tier on a real device; table recorded in §4.8.
 - [ ] 6.5 Extras: home-screen scroll parallax, `WallpaperColors` (optional).
 - [ ] 6.6 Distribution (decided): `make android-release` builds a signed APK; CI attaches it to a GitHub Release on tag. The keystore lives outside the repo; CI uses an encrypted secret. Play and F-Droid are not planned for now.
 
