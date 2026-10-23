@@ -945,6 +945,29 @@ const STAGE_CHECKS = {
             }
             return true;
         }],
+        ['titled frames show the playing title, repainted once per item, not every frame', async () => {
+            const mock = jellyfinServer();
+            await fresh(`${WEB}/stage.html?w=jellyfin&thumb=1`);
+            await stageReady();
+            const titled = await evaluate('JellyfinFrames.list().filter(f => f.titled).map(f => f.id)');
+            const squash = text => text.toLowerCase().replace(/[^a-z0-9]/g, '');
+            for (const frame of titled) {
+                await fresh(`${WEB}/stage.html?w=jellyfin&tier=high`, jellyfinSignedIn(mock, { order: 'inOrder', subtitles: 'off', frame }));   // a fixed tier: Auto's changes repaint too
+                if (!await waitFor(() => counts(`m.state === 'playing' && m.video.currentTime > 0.2`), 10000)) { record(`${frame}: never played`); continue; }
+                // From here on, note every word the art canvas draws.
+                await counts(`(c => { window.artText = []; for (const k of ['fillText', 'strokeText']) { const real = c[k]; c[k] = function (text, ...rest) { window.artText.push(String(text)); return real.call(this, text, ...rest); }; } })(m.artCtx)`);
+                const before = await counts('({ paints: m.paints, name: m.item.Name })');
+                await counts('m.skip(1)');
+                if (!await waitFor(() => counts(`m.state === 'playing' && m.item.Name !== ${JSON.stringify(before.name)} && m.video.currentTime > 0.2`), 8000)) { record(`${frame}: never moved on`); continue; }
+                const after = await counts('({ paints: m.paints, name: m.item.Name })');
+                if (!squash((await evaluate('window.artText')).join('')).includes(squash(after.name))) record(`${frame}: the art doesn't show "${after.name}"`);
+                if (after.paints - before.paints !== 1) record(`${frame}: painted ${after.paints - before.paints} times for one new item`);
+                await sleep(1500);
+                if (await counts('m.paints') !== after.paints) record(`${frame}: repainted while the item played`);
+                await shoot(`jellyfin-${frame}-titled`);
+            }
+            return titled.length > 0 || record('no titled frames');
+        }],
         ['on Low only the video moves', async () => {
             const mock = jellyfinServer();
             await fresh(`${WEB}/stage.html?w=jellyfin&tier=low`, jellyfinSignedIn(mock, { order: 'inOrder', subtitles: 'off', showTitle: false }));
