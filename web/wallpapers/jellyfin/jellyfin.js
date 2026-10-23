@@ -561,7 +561,7 @@ class JellyfinAnimationManager {
         this.item = item;
         this.cue = '';
         this.channel += changed ? 1 : 0;
-        if (changed && this.frameDef.titled) this.paint();   // the marquee or plaque shows the new title
+        if (changed && this.frameDef.titled && this.layout) this.paint();   // the marquee or plaque shows the new title
         this.claim();
         if (this.posterWanted()) return this.showPoster(item, first);
         this.poster.style.opacity = '0';

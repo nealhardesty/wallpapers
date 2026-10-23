@@ -55,8 +55,9 @@
 
         { group: '🖼️ Frame' },
         { key: 'frame', label: 'Frame', type: 'select',
-          options: [['old-tv', '📺 Old TV'], ['mantel', '🔥 Mantel'], ['cinema', '🎭 Cinema'], ['gallery', '🖼️ Gallery'], ['arcade', '🕹️ Arcade'],
-              ['ambilight', '🌈 Ambilight'], ['camcorder', '📹 Camcorder'], ['vhs', '📼 VHS'], ['none', '⬛ None']] },
+          options: [['old-tv', '📺 Old TV'], ['mantel', '🔥 Mantel'], ['cinema', '🎭 Cinema'], ['drive-in', '🚗 Drive-in'], ['porthole', '⚓ Porthole'],
+              ['gallery', '🖼️ Gallery'], ['arcade', '🕹️ Arcade'], ['ambilight', '🌈 Ambilight'], ['camcorder', '📹 Camcorder'], ['vhs', '📼 VHS'],
+              ['seasonal', '📅 Seasonal (mantel in winter, drive-in in summer)'], ['none', '⬛ None']] },
         { key: 'fit', label: 'Fit', type: 'select', when: config => config.frame === 'none', options: [['contain', 'Whole picture'], ['cover', 'Fill the screen']] },
         { key: 'showTitle', label: 'Show the title', type: 'toggle' },
 
