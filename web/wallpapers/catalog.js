@@ -150,6 +150,19 @@
           keys: [
               { keys: ['n'], label: 'A new window', run: glass => { glass.newWindow(); return 'A new window'; } },
           ] },
+        { id: 'murmuration', name: 'Murmuration', icon: '🐦', accent: '#f0a868', scripts: ['murmuration/flock.js', 'murmuration/murmuration.js'],
+          make: host => new MurmurationAnimationManager(host), cost: 'medium', interactive: true, background: '#1c2442',
+          keys: [
+              { keys: ['d'], label: 'A falcon dives through the flock', run: flock => flock.dive() },
+              { keys: ['r'], label: 'Roost now', run: flock => flock.roostNow() },
+              { keys: ['n'], label: 'A new evening', run: flock => flock.newEvening() },
+          ] },
+        { id: 'lanterns', name: 'Lantern Festival', icon: '🏮', accent: '#ffb35c', scripts: ['lanterns/lanterns.js'],
+          make: host => new LanternsAnimationManager(host), cost: 'low', motion: 'slow', interactive: true, background: '#070918',
+          effects: [['ripples', 'medium']],
+          keys: [
+              { keys: ['l', ' '], label: 'Release a lantern', run: sky => { sky.releaseAt(sky.width * (0.2 + 0.6 * Math.random()), sky.shore + 4); } },
+          ] },
         { id: 'bing', name: 'Bing Image of the Day', icon: '🖼️', accent: '#8ab4ff', scripts: ['bing/bing.js'],
           make: host => new BingWallpaperManager(host), cost: 'none', network: ['www.bing.com'] },
     ];

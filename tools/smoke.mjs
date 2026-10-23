@@ -247,6 +247,9 @@ async function stage(id, entry) {
     return { readyMs, drawn, problems: current.problems };
 }
 
+// Murmuration's and Lanterns': a plain mouse event.
+const mouse = (type, x, y) => cdp.send('Input.dispatchMouseEvent', { type, x, y, button: 'left', clickCount: 1, ...(type === 'mouseMoved' ? { button: 'none' } : {}) });
+
 // Girih's and Stained Glass's: a stage URL booted with these keys stored first.
 async function stageAt(url, settings) {
     await fresh(`${WEB}/stage.html?w=blank`);
@@ -326,6 +329,69 @@ const AVERAGE = `(() => {
 })()`;
 
 const STAGE_CHECKS = {
+    // Murmuration (task 8.8): the pointer is the falcon. Sweep it through
+    // the middle of the flock: the flock splits into separate clouds and a
+    // wave of alarm runs through it.
+    murmuration: [['a pointer falcon splits the flock', async () => {
+        await cdp.send('Page.navigate', { url: `${WEB}/stage.html?w=murmuration&seed=7` });
+        await waitFor(() => evaluate('WP.stage?.ready === true'));
+        await sleep(1500);
+        const stats = 'WP.stage.manager.evening.flock.stats(null, WP.stage.manager.evening.unit * 2.5)';
+        const before = await evaluate(stats);
+        let largest = 1, clouds = 0, alarmed = 0;
+        // Across and back, through the middle of the flock.
+        for (let i = 0; i < 96; i++) {
+            const t = i <= 40 ? i / 40 : i <= 80 ? 1 - (i - 40) / 40 : 0;
+            // Aimed at where the flock is now: it doesn't wait.
+            const c = i <= 80 ? await evaluate('WP.stage.manager.evening.flock.stats()') : null;
+            if (c) await mouse('mouseMoved', c.x - 320 + 640 * t, c.y - 120 + 240 * t + (i > 40 ? 30 : 0));
+            await sleep(30);
+            if (i % 4) continue;
+            const now = await evaluate(stats);
+            largest = Math.min(largest, now.largest);
+            clouds = Math.max(clouds, now.clouds);
+            alarmed = Math.max(alarmed, now.alarmed);
+        }
+        if (before.clouds !== 1 || before.largest < 0.9) record(`flock already apart before the falcon: ${before.clouds} clouds, largest ${before.largest.toFixed(2)}`);
+        if (clouds < 2 || largest > 0.9) record(`the falcon didn't split the flock: ${clouds} clouds, largest ${largest.toFixed(2)}`);
+        if (alarmed < 200) record(`only ${alarmed} birds alarmed`);
+        console.log(`    falcon: ${before.clouds} cloud → ${clouds}, largest ${before.largest.toFixed(2)} → ${largest.toFixed(2)}, ${alarmed} of ${before.flying} birds alarmed`);
+        return true;
+    }]],
+
+    // Lantern Festival (task 8.9): the first frame already has lanterns in
+    // the sky; a tap releases one from the shore under the pointer; and
+    // however many taps come, the pool never grows past its cap.
+    lanterns: [['a full sky at once; a tap releases one under it; the pool keeps its cap', async () => {
+        await cdp.send('Page.navigate', { url: `${WEB}/stage.html?w=lanterns&seed=7` });
+        await waitFor(() => evaluate('WP.stage?.ready === true'));
+        const first = await evaluate(`(m => ({ frames: WP.host.frames.count, sky: m.pool.filter(l => l.alive && l.age > 0 && m.place(l).y < m.horizon).length }))(WP.stage.manager)`);
+        // Seeded before the first frame: automatic releases take seconds.
+        if (first.frames > 5 || first.sky < 15) record(`first frame (${first.frames}): only ${first.sky} lanterns in the sky`);
+        const shore = await evaluate('WP.stage.manager.shore');
+        const ages = await evaluate('WP.stage.manager.pool.map(l => l.alive ? l.age : -1)');
+        await mouse('mousePressed', 333, shore + 12);
+        await mouse('mouseReleased', 333, shore + 12);
+        await sleep(300);
+        const tapped = await evaluate(`(m => m.pool.filter(l => l.alive && l.age < 0.6).map(l => m.place(l)))(WP.stage.manager)`);
+        if (!tapped.some(p => Math.abs(p.x - 333) < 12 && p.water >= shore - 2)) record(`no lantern from the shore under the tap: ${JSON.stringify(tapped.map(p => [Math.round(p.x), Math.round(p.water)]))}, ${ages.length} in the pool`);
+        const cap = await evaluate('WP.stage.manager.pool.length');
+        let most = 0;
+        for (let i = 0; i < 200; i++) {
+            const x = 40 + (i * 37) % 1200;
+            await mouse('mousePressed', x, shore + 20);
+            await mouse('mouseReleased', x, shore + 20);
+            if (i % 10 === 0) {
+                const { size, alive } = await evaluate('({ size: WP.stage.manager.pool.length, alive: WP.stage.manager.alive() })');
+                most = Math.max(most, size);
+                if (alive > size) record(`${alive} lanterns alive in a pool of ${size}`);
+            }
+        }
+        if (most !== cap) record(`the pool grew from ${cap} to ${most} under 200 taps`);
+        if (await evaluate('WP.stage.manager.alive()') !== cap) record('200 taps didn\'t fill the pool');
+        console.log(`    lanterns: ${first.sky} in the sky on frame ${first.frames}; pool ${cap}, at most ${most} after 200 taps`);
+        return true;
+    }]],
     // 8.2: one full repaint per morph step, none while a pattern holds. On
     // Low there's no sheen, so a hold sends no frames at all.
     girih: [['one repaint per morph step, none while holding', async () => {
