@@ -42,17 +42,50 @@ the hosted address.
 
 **As Chrome's new tab.** Every new tab shows the wallpaper.
 1. Get the extension: `make extension` builds `dist/extension/`. Or download
-   `wallpapers-extension` from the latest
-   [CI run](https://github.com/nealhardesty/wallpapers/actions/workflows/ci.yml)
-   and unzip it.
+   `wallpapers-extension-<version>.zip` from the latest
+   [release](https://github.com/nealhardesty/wallpapers/releases) (or the
+   `wallpapers-extension` artifact of a
+   [CI run](https://github.com/nealhardesty/wallpapers/actions/workflows/ci.yml))
+   and unzip it somewhere it can stay.
 2. Open `chrome://extensions`, turn on Developer mode, click **Load
    unpacked** and pick that folder.
 3. Open a new tab. Chrome asks once whether to keep the change; keep it.
+
+Its ID is always `hajnldgffgkdnbimdihipffnimjckgcp`, whichever folder you
+load it from, so a new version unpacked somewhere else keeps your settings.
 
 Chrome puts the cursor in the address bar on a new tab, so click the page
 once before pressing `,`, or use the gear in the top-right corner. The
 extension asks for one permission, reading `www.bing.com`, so the Bing
 wallpaper can fetch its photo; nothing else leaves your machine.
+
+**Moving from the old homepage.** Its wallpaper settings come with you:
+the wallpaper you'd picked, every setting you changed, and the advent
+calendar's memory of the last door it celebrated. Settings you never
+touched take today's defaults. Links, weather, search and clocks stay
+behind.
+1. On an old homepage tab, open the console (⌥⌘J on a Mac, Ctrl+Shift+J
+   elsewhere). If Chrome asks, type `allow pasting` first. Paste this and
+   press Enter; it downloads `homepage-wallpapers.json`, and reads nothing
+   but the wallpaper keys:
+
+   ```js
+   (() => {
+     const keep = k => /Config$/.test(k) || ['wallpaperPreference', 'adventCelebrated', 'adventLastSeen'].includes(k);
+     const data = { app: 'homepage', exported: new Date().toISOString(),
+       localStorage: Object.fromEntries(Object.keys(localStorage).filter(keep).map(k => [k, localStorage.getItem(k)])) };
+     const a = document.createElement('a');
+     a.href = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
+     a.download = 'homepage-wallpapers.json';
+     a.click();
+   })();
+   ```
+2. In `chrome://extensions`, turn the old homepage off, and install this
+   extension (above).
+3. Open a new tab, press `c` (or `,`), choose **Import** and pick the file.
+   A note says what came over.
+
+The same file imports on the hosted copy and in the Android app.
 
 **On Android, as a live wallpaper.** Download `wallpapers-<version>.apk`
 from the latest [release](https://github.com/nealhardesty/wallpapers/releases)
@@ -79,7 +112,7 @@ December.
 
 | Key | Action |
 |---|---|
-| `,` | The panel: every wallpaper, and the current one's settings |
+| `,` or `c` | The panel: every wallpaper, and the current one's settings |
 | `[` / `]` | Previous / next wallpaper (remembered) |
 | `←` / `→` | Switch, while the panel is open |
 | `f` | Fullscreen |
@@ -182,6 +215,7 @@ Run `make` to list every target.
 | `make audit-history` | Scan every file version ever committed |
 | `make test` | Run the unit tests |
 | `make smoke` | Build the extension, then boot every wallpaper, the player and the extension in headless Chrome; screenshots go to `dist/smoke/` |
+| `make smoke-live` | The same stage and player checks against the deployed site, with real network and Bing (`SMOKE_URL=` for another, e.g. `make serve`'s); CI runs it after every deploy |
 | `make ci` | Everything CI runs: lint, audit, audit-history, test, smoke |
 | `make clean` | Remove build output |
 

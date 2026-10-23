@@ -14,14 +14,14 @@ wallpapers' only home. They run in three hosts:
 3. **Android live wallpaper**: a future app in `android/` that runs the same
    web code behind the home screen.
 
-> Status: **phases 1–6 done** (2026-10-22), except the measurements that
-> need a real phone (6.2's numbers, 6.4a) and the first signed release
-> (6.6 needs the owner's keystore). The player, the stage, the panel and
+> Status: **phases 1–7 done** (2026-10-22), except what needs the owner:
+> measurements on a real phone (6.2's numbers, 6.4a), the first signed
+> release (6.6), and the switch-over itself (7.2). The player, the stage, the panel and
 > all 17 wallpapers run from `web/index.html`, as a Chrome new-tab
 > extension, on GitHub Pages at https://nealhardesty.github.io/wallpapers/,
 > and as an Android live wallpaper. Every wallpaper is tiered and within
-> budget. Next up: Phase 7 (retire the homepage) and Phase 8 (new
-> wallpapers).
+> budget, and everything the homepage had for wallpapers is here, settings
+> included (Appendix B). Next up: Phase 8 (new wallpapers).
 
 ---
 
@@ -260,9 +260,10 @@ Phase 4 and 6 take it:
   switches.
 - Persists the choice under a namespaced key (`wp:current`). Every
   wallpaper's settings live under `wp:<id>` and keep a `configVersion`.
-  Old homepage settings are not migrated automatically: the extension is a
-  new identity with its own storage. The README gives a one-line console
-  snippet that dumps the old keys in the panel's Import format.
+  Old homepage settings move over by hand, once: the extension is a new
+  identity with its own storage. The README's console snippet saves the
+  old wallpaper keys to a file, and the panel's Import converts it
+  (Appendix B).
 - **URL parameters (decided).** They override for **this page load only**:
   nothing is persisted, the saved choice and Seasonal are untouched, and a
   reload without them returns to normal. They replace the old
@@ -426,7 +427,7 @@ settings directly (storage is shared) and tells the player to apply them:
 
 | Key | Where | Action |
 |---|---|---|
-| `,` | everywhere | open or close the panel |
+| `,` or `C` | everywhere | open or close the panel (`C` as on the old homepage, Phase 7) |
 | `Esc` | everywhere | close the key help, then the panel |
 | `[` / `]` | everywhere | previous or next wallpaper (remembered) |
 | `←` / `→` | panel open | previous or next wallpaper |
@@ -436,7 +437,8 @@ settings directly (storage is shared) and tells the player to apply them:
 
 Keys are ignored when Ctrl, Meta or Alt is held, or when focus is in a form
 field. The player's keys work wherever focus is: the stage forwards `,`
-`[` `]` `f` to the player when it has focus.
+`c` `[` `]` `f` `?` `Esc` to the player when it has focus. No wallpaper may
+declare `c`.
 
 ### 4.6 Bing image of the day (built in Phase 4, Pages job in Phase 5)
 
@@ -765,8 +767,14 @@ and the commits.
   `chrome_url_overrides.newtab = index.html` and one host permission,
   `https://www.bing.com/*` (§4.6). No `permissions`: settings live in
   `localStorage`, which extension pages have, so `storage` isn't needed.
-  No `key` either: an unpacked extension's id comes from its folder, and a
-  zip from the Web Store would get its own.
+  - **A pinned ID** (Phase 7): the manifest's `key` is a public RSA key, so
+    the ID is always `hajnldgffgkdnbimdihipffnimjckgcp`, wherever it's
+    unpacked. Without it, Chrome derives the ID from the folder, and the
+    storage (every setting) goes with the ID: a release zip unpacked into
+    a new folder would start from scratch. The private half was never
+    kept: unpacked installs don't need it, and the Web Store would assign
+    its own ID. A unit test derives the ID from the key, and the smoke
+    test checks Chrome agrees.
   - `make extension` builds `dist/extension/` (load unpacked) and
     `dist/wallpapers-extension-<version>.zip`. CI uploads the zip as the
     `wallpapers-extension` artifact of every run.
@@ -1070,6 +1078,18 @@ GitHub Actions runs only that.
     pixels, remember the rung and show it in `?hud=1`; `idleUntil` holds
     frames until input
   - `make bench` and `make android-bench` (§4.8, "Measuring it"); not in CI
+- Phase 7 added:
+  - `tools/legacy.test.mjs`: the old homepage's settings import as
+    changes only, fitted to today's controls, version-checked, neko's
+    coats, the chosen wallpaper and advent's state, links never; and every
+    homepage setting is either still a setting or retired for a recorded
+    reason
+  - smoke: Import through the panel's real file input; the extension
+    loads with the ID its manifest key pins; `c` opens the panel
+  - `make smoke-live`: the stage and player suites against a deployed copy
+    (`SMOKE_URL=`, default GitHub Pages), with real network: its own files
+    and Bing pass, anything else fails. CI runs it after every deploy and
+    daily, with one retry for the CDN
 - `make screenshots` renders the README's images into `docs/` (the panel on
   a desktop, the bottom sheet on a phone, Pixel Quest). Like thumbnails,
   not part of `make ci`.
@@ -1180,8 +1200,12 @@ phase can mostly run in parallel.
 
 ### Phase 7: Retire the old homepage
 
-- [ ] 7.1 Parity check: every wallpaper, setting and key from the homepage works here. → a checklist walk-through on the extension and on Pages.
-- [ ] 7.2 Owner switches Chrome to this extension and archives the private repo. Its links, weather and search are out of scope for this repo.
+- [x] 7.1 Parity check: every wallpaper, setting and key from the homepage works here. → a checklist walk-through on the extension and on Pages. *(Done: Appendix B. The walk-through is automated and stays: `make smoke` on the extension, and `make smoke-live` on Pages after every deploy and daily. Gaps found and closed: settings migration (Import reads the old homepage's storage), the `c` key, and a pinned extension ID so settings survive reinstalls.)*
+- [ ] 7.2 Owner switches over. Its links, weather and search are out of scope for this repo. Steps, in order:
+  1. Save the old settings with the README's console snippet ("Moving from the old homepage").
+  2. Turn the old extension off, load this one, Import the file.
+  3. Rotate the old homepage's weather API key (§7.1): it's in that repo's history.
+  4. Archive the private repo (`gh repo archive nealhardesty/homepage`) once nothing is missed.
 
 ### Phase 8: New wallpapers
 
@@ -2033,6 +2057,51 @@ New questions go here, each with a recommendation.
   with that explanation shown in the panel instead of a vague failure.
 
 ---
+
+## Appendix B: parity with the old homepage (Phase 7)
+
+The homepage at its last commit (`82a3c60`). The Phase 2 import matches it
+file for file: all 19 module files hash the same, so nothing drifted after
+the import.
+
+| On the homepage | Here | |
+|---|---|---|
+| A wallpaper menu in its status bar: Blank, Bing and 16 animations | The panel's filmstrip, with thumbnails and live previews; every one, plus Seasonal | ✓ |
+| First run: snow in season, else Blank | Seasonal by month (§4.2) | ✓ better |
+| A gear button for the current wallpaper's settings | The panel; the corner gear; a long press on touch | ✓ |
+| `c` settings, `f` fullscreen | `c` or `,`, `f`; also `[` `]` `?` | ✓ |
+| `h` hides the page around the wallpaper | Nothing to hide: only the wallpaper shows | n/a |
+| 301 settings in 18 stored configs (`<name>Config`, `questConfig`, `questStandaloneConfig`, `snowConfig`, `wallpaperConfig`) | 288 carried as they were. Neko's `theme` became `coat`. 12 retired: `statusBarHeight` ×8 (host insets), `quality` ×2 (the Auto governor), quest's `dim` (nothing sits on top now), neko's `enableSounds` | ✓, enforced by a unit test (`tools/legacy.test.mjs`) |
+| Standalone pages (`snow.html`, `quest.html`, …) with tuned presets | `?w=<id>` deep links; the presets are the defaults (Appendix A) | ✓ |
+| Advent's keys, `?date=`, `?theme=` | Declared keys, `?date=`, `?theme=`; its `s` (settings) is `c` or `,` now | ✓ |
+| Quest's keys and play | Declared keys and the same play; its `c`/`o` (settings) is `c` or `,` now | ✓ |
+| Bing's photo, day picker and credit | The same, with proxies opt-in (§4.6) | ✓ |
+| Settings in that origin's `localStorage` | Import (below) | ✓ |
+| A Chrome new-tab extension asking for storage, geolocation and three hosts | One host (Bing), no other permissions, a pinned ID (§5) | ✓ fewer permissions |
+| Docker and nginx | The container, `make serve`, GitHub Pages | ✓ |
+| Links, weather, search, clocks | Left behind by decision; weather and a world clock are ideas 10.2 and 10.3 | — |
+
+**Moving settings** (`core/legacy.js`, loaded only on Import): the README's
+console snippet saves the old wallpaper keys (never the links) as
+`{ app: 'homepage', localStorage }`. Import recognises the shape and:
+- keeps only values that differ from the homepage's own defaults, since
+  its dialogs saved every value on Apply, and lays them over today's
+  defaults. The legacy defaults were read by running each module as
+  imported in headless Chrome; snow's are the homepage's Reset values;
+- fits each value to today's control (numbers clamped and snapped to the
+  step; options, toggles and colours must be valid) and skips the rest,
+  logging which;
+- ignores a config with another `configVersion`, as the homepage did;
+- maps neko's sprite themes to coats, `wallpaperPreference` to
+  `wp:current`, and advent's `adventCelebrated` and `adventLastSeen` to
+  its `wp:advent:*` state; prefers the homepage's quest over the
+  standalone page's;
+- reloads, then says what came over ("From the old homepage: 3 changed
+  settings, for Fish Tank and Snow.
+  Your wallpaper, Fish Tank, is back.").
+
+Tested by unit tests and end to end: the smoke test feeds a dump through
+the panel's real file input.
 
 ## Appendix A: legacy standalone pages, to bring back
 

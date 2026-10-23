@@ -218,7 +218,7 @@
 
     // Keys the player owns, wherever focus is. Everything else stays with
     // the wallpaper, including its declared keys.
-    const PLAYER_KEYS = new Set([',', '[', ']', 'f', 'F', '?', 'Escape']);
+    const PLAYER_KEYS = new Set([',', 'c', 'C', '[', ']', 'f', 'F', '?', 'Escape']);
     window.addEventListener('keydown', event => {
         if (params.thumb || event.ctrlKey || event.metaKey || event.altKey || event.target.closest?.('input, select, textarea')) return;
         if (PLAYER_KEYS.has(event.key)) tell({ type: 'key', key: event.key });

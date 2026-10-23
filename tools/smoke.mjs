@@ -23,6 +23,10 @@
 // All network is intercepted: local files load, Bing gets fixtures, anything
 // else fails the run. Screenshots land in dist/smoke/. CHROME_PATH picks the
 // browser.
+//
+// SMOKE_URL=https://… runs the stage and player suites against a deployed
+// copy instead (make smoke-live: GitHub Pages after each deploy), with real
+// network: the site's own files and Bing pass, anything else still fails.
 
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -30,7 +34,10 @@ import { pathToFileURL } from 'node:url';
 import { launch, sleep } from './chrome.mjs';
 
 const ROOT = resolve(import.meta.dirname, '..');
-const WEB = pathToFileURL(join(ROOT, 'web')).href;
+const LIVE = process.env.SMOKE_URL?.replace(/\/$/, '') || null;
+const WEB = LIVE || pathToFileURL(join(ROOT, 'web')).href;
+// The Bing photo the stage should end up showing.
+const BING_PHOTO = LIVE ? 'bing.com/th' : 'smoke-fixture';
 const SHOTS = join(ROOT, 'dist/smoke');
 const EXTENSION = join(ROOT, 'dist/extension');
 const RUN_MS = 2500;
@@ -62,6 +69,9 @@ function listen() {
         const url = request.url;
         current.requests?.push(url);
         if (/^(file|data|blob|chrome-extension):/.test(url) || url === 'about:blank') return cdp.send('Fetch.continueRequest', { requestId });
+        if (LIVE && (url.startsWith(`${LIVE}/`) || url.startsWith('https://www.bing.com/'))) return cdp.send('Fetch.continueRequest', { requestId });
+        // The browser asks the host's root for a favicon on its own.
+        if (LIVE && new URL(url).pathname === '/favicon.ico') return cdp.send('Fetch.fulfillRequest', { requestId, responseCode: 204 });
         const fulfil = (body, type) => cdp.send('Fetch.fulfillRequest', {
             requestId, responseCode: 200, body: body.toString('base64'),
             responseHeaders: [{ name: 'Content-Type', value: type },
@@ -69,6 +79,9 @@ function listen() {
         });
         if (current.network && url.startsWith('https://www.bing.com/HPImageArchive')) return fulfil(Buffer.from(JSON.stringify(BING_JSON)), 'application/json');
         if (current.network && url.startsWith('https://www.bing.com/th')) return fulfil(PIXEL, 'image/png');
+        // The fixture's photo can arrive after its test has ended; only the
+        // fixture names it, so it's never a wallpaper going online.
+        if (url.startsWith('https://www.bing.com/th?id=smoke-fixture')) return fulfil(PIXEL, 'image/png');
         record(`network blocked: ${url}`);
         return cdp.send('Fetch.failRequest', { requestId, errorReason: 'BlockedByClient' });
     });
@@ -163,7 +176,7 @@ async function stage(id, entry) {
 
     const ready = state?.ready;
     const drawn = entry.network
-        ? (await evaluate('getComputedStyle(document.body).backgroundImage.includes("smoke-fixture") ? 99 : 0'))
+        ? (await evaluate(`getComputedStyle(document.body).backgroundImage.includes("${BING_PHOTO}") ? 99 : 0`))
         : await evaluate(DRAWN);
     const { data } = await cdp.send('Page.captureScreenshot', { format: 'png' });
     writeFileSync(join(SHOTS, `${id}.png`), Buffer.from(data, 'base64'));
@@ -238,7 +251,7 @@ async function playerSuite(catalog) {
         return frames === 1 && !canvases;
     });
 
-    await check('?panel=open opens the panel; Esc and , close and reopen it', async () => {
+    await check('?panel=open opens the panel; Esc closes it; , and c open it', async () => {
         await fresh(`${WEB}/index.html?w=rain&panel=open`);
         await playerReady();
         if (!await waitFor(() => evaluate(PANEL_OPEN), 3000)) return record('panel not open on load');
@@ -246,6 +259,9 @@ async function playerSuite(catalog) {
         if (await evaluate(PANEL_OPEN)) record('Esc did not close the panel');
         await press(',');
         if (!await evaluate(PANEL_OPEN)) record(', did not reopen the panel');
+        await press('Escape');
+        await press('c');
+        if (!await evaluate(PANEL_OPEN)) record('c did not open the panel');
         return true;
     });
 
@@ -373,6 +389,33 @@ async function playerSuite(catalog) {
         return true;
     });
 
+    await check('Import takes the old homepage\'s settings: changes only, links left behind', async () => {
+        // As the README's console snippet saves it: raw localStorage strings.
+        const dump = join(SHOTS, 'homepage-wallpapers.json');
+        writeFileSync(dump, JSON.stringify({ app: 'homepage', localStorage: {
+            wallpaperPreference: 'fishtank',
+            fishtankConfig: JSON.stringify({ configVersion: 1, population: 'community', fishCount: 40, quality: 'auto', statusBarHeight: 36 }),
+            snowConfig: JSON.stringify({ maxSnowflakes: 100, treeCount: 10 }),
+            customLinks: '[]',
+        } }));
+        await fresh(`${WEB}/index.html?w=rain&panel=open`);
+        await playerReady();
+        await waitFor(() => evaluate(PANEL_OPEN));
+        const { root } = await cdp.send('DOM.getDocument');
+        const { nodeId } = await cdp.send('DOM.querySelector', { nodeId: root.nodeId, selector: '.panel input[type=file]' });
+        await cdp.send('DOM.setFileInputFiles', { nodeId, files: [dump] });
+        // The import reloads the page, which then shows fishtank and says what came over.
+        const said = await waitFor(() => evaluate("document.getElementById('toast').textContent.includes('old homepage') && document.getElementById('toast').textContent"));
+        const saved = await evaluate("({ current: JSON.parse(localStorage.getItem('wp:current')), fishtank: JSON.parse(localStorage.getItem('wp:fishtank')), snow: localStorage.getItem('wp:snow'), keys: Object.keys(localStorage) })");
+        if (!said) record('no import summary');
+        else if (!/1 changed setting, for Fish Tank\. Your wallpaper, Fish Tank, is back\..*links stayed behind/.test(said)) record(`summary: ${said}`);
+        if (saved.current !== 'fishtank') record(`wallpaper is ${saved.current}`);
+        if (saved.fishtank?.fishCount !== 40) record(`fishtank saved ${JSON.stringify(saved.fishtank)}`);
+        if (saved.snow !== null) record('untouched homepage defaults were imported');
+        if (saved.keys.some(key => !key.startsWith('wp:'))) record(`stray keys: ${saved.keys}`);
+        return true;
+    });
+
     await check('Auto steps down from slow frames, and renders fewer pixels', async () => {
         await fresh(`${WEB}/index.html?w=rain&hud=1`);
         await playerReady();
@@ -414,6 +457,9 @@ async function extensionSuite(extensionId) {
     const { check, failed } = checker();
     const page = `chrome-extension://${extensionId}/index.html`;
 
+    await check('Chrome gives it the ID its manifest key pins', async () => extensionId === 'hajnldgffgkdnbimdihipffnimjckgcp'
+        || record(`loaded as ${extensionId}`));
+
     await check('the new tab is the player', async () => {
         await cdp.send('Page.navigate', { url: 'chrome://newtab/' });
         await waitFor(() => evaluate('WP.player?.stage?.ready'));
@@ -439,8 +485,9 @@ async function extensionSuite(extensionId) {
 
 async function main(only) {
     mkdirSync(SHOTS, { recursive: true });
-    if (!only.length && !existsSync(EXTENSION)) throw new Error('no dist/extension/: run `make extension` first (make smoke does)');
-    const launched = await launch({ extension: only.length ? null : EXTENSION });
+    const withExtension = !only.length && !LIVE;
+    if (withExtension && !existsSync(EXTENSION)) throw new Error('no dist/extension/: run `make extension` first (make smoke does)');
+    const launched = await launch({ extension: withExtension ? EXTENSION : null });
     cdp = launched.cdp;
     try {
         listen();
@@ -465,10 +512,13 @@ async function main(only) {
         if (!only.length) {
             console.log('player');
             failed += await playerSuite(catalog);
-            console.log('extension');
-            failed += await extensionSuite(launched.extensionId);
+            if (withExtension) {
+                console.log('extension');
+                failed += await extensionSuite(launched.extensionId);
+            }
         }
-        console.log(failed ? `smoke ✗ ${failed} failed` : `smoke ✓ ${ids.length} stages${only.length ? '' : ' + player + extension'} · screenshots in dist/smoke/`);
+        const suites = only.length ? '' : withExtension ? ' + player + extension' : ' + player';
+        console.log(failed ? `smoke ✗ ${failed} failed` : `smoke ✓ ${ids.length} stages${suites}${LIVE ? ` on ${LIVE}` : ''} · screenshots in dist/smoke/`);
         return failed ? 1 : 0;
     } finally {
         cdp.close();

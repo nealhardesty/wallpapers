@@ -13,7 +13,7 @@ AVD ?= $(firstword $(shell $(ANDROID_HOME)/emulator/emulator -list-avds 2>/dev/n
 GRADLE = cd android && ./gradlew --quiet
 APP = com.roadwaffle.wallpapers
 
-.PHONY: help hooks serve serve-https cert bing-json thumbnails icons screenshots extension site android-build android-install android-logcat android-emulator android-release android-keystore android-bench docker-build docker-run lint audit audit-staged audit-history test smoke ci clean
+.PHONY: help hooks serve serve-https cert bing-json thumbnails icons screenshots extension site android-build android-install android-logcat android-emulator android-release android-keystore android-bench docker-build docker-run lint audit audit-staged audit-history test smoke smoke-live ci clean
 
 help: ## List every target
 	@awk 'BEGIN {FS = ":.*## "} /^[a-zA-Z0-9_-]+:.*## / {printf "  \033[36m%-17s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -109,6 +109,9 @@ test: ## Run the unit tests
 
 smoke: extension ## Boot every wallpaper in headless Chrome (needs Chrome; CHROME_PATH to override)
 	@node tools/smoke.mjs
+
+smoke-live: ## Run the stage and player smoke suites against the deployed site, with real network (SMOKE_URL= to pick another)
+	@SMOKE_URL=$(or $(SMOKE_URL),https://nealhardesty.github.io/wallpapers) node tools/smoke.mjs
 
 ci: lint audit audit-history test smoke ## Everything CI runs
 

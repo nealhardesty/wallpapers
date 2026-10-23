@@ -2,6 +2,7 @@
 // classic scripts the browser loads, without a browser.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import vm from 'node:vm';
@@ -283,4 +284,15 @@ test('CSP: pages carry the extension\'s policy and have no inline script', () =>
         assert.doesNotMatch(html, /<script(?![^>]*\bsrc=)[^>]*>/, `${page}: inline <script>`);
         assert.doesNotMatch(html, /\son[a-z]+=/i, `${page}: inline event handler`);
     }
+});
+
+// The ID Chrome derives from the manifest's public key: the first 32 hex
+// digits of its SHA-256, written with a–p. Pinned so the extension keeps
+// its ID, and with it its settings, wherever it's unpacked (SPEC §5).
+export const EXTENSION_ID = 'hajnldgffgkdnbimdihipffnimjckgcp';
+
+test('extension: the manifest key pins the documented ID', () => {
+    const { key } = JSON.parse(readFileSync(join(WEB, 'manifest.json'), 'utf8'));
+    const hex = createHash('sha256').update(Buffer.from(key, 'base64')).digest('hex').slice(0, 32);
+    assert.equal([...hex].map(c => String.fromCharCode(97 + parseInt(c, 16))).join(''), EXTENSION_ID);
 });

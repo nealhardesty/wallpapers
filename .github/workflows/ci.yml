@@ -103,3 +103,8 @@ jobs:
           path: dist/site
       - id: deploy
         uses: actions/deploy-pages@v5
+      # The site as people get it: every wallpaper and the player, with real
+      # network and Bing. Daily too, through the schedule. Once more after a
+      # minute if the CDN was still serving the previous version.
+      - name: Smoke the deployed site
+        run: sleep 20 && (make smoke-live || (sleep 60 && make smoke-live))

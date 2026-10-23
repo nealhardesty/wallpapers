@@ -202,7 +202,7 @@
             help.replaceChildren(
                 WP.h('h2', {}, 'Keys'),
                 WP.h('dl', {},
-                    row([','], 'Settings and wallpapers'),
+                    row([',', 'C'], 'Settings and wallpapers'),
                     row(['[', ']'], 'Previous or next wallpaper'),
                     row(['←', '→'], 'Switch, while settings are open'),
                     row(['F'], 'Fullscreen'),
@@ -226,7 +226,8 @@
             else WP.panel.close();
         } else if (typing) {
             return;
-        } else if (name === ',') {
+        } else if (name === ',' || name === 'c' || name === 'C') {
+            // c, as on the old homepage
             WP.panel.toggle();
         } else if (name === '[') cycle(-1);
         else if (name === ']') cycle(1);
@@ -304,7 +305,10 @@
             }
             document.getElementById('gear').addEventListener('click', () => WP.panel.open());
             show(initialChoice());
-            if (!WP.store.get('wp:hinted') && !params.w) {
+            let said = null;
+            try { said = sessionStorage.getItem('wp:toast'); sessionStorage.removeItem('wp:toast'); } catch {}
+            if (said) toast(said, 7000);
+            else if (!WP.store.get('wp:hinted') && !params.w) {
                 WP.store.set('wp:hinted', true);
                 const touch = matchMedia('(hover: none)').matches;
                 toast(touch ? 'Hold the top-right corner for wallpapers and settings'

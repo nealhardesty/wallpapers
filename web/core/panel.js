@@ -22,14 +22,13 @@
     let shownFor = null;   // the wallpaper whose settings are on screen
     const loaded = {};     // id → Promise for its defaults.js and settings.js
 
+    const script = src => new Promise(resolve => {
+        const element = h('script', { src });
+        element.onload = element.onerror = resolve;
+        document.head.append(element);
+    });
     const load = id => loaded[id] ??= (async () => {
-        for (const file of ['defaults.js', 'settings.js']) {
-            await new Promise(resolve => {
-                const script = h('script', { src: `wallpapers/${id}/${file}` });
-                script.onload = script.onerror = resolve;
-                document.head.append(script);
-            });
-        }
+        for (const file of ['defaults.js', 'settings.js']) await script(`wallpapers/${id}/${file}`);
     })();
 
     function build() {
@@ -233,12 +232,40 @@
         if (!file) return;
         try {
             const data = JSON.parse(await file.text());
-            if (data?.app !== 'wallpapers' || typeof data.settings !== 'object') throw new Error('not a wallpapers settings file');
-            for (const [key, value] of Object.entries(data.settings)) if (key.startsWith('wp:')) WP.store.set(key, value);
+            let entries, message = 'Settings imported';
+            if (data?.app === 'wallpapers' && typeof data.settings === 'object') {
+                entries = data.settings;
+            } else {
+                // The old homepage's storage (README, "Moving from the old homepage").
+                if (!WP.importLegacy) await script('core/legacy.js');
+                if (!WP.isLegacyDump(data)) throw new Error('not a settings file from here or from the old homepage');
+                await Promise.all(WP.catalog.filter(entry => entry.scripts?.length).map(entry => load(entry.id)));
+                const imported = WP.importLegacy(data.localStorage || data, {
+                    defaultsOf: WP.defaultsOf, schemaOf: WP.schemaOf, usable: id => !!WP.entry(id) && !WP.entry(id).disabled,
+                });
+                entries = imported.entries;
+                message = describeImport(imported.report);
+            }
+            for (const [key, value] of Object.entries(entries)) if (key.startsWith('wp:')) WP.store.set(key, value);
+            // Said after the reload, which starts everything with the new settings.
+            try { sessionStorage.setItem('wp:toast', message); } catch {}
             location.reload();
         } catch (error) {
             WP.player.toast(`Couldn’t import: ${error.message}`, 4000);
         }
+    }
+
+    function describeImport({ wallpapers, settings, current, skipped, leftBehind }) {
+        const names = wallpapers.map(id => WP.entry(id).name);
+        const list = names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}` : names[0];
+        let text = settings
+            ? `From the old homepage: ${settings} changed setting${settings === 1 ? '' : 's'}, for ${list}.`
+            : 'From the old homepage: no changed settings.';
+        if (current) text += ` Your wallpaper, ${WP.entry(current).name}, is back.`;
+        if (skipped.length) text += ` ${skipped.length} had no place here.`;
+        if (leftBehind.length) text += ` Its ${leftBehind.join(' and ')} stayed behind.`;
+        if (skipped.length) console.info('wallpapers: not imported:', skipped.join(', '));
+        return text;
     }
 
     function open() {
