@@ -14,9 +14,10 @@ wallpapers' only home. They run in three hosts:
 3. **Android live wallpaper**: a future app in `android/` that runs the same
    web code behind the home screen.
 
-> Status: **phases 1–4 done** (2026-10-22). The player, the stage, the
-> panel and all 17 wallpapers (Neko redrawn) run from `web/index.html`; next
-> up is Phase 5, the Chrome extension and GitHub Pages.
+> Status: **phases 1–5 done** (2026-10-22). The player, the stage, the
+> panel and all 17 wallpapers run from `web/index.html`, as a Chrome new-tab
+> extension, and on GitHub Pages at https://nealhardesty.github.io/wallpapers/.
+> Next up is Phase 6, mobile readiness and then Android.
 
 ---
 
@@ -108,7 +109,8 @@ wallpapers/
 ├── web/                         # the product: a static site, zero build
 │   ├── index.html               # the player: wallpaper only (core/player.js)
 │   ├── stage.html               # one wallpaper, in an iframe or alone (core/stage.js)
-│   ├── manifest.json            # Chrome MV3; web/ loads unpacked as-is (phase 5)
+│   ├── manifest.json            # Chrome MV3 extension: the new tab is index.html
+│   ├── app.webmanifest          # installable web app (Add to Home screen), linked only when served
 │   ├── core/
 │   │   ├── wp.js                # WP namespace + pure logic: seasons, params, settings, tiers, pacing
 │   │   ├── player.js            # chooses, mounts and crossfades stages; global keys
@@ -119,10 +121,11 @@ wallpapers/
 │   ├── wallpapers/
 │   │   ├── catalog.js           # every wallpaper's metadata, in menu order
 │   │   └── <id>/                # defaults.js + the wallpaper's scripts and assets
-│   └── icons/
-├── tools/                       # node scripts (built-ins only): audit, lint, serve, smoke, tests
+│   └── icons/                   # icon.svg (ours) and the PNGs `make icons` renders from it
+├── tools/                       # node scripts (built-ins only): audit, lint, serve, build, smoke, tests, images
+├── docs/                        # README screenshots (`make screenshots`)
 ├── android/                     # Gradle project (phase 6)
-├── .github/workflows/ci.yml     # runs `make ci`
+├── .github/workflows/ci.yml     # `make ci`; on master also `make site` → GitHub Pages; daily for bing.json
 ├── Dockerfile                   # the site in a container, served by tools/serve.mjs
 ├── Makefile
 ├── README.md                    # setup and use
@@ -130,8 +133,11 @@ wallpapers/
 └── THIRD_PARTY.md               # provenance and licences of anything not ours
 ```
 
-`web/` is the single source of truth. The Chrome extension *is* `web/`;
-GitHub Pages serves `web/`; the Android build copies `web/` into its assets.
+`web/` is the single source of truth. The Chrome extension *is* `web/`
+(`make extension` copies it to `dist/extension/` and zips it); GitHub Pages
+serves `web/` plus a fresh `bing.json` (`make site`); the Android build
+copies `web/` into its assets. Builds take only files git knows about
+(tracked, or new and not ignored), so nothing local ships.
 Nothing outside this repo consumes it. The old homepage is retired, not
 integrated.
 
@@ -665,13 +671,40 @@ Still per wallpaper (phase 6):
 ## 5. Hosts: standalone and Chrome
 
 - **Standalone:** open `web/index.html` from disk, from `make serve`, or from
-  the hosted copy on GitHub Pages (decided). CI deploys `web/` on every push
-  to `master`, and a daily scheduled job refreshes `bing.json`.
-- **Chrome new tab:** `web/manifest.json` (MV3) with
-  `chrome_url_overrides.newtab = index.html`, permission `storage`, and one
-  host permission, `https://www.bing.com/*` (§4.6). It is a new extension identity with a freshly
-  generated key, not the homepage's. `make extension` zips `web/` into
-  `dist/`.
+  the hosted copy on GitHub Pages (built in Phase 5):
+  - `ci.yml` has a `pages` job after `ci`, on pushes to `master`, a daily
+    schedule (09:23 UTC, after Bing's new image) and manual runs. It runs
+    `make site` (`tools/build.mjs site`: `web/` plus `bing.json` from
+    `tools/bing.mjs`) and deploys with `actions/deploy-pages`. Bing being
+    down doesn't stop a deploy; the wallpaper then shows its note.
+  - Pages is set to "GitHub Actions" as its source. GitHub turns off
+    scheduled workflows after 60 days without commits; a manual run (or any
+    push) turns the daily refresh back on.
+  - `app.webmanifest` makes the hosted copy installable: *Add to Home
+    screen* opens it full screen, a stopgap for phones until Android ships.
+    The player links it only over http(s), since Chrome refuses to read a
+    manifest from `file://` and logs an error.
+- **Chrome new tab** (built in Phase 5): `web/manifest.json` (MV3) with
+  `chrome_url_overrides.newtab = index.html` and one host permission,
+  `https://www.bing.com/*` (§4.6). No `permissions`: settings live in
+  `localStorage`, which extension pages have, so `storage` isn't needed.
+  No `key` either: an unpacked extension's id comes from its folder, and a
+  zip from the Web Store would get its own.
+  - `make extension` builds `dist/extension/` (load unpacked) and
+    `dist/wallpapers-extension-<version>.zip`. CI uploads the zip as the
+    `wallpapers-extension` artifact of every run.
+  - **CSP:** MV3 pages may not run inline scripts. Both pages load only
+    deferred external scripts (`player.js` and `stage.js` start themselves),
+    and both carry the same policy in a meta tag (`script-src 'self';
+    object-src 'none'; base-uri 'none'`), so `file://`, Pages and the smoke
+    test all enforce the extension's rules. A unit test forbids inline
+    `<script>` and `on…=` attributes.
+  - The icon is ours: `web/icons/icon.svg`, a window onto a dusk scene with
+    a crescent moon and fireflies. `make icons` renders the PNGs (16, 32,
+    48, 128 for the extension; 192, 512 for the web app); they're
+    committed, since the extension can't use an SVG.
+  - Version: `manifest.json`'s `version`, bumped by hand when a build is
+    worth telling apart (0.5.0 for Phase 5).
   - Known Chrome behaviour: a new tab puts keyboard focus in the omnibox,
     so `,` only works after a click on the page. This is documented in the
     README, and the corner hot zone works with a mouse too.
@@ -882,8 +915,31 @@ GitHub Actions runs only that.
   not in CI.
 - `make thumbnails`: regenerates the committed thumbnails (§4.7). Not part
   of `make ci`; the tests only check that every wallpaper has one.
+  - **Extension suite**, on the built `dist/extension/` (`make smoke`
+    builds it first), loaded unpacked:
+    - `chrome://newtab/` becomes `chrome-extension://<id>/index.html`, with
+      the player reporting host `extension`
+    - the Bing wallpaper gets its photo straight from `www.bing.com`, with
+      the fixtures served **without** CORS headers, so only
+      `host_permissions` can make it work (removing it fails the check),
+      and never asks for `bing.json` or a proxy
+
+    Chrome 137+ ignores `--load-extension`, so `tools/chrome.mjs` loads it
+    with `Extensions.loadUnpacked`, which answers only on the
+    `--remote-debugging-pipe` transport (with
+    `--enable-unsafe-extension-debugging`); pages are still driven over
+    the WebSocket.
+  - Every page carries the extension's CSP (§5), and CSP violations are
+    logged errors, so every suite fails on one.
+- `wp.test.mjs` also checks the manifests: `host_permissions` are exactly
+  the catalog's `network` hosts, there are no other permissions, every
+  named icon exists, and both pages have the CSP and no inline script.
 - `tools/chrome.mjs` holds the shared headless-Chrome plumbing (launch,
-  DevTools protocol connection) used by the smoke test and the thumbnails.
+  DevTools protocol connection, extension loading) used by the smoke test,
+  the thumbnails, the icons and the screenshots.
+- `make screenshots` renders the README's images into `docs/` (the panel on
+  a desktop, the bottom sheet on a phone, Pixel Quest). Like thumbnails,
+  not part of `make ci`.
 
 ---
 
@@ -972,9 +1028,9 @@ phase can mostly run in parallel.
 
 ### Phase 5: Chrome and hosting
 
-- [ ] 5.1 `web/manifest.json`, new icon (ours, drawn by us), `make extension` → `dist/wallpapers-extension.zip`. → loads unpacked; the new tab shows the wallpaper only.
-- [ ] 5.2 GitHub Pages deploy of `web/` from CI, plus the daily `bing.json` Action. → the public URL loads; Bing works with no proxy.
-- [ ] 5.3 README: install, use, keys, screenshots.
+- [x] 5.1 `web/manifest.json`, new icon (ours, drawn by us), `make extension` → `dist/wallpapers-extension-<version>.zip`. → loads unpacked; the new tab shows the wallpaper only. *(Done: plus the extension's CSP on every page, an extension suite in `make smoke`, and `make icons`.)*
+- [x] 5.2 GitHub Pages deploy of `web/` from CI, plus the daily `bing.json` Action. → the public URL loads; Bing works with no proxy. *(Done: one `ci.yml`, deploy only after `make ci` passes; plus an installable web app manifest.)*
+- [x] 5.3 README: install, use, keys, screenshots. *(Done: a live gallery linking each thumbnail to the hosted copy, and `make screenshots`.)*
 
 ### Phase 6: Mobile readiness, then Android
 

@@ -237,6 +237,11 @@
 
     WP.player = {
         start() {
+            // Installable ("Add to Home screen") when served; Chrome won't
+            // read a manifest from disk, so it isn't linked there.
+            if (location.protocol.startsWith('http')) {
+                document.head.append(Object.assign(document.createElement('link'), { rel: 'manifest', href: 'app.webmanifest' }));
+            }
             document.getElementById('gear').addEventListener('click', () => WP.panel.open());
             show(initialChoice());
             if (!WP.store.get('wp:hinted') && !params.w) {
@@ -258,4 +263,8 @@
         get tier() { return tier.tier; },
         get host() { return host; },
     };
+
+    // Scripts load with defer (no inline script: the extension's CSP forbids
+    // it), so the page is parsed by now.
+    WP.player.start();
 })(globalThis.WP);

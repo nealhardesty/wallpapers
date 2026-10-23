@@ -1,0 +1,17 @@
+{
+  "manifest_version": 3,
+  "name": "Wallpapers",
+  "version": "0.5.0",
+  "description": "Animated wallpapers on every new tab: snow, rain, fireflies, a fish tank, a self-playing 8-bit adventure and more.",
+  "homepage_url": "https://github.com/nealhardesty/wallpapers",
+  "icons": {
+    "16": "icons/icon-16.png",
+    "32": "icons/icon-32.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  },
+  "chrome_url_overrides": {
+    "newtab": "index.html"
+  },
+  "host_permissions": ["https://www.bing.com/*"]
+}

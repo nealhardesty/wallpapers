@@ -23,20 +23,41 @@ export function findChrome() {
     return found;
 }
 
-export async function launch({ width = 1280, height = 800 } = {}) {
+// extension: a folder to load as an unpacked extension; its id comes back.
+export async function launch({ width = 1280, height = 800, extension = null } = {}) {
     const profile = mkdtempSync(join(tmpdir(), 'wallpapers-smoke-'));
     const args = ['--headless=new', '--remote-debugging-port=0', `--user-data-dir=${profile}`,
         '--no-first-run', '--no-default-browser-check', `--window-size=${width},${height}`, '--hide-scrollbars',
         '--mute-audio', 'about:blank'];
     // Ubuntu 24.04 runners block the sandbox's user namespaces.
     if (process.env.CI) args.unshift('--no-sandbox');
-    const chrome = spawn(findChrome(), args, { stdio: 'ignore' });
+    if (extension) args.unshift('--remote-debugging-pipe', '--enable-unsafe-extension-debugging');
+    const chrome = spawn(findChrome(), args, { stdio: extension ? ['ignore', 'ignore', 'ignore', 'pipe', 'pipe'] : 'ignore' });
     const portFile = join(profile, 'DevToolsActivePort');
     for (let i = 0; i < 100 && !existsSync(portFile); i++) await sleep(100);
     const port = readFileSync(portFile, 'utf8').split('\n')[0];
     const pages = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json();
     const page = pages.find(p => p.type === 'page');
-    return { chrome, profile, cdp: await connect(page.webSocketDebuggerUrl) };
+    const extensionId = extension ? await loadExtension(chrome, extension) : null;
+    return { chrome, profile, extensionId, cdp: await connect(page.webSocketDebuggerUrl) };
+}
+
+// Chrome 137+ ignores --load-extension, and Extensions.loadUnpacked answers
+// only on the pipe transport: NUL-terminated JSON on fds 3 (in) and 4 (out).
+function loadExtension(chrome, path) {
+    const [, , , input, output] = chrome.stdio;
+    return new Promise((ok, fail) => {
+        let buffer = '';
+        output.on('data', chunk => {
+            buffer += chunk;
+            const end = buffer.indexOf('\0');
+            if (end < 0) return;
+            const message = JSON.parse(buffer.slice(0, end));
+            output.removeAllListeners('data');
+            message.error ? fail(new Error(`Extensions.loadUnpacked: ${message.error.message}`)) : ok(message.result.id);
+        });
+        input.write(JSON.stringify({ id: 1, method: 'Extensions.loadUnpacked', params: { path } }) + '\0');
+    });
 }
 
 export function connect(url) {

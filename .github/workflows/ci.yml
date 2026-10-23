@@ -4,6 +4,12 @@ on:
   push:
     branches: [master]
   pull_request:
+  schedule:
+    - cron: '23 9 * * *'   # daily, after Bing's new image: refreshes bing.json on Pages
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   ci:
@@ -16,3 +22,32 @@ jobs:
         with:
           node-version: 22
       - run: make ci
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wallpapers-extension
+          path: dist/wallpapers-extension-*.zip
+
+  pages:
+    needs: ci
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: make site
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist/site
+      - id: deploy
+        uses: actions/deploy-pages@v4

@@ -16,11 +16,15 @@
 // closes, every wallpaper's settings render and round-trip into the running
 // wallpaper, Reset, key help, declared wallpaper keys, and the corner gear.
 //
+// Extension suite, the built dist/extension/ (`make extension`) loaded
+// unpacked: it takes over the new tab, runs under the extension's CSP, and
+// Bing works straight from bing.com through host_permissions alone.
+//
 // All network is intercepted: local files load, Bing gets fixtures, anything
 // else fails the run. Screenshots land in dist/smoke/. CHROME_PATH picks the
 // browser.
 
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { launch, sleep } from './chrome.mjs';
@@ -28,6 +32,7 @@ import { launch, sleep } from './chrome.mjs';
 const ROOT = resolve(import.meta.dirname, '..');
 const WEB = pathToFileURL(join(ROOT, 'web')).href;
 const SHOTS = join(ROOT, 'dist/smoke');
+const EXTENSION = join(ROOT, 'dist/extension');
 const RUN_MS = 2500;
 const READY_MS = 10000;
 
@@ -38,8 +43,9 @@ const BING_JSON = { images: [{ url: '/th?id=smoke-fixture.jpg', copyright: 'Smok
 // ---- Page plumbing ----------------------------------------------------------
 
 let cdp;
-// Problems for the test in progress, and whether it may use Bing's fixtures.
-let current = { network: false, problems: [] };
+// Problems for the test in progress, whether it may use Bing's fixtures, and
+// whether they come with CORS headers (the extension mustn't need them).
+let current = { network: false, cors: true, problems: [], requests: [] };
 const record = text => current.problems.push(text.split('\n')[0].slice(0, 160));
 // Default execution context of each frame, so the player suite can reach into
 // the stage iframe, which file:// makes cross-origin to the page.
@@ -54,10 +60,12 @@ function listen() {
     });
     cdp.on('Fetch.requestPaused', ({ requestId, request }) => {
         const url = request.url;
-        if (/^(file|data|blob):/.test(url) || url === 'about:blank') return cdp.send('Fetch.continueRequest', { requestId });
+        current.requests?.push(url);
+        if (/^(file|data|blob|chrome-extension):/.test(url) || url === 'about:blank') return cdp.send('Fetch.continueRequest', { requestId });
         const fulfil = (body, type) => cdp.send('Fetch.fulfillRequest', {
             requestId, responseCode: 200, body: body.toString('base64'),
-            responseHeaders: [{ name: 'Content-Type', value: type }, { name: 'Access-Control-Allow-Origin', value: '*' }],
+            responseHeaders: [{ name: 'Content-Type', value: type },
+                ...(current.cors ? [{ name: 'Access-Control-Allow-Origin', value: '*' }] : [])],
         });
         if (current.network && url.startsWith('https://www.bing.com/HPImageArchive')) return fulfil(Buffer.from(JSON.stringify(BING_JSON)), 'application/json');
         if (current.network && url.startsWith('https://www.bing.com/th')) return fulfil(PIXEL, 'image/png');
@@ -143,7 +151,7 @@ const STORAGE = `(() => {
 // ---- Suites ---------------------------------------------------------------------
 
 async function stage(id, entry) {
-    current = { network: !!entry.network, problems: [] };
+    current = { network: !!entry.network, cors: true, problems: [], requests: [] };
     const started = Date.now();
     await fresh(`${WEB}/stage.html?w=${id}`);
     const state = await waitFor(() => evaluate('WP.stage && (WP.stage.ready || WP.stage.error) && { ready: !!WP.stage.ready, error: WP.stage.error || null }'));
@@ -173,10 +181,11 @@ async function press(key) {
     await sleep(150);
 }
 
-async function playerSuite(catalog) {
+// A named check: passes if fn returns truthy and nothing was recorded.
+function checker() {
     let failed = 0;
     const check = async (name, fn) => {
-        current = { network: false, problems: [] };
+        current = { network: false, cors: true, problems: [], requests: [] };
         let ok = false;
         try { ok = await fn(); } catch (error) { record(error.message); }
         if (!ok && !current.problems.length) record('check failed');
@@ -184,6 +193,11 @@ async function playerSuite(catalog) {
         console.log(`  ${name.padEnd(52)} ${current.problems.length ? '✗' : '✓'}`);
         for (const problem of current.problems) console.log(`      ${problem}`);
     };
+    return { check, failed: () => failed };
+}
+
+async function playerSuite(catalog) {
+    const { check, failed } = checker();
     const playerReady = () => waitFor(() => evaluate('WP.player?.stage?.ready && WP.player.stage.id'));
 
     await check('first run shows the Seasonal wallpaper', async () => {
@@ -356,12 +370,40 @@ async function playerSuite(catalog) {
         return true;
     });
 
-    return failed;
+    return failed();
+}
+
+async function extensionSuite(extensionId) {
+    const { check, failed } = checker();
+    const page = `chrome-extension://${extensionId}/index.html`;
+
+    await check('the new tab is the player', async () => {
+        await cdp.send('Page.navigate', { url: 'chrome://newtab/' });
+        await waitFor(() => evaluate('WP.player?.stage?.ready'));
+        const tab = await evaluate('({ href: location.href, host: WP.player.host })');
+        const { data } = await cdp.send('Page.captureScreenshot', { format: 'png' });
+        writeFileSync(join(SHOTS, 'extension-newtab.png'), Buffer.from(data, 'base64'));
+        return tab.href === page && tab.host === 'extension';
+    });
+
+    await check('Bing comes straight from bing.com, without CORS help', async () => {
+        Object.assign(current, { network: true, cors: false });
+        await cdp.send('Page.navigate', { url: `${page}?w=bing` });
+        await waitFor(() => evaluate('WP.player?.stage?.ready'));
+        const shown = await waitFor(() => inStage('getComputedStyle(document.body).backgroundImage.includes("smoke-fixture")'));
+        const asked = current.requests.filter(url => !url.startsWith('chrome-extension:'));
+        if (asked.some(url => !url.startsWith('https://www.bing.com/'))) record(`asked someone else: ${asked.join(' ')}`);
+        if (current.requests.some(url => url.endsWith('/bing.json'))) record('looked for bing.json, which only served pages have');
+        return shown;
+    });
+
+    return failed();
 }
 
 async function main(only) {
     mkdirSync(SHOTS, { recursive: true });
-    const launched = await launch();
+    if (!only.length && !existsSync(EXTENSION)) throw new Error('no dist/extension/: run `make extension` first (make smoke does)');
+    const launched = await launch({ extension: only.length ? null : EXTENSION });
     cdp = launched.cdp;
     try {
         listen();
@@ -386,8 +428,10 @@ async function main(only) {
         if (!only.length) {
             console.log('player');
             failed += await playerSuite(catalog);
+            console.log('extension');
+            failed += await extensionSuite(launched.extensionId);
         }
-        console.log(failed ? `smoke ✗ ${failed} failed` : `smoke ✓ ${ids.length} stages${only.length ? '' : ' + player'} · screenshots in dist/smoke/`);
+        console.log(failed ? `smoke ✗ ${failed} failed` : `smoke ✓ ${ids.length} stages${only.length ? '' : ' + player + extension'} · screenshots in dist/smoke/`);
         return failed ? 1 : 0;
     } finally {
         cdp.close();

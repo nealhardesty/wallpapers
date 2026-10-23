@@ -7,25 +7,63 @@ animation with no page around it. Most just play; some also respond to you.
 Click to feed the fish, light the jack-o'-lanterns, or take over Pixel
 Quest's hero with the arrow keys.
 
-They run in three places:
+**[Try it: nealhardesty.github.io/wallpapers](https://nealhardesty.github.io/wallpapers/)**, then press `,`.
 
-- **A web page**: open it and you see only the wallpaper. Press `,` for the
-  wallpaper picker and settings, `[` and `]` to switch.
-- **Chrome's new tab**, through a small extension.
-- **Android's home screen**, as a live wallpaper (planned).
+![The settings panel open over the fireplace](docs/panel.webp)
 
 Everything is plain HTML, CSS and JavaScript, with no build step. Most
 wallpapers work fully offline. The online ones, such as the Bing image of
 the day, need no API keys.
 
-> **Status: working.** Open `web/index.html` and it plays, with a picker and
-> settings panel. Next: the Chrome extension and a hosted copy. The plan and
-> roadmap are in [SPEC.md](SPEC.md).
+> **Status: working** as a web page and a Chrome new tab. Next: Android
+> live wallpapers. The plan and roadmap are in [SPEC.md](SPEC.md).
+
+## The wallpapers
+
+Click one to see it live.
+
+| | | | |
+|:-:|:-:|:-:|:-:|
+| [<img src="web/wallpapers/snow/thumb.webp" width="200" alt="Snow">](https://nealhardesty.github.io/wallpapers/?w=snow)<br>❄️ Snow | [<img src="web/wallpapers/rain/thumb.webp" width="200" alt="Rain">](https://nealhardesty.github.io/wallpapers/?w=rain)<br>🌧️ Rain | [<img src="web/wallpapers/leaves/thumb.webp" width="200" alt="Falling Leaves">](https://nealhardesty.github.io/wallpapers/?w=leaves)<br>🍂 Falling Leaves | [<img src="web/wallpapers/fireflies/thumb.webp" width="200" alt="Fireflies">](https://nealhardesty.github.io/wallpapers/?w=fireflies)<br>✨ Fireflies |
+| [<img src="web/wallpapers/fireplace/thumb.webp" width="200" alt="Fireplace">](https://nealhardesty.github.io/wallpapers/?w=fireplace)<br>🔥 Fireplace | [<img src="web/wallpapers/northern-lights/thumb.webp" width="200" alt="Northern Lights">](https://nealhardesty.github.io/wallpapers/?w=northern-lights)<br>🌌 Northern Lights | [<img src="web/wallpapers/parallax-clouds/thumb.webp" width="200" alt="Parallax Clouds">](https://nealhardesty.github.io/wallpapers/?w=parallax-clouds)<br>☁️ Parallax Clouds | [<img src="web/wallpapers/mountains/thumb.webp" width="200" alt="Mountains">](https://nealhardesty.github.io/wallpapers/?w=mountains)<br>🏔️ Mountains |
+| [<img src="web/wallpapers/starfield/thumb.webp" width="200" alt="Starfield">](https://nealhardesty.github.io/wallpapers/?w=starfield)<br>🌠 Starfield | [<img src="web/wallpapers/cherry-blossoms/thumb.webp" width="200" alt="Cherry Blossoms">](https://nealhardesty.github.io/wallpapers/?w=cherry-blossoms)<br>🌸 Cherry Blossoms | [<img src="web/wallpapers/halloween/thumb.webp" width="200" alt="Halloween Night">](https://nealhardesty.github.io/wallpapers/?w=halloween)<br>🎃 Halloween Night | [<img src="web/wallpapers/neko/thumb.webp" width="200" alt="Neko">](https://nealhardesty.github.io/wallpapers/?w=neko)<br>🐈 Neko |
+| [<img src="web/wallpapers/matrix/thumb.webp" width="200" alt="Matrix">](https://nealhardesty.github.io/wallpapers/?w=matrix)<br>🟩 Matrix | [<img src="web/wallpapers/fishtank/thumb.webp" width="200" alt="Fish Tank">](https://nealhardesty.github.io/wallpapers/?w=fishtank)<br>🐠 Fish Tank | [<img src="web/wallpapers/advent/thumb.webp" width="200" alt="Advent Calendar">](https://nealhardesty.github.io/wallpapers/?w=advent)<br>🎁 Advent Calendar | [<img src="web/wallpapers/quest/thumb.webp" width="200" alt="Pixel Quest">](https://nealhardesty.github.io/wallpapers/?w=quest)<br>⚔️ Pixel Quest |
+
+Also: **Seasonal** 📅 picks by month (the default), **Blank** ⬛ is just
+black, and the **Bing Image of the Day** 🖼️ shows Bing's photo with its
+credit.
+
+## Install
+
+**As a web page.** Open [the hosted copy](https://nealhardesty.github.io/wallpapers/), or `web/index.html`
+straight from a clone, or run `make serve`. To make it Chrome's start page
+without the extension, set Settings → On startup → Open a specific page to
+the hosted address.
+
+**As Chrome's new tab.** Every new tab shows the wallpaper.
+1. Get the extension: `make extension` builds `dist/extension/`. Or download
+   `wallpapers-extension` from the latest
+   [CI run](https://github.com/nealhardesty/wallpapers/actions/workflows/ci.yml)
+   and unzip it.
+2. Open `chrome://extensions`, turn on Developer mode, click **Load
+   unpacked** and pick that folder.
+3. Open a new tab. Chrome asks once whether to keep the change; keep it.
+
+Chrome puts the cursor in the address bar on a new tab, so click the page
+once before pressing `,`, or use the gear in the top-right corner. The
+extension asks for one permission, reading `www.bing.com`, so the Bing
+wallpaper can fetch its photo; nothing else leaves your machine.
+
+**On a phone,** for now. Open the hosted copy and choose *Add to Home
+screen*: it opens full screen, with no browser around it. Hold the
+top-right corner for the panel. A real Android live wallpaper is next on
+the roadmap.
+
+<img src="docs/phone.webp" width="260" alt="The panel as a bottom sheet on a phone">
 
 ## Use
 
-Open `web/index.html`, straight from disk or through `make serve`. You see
-only the wallpaper. On first run it's **Seasonal**: snow from January to
+You see only the wallpaper. On first run it's **Seasonal**: snow from January to
 April, the fish tank in May and November, fireflies in summer, falling
 leaves in September, Halloween in October and the advent calendar in
 December.
@@ -55,17 +93,13 @@ mouse, a gear appears when you move toward that corner.
   `P` palette. Arrows or WASD and Space take over the hero.
 - Advent calendar: arrows time-travel, `0` today, `T` theme, `R` replay.
 
-**Wallpapers:** Seasonal 📅, Blank ⬛, Snow ❄️, Rain 🌧️, Falling Leaves 🍂,
-Fireflies ✨, Fireplace 🔥, Northern Lights 🌌, Parallax Clouds ☁️,
-Mountains 🏔️, Starfield 🌠, Cherry Blossoms 🌸, Halloween Night 🎃,
-Matrix 🟩, Fish Tank 🐠, Advent Calendar 🎁, Pixel Quest ⚔️, and the Bing
-Image of the Day 🖼️, and Neko 🐈, a pixel cat that chases your pointer
-(or finger), washes, yawns and naps.
+![Pixel Quest, mid-adventure](docs/quest.webp)
 
-The Bing photo needs a connection, and a browser only lets a page reach it
-when the page is served: run `make bing-json` and then `make serve`. Opened
-straight from disk, it explains this instead (or uses public proxies, if you
-allow them in its settings).
+The Bing photo needs a connection. The hosted copy and the extension just
+work. Locally, a browser only lets a page reach it when the page is served:
+run `make bing-json` and then `make serve`. Opened straight from disk, it
+explains this instead (or uses public proxies, if you allow them in its
+settings).
 
 **URL options**, for this visit only; nothing is saved:
 
@@ -108,6 +142,10 @@ Run `make` to list every target.
 | `make cert` | Make a fresh self-signed certificate in `.cert/` (localhost and your LAN addresses) |
 | `make bing-json` | Fetch Bing's last eight images of the day into `web/bing.json`, so the Bing wallpaper works when served |
 | `make thumbnails` | Re-render the panel's wallpaper thumbnails (they're committed: review the changes) |
+| `make icons` | Render `web/icons/icon.svg` to the PNG icons the extension and web app need (committed) |
+| `make screenshots` | Re-render the README's screenshots in `docs/` (committed: review the changes) |
+| `make extension` | Build the Chrome extension: `dist/extension/` to load unpacked, and a zip |
+| `make site` | Build the GitHub Pages copy in `dist/site/`, with a fresh `bing.json` |
 | `make docker-build` | Build the container image `wallpapers` |
 | `make docker-run` | Run it at http://localhost:8000 (read-only, unprivileged) |
 | `make lint` | Syntax-check every script and JSON file |
@@ -115,7 +153,7 @@ Run `make` to list every target.
 | `make audit-staged` | Scan only what is staged for commit |
 | `make audit-history` | Scan every file version ever committed |
 | `make test` | Run the unit tests |
-| `make smoke` | Boot every wallpaper in headless Chrome; screenshots go to `dist/smoke/` |
+| `make smoke` | Build the extension, then boot every wallpaper, the player and the extension in headless Chrome; screenshots go to `dist/smoke/` |
 | `make ci` | Everything CI runs: lint, audit, audit-history, test, smoke |
 | `make clean` | Remove build output |
 

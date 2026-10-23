@@ -3,10 +3,11 @@
 // wallpaper works on any http(s) host without a CORS proxy (SPEC §4.6).
 // Keeps only what the wallpaper uses: image path, credit, credit link, date.
 // GitHub Pages runs this daily; locally, `make bing-json` before `make serve`.
+//   node tools/bing.mjs [out]    default web/bing.json
 import { writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
-const OUT = join(resolve(import.meta.dirname, '..'), 'web', 'bing.json');
+const OUT = process.argv[2] ?? join(resolve(import.meta.dirname, '..'), 'web', 'bing.json');
 const response = await fetch('https://www.bing.com/HPImageArchive.aspx?format=js&idx=0&n=8&mkt=en-US');
 if (!response.ok) throw new Error(`Bing answered ${response.status}`);
 const { images } = await response.json();

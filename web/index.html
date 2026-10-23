@@ -3,8 +3,14 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- The Chrome extension's rules everywhere, so a page that works here works there. -->
+<meta http-equiv="Content-Security-Policy" content="script-src 'self'; object-src 'none'; base-uri 'none'">
 <meta name="description" content="Toy animated wallpapers: snow, rain, fireflies, a fish tank, a self-playing 8-bit adventure and more.">
 <title>Wallpapers</title>
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="icon" href="icons/icon-32.png" sizes="32x32">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<meta name="theme-color" content="#000000">
 <!-- The player. Nothing shows but the wallpaper.
        ,      wallpapers and settings (or hold the top-right corner)
        [ ]    previous / next wallpaper
@@ -45,15 +51,14 @@
   }
   #toast.show { opacity: 1; transform: translate(-50%, 0); }
 </style>
-<script src="core/wp.js"></script>
-<script src="wallpapers/catalog.js"></script>
-<script src="core/settings.js"></script>
-<script src="core/panel.js"></script>
-<script src="core/player.js"></script>
+<script src="core/wp.js" defer></script>
+<script src="wallpapers/catalog.js" defer></script>
+<script src="core/settings.js" defer></script>
+<script src="core/panel.js" defer></script>
+<script src="core/player.js" defer></script>
 </head>
 <body>
 <div id="toast" role="status" aria-live="polite"></div>
 <button id="gear" class="gear" type="button" aria-label="Wallpapers and settings (,)">⚙︎</button>
-<script>WP.player.start();</script>
 </body>
 </html>

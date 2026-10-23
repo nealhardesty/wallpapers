@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <!-- The wallpapers icon: a window onto a dusk scene. Drawn for this project
+       (MIT, like everything else here). tools/icons.mjs renders the PNGs. -->
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1c1f4a"/>
+      <stop offset="0.55" stop-color="#5b3a7a"/>
+      <stop offset="0.85" stop-color="#e0875a"/>
+    </linearGradient>
+    <radialGradient id="glow">
+      <stop offset="0" stop-color="#ffd166" stop-opacity="0.7"/>
+      <stop offset="1" stop-color="#ffd166" stop-opacity="0"/>
+    </radialGradient>
+    <clipPath id="pane"><rect x="8" y="8" width="112" height="112" rx="26"/></clipPath>
+  </defs>
+  <g clip-path="url(#pane)">
+    <rect x="8" y="8" width="112" height="112" fill="url(#sky)"/>
+    <path d="M80 26a20 20 0 1 0 22 26a16 16 0 1 1 -22 -26z" fill="#ffe9b0"/>
+    <circle cx="30" cy="30" r="3" fill="#fff" opacity="0.9"/>
+    <circle cx="52" cy="22" r="2" fill="#fff" opacity="0.7"/>
+    <circle cx="44" cy="50" r="2.5" fill="#fff" opacity="0.8"/>
+    <path d="M8 92 C30 70 52 76 70 88 S104 76 120 82 V120 H8z" fill="#2c3f6b"/>
+    <path d="M8 104 C34 90 60 96 80 104 S110 98 120 100 V120 H8z" fill="#14213d"/>
+    <circle cx="40" cy="98" r="11" fill="url(#glow)"/>
+    <circle cx="40" cy="98" r="3.5" fill="#fff3c4"/>
+    <circle cx="92" cy="108" r="8" fill="url(#glow)"/>
+    <circle cx="92" cy="108" r="2.5" fill="#fff3c4"/>
+  </g>
+</svg>

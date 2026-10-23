@@ -3,15 +3,16 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- The Chrome extension's rules everywhere, so a page that works here works there. -->
+<meta http-equiv="Content-Security-Policy" content="script-src 'self'; object-src 'none'; base-uri 'none'">
 <title>Wallpaper</title>
 <!-- One wallpaper, nothing else: stage.html?w=<id>. The player shows it in
      an iframe; it also works on its own. See core/stage.js. -->
 <link rel="stylesheet" href="core/theme.css">
-<script src="core/wp.js"></script>
-<script src="wallpapers/catalog.js"></script>
-<script src="core/stage.js"></script>
+<script src="core/wp.js" defer></script>
+<script src="wallpapers/catalog.js" defer></script>
+<script src="core/stage.js" defer></script>
 </head>
 <body>
-<script>WP.stage.boot();</script>
 </body>
 </html>

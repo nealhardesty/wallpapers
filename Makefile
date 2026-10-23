@@ -3,7 +3,7 @@
 .DEFAULT_GOAL := help
 PORT ?= 8000
 
-.PHONY: help hooks serve serve-https cert bing-json thumbnails docker-build docker-run lint audit audit-staged audit-history test smoke ci clean
+.PHONY: help hooks serve serve-https cert bing-json thumbnails icons screenshots extension site docker-build docker-run lint audit audit-staged audit-history test smoke ci clean
 
 help: ## List every target
 	@awk 'BEGIN {FS = ":.*## "} /^[a-zA-Z0-9_-]+:.*## / {printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -27,6 +27,18 @@ bing-json: ## Fetch Bing's last eight images of the day into web/bing.json (for 
 thumbnails: ## Regenerate the panel's wallpaper thumbnails (committed; review the changes)
 	@node tools/thumbnails.mjs
 
+icons: ## Render web/icons/icon.svg to the extension's and web app's PNGs (committed)
+	@node tools/icons.mjs
+
+screenshots: ## Render the README's screenshots into docs/ (committed; review the changes)
+	@node tools/screenshots.mjs
+
+extension: ## Build the Chrome extension: dist/extension/ (load unpacked) and a zip
+	@node tools/build.mjs extension
+
+site: ## Build the GitHub Pages site in dist/site/, with a fresh bing.json
+	@node tools/build.mjs site
+
 docker-build: ## Build the container image (wallpapers:latest)
 	docker build -t wallpapers .
 
@@ -48,7 +60,7 @@ audit-history: ## Scan every blob ever committed
 test: ## Run the unit tests
 	@node --test 'tools/*.test.mjs'
 
-smoke: ## Boot every wallpaper in headless Chrome (needs Chrome; CHROME_PATH to override)
+smoke: extension ## Boot every wallpaper in headless Chrome (needs Chrome; CHROME_PATH to override)
 	@node tools/smoke.mjs
 
 ci: lint audit audit-history test smoke ## Everything CI runs

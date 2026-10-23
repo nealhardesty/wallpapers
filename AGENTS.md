@@ -73,9 +73,12 @@ SPEC.md §4 has the full contract. The short version:
      black.
 4. **Public-repo rules.**
    - No API keys.
-   - No network unless declared in the catalog's `network` *and* allowed in
-     `URL_ALLOW` in `tools/audit.mjs`, with an offline state that isn't
-     blank.
+   - No network unless declared in the catalog's `network`, allowed in
+     `URL_ALLOW` in `tools/audit.mjs` *and* listed in `host_permissions`
+     in `web/manifest.json` (the tests check all three agree), with an
+     offline state that isn't blank.
+   - No inline `<script>` or `on…=` handlers: the extension's CSP forbids
+     them, and every page enforces it.
    - Prefer art drawn in code. Anything not ours needs a clear licence and
      a line in `THIRD_PARTY.md`.
    - No real locations, names or personal details in code, docs, tests or

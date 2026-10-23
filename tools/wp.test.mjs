@@ -177,3 +177,27 @@ test('thumbnails: every offline wallpaper has a small one', () => {
         assert.ok(bytes.length < 40 * 1024, `${entry.id}: thumbnail over 40 KB`);
     }
 });
+
+test('extension: host_permissions are exactly the catalog\'s network hosts', () => {
+    const manifest = JSON.parse(readFileSync(join(WEB, 'manifest.json'), 'utf8'));
+    const hosts = [...new Set(WP.catalog.flatMap(e => e.network || []))].sort();
+    assert.deepEqual(manifest.host_permissions.map(p => p.match(/^https:\/\/([^/]+)\/\*$/)?.[1]).sort(), hosts);
+    assert.equal(manifest.manifest_version, 3);
+    assert.match(manifest.version, /^\d+\.\d+\.\d+$/);
+    assert.deepEqual(manifest.permissions ?? [], [], 'no permissions beyond the hosts: settings live in localStorage');
+});
+
+test('icons: every one the manifests name exists', () => {
+    const manifest = JSON.parse(readFileSync(join(WEB, 'manifest.json'), 'utf8'));
+    const app = JSON.parse(readFileSync(join(WEB, 'app.webmanifest'), 'utf8'));
+    for (const path of [...Object.values(manifest.icons), ...app.icons.map(i => i.src)]) assert.ok(existsSync(join(WEB, path)), path);
+});
+
+test('CSP: pages carry the extension\'s policy and have no inline script', () => {
+    for (const page of ['index.html', 'stage.html']) {
+        const html = readFileSync(join(WEB, page), 'utf8');
+        assert.match(html, /http-equiv="Content-Security-Policy" content="script-src 'self'/, page);
+        assert.doesNotMatch(html, /<script(?![^>]*\bsrc=)[^>]*>/, `${page}: inline <script>`);
+        assert.doesNotMatch(html, /\son[a-z]+=/i, `${page}: inline event handler`);
+    }
+});

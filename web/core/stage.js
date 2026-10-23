@@ -208,4 +208,6 @@
             throw error;
         }
     };
+
+    WP.stage.boot();   // deferred, like the player: no inline scripts (CSP)
 })(globalThis.WP);
