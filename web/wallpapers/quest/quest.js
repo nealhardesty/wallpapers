@@ -458,7 +458,10 @@ class QuestAnimationManager {
 
     sizeCanvases() {
         const L = this.layout;
-        const dpr = Math.min(window.devicePixelRatio || 1, 2);
+        // Never under one pixel per CSS pixel: the game is drawn small and
+        // blown up in a single copy, so a lower ratio (Low's render scale)
+        // saves almost nothing and would make the 8-bit pixels uneven
+        const dpr = Math.max(1, Math.min(window.devicePixelRatio || 1, 2));
         this.dpr = dpr;
         this.canvas.width = Math.round(window.innerWidth * dpr);
         this.canvas.height = Math.round(window.innerHeight * dpr);
@@ -470,10 +473,23 @@ class QuestAnimationManager {
         }
         this.low.width = L.lowW;
         this.low.height = L.lowH;
-        this.lightCanvas.width = L.cols * 16;
-        this.lightCanvas.height = L.rows * 16;
+        this.sizeLight();
         this.lctx.imageSmoothingEnabled = false;
         this.crtCanvas = null;
+    }
+
+    // The light map runs at half resolution on Low: chunkier rings, which
+    // suit 8-bit anyway, for a quarter of the fill.
+    sizeLight() {
+        const L = this.layout;
+        this.lightScale = this.host.quality.tier === 'low' ? 0.5 : 1;
+        this.lightCanvas.width = Math.ceil(L.cols * 16 * this.lightScale);
+        this.lightCanvas.height = Math.ceil(L.rows * 16 * this.lightScale);
+    }
+
+    // A new tier (SPEC §4.8): the light map's size; CRT is read per frame.
+    onQuality() {
+        if (this.lightCanvas && this.layout) this.sizeLight();
     }
 
     handleResize() {
@@ -1275,6 +1291,7 @@ class QuestAnimationManager {
         if (area.kind === 'dungeon') this.paintDungeonRoom(ctx, room);
         else if (area.kind === 'cave') this.paintCaveRoom(ctx, room);
         else this.paintOverworldRoom(ctx, room);
+        if (this._palette) this._palette.sheets.delete(cv);
         return cv;
     }
 
@@ -1798,45 +1815,49 @@ class QuestAnimationManager {
     // -----------------------------------------------------------------------
     // Main loop
     // -----------------------------------------------------------------------
-    animate() {
+    // The game steps at a fixed 60 Hz whatever the frame rate (the stage
+    // paces frames from 10 to 120 fps), so it plays at the same speed on any
+    // tier; a frame only draws the latest state.
+    animate(now = performance.now()) {
         if (!this.isEnabled) return;
         if (this.touch && this.touch.paused !== this.paused) this.syncTouchPause();
-        const now = performance.now();
         const frameMs = now - this.lastTime;
         const cap = this.config.fpsCap || 60;
-        if (cap < 60 && frameMs < 1000 / cap - 2) {
-            this.animationId = requestAnimationFrame(() => this.animate());
+        if (frameMs < 1000 / cap - 2) {
+            this.animationId = requestAnimationFrame(t => this.animate(t));
             return;
         }
         this.lastTime = now;
-        // Paused: keep painting so the overlay shows, but bank no time at all
-        // or the game would fast-forward through everything on resume
+        // Paused: paint once so the overlay shows, then idle until input
+        // wakes the stage. Bank no time at all, or the game would
+        // fast-forward through everything on resume.
         if (this.paused && this.playable) {
             this.acc = 0;
             try { this.render(); } catch (err) {
                 if (!this.loggedError) { this.loggedError = true; console.error('Pixel Quest frame error:', err); }
             }
-            this.animationId = requestAnimationFrame(() => this.animate());
+            this.host.idleUntil();
+            this.animationId = requestAnimationFrame(t => this.animate(t));
             return;
         }
         const dt = Math.min(0.1, Math.max(0, frameMs / 1000));
         this.acc += dt * (this.config.gameSpeed || 1);
-        const STEP = 1 / 60;
+        const STEP = 1 / 60, MAX_STEPS = 20;   // 0.1 s at 3× speed
         let steps = 0;
         // An error in one frame must not stop the game: log it once, carry on
         try {
-            while (this.acc >= STEP && steps < 8) {
+            while (this.acc >= STEP && steps < MAX_STEPS) {
                 this.tick(STEP);
                 this.acc -= STEP;
                 steps++;
             }
-            if (steps >= 8) this.acc = 0;
+            if (steps >= MAX_STEPS) this.acc = 0;
             this.render();
         } catch (err) {
             this.acc = 0;
             if (!this.loggedError) { this.loggedError = true; console.error('Pixel Quest frame error:', err); }
         }
-        this.animationId = requestAnimationFrame(() => this.animate());
+        this.animationId = requestAnimationFrame(t => this.animate(t));
     }
 
     tick(dt) {
@@ -4480,7 +4501,7 @@ class QuestAnimationManager {
 
     render() {
         if (!this.world || !this.low) return;
-        const ctx = this.lctx, L = this.layout;
+        const ctx = this.paletteContext(), L = this.layout;
         ctx.save();
         ctx.fillStyle = '#000';
         ctx.fillRect(0, 0, L.lowW, L.lowH);
@@ -4493,8 +4514,6 @@ class QuestAnimationManager {
         }
         ctx.restore();
 
-        if (this.config.palette && this.config.palette !== 'none') this.applyFilter();
-
         // Scale up to the screen
         const out = this.ctx;
         const v = this.viewport();
@@ -4502,7 +4521,7 @@ class QuestAnimationManager {
         out.fillStyle = '#000';
         out.fillRect(0, 0, this.canvas.width, this.canvas.height);
         out.drawImage(this.low, 0, 0, L.lowW, L.lowH, v.x, v.y, v.w, v.h);
-        if (this.config.crt) this.drawCRT(out, v);
+        if (this.config.crt && this.host.quality.effects.includes('crt')) this.drawCRT(out, v);
     }
 
     drawWorld(ctx) {
@@ -5020,7 +5039,7 @@ class QuestAnimationManager {
             case 'bombLit': {
                 const img = this.sprites.pickup('bomb');
                 const blink = p.t > 0.7 && Math.floor(p.t * 16) % 2;
-                ctx.drawImage(blink ? QuestArt.silhouette(img, '#f83838') : img, x - 5, y - 7);
+                ctx.drawImage(blink ? this.sprites.get('bombBlink', () => QuestArt.silhouette(img, '#f83838')) : img, x - 5, y - 7);
                 break;
             }
         }
@@ -5171,9 +5190,10 @@ class QuestAnimationManager {
         if (dark < 0.02) return;
         const lc = this.lightCanvas, l = this.lightCtx;
         const W = room.cols * 16, H = room.rows * 16;
+        l.setTransform(this.lightScale, 0, 0, this.lightScale, 0, 0);
         l.globalCompositeOperation = 'source-over';
         l.clearRect(0, 0, W, H);
-        l.fillStyle = `rgba(${tint},${Math.min(0.92, dark)})`;
+        l.fillStyle = this.recolor(`rgba(${tint},${Math.min(0.92, dark)})`);
         l.fillRect(0, 0, W, H);
         l.globalCompositeOperation = 'destination-out';
         const hole = (x, y, r) => {
@@ -5197,7 +5217,7 @@ class QuestAnimationManager {
         }
         if (room.structures) for (const s of room.structures) if (s.kind === 'house') hole(s.x * 16 + 24, s.y * 16 + 20, 20);
         if (room.pedestal) hole(room.pedestal.x * 16 + 8, room.pedestal.y * 16 + 8, 22);
-        ctx.drawImage(lc, 0, 0);
+        ctx.drawImage(lc, 0, 0, W, H);
     }
 
     drawThought(ctx) {
@@ -5497,30 +5517,90 @@ class QuestAnimationManager {
     // -----------------------------------------------------------------------
     // Palette filters and CRT
     // -----------------------------------------------------------------------
-    applyFilter() {
-        const f = QuestEngineData.FILTERS[this.config.palette];
-        if (!f) return;
-        const L = this.layout;
-        const img = this.lctx.getImageData(0, 0, L.lowW, L.lowH);
-        const d = img.data;
-        if (!this._lut || this._lutFor !== this.config.palette) {
-            this._lut = new Map();
-            this._lutFor = this.config.palette;
-            this._ramp = f.ramp ? f.ramp.map(QuestArt.hexToRgb) : null;
-            this._near = f.nearest ? f.nearest.map(QuestArt.hexToRgb) : null;
+    // Palettes (SPEC §4.8). Rather than read every frame back and recolour
+    // it, the game draws through a stand-in for its context that recolours
+    // what goes in: fill colours through the palette's lookup, and each
+    // sprite, font and room canvas once, the first time it's drawn. The
+    // light map changes every frame, so only its tint is recoloured.
+    paletteContext() {
+        const key = this.config.palette;
+        const f = QuestEngineData.FILTERS[key];
+        if (!f || key === 'none') {
+            this._palette = null;
+            return this.lctx;
         }
-        const lut = this._lut, key = this.config.palette;
+        if (this._palette && this._palette.key === key && this._palette.real === this.lctx) return this._palette.ctx;
+        this._lut = new Map();
+        this._ramp = f.ramp ? f.ramp.map(QuestArt.hexToRgb) : null;
+        this._near = f.nearest ? f.nearest.map(QuestArt.hexToRgb) : null;
+        const real = this.lctx, sheets = new WeakMap(), methods = new Map();
+        const drawImage = (src, ...rest) => real.drawImage(src === this.lightCanvas ? src : this.paletteSheet(src), ...rest);
+        const ctx = new Proxy(real, {
+            get: (target, name) => {
+                if (name === 'drawImage') return drawImage;
+                const value = target[name];
+                if (typeof value !== 'function') return value;
+                if (!methods.has(name)) methods.set(name, value.bind(target));
+                return methods.get(name);
+            },
+            set: (target, name, value) => {
+                target[name] = name === 'fillStyle' || name === 'strokeStyle' ? this.recolor(value) : value;
+                return true;
+            },
+        });
+        this._palette = { key, real, ctx, sheets, colors: new Map() };
+        return ctx;
+    }
+
+    // A CSS colour (hex or rgb[a]) in the current palette; anything else as is.
+    recolor(css) {
+        const p = this._palette;
+        if (!p || typeof css !== 'string') return css;
+        let out = p.colors.get(css);
+        if (out !== undefined) return out;
+        const hex = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(css);
+        const rgb = !hex && /^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*(?:,\s*([\d.]+)\s*)?\)$/.exec(css);
+        if (hex || rgb) {
+            const [r, g, b] = hex ? QuestArt.hexToRgb(css) : [+rgb[1], +rgb[2], +rgb[3]];
+            const v = this.paletteRgb(r, g, b);
+            out = `rgba(${(v >> 16) & 255},${(v >> 8) & 255},${v & 255},${rgb && rgb[4] !== undefined ? rgb[4] : 1})`;
+        } else out = css;
+        // Fades make one-off alphas; keep the cache from growing forever
+        if (p.colors.size > 4000) p.colors.clear();
+        p.colors.set(css, out);
+        return out;
+    }
+
+    paletteRgb(r, g, b) {
+        const k = (r << 16) | (g << 8) | b;
+        let v = this._lut.get(k);
+        if (v === undefined) {
+            v = this.mapColor(this._palette.key, r, g, b);
+            this._lut.set(k, v);
+        }
+        return v;
+    }
+
+    // A canvas recoloured into the palette, made once and kept.
+    paletteSheet(src) {
+        const sheets = this._palette.sheets;
+        let out = sheets.get(src);
+        if (out) return out;
+        if (!src.width || !src.height || !src.getContext) return src;
+        out = document.createElement('canvas');
+        out.width = src.width;
+        out.height = src.height;
+        const c = out.getContext('2d', { willReadFrequently: true });
+        c.drawImage(src, 0, 0);
+        const img = c.getImageData(0, 0, out.width, out.height), d = img.data;
         for (let i = 0; i < d.length; i += 4) {
-            const r = d[i], g = d[i + 1], b = d[i + 2];
-            const k = (r << 16) | (g << 8) | b;
-            let v = lut.get(k);
-            if (v === undefined) {
-                v = this.mapColor(key, r, g, b);
-                lut.set(k, v);
-            }
+            if (!d[i + 3]) continue;
+            const v = this.paletteRgb(d[i], d[i + 1], d[i + 2]);
             d[i] = (v >> 16) & 255; d[i + 1] = (v >> 8) & 255; d[i + 2] = v & 255;
         }
-        this.lctx.putImageData(img, 0, 0);
+        c.putImageData(img, 0, 0);
+        sheets.set(src, out);
+        return out;
     }
 
     mapColor(key, r, g, b) {
@@ -5586,7 +5666,6 @@ class QuestAnimationManager {
         const worldKeys = ['worldSize', 'worldTheme', 'dungeonCount', 'cowLevel', 'roomSize', 'seed', 'difficulty', 'enemyDensity'];
         const rebuild = forceNew || worldKeys.some(k => before[k] !== this.config[k]) || before.hud !== this.config.hud && (before.hud === 'off' || this.config.hud === 'off');
         if (before.hud !== this.config.hud) { this.computeLayout(); this.sizeCanvases(); }
-        if (before.palette !== this.config.palette) this._lut = null;
         if (['touchControls', 'touchScale', 'touchPosition', 'touchSwap'].some(k => before[k] !== this.config[k])) this.setupTouchControls();
         if (rebuild) {
             const keep = !forceNew || this.config.hero !== 'random';

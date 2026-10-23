@@ -65,6 +65,7 @@
           ] },
         { id: 'quest', name: 'Pixel Quest', icon: '⚔️', accent: '#ffd166', scripts: ['quest/quest-art.js', 'quest/quest-world.js', 'quest/quest.js'],
           make: host => new QuestAnimationManager(host), cost: 'medium', interactive: true,
+          effects: [['crt', 'high']],
           keys: [
               { keys: ['n'], label: 'New quest', run: quest => { quest.applyConfig({}, true); return 'A new quest begins'; } },
               { keys: ['h'], label: 'Next hero', run: quest => questCycle(quest, 'hero', Object.keys(QuestArt.HEROES), QuestArt.HEROES) },

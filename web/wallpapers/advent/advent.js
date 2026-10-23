@@ -11,15 +11,17 @@
 //
 //   month model   which doors exist, where they sit, which treat is behind each
 //   layout        packs the doors into a grid that fits the window
-//   painting      scene backdrop and calendar frame are cached offscreen; doors,
-//                 treats, particles and the opening ceremony draw live
-//   interaction   document-level listeners, like the fish tank, so the
-//                 homepage widgets on top keep working
+//   painting      scene backdrop and calendar frame are cached offscreen, and so
+//                 are the doors at rest; treats, particles and any door that
+//                 moves or glows draw live
+//   interaction   document-level pointer listeners, like the fish tank, so the
+//                 homepage widgets on top keep working and touch works
 //   spotlight     clicking an open door replays its treat full size
 //
 // Open treats are rendered into small per-door canvases on a round-robin so
 // a month of doors stays cheap; today's door and the one under the cursor
-// always render at full rate.
+// always render at full rate. Lower tiers (SPEC §4.8) refresh fewer of the
+// older treats per frame and drop fewer snowflakes and less confetti.
 
 class AdventCalendarAnimationManager {
     constructor(host) {
@@ -38,8 +40,10 @@ class AdventCalendarAnimationManager {
 
         this.model = null;          // the current month
         this.layoutInfo = null;
-        this.bgCanvas = null;       // scene backdrop
-        this.boardCanvas = null;    // frame, board and door recesses
+        this.bgCanvas = null;       // scene backdrop, frame, board and door recesses
+        this.doorsCanvas = null;    // the doors that aren't moving or glowing
+        this.doorsKey = '';         // which doors doorsCanvas holds, and how
+        this.glow = null;           // today's door glow, baked
         this.particles = [];
         this.bursts = [];           // sparkle bursts from opening doors
         this.bubbles = [];          // "not yet!" speech bubbles
@@ -98,7 +102,9 @@ class AdventCalendarAnimationManager {
         if (!this.canvas) return;
         this.w = window.innerWidth;
         this.h = window.innerHeight;
-        const native = Math.min(window.devicePixelRatio || 1, 2);
+        // Never under one pixel per CSS pixel: below that the day numbers
+        // on the doors blur past reading, and the doors cost little now
+        const native = Math.max(1, Math.min(window.devicePixelRatio || 1, 2));
         this.dpr = this.config.quality === 'balanced' ? Math.min(native, 1.25) : native;
         this.canvas.width = Math.round(this.w * this.dpr);
         this.canvas.height = Math.round(this.h * this.dpr);
@@ -409,6 +415,12 @@ class AdventCalendarAnimationManager {
 
         this.paintBackdrop();
         this.paintBoard();
+        // One layer for the backdrop and the board: one copy per frame, not two
+        const bg = this.bgCanvas.getContext('2d');
+        bg.setTransform(1, 0, 0, 1, 0, 0);
+        bg.drawImage(this.boardCanvas, 0, 0);
+        this.boardCanvas = null;
+        this.doorsKey = '';
         this.seedParticles();
     }
 
@@ -1476,24 +1488,38 @@ class AdventCalendarAnimationManager {
     // Particles
     // -----------------------------------------------------------------------
 
+    // As many particles as the scene, the window and the tier call for.
+    // The ones already falling keep falling, so a new size or tier never
+    // restarts the snow.
     seedParticles() {
-        this.particles = [];
         const scene = this.model.theme.scene;
-        if (!this.config.particles || !scene.particles) return;
+        if (!this.config.particles || !scene.particles) {
+            this.particles = [];
+            return;
+        }
         const kind = scene.particles;
         const base = { snow: 1, rain: 1.4, petals: 0.6, leaves: 0.45, hearts: 0.4, confetti: 0.7, fireflies: 0.4, stars: 0.5, bubbles: 0.5, sparkles: 0.5, clovers: 0.4, bats: 0.12 }[kind] || 0.5;
-        const n = Math.round(this.w * this.h / 24000 * base * this.config.particleAmount);
+        const n = Math.round(this.w * this.h / 24000 * base * this.config.particleAmount * this.host.quality.density);
         const rng = advRng(this.model.seed + 99);
+        const particles = [];
         for (let i = 0; i < n; i++) {
-            this.particles.push({
+            const p = {
                 x: rng() * this.w,
                 y: rng() * this.h,
                 z: 0.4 + rng() * 0.6,
                 ph: rng() * advTAU,
                 spin: (rng() - 0.5) * 2,
                 c: i
-            });
+            };
+            particles.push(this.particles[i] || p);
         }
+        this.particles = particles;
+    }
+
+    // A new tier (SPEC §4.8): DPR changes arrive as a resize; here, only
+    // the particle count.
+    onQuality() {
+        if (this.model) this.seedParticles();
     }
 
     updateDrawParticles(ctx, dt) {
@@ -1564,12 +1590,13 @@ class AdventCalendarAnimationManager {
     // Animation loop
     // -----------------------------------------------------------------------
 
-    animate() {
+    animate(nowMs = performance.now()) {
         if (!this.isEnabled) return;
-        this.animationId = requestAnimationFrame(() => this.animate());
-        const nowMs = performance.now();
+        this.animationId = requestAnimationFrame(t => this.animate(t));
         const minGap = 1000 / (this.config.fps || 30);
-        if (this.lastFrame && nowMs - this.lastFrame < minGap - 2) return;
+        const early = minGap - 2 - (nowMs - this.lastFrame);
+        // Not due yet at our own frame rate: no frames until it is
+        if (this.lastFrame && early > 0) return this.host.idleUntil(early);
         const dt = this.lastFrame ? Math.min(0.1, (nowMs - this.lastFrame) / 1000) : 1 / 30;
         this.lastFrame = nowMs;
         this.time = (nowMs - this.clockStart) / 1000;
@@ -1647,7 +1674,7 @@ class AdventCalendarAnimationManager {
     addBurst(door, big) {
         const r = door.rect;
         const parts = [];
-        const n = big ? 46 : 16;
+        const n = Math.max(6, Math.round((big ? 46 : 16) * this.host.quality.density));
         const acc = this.model.theme.pal.accent;
         for (let i = 0; i < n; i++) {
             const a = Math.random() * advTAU;
@@ -1666,15 +1693,16 @@ class AdventCalendarAnimationManager {
         const t = this.time;
         ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
         ctx.drawImage(this.bgCanvas, 0, 0, this.w, this.h);
-        ctx.drawImage(this.boardCanvas, 0, 0, this.w, this.h);
 
         if (this.chimney && this.model.theme.frame === 'house') this.drawSmoke(ctx);
         this.drawSubtitle(ctx);
 
-        // Treat budget: how many open doors may re-render this frame
+        // Treat budget: how many open doors may re-render this frame. Lower
+        // tiers refresh fewer of the older treats each frame.
         const ambient = this.config.ambient;
         const open = this.model.doors.filter(d => d.openK > 0.01);
-        const budget = ambient === 'lively' ? open.length : ambient === 'gentle' ? Math.max(2, Math.ceil(open.length / 3)) : 0;
+        const density = this.host.quality.density;
+        const budget = ambient === 'lively' ? Math.ceil(open.length * density) : ambient === 'gentle' ? Math.max(2, Math.ceil(open.length / 3 * density)) : 0;
         let rendered = 0;
         const start = this.renderCursor % Math.max(1, open.length);
         for (let i = 0; i < open.length; i++) {
@@ -1688,9 +1716,19 @@ class AdventCalendarAnimationManager {
         this.renderCursor += Math.max(1, budget);
 
         // Doors: closed ones and open-door contents; the big star doors go
-        // last so their swung-open leaves land on top of their neighbours
+        // last so their swung-open leaves land on top of their neighbours.
+        // A door that moves or glows draws live, on top; the rest come from
+        // one cached layer, over their treats.
         const ordered = this.model.doors.slice().sort((a, b) => (a.span[0] * a.span[1]) - (b.span[0] * b.span[1]) || (a.openK - b.openK));
-        for (const door of ordered) this.drawDoor(ctx, door, t);
+        const live = ordered.filter(door => this.isLive(door, t));
+        for (const door of ordered) {
+            if (door.openK <= 0.01 || !door.cache || live.includes(door)) continue;
+            this.drawWindow(ctx, door);
+            if (door.day === this.model.today) this.drawRim(ctx, door, t);
+        }
+        this.paintDoors(ordered, live);
+        ctx.drawImage(this.doorsCanvas, 0, 0, this.w, this.h);
+        for (const door of live) this.drawDoor(ctx, door, t);
 
         this.drawBursts(ctx);
         if (this.config.particles) this.updateDrawParticles(ctx, dt);
@@ -1796,34 +1834,9 @@ class AdventCalendarAnimationManager {
 
         // The window behind the door
         if (k > 0.01 && door.cache) {
-            ctx.save();
-            AdvArt.rr(ctx, r.x, r.y, r.w, r.h, rad);
-            ctx.clip();
-            ctx.drawImage(door.cache, r.x, r.y, r.w, r.h);
-            // Inner shadow gives the window some depth
-            const sh = Math.min(r.w, r.h) * 0.12;
-            const g1 = ctx.createLinearGradient(r.x, r.y, r.x, r.y + sh);
-            g1.addColorStop(0, 'rgba(0,0,0,0.35)');
-            g1.addColorStop(1, 'rgba(0,0,0,0)');
-            ctx.fillStyle = g1;
-            ctx.fillRect(r.x, r.y, r.w, sh);
-            const g2 = ctx.createLinearGradient(r.x, r.y, r.x + sh, r.y);
-            g2.addColorStop(0, 'rgba(0,0,0,0.25)');
-            g2.addColorStop(1, 'rgba(0,0,0,0)');
-            ctx.fillStyle = g2;
-            ctx.fillRect(r.x, r.y, sh, r.h);
-            ctx.restore();
-            this.drawDayTag(ctx, door, r, k);
-            if (isToday && k >= 1) {
-                // A soft golden rim marks today's treat
-                ctx.save();
-                ctx.globalAlpha = 0.55 + 0.35 * Math.sin(t * 2.5);
-                AdvArt.rr(ctx, r.x - 2, r.y - 2, r.w + 4, r.h + 4, rad + 2);
-                ctx.strokeStyle = '#ffe066';
-                ctx.lineWidth = 3;
-                ctx.stroke();
-                ctx.restore();
-            }
+            this.drawWindow(ctx, door);
+            this.drawWindowFrame(ctx, door, k);
+            if (isToday && k >= 1) this.drawRim(ctx, door, t);
         }
 
         if (k >= 0.999) {
@@ -1844,20 +1857,104 @@ class AdventCalendarAnimationManager {
         ctx.translate(-(r.x + r.w / 2), -(r.y + r.h / 2));
 
         if (isToday && k < 0.01) {
-            // Today's door glows before it opens
+            // Today's door glows before it opens: the glow is baked once
+            // and pulses by its opacity
             const glow = 0.5 + 0.5 * Math.sin(t * 3);
-            ctx.save();
-            ctx.shadowColor = `rgba(255,220,100,${0.6 + glow * 0.4})`;
-            ctx.shadowBlur = 18 + glow * 14;
-            AdvArt.rr(ctx, r.x, r.y, r.w, r.h, rad);
-            ctx.fillStyle = door.color;
-            ctx.fill();
-            ctx.restore();
+            const sprite = this.glowSprite(door, rad);
+            ctx.globalAlpha = 0.6 + glow * 0.4;
+            ctx.drawImage(sprite.canvas, r.x - sprite.pad, r.y - sprite.pad, r.w + sprite.pad * 2, r.h + sprite.pad * 2);
+            ctx.globalAlpha = 1;
         }
 
         if (k > 0.01) this.drawLeaves(ctx, door, r, k);
         else this.drawClosedFace(ctx, door, r, rad, pal, isToday);
         ctx.restore();
+    }
+
+    // A door that's moving or glowing this frame; every other door is at
+    // rest and comes from the doors layer
+    isLive(door, t) {
+        return door.opening || door.waiting || door.hoverK > 0.002 || t - door.jiggleAt < 0.6
+            || (door.day === this.model.today && door.openK < 0.01);
+    }
+
+    // The doors at rest, painted into their layer only when which doors
+    // those are, or how they stand, changes
+    paintDoors(ordered, live) {
+        const key = ordered.map(d => live.includes(d) ? 'L' : d.openK >= 0.999 ? 'o' : 'c').join('');
+        if (key === this.doorsKey && this.doorsCanvas) return;
+        this.doorsKey = key;
+        const [c, ctx] = this.makeLayer(this.w, this.h);
+        this.doorsCanvas = c;
+        const pal = this.model.theme.pal;
+        for (const door of ordered) {
+            if (live.includes(door)) continue;
+            const r = door.rect;
+            if (door.openK > 0.01) this.drawWindowFrame(ctx, door, door.openK);
+            if (door.openK >= 0.999) this.drawLeaves(ctx, door, r, 1);
+            else this.drawClosedFace(ctx, door, r, Math.min(r.w, r.h) * 0.12, pal, door.day === this.model.today);
+        }
+    }
+
+    // An open door's treat, in its rounded window
+    drawWindow(ctx, door) {
+        const r = door.rect;
+        ctx.save();
+        AdvArt.rr(ctx, r.x, r.y, r.w, r.h, Math.min(r.w, r.h) * 0.12);
+        ctx.clip();
+        ctx.drawImage(door.cache, r.x, r.y, r.w, r.h);
+        ctx.restore();
+    }
+
+    // Over the treat: an inner shadow gives the window some depth, and a tag
+    // carries the day
+    drawWindowFrame(ctx, door, k) {
+        const r = door.rect;
+        ctx.save();
+        AdvArt.rr(ctx, r.x, r.y, r.w, r.h, Math.min(r.w, r.h) * 0.12);
+        ctx.clip();
+        const sh = Math.min(r.w, r.h) * 0.12;
+        const g1 = ctx.createLinearGradient(r.x, r.y, r.x, r.y + sh);
+        g1.addColorStop(0, 'rgba(0,0,0,0.35)');
+        g1.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = g1;
+        ctx.fillRect(r.x, r.y, r.w, sh);
+        const g2 = ctx.createLinearGradient(r.x, r.y, r.x + sh, r.y);
+        g2.addColorStop(0, 'rgba(0,0,0,0.25)');
+        g2.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = g2;
+        ctx.fillRect(r.x, r.y, sh, r.h);
+        ctx.restore();
+        this.drawDayTag(ctx, door, r, k);
+    }
+
+    // A soft golden rim marks today's treat
+    drawRim(ctx, door, t) {
+        const r = door.rect;
+        if (door.openK < 1) return;
+        const rad = Math.min(r.w, r.h) * 0.12;
+        ctx.save();
+        ctx.globalAlpha = 0.55 + 0.35 * Math.sin(t * 2.5);
+        AdvArt.rr(ctx, r.x - 2, r.y - 2, r.w + 4, r.h + 4, rad + 2);
+        ctx.strokeStyle = '#ffe066';
+        ctx.lineWidth = 3;
+        ctx.stroke();
+        ctx.restore();
+    }
+
+    // Today's door with its glow, baked once per layout (no live shadowBlur)
+    glowSprite(door, rad) {
+        const r = door.rect;
+        if (this.glow && this.glow.door === door && this.glow.rect === r && this.glow.dpr === this.dpr) return this.glow;
+        const pad = 36;
+        const [c, ctx] = this.makeLayer(r.w + pad * 2, r.h + pad * 2);
+        ctx.shadowColor = 'rgba(255,220,100,1)';
+        ctx.shadowBlur = 25;
+        AdvArt.rr(ctx, pad, pad, r.w, r.h, rad);
+        ctx.fillStyle = door.color;
+        ctx.fill();
+        this.glow = { door, rect: r, dpr: this.dpr, canvas: c, pad };
+        return this.glow;
     }
 
     // Small paper tag with the day number on an open window
@@ -2055,7 +2152,9 @@ class AdventCalendarAnimationManager {
             this.listeners.push([target, type, fn, opts]);
         };
 
-        bind(document, 'mousemove', (e) => {
+        // Pointer events, so a finger works like a mouse: a tap is a click,
+        // and a drag hovers the doors it passes over
+        bind(document, 'pointermove', (e) => {
             const door = this.isBackground(e.target) ? this.doorAt(e.clientX, e.clientY) : null;
             if (door !== this.hoverDoor) {
                 this.hoverDoor = door;
@@ -2063,7 +2162,8 @@ class AdventCalendarAnimationManager {
             }
         }, { passive: true });
 
-        bind(document, 'mouseleave', () => { this.hoverDoor = null; });
+        bind(document, 'pointerleave', () => { this.hoverDoor = null; });
+        bind(document, 'pointercancel', () => { this.hoverDoor = null; });
 
         bind(document, 'click', (e) => {
             if (this.spotlight) return;
@@ -2170,7 +2270,7 @@ class AdventCalendarAnimationManager {
             max-width: 92vw;
         `;
         const canvas = document.createElement('canvas');
-        const dpr = Math.min(window.devicePixelRatio || 1, 2);
+        const dpr = Math.max(1, Math.min(window.devicePixelRatio || 1, 2));
         canvas.width = cw * dpr;
         canvas.height = ch * dpr;
         canvas.style.cssText = `width:${cw}px;height:${ch}px;max-width:86vw;max-height:${Math.round(86 * 0.8)}vw;display:block;border-radius:${Math.round(cw * 0.035)}px;`;
