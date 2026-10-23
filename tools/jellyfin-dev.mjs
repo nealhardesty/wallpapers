@@ -9,7 +9,8 @@
 // The first start runs the setup wizard over the API: a user, Movies and
 // Shows libraries with internet metadata off (the titles are made up, and
 // shouldn't be looked up), a "Wallpaper Mix" playlist, and one favourite.
-// It listens on localhost only. To try a phone against it, see README.
+// It listens on localhost only; JELLYFIN_HOST=0.0.0.0 puts it on your
+// network, for a phone (README, "Trying it on a phone").
 
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync } from 'node:fs';
@@ -19,6 +20,7 @@ const ROOT = resolve(import.meta.dirname, '..');
 const DIR = join(ROOT, '.jellyfin');
 const NAME = 'wallpapers-jellyfin';
 const PORT = process.env.JELLYFIN_PORT || '8096';
+const BIND = process.env.JELLYFIN_HOST || '127.0.0.1';
 const SERVER = `http://localhost:${PORT}`;
 // The dev server's own account. It only exists inside .jellyfin/.
 export const DEV_USER = { name: 'wallpapers', password: 'wallpapers' };
@@ -43,7 +45,7 @@ async function up() {
     const running = docker('ps', '-a', '--filter', `name=^${NAME}$`, '--format', '{{.State}}');
     if (running === 'exited' || running === 'created') docker('start', NAME);
     else if (!running) {
-        docker('run', '-d', '--name', NAME, '-p', `127.0.0.1:${PORT}:8096`,
+        docker('run', '-d', '--name', NAME, '-p', `${BIND}:${PORT}:8096`,
             '-v', `${join(DIR, 'config')}:/config`, '-v', `${join(DIR, 'cache')}:/cache`, '-v', `${join(DIR, 'media')}:/media:ro`,
             'jellyfin/jellyfin:latest');
     }

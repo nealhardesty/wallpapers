@@ -999,8 +999,13 @@ const STAGE_CHECKS = {
     ],
 };
 
+// Checks whose fixture server is plain http, which an https page (the live
+// site) may not reach: they run only locally.
+const LOCAL_ONLY = new Set(['jellyfin']);
+
 async function stageChecks(id) {
     const { check, failed } = checker();
+    if (LIVE && LOCAL_ONLY.has(id)) return 0;
     for (const [name, fn] of STAGE_CHECKS[id] || []) await check(`${id}: ${name}`, fn);
     // Leave while the last check's fixtures still answer, so a request
     // already in flight (a video's next range) isn't blamed on the next stage.

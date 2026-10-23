@@ -11,6 +11,7 @@ WP.costs = {
     'girih': 1,
     'halloween': 2,
     'harmonograph': 1,
+    'jellyfin': 1,
     'koi-pond': 1,
     'lanterns': 1,
     'leaves': 1,

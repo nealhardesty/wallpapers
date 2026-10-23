@@ -74,8 +74,13 @@ SPEC.md §4 has the full contract. The short version:
    - Keep ground lines above `host.insets.bottom`.
    - Taps and drags go through `host.gestures({ tap, start, move, end })`,
      so Android's page swipes never count; give touch a setting to ignore it.
-   - Anything that needs pausing beyond rAF (a stream, a timer) implements
-     `onPause()` and `onResume()`.
+   - Anything that needs pausing beyond rAF (a stream, a timer, a
+     `<video>`) implements `onPause()` and `onResume()`.
+   - Something the panel can't express as a setting (signing in, a list
+     loaded from a server): `settings.js` extras (`action`, `status`,
+     `input`, `when`, options from the feed; SPEC §4.4), fed by
+     `host.panel(feed)` and answered in `onAction(name, inputs)`.
+     `host.toast(text)` says something over the wallpaper.
    - Anything that depends on the date or hour reads `host.now()`, never
      `new Date()`, so `?date=2026-12-31T23:59:50` can test it.
    - Look alive on the first frame: seed the scene, don't fade in from
@@ -86,7 +91,10 @@ SPEC.md §4 has the full contract. The short version:
      `offline: true` if it still draws its own scene without it), allowed in
      `URL_ALLOW` in `tools/audit.mjs` *and* listed in `host_permissions`
      in `web/manifest.json` (the tests check all three agree), with an
-     offline state that isn't blank.
+     offline state that isn't blank. A server the user types (Jellyfin) is
+     `network: 'user'`: no fixed host anywhere, fixtures at
+     `jellyfin.invalid`, and its token in `host.storage` named in the
+     catalog's `secrets`, so Export never carries it.
    - No inline `<script>` or `on…=` handlers: the extension's CSP forbids
      them, and every page enforces it.
    - Prefer art drawn in code. Anything not ours needs a clear licence and

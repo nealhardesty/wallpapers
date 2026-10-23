@@ -169,10 +169,17 @@ const JellyfinLogic = (() => {
         return Object.fromEntries([...kept, [id, Math.round(seconds)]]);
     }
 
+    // A bitrate ceiling for each height: roomy enough that a file already
+    // under the cap still plays directly (the server weighs this for direct
+    // play too), and it bounds what a transcode sends.
+    const bitrateFor = height => height <= 480 ? 4e6 : height <= 720 ? 8e6 : height <= 1080 ? 20e6 : 60e6;
+
     // The device profile for PlaybackInfo, from what this browser says it
-    // can play (canPlay(mime) → bool). Anything taller than `height` is
-    // transcoded; image subtitles aren't listed, so the server burns them in.
-    function deviceProfile({ canPlay, height, bitrate = 20e6 }) {
+    // can play (canPlay(mime) → bool). Anything over `height` (or its 16:9
+    // width) is transcoded down to it. Jellyfin 12.3 scales by MaxWidth and
+    // ignores MaxHeight, so the width condition is the one that bites
+    // (spike 9.0). Image subtitles aren't listed, so the server burns them in.
+    function deviceProfile({ canPlay, height, bitrate = bitrateFor(height) }) {
         const video = (container, codecs) => codecs.filter(([, mime]) => canPlay(`${container}; codecs="${mime}"`)).map(([name]) => name);
         const VIDEO = [['h264', 'avc1.640028'], ['hevc', 'hvc1.1.6.L120.90'], ['vp9', 'vp09.00.40.08'], ['av1', 'av01.0.08M.08']];
         const AUDIO = [['aac', 'mp4a.40.2'], ['mp3', 'mp3'], ['opus', 'opus'], ['flac', 'flac'], ['ac3', 'ac-3'], ['eac3', 'ec-3']];
@@ -194,7 +201,10 @@ const JellyfinLogic = (() => {
                 ? { Container: 'ts', Type: 'Video', VideoCodec: 'h264', AudioCodec: 'aac,mp3', Protocol: 'hls', Context: 'Streaming', MaxAudioChannels: '2', BreakOnNonKeyFrames: true }
                 : { Container: 'mp4', Type: 'Video', VideoCodec: 'h264', AudioCodec: 'aac', Protocol: 'http', Context: 'Streaming', MaxAudioChannels: '2' }],
             ContainerProfiles: [],
-            CodecProfiles: [{ Type: 'Video', Conditions: [{ Condition: 'LessThanEqual', Property: 'Height', Value: String(height), IsRequired: false }] }],
+            CodecProfiles: [{ Type: 'Video', Conditions: [
+                { Condition: 'LessThanEqual', Property: 'Height', Value: String(height), IsRequired: false },
+                { Condition: 'LessThanEqual', Property: 'Width', Value: String(Math.ceil(height * 16 / 9 / 2) * 2), IsRequired: false },
+            ] }],
             SubtitleProfiles: ['vtt', 'srt', 'subrip', 'ass', 'ssa', 'sub', 'smi', 'ttml'].map(Format => ({ Format, Method: 'External' })),
         };
     }
@@ -210,7 +220,8 @@ const JellyfinLogic = (() => {
 
     // What the frames show of an item: "Title (Year)" or "Show: Episode".
     const titleOf = item => item.SeriesName && item.Type === 'Episode'
-        ? `${item.SeriesName}: ${item.Name}` : item.ProductionYear ? `${item.Name} (${item.ProductionYear})` : item.Name;
+        ? `${item.SeriesName}: ${item.Name}`
+        : item.ProductionYear && !item.Name.includes(`(${item.ProductionYear})`) ? `${item.Name} (${item.ProductionYear})` : item.Name;
 
     // Reconnecting: 5 s, doubling, up to 5 minutes.
     const backoff = failures => Math.min(300000, 5000 * 2 ** Math.max(0, failures - 1));

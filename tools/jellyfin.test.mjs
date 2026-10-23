@@ -173,7 +173,9 @@ test('device profile: only what the browser plays goes direct; taller than the c
         { Container: 'webm', Type: 'Video', VideoCodec: 'vp9', AudioCodec: 'opus' },
     ]);
     assert.equal(profile.TranscodingProfiles[0].Protocol, 'hls');
-    assert.equal(profile.CodecProfiles[0].Conditions[0].Value, '720');
+    assert.deepEqual(plain(profile.CodecProfiles[0].Conditions.map(c => [c.Property, c.Value])), [['Height', '720'], ['Width', '1280']], 'width is what the server scales by');
+    assert.equal(profile.MaxStreamingBitrate, 8e6);
+    assert.equal(J.deviceProfile({ canPlay: () => false, height: 480 }).CodecProfiles[0].Conditions[1].Value, '854');
     assert.ok(!profile.SubtitleProfiles.some(p => /pgs|dvd|vobsub/i.test(p.Format)));
     const noHls = J.deviceProfile({ canPlay: mime => plays.has(mime) && !mime.includes('mpegurl'), height: 480 });
     assert.equal(noHls.TranscodingProfiles[0].Protocol, 'http');
@@ -189,6 +191,7 @@ test('stream path: direct with the token as api_key, else the server\'s transcod
 
 test('titles and backoff', () => {
     assert.equal(J.titleOf({ Name: 'Test Pattern', ProductionYear: 2026 }), 'Test Pattern (2026)');
+    assert.equal(J.titleOf({ Name: 'Game of Life (2026)', ProductionYear: 2026 }), 'Game of Life (2026)', 'a name that already has its year');
     assert.equal(J.titleOf({ Name: 'Pilot', SeriesName: 'Fixture Show', Type: 'Episode' }), 'Fixture Show: Pilot');
     assert.deepEqual([1, 2, 3, 10].map(J.backoff), [5000, 10000, 20000, 300000]);
 });

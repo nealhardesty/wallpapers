@@ -341,14 +341,21 @@ host = {
   now(): Date,                            // the time: real, or ?date= ticking forward (8.0)
   gestures({ tap, start, move, end }),    // taps and drags; Android page swipes are neither. Returns a stop function
   location(): Promise<{lat, lon, label, source} | null>,  // §10.1, for wallpapers that declare needs: ['location']
-  idleUntil(ms),                          // no frames until then, or input (§4.8)
+  idleUntil(ms),                          // no frames until then, or input (§4.8); 0 wakes the stage at once (9.3)
+  toast(text, ms),                        // a message in the player's toast (9.3)
+  panel(feed),                            // what the panel's extras show of this wallpaper (§4.4, 9.3)
+  power,                                  // the power policy now: { ceiling, fpsCap, pause, reasons } (9.7)
 }
 // Optional on the manager, beside onQuality and onScroll: onPause() and
 // onResume(), when the stage pauses (hidden tab, Android screen off), for
-// anything rAF doesn't stop, such as Wiki Pond's EventSource.
+// anything rAF doesn't stop, such as Wiki Pond's EventSource or Jellyfin's
+// <video>; onAction(name, inputs), a panel button (§4.4); onPower(policy).
 // Catalog, beside network: offline (a network wallpaper that still draws its
-// own scene: it gets a thumbnail, live previews and the smoke pixel check)
-// and needs: ['location'] (the stage iframe gets allow="geolocation").
+// own scene: it gets a thumbnail, live previews and the smoke pixel check),
+// needs: ['location'] (the stage iframe gets allow="geolocation"), and for
+// Jellyfin: network: 'user' (one server the user types, never a fixed
+// host), media: true (allow="autoplay", so sound can follow a gesture), and
+// secrets: ['auth'] (host.storage keys Export and Import never carry).
 ```
 
 The host kind is detected from `location` and a `?host=` override.
@@ -380,6 +387,20 @@ WP.schema('fishtank', [
     `number`, `text` and `color`
 - **Accessors:** `get(config)` and `set(config, value)`, e.g. advent's
   "theme for this month" inside a per-month map. Labels may be functions.
+- **Extras the wallpaper drives** (task 9.3, for Jellyfin's sign-in). They
+  have no `key`, are never saved, and render as `.setting-extra` rows:
+  - `{ type: 'action', name, label, primary?, asks? }`: a button. The panel
+    posts `action {name, inputs}` to the stage, which calls the manager's
+    `onAction(name, inputs)`. `asks: 'localNetwork'` first asks Android 17
+    for its local network permission, from the settings screen.
+  - `{ type: 'status', name }`: a line of text from the wallpaper, or a big
+    code (`{ text, code }`, Quick Connect's six digits).
+  - `{ type: 'input', name, label, input? }`: a field whose value goes with
+    every action, then is cleared if it's a password. Never stored.
+  - Any control may have `when(config, feed)`, and a select's
+    `options(config, feed)` may list what the wallpaper loaded (playlists).
+  - The feed is whatever the wallpaper last passed to `host.panel(feed)`;
+    the player keeps it per stage and the panel re-renders on each one.
 - **How the schemas were made:**
   - A one-off tool opened each legacy dialog in headless Chrome and read
     every control.
@@ -1294,14 +1315,14 @@ Phase 8 wallpapers. The design is §10.21. It's the first wallpaper whose
 network host is chosen by the user, and the first with a `<video>`, so the
 groundwork comes first. It has the same done-checks as Phase 8, plus its own:
 
-- [ ] 9.0 **Spike:** against a throwaway Jellyfin in Docker (`make jellyfin-dev`, 9.1), confirm the facts §10.21 marks *verify*: the server's default CORS, Quick Connect, direct play vs HLS in Chrome, the extension, `file://` and Android WebView, mixed content and Chrome's Local Network Access prompt from Pages, and muted autoplay inside the stage iframe. Record the answers in §10.21. → a table of host × server (http LAN, https) × result.
-- [ ] 9.1 **Dev and test servers, no real media.** `make jellyfin-media` uses `ffmpeg` to generate a few short clips (test patterns, a tone, English and Spanish `.srt`, one burned-in-only "image subtitle" case) into the gitignored `.jellyfin/`. `make jellyfin-dev` runs `jellyfin/jellyfin` in Docker on that folder. `tools/jellyfin-mock.mjs` is a fixture Jellyfin API (auth, Quick Connect, views, playlists, items, PlaybackInfo, subtitles) for the smoke run, serving one committed, generated VP9/WebM clip of a few KB: headless Chromium has no H.264. → the smoke run plays a fixture playlist with English subtitles on, through the mock server only.
-- [ ] 9.2 **User-chosen network** (§10.21 *Network*): the catalog's `network: 'user'`, the player's per-origin grant, the extension's `optional_host_permissions` requested at sign-in, and the test changes so the catalog, `URL_ALLOW` and `manifest.json` still have to agree. → unit tests; the extension asks for exactly the server's origin and nothing else.
-- [ ] 9.3 **Host media hooks:** `host.onPause(fn)` / `host.onResume(fn)` (the stage's pause stops rAF but would leave a `<video>` playing), `allow="autoplay"` on the stage iframe for wallpapers that declare `media: true`, and settings controls the panel lacks: an action button, a status line, and a select whose options the wallpaper loads (playlists, libraries). → smoke: pausing the stage pauses the fixture video within 100 ms; switching away releases the decoder (`video.src` cleared).
-- [ ] 9.4 **Sign-in and choosing what to play:** Quick Connect first, username and password as the fallback, a token kept only in `wp:jellyfin:auth` and left out of Export, Sign out revokes it. Playlist (shuffled by default), or random from a library. → smoke against the mock: sign in, list, pick, play; Export JSON has no token; the password is never stored.
-- [ ] 9.5 **Playback:** shuffle by default, the order selectable; resume where it left off across new tabs; one tab plays at a time; muted start by default; subtitles chosen automatically (§10.21). → unit tests on stream picking (English full over forced over none; text vs image formats) and the shuffle bag; smoke: a second stage takes over and the first goes quiet.
+- [x] 9.0 **Spike:** against a throwaway Jellyfin in Docker (`make jellyfin-dev`, 9.1), confirm the facts §10.21 marks *verify*: the server's default CORS, Quick Connect, direct play vs HLS in Chrome, the extension, `file://` and Android WebView, mixed content and Chrome's Local Network Access prompt from Pages, and muted autoplay inside the stage iframe. Record the answers in §10.21. → a table of host × server (http LAN, https) × result.
+- [x] 9.1 **Dev and test servers, no real media.** `make jellyfin-media` uses `ffmpeg` to generate a few short clips (test patterns, a tone, English and Spanish `.srt`, one burned-in-only "image subtitle" case) into the gitignored `.jellyfin/`. `make jellyfin-dev` runs `jellyfin/jellyfin` in Docker on that folder. `tools/jellyfin-mock.mjs` is a fixture Jellyfin API (auth, Quick Connect, views, playlists, items, PlaybackInfo, subtitles) for the smoke run, serving one committed, generated VP9/WebM clip of a few KB: headless Chromium has no H.264. → the smoke run plays a fixture playlist with English subtitles on, through the mock server only.
+- [x] 9.2 **User-chosen network** (§10.21 *Network*): the catalog's `network: 'user'`, the player's per-origin grant, the extension's `optional_host_permissions` requested at sign-in, and the test changes so the catalog, `URL_ALLOW` and `manifest.json` still have to agree. → unit tests; the extension asks for exactly the server's origin and nothing else.
+- [x] 9.3 **Host media hooks:** `host.onPause(fn)` / `host.onResume(fn)` (the stage's pause stops rAF but would leave a `<video>` playing), `allow="autoplay"` on the stage iframe for wallpapers that declare `media: true`, and settings controls the panel lacks: an action button, a status line, and a select whose options the wallpaper loads (playlists, libraries). → smoke: pausing the stage pauses the fixture video within 100 ms; switching away releases the decoder (`video.src` cleared).
+- [x] 9.4 **Sign-in and choosing what to play:** Quick Connect first, username and password as the fallback, a token kept only in `wp:jellyfin:auth` and left out of Export, Sign out revokes it. Playlist (shuffled by default), or random from a library. → smoke against the mock: sign in, list, pick, play; Export JSON has no token; the password is never stored.
+- [x] 9.5 **Playback:** shuffle by default, the order selectable; resume where it left off across new tabs; one tab plays at a time; muted start by default; subtitles chosen automatically (§10.21). → unit tests on stream picking (English full over forced over none; text vs image formats) and the shuffle bag; smoke: a second stage takes over and the first goes quiet.
 - [ ] 9.6 **Frames** (§10.21 *Frames*): None and Old TV first, then the rest one per commit. → each frame has a landscape and a portrait layout, its screen rect keeps the video's aspect ratio, the static art is built once per resize, and on Low only the video moves.
-- [ ] 9.7 **Power** (§10.21 *Energy*): the server-side resolution cap by tier, poster mode on battery saver or under 20%, and a `make bench` entry. → on battery the request asks for ≤ 720p; with battery saver on, no video element exists.
+- [x] 9.7 **Power** (§10.21 *Energy*): the server-side resolution cap by tier, poster mode on battery saver or under 20%, and a `make bench` entry. → on battery the request asks for ≤ 720p; with battery saver on, no video element exists.
 
 ---
 

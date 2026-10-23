@@ -3,7 +3,8 @@
 Toy animated wallpapers: snow, rain, falling leaves, fireflies, a fireplace,
 northern lights, a fish tank, a Halloween night, an advent calendar, a
 self-playing 8-bit adventure, koi, a zen garden, a night train, fireworks,
-the real satellites overhead, and more: 32 in all. Each one is a full-screen canvas
+the real satellites overhead, your own Jellyfin videos playing in an old
+TV, and more: 33 in all. Each one is a full-screen canvas
 animation with no page around it. Most just play; some also respond to you.
 Click to feed the fish, light the jack-o'-lanterns, rake the sand, or take
 over Pixel Quest's hero with the arrow keys.
@@ -32,7 +33,7 @@ Click one to see it live.
 | [<img src="web/wallpapers/harmonograph/thumb.webp" width="200" alt="Harmonograph">](https://nealhardesty.github.io/wallpapers/?w=harmonograph)<br>🖋️ Harmonograph | [<img src="web/wallpapers/pixel-room/thumb.webp" width="200" alt="Pixel Room">](https://nealhardesty.github.io/wallpapers/?w=pixel-room)<br>🛋️ Pixel Room | [<img src="web/wallpapers/girih/thumb.webp" width="200" alt="Girih">](https://nealhardesty.github.io/wallpapers/?w=girih)<br>✴️ Girih | [<img src="web/wallpapers/stained-glass/thumb.webp" width="200" alt="Stained Glass">](https://nealhardesty.github.io/wallpapers/?w=stained-glass)<br>⛪ Stained Glass |
 | [<img src="web/wallpapers/synthwave/thumb.webp" width="200" alt="Synthwave">](https://nealhardesty.github.io/wallpapers/?w=synthwave)<br>🌇 Synthwave | [<img src="web/wallpapers/zen-garden/thumb.webp" width="200" alt="Zen Garden">](https://nealhardesty.github.io/wallpapers/?w=zen-garden)<br>🪨 Zen Garden | [<img src="web/wallpapers/koi-pond/thumb.webp" width="200" alt="Koi Pond">](https://nealhardesty.github.io/wallpapers/?w=koi-pond)<br>🎏 Koi Pond | [<img src="web/wallpapers/murmuration/thumb.webp" width="200" alt="Murmuration">](https://nealhardesty.github.io/wallpapers/?w=murmuration)<br>🐦 Murmuration |
 | [<img src="web/wallpapers/lanterns/thumb.webp" width="200" alt="Lantern Festival">](https://nealhardesty.github.io/wallpapers/?w=lanterns)<br>🏮 Lantern Festival | [<img src="web/wallpapers/rainy-window/thumb.webp" width="200" alt="Rainy Window">](https://nealhardesty.github.io/wallpapers/?w=rainy-window)<br>🪟 Rainy Window | [<img src="web/wallpapers/night-train/thumb.webp" width="200" alt="Night Train">](https://nealhardesty.github.io/wallpapers/?w=night-train)<br>🚆 Night Train | [<img src="web/wallpapers/fireworks/thumb.webp" width="200" alt="Fireworks">](https://nealhardesty.github.io/wallpapers/?w=fireworks)<br>🎆 Fireworks |
-| [<img src="web/wallpapers/lighthouse/thumb.webp" width="200" alt="Lighthouse">](https://nealhardesty.github.io/wallpapers/?w=lighthouse)<br>🌊 Lighthouse | [<img src="web/wallpapers/wiki-pond/thumb.webp" width="200" alt="Wiki Pond">](https://nealhardesty.github.io/wallpapers/?w=wiki-pond)<br>🪷 Wiki Pond | [<img src="web/wallpapers/satellites/thumb.webp" width="200" alt="Satellites">](https://nealhardesty.github.io/wallpapers/?w=satellites)<br>🛰️ Satellites |   |
+| [<img src="web/wallpapers/lighthouse/thumb.webp" width="200" alt="Lighthouse">](https://nealhardesty.github.io/wallpapers/?w=lighthouse)<br>🌊 Lighthouse | [<img src="web/wallpapers/wiki-pond/thumb.webp" width="200" alt="Wiki Pond">](https://nealhardesty.github.io/wallpapers/?w=wiki-pond)<br>🪷 Wiki Pond | [<img src="web/wallpapers/satellites/thumb.webp" width="200" alt="Satellites">](https://nealhardesty.github.io/wallpapers/?w=satellites)<br>🛰️ Satellites | [<img src="web/wallpapers/jellyfin/thumb.webp" width="200" alt="Jellyfin">](https://nealhardesty.github.io/wallpapers/?w=jellyfin)<br>📺 Jellyfin |
 
 The second half is new: a harmonograph inking its figures, a pixel-art room
 with a cat that keeps the real hours, Islamic star patterns that breathe, a
@@ -41,7 +42,8 @@ garden to rake, koi to feed, a starling murmuration you can scatter as the
 falcon, sky lanterns to release, a rainy window to draw on, the view from a
 night train, fireworks (with a New Year's countdown), a lighthouse that
 keeps a real light's rhythm, every Wikipedia edit as a ripple on a pond, and
-the real satellites crossing your sky.
+the real satellites crossing your sky. Last, **Jellyfin** 📺 plays your own
+server's videos in a frame of your choice (see below).
 
 Also: **Seasonal** 📅 picks by month (the default), **Blank** ⬛ is just
 black, and the **Bing Image of the Day** 🖼️ shows Bing's photo with its
@@ -176,6 +178,56 @@ rounded to about 10 km and stays in your browser.
 
 ![Pixel Quest, mid-adventure](docs/quest.webp)
 
+### Jellyfin 📺
+
+Your own [Jellyfin](https://jellyfin.org) server's videos, playing behind
+everything: a playlist (shuffled, by default), random picks from a library,
+or your favourites. They play inside a frame drawn in code: an old TV, a
+mantel over a crackling fire, a drive-in under the stars, a cinema whose
+curtains close between films, a gilt frame in a gallery, a glow that spills
+the picture's colours onto the wall, a camcorder viewfinder or a VHS deck, a
+submarine porthole, an arcade cabinet, or none at all. **Seasonal** picks
+the mantel in winter and the drive-in in summer.
+
+To connect:
+1. Open the panel (`,`), pick 📺 Jellyfin, type your server's address
+   (`nas.lan:8096`, an IP address, or an https address), and press **Connect**.
+2. Press **Sign in with Quick Connect**. Six digits appear. In any Jellyfin
+   app you're signed in to, open Quick Connect (on the web: your profile →
+   Quick Connect) and enter them. No password ever touches the wallpaper.
+   Servers with Quick Connect off can use a username and password instead;
+   the password goes to your server once and is never stored.
+3. Pick a playlist, a library or your favourites. Sign out tells the server
+   to forget this device.
+
+What it does for you:
+- Every start is muted; `M` or a tap on 🔇 gives sound. Each item carries
+  on where it left off, in any new tab.
+- Subtitles come on by themselves: a full track in your language, then a
+  forced one, then the file's default. With audio in another language,
+  "forced only" shows full subtitles. Picture subtitles (PGS, DVD) are
+  burned in by your server.
+- Only one tab plays at a time; the others hold their last picture and free
+  the decoder. The server sends no more than the tier needs (480p on Low,
+  720p on Medium or on battery), and with battery saver on it shows each
+  item's poster, slowly drifting, instead of video.
+- The sign-in stays on this device: Export leaves it out, and logs never
+  show your server's address.
+
+Where it works: everywhere, with one catch per place.
+
+| Here | http server at home | https server |
+|---|---|---|
+| The extension, or `web/index.html` from disk | Just works | Just works |
+| The hosted copy (GitHub Pages) | Allow Chrome's "local network" prompt, and type the server's **IP address** (Chrome blocks an http name such as `nas.lan` from an https page) | Allow the prompt |
+| Android | Allow "Nearby devices" when asked (Android 17 calls reaching your home network that) | Just works |
+
+On Android, it plays clips instead of whole films, and posters while on
+battery, so full video plays while charging.
+
+Keys: `Space` pause, `M` sound, `N`/`P` next and previous, `←`/`→` 30 s,
+`S` subtitles, `I` what's playing, `V` next frame.
+
 The Bing photo needs a connection. The hosted copy and the extension just
 work. Locally, a browser only lets a page reach it when the page is served:
 run `make bing-json` and then `make serve`. Opened straight from disk, it
@@ -232,6 +284,11 @@ Run `make` to list every target.
 | `make extension` | Build the Chrome extension: `dist/extension/` to load unpacked, and a zip |
 | `make site` | Build the GitHub Pages copy in `dist/site/`, with a fresh `bing.json` |
 | `make bench` | Every wallpaper at every tier on a simulated phone (4× slower CPU); checks the budgets, writes `bench/results.json` and the ⚡ badges |
+| `make jellyfin-media` | Generate made-up test videos (patterns, tones, subtitles in several kinds) into `.jellyfin/media/`; needs `ffmpeg` |
+| `make jellyfin-dev` | Run a throwaway Jellyfin in Docker at http://localhost:8096 on that media, set up on first start (user `wallpapers`, password `wallpapers`, a playlist) |
+| `make jellyfin-stop` | Stop and remove that container (`.jellyfin/` stays; delete it to start over) |
+| `make jellyfin-mock` | Serve the smoke run's fixture Jellyfin at http://localhost:8097 (user `fixture`, password `fixture-pw`), when Docker isn't handy |
+| `make jellyfin-fixtures` | Regenerate the smoke run's tiny clip and backdrop in `tools/fixtures/jellyfin/` (committed) |
 | `make android-build` | Build the Android debug APK |
 | `make android-install` | Install it on the connected phone or emulator and open it |
 | `make android-logcat` | Follow the app's log, including the page's console |
@@ -250,6 +307,18 @@ Run `make` to list every target.
 | `make smoke-live` | The same stage and player checks against the deployed site, with real network and Bing (`SMOKE_URL=` for another, e.g. `make serve`'s); CI runs it after every deploy |
 | `make ci` | Everything CI runs: lint, audit, audit-history, test, smoke |
 | `make clean` | Remove build output |
+
+### Trying Jellyfin
+
+`make jellyfin-media` then `make jellyfin-dev` gives you a real Jellyfin with
+made-up videos, a playlist and every subtitle case, at
+http://localhost:8096. Point the wallpaper at `localhost:8096` and sign in
+as `wallpapers` / `wallpapers`, or approve a Quick Connect code from
+Jellyfin's own web page there. It listens on this computer only. For a
+phone on your network, `make jellyfin-stop`, then
+`JELLYFIN_HOST=0.0.0.0 make jellyfin-dev` and use this computer's address.
+The Android emulator's alias for this computer can't reach Docker Desktop's
+localhost ports, but it can reach `make jellyfin-mock` (port 8097).
 
 ### HTTPS and phones
 
