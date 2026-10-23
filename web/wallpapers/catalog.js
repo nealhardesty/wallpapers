@@ -79,6 +79,11 @@
               { keys: ['m'], label: 'Next companion', run: quest => questCycle(quest, 'companion', Object.keys(QuestArt.COMPANIONS), QuestArt.COMPANIONS) },
               { keys: ['p'], label: 'Next palette', run: quest => questCycle(quest, 'palette', Object.keys(QuestEngineData.FILTERS)) },
           ] },
+        { id: 'rainy-window', name: 'Rainy Window', icon: '🪟', accent: '#e9a25c', background: '#07060b',
+          scripts: ['rainy-window/rainy-window-city.js', 'rainy-window/rainy-window.js'],
+          make: host => new RainyWindowAnimationManager(host), cost: 'medium', interactive: true,
+          effects: [['fog', 'medium']],
+          keys: [{ keys: ['w'], label: 'Wipe the glass', run: pane => { pane.wipe(); return 'Wiped'; } }] },
         { id: 'bing', name: 'Bing Image of the Day', icon: '🖼️', accent: '#8ab4ff', scripts: ['bing/bing.js'],
           make: host => new BingWallpaperManager(host), cost: 'none', network: ['www.bing.com'] },
     ];

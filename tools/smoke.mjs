@@ -185,8 +185,49 @@ async function stage(id, entry) {
     if (drawn < 2 && id !== 'blank') record(entry.network ? 'background photo not shown' : 'nothing drawn');
     if (storage?.diff?.length) record(`fresh run would save: ${storage.diff.join(', ')} (defaults.js out of step)`);
     if (storage?.foreign?.length) record(`wrote storage outside its namespace: ${storage.foreign.join(', ')}`);
+    if (ready && STAGE_CHECKS[id]) await STAGE_CHECKS[id]().catch(error => record(error.message));
     return { readyMs, drawn, problems: current.problems };
 }
+
+// A wallpaper's own checks (its Phase 8 "→" check), run on its stage after
+// the common ones. They record problems like everything else.
+const bootStage = async url => {
+    await fresh(url);
+    if (!await waitFor(() => evaluate('WP.stage?.ready'))) throw new Error(`${url} never got ready`);
+};
+const drag = async points => {
+    const [first, ...rest] = points;
+    await cdp.send('Input.dispatchMouseEvent', { type: 'mousePressed', x: first[0], y: first[1], button: 'left', buttons: 1, clickCount: 1 });
+    for (const [x, y] of rest) await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x, y, button: 'left', buttons: 1 });
+    const last = rest.at(-1) || first;
+    await cdp.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: last[0], y: last[1], button: 'left', buttons: 0, clickCount: 1 });
+};
+const STAGE_CHECKS = {
+    // 8.10: the layers are built once per resize; a finger's line fogs over
+    // within a minute; lit windows follow the hour.
+    'rainy-window': async () => {
+        const pane = 'WP.stage.manager';
+        await evaluate(`${pane}.patchWindow(${pane}.city.windows[0])`);
+        const frames = await evaluate('WP.host.frames.count');
+        await sleep(1200);
+        const [builds, later, patches] = await evaluate(`[${pane}.builds, WP.host.frames.count, ${pane}.patches]`);
+        if (builds !== 1 || later <= frames || !patches) record(`${builds} layer builds over ${later - frames} frames and ${patches} window repaints (want 1, some, some)`);
+        const line = Array.from({ length: 25 }, (_, i) => [200 + i * 30, 380 + Math.round(10 * Math.sin(i / 3))]);
+        await drag(line);
+        await sleep(100);
+        const along = `(${JSON.stringify(line)}).reduce((a, [x, y]) => a + ${pane}.clearness(x, y), 0) / ${line.length}`;
+        const drawnClear = await evaluate(along);
+        const fogged = await evaluate(`(${pane}.advanceFog(60), ${along})`);
+        if (drawnClear < 0.6) record(`a dragged line only cleared the fog to ${drawnClear.toFixed(2)}`);
+        if (fogged > 0.06) record(`a minute later the line is still ${fogged.toFixed(2)} clear`);
+        const lit = {};
+        for (const hour of ['22', '03']) {
+            await bootStage(`${WEB}/stage.html?w=rainy-window&seed=3&date=2026-10-22T${hour}:00`);
+            lit[hour] = await evaluate(`${pane}.litCount()`);
+        }
+        if (!(lit['22'] > lit['03'] * 3)) record(`lit windows at 22:00 ${lit['22']}, at 03:00 ${lit['03']}`);
+    },
+};
 
 async function press(key) {
     const text = key.length === 1 ? key : undefined;

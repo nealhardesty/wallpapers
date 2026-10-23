@@ -27,6 +27,10 @@ const OVERRIDES = {
     fireflies: { configVersion: 2, glowSize: 12, brightness: 1.2 },
     snow: { configVersion: 1, treeCount: 14, accumulationRate: 0.4 },
 };
+// Extra URL parameters, for wallpapers that follow the clock.
+const PARAMS = {
+    'rainy-window': '&date=2026-10-22T21:00',
+};
 
 const { chrome, profile, cdp } = await launch({ width: 1280, height: 800 });
 try {
@@ -43,7 +47,7 @@ try {
         await cdp.send('Page.navigate', { url: `${WEB}/stage.html?w=blank` });
         await sleep(300);
         await evaluate(`localStorage.clear(); ${OVERRIDES[id] ? `localStorage.setItem('wp:${id}', ${JSON.stringify(JSON.stringify(OVERRIDES[id]))})` : ''}`);
-        await cdp.send('Page.navigate', { url: `${WEB}/stage.html?w=${id}&seed=${SEED}&thumb=1` });
+        await cdp.send('Page.navigate', { url: `${WEB}/stage.html?w=${id}&seed=${SEED}&thumb=1${PARAMS[id] || ''}` });
         await sleep(SETTLE_MS[id] ?? 3000);
         const { data } = await cdp.send('Page.captureScreenshot', {
             format: 'webp', quality: 82, clip: { x: 0, y: 0, width: 1280, height: 800, scale: 0.25 },
