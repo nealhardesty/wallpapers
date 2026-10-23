@@ -27,6 +27,8 @@ const OVERRIDES = {
     fireflies: { configVersion: 2, glowSize: 12, brightness: 1.2 },
     snow: { configVersion: 1, treeCount: 14, accumulationRate: 0.4 },
     satellites: { configVersion: 1, facing: 'east' },
+    girih: { configVersion: 1, baseTiling: '3.12.12', scale: 340 },
+    'stained-glass': { configVersion: 1, light: 'afternoon' },
 };
 // URL parameters for a better picture: satellites as its sample station
 // passes overhead before dawn (thumb mode never fetches, so it's the sample).

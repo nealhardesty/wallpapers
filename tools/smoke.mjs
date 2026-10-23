@@ -247,6 +247,16 @@ async function stage(id, entry) {
     return { readyMs, drawn, problems: current.problems };
 }
 
+// Girih's and Stained Glass's: a stage URL booted with these keys stored first.
+async function stageAt(url, settings) {
+    await fresh(`${WEB}/stage.html?w=blank`);
+    await waitFor(() => evaluate('WP.stage?.ready'));
+    for (const [key, value] of Object.entries(settings)) await evaluate(`localStorage.setItem(${JSON.stringify(key)}, ${JSON.stringify(JSON.stringify(value))})`);
+    await cdp.send('Page.navigate', { url });
+    await waitFor(() => evaluate('WP.stage?.ready'));
+}
+const counts = expression => evaluate(`(m => (${expression}))(WP.stage.manager)`);
+
 // Rainy Window's and Fireworks' helpers: a stage URL booted with storage; a quick drag.
 const bootWith = async (url, storage = {}) => {
     await cdp.send('Page.navigate', { url: `${WEB}/stage.html?w=blank` });
@@ -316,6 +326,68 @@ const AVERAGE = `(() => {
 })()`;
 
 const STAGE_CHECKS = {
+    // 8.2: one full repaint per morph step, none while a pattern holds. On
+    // Low there's no sheen, so a hold sends no frames at all.
+    girih: [['one repaint per morph step, none while holding', async () => {
+        await stageAt(`${WEB}/stage.html?w=girih&tier=low&seed=7`, { 'wp:girih': { configVersion: 1, holdSeconds: 3, morphSeconds: 2 } });
+        await sleep(1000);
+        const a = await counts('({ ...m.stats, state: m.state.name })');
+        await sleep(1000);
+        const b = await counts('({ ...m.stats, state: m.state.name })');
+        if (b.frames !== a.frames || b.redraws !== 1) record(`holding: ${b.frames - a.frames} frames, ${b.redraws} repaints (want 0 frames, 1 repaint)`);
+        await sleep(3400);   // the morph runs from 3 s to 5 s
+        const c = await counts('({ ...m.stats, state: m.state.name })');
+        const frames = c.frames - b.frames, redraws = c.redraws - b.redraws;
+        if (redraws < 10 || Math.abs(frames - redraws) > 2) record(`morph: ${redraws} repaints in ${frames} frames (want one each)`);
+        await sleep(1000);
+        const d = await counts('m.stats');
+        if (c.state !== 'hold' || d.frames !== c.frames) record(`after the morph: ${c.state}, ${d.frames - c.frames} frames while holding`);
+        return true;
+    }]],
+
+    // 8.3: the glass is built once per resize, however many frames run; and
+    // ?date= noon and midnight light the window differently.
+    'stained-glass': [['glass built once per resize; noon and midnight light differ', async () => {
+        await stageAt(`${WEB}/stage.html?w=stained-glass&date=2026-06-21T15:00`, {});
+        await sleep(2500);
+        const before = await counts('m.stats');
+        if (before.glassBuilds !== 1 || before.frames < 10) record(`glass built ${before.glassBuilds}× in ${before.frames} frames (want once)`);
+        await cdp.send('Emulation.setDeviceMetricsOverride', { width: 900, height: 700, deviceScaleFactor: 1, mobile: false });
+        await sleep(1000);
+        const after = await counts('m.stats');
+        await cdp.send('Emulation.clearDeviceMetricsOverride');
+        if (after.glassBuilds !== 2 || after.frames <= before.frames) record(`after a resize: built ${after.glassBuilds}× (want 2)`);
+
+        // Mean luminance of what's on screen: the base, with the light
+        // screened over it as the compositor does.
+        const LUMINANCE = `(() => {
+            const m = WP.stage.manager, size = 64, probe = document.createElement('canvas');
+            probe.width = probe.height = size;
+            const g = probe.getContext('2d', { willReadFrequently: true });
+            g.drawImage(m.base, 0, 0, size, size);
+            g.globalCompositeOperation = 'screen';
+            g.globalAlpha = +m.lightCanvas.style.opacity || 1;
+            g.drawImage(m.lightCanvas, 0, 0, size, size);
+            const d = g.getImageData(0, 0, size, size).data;
+            let sum = 0;
+            for (let i = 0; i < d.length; i += 4) sum += 0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2];
+            return { luminance: sum / (size * size), day: m.light.day, hour: WP.host.now().getHours(), shafts: m.shafts?.length || 0 };
+        })()`;
+        const light = {};
+        for (const [name, time] of [['noon', '12:00'], ['midnight', '00:00']]) {
+            await stageAt(`${WEB}/stage.html?w=stained-glass&date=2026-06-21T${time}`, {});
+            await sleep(1200);
+            light[name] = await evaluate(LUMINANCE);
+            const { data } = await cdp.send('Page.captureScreenshot', { format: 'png' });
+            writeFileSync(join(SHOTS, `stained-glass-${name}.png`), Buffer.from(data, 'base64'));
+        }
+        const { noon, midnight } = light;
+        if (noon.hour !== 12 || midnight.hour !== 0) record(`clock: noon run at ${noon.hour}h, midnight at ${midnight.hour}h`);
+        if (!(noon.day > 0.9 && midnight.day < 0.05)) record(`daylight: noon ${noon.day}, midnight ${midnight.day}`);
+        if (!(noon.luminance > midnight.luminance * 1.4 + 6)) record(`noon (${noon.luminance.toFixed(1)}) is not visibly brighter than midnight (${midnight.luminance.toFixed(1)})`);
+        console.log(`    stained-glass: glass built ${before.glassBuilds}× in ${before.frames} frames, ${after.glassBuilds}× after a resize; luminance noon ${noon.luminance.toFixed(1)} vs midnight ${midnight.luminance.toFixed(1)}`);
+        return true;
+    }]],
     // 8.10: the layers are built once per resize; a finger's line fogs over
     // within a minute; lit windows follow the hour.
     'rainy-window': [['layers built once; a finger\'s line fogs over in a minute; lights follow the hour', async () => {

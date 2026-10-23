@@ -138,6 +138,18 @@
               { keys: [' ', 'l'], label: 'Launch a shell', run: show => { show.launchRandom(); } },
               { keys: ['g'], label: 'Grand finale', run: show => { show.grandFinale(); return '🎆 Grand finale'; } },
           ] },
+        { id: 'girih', name: 'Girih', icon: '✴️', accent: '#d9a94a', scripts: ['girih/girih-geometry.js', 'girih/girih.js'],
+          make: host => new GirihAnimationManager(host), cost: 'low', motion: 'slow', background: '#1d2327',
+          effects: [['sheen', 'medium']],
+          keys: [
+              { keys: ['n'], label: 'Next pattern now', run: girih => { girih.nextPattern(); return 'The pattern moves on'; } },
+              { keys: ['t'], label: 'Next base tiling', run: girih => girih.nextTiling() },
+          ] },
+        { id: 'stained-glass', name: 'Stained Glass', icon: '⛪', accent: '#e0a040', scripts: ['girih/girih-geometry.js', 'stained-glass/stained-glass.js'],
+          make: host => new StainedGlassAnimationManager(host), cost: 'low', motion: 'slow', background: '#141210',
+          keys: [
+              { keys: ['n'], label: 'A new window', run: glass => { glass.newWindow(); return 'A new window'; } },
+          ] },
         { id: 'bing', name: 'Bing Image of the Day', icon: '🖼️', accent: '#8ab4ff', scripts: ['bing/bing.js'],
           make: host => new BingWallpaperManager(host), cost: 'none', network: ['www.bing.com'] },
     ];
