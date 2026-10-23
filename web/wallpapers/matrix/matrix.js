@@ -1,12 +1,18 @@
 // Matrix Animation Module
 class MatrixAnimationManager {
-    constructor() {
+    constructor(host) {
+        this.host = host;
         this.canvas = null;
         this.ctx = null;
         this.columns = [];
         this.isEnabled = false;
         this.animationId = null;
         this.columnCount = 0;
+        this.lastTime = 0;
+
+        // Head glows, baked once per colour (SPEC §4.8): a live shadowBlur on
+        // every head glyph was the whole cost of this wallpaper.
+        this.glowSprites = new Map();
 
         // Configuration
         this.config = WP.settings.load();
@@ -150,9 +156,43 @@ class MatrixAnimationManager {
                 characters: [],
                 trail: Math.floor(Math.random() * (maxTrailLength - minTrailLength)) + minTrailLength,
                 lastCharacterChange: 0,
-                isActive: Math.random() < this.config.density
+                // Spread evenly, so a lower tier's share of the columns
+                // thins the rain out across the screen instead of in clumps
+                rank: (i * 0.618034) % 1,
+                isActive: false
             });
+            this.columns[i].isActive = this.inTier(this.columns[i]) && Math.random() < this.config.density;
         }
+    }
+
+    // Lower tiers run fewer columns (host.quality.density). A column outside
+    // the tier's share finishes its pass and then stays dark, so a change
+    // thins or fills the screen gradually.
+    inTier(column) {
+        return column.rank < (this.host.quality?.density ?? 1);
+    }
+
+    // The glow a shadowBlur of 10 put around a head glyph, baked into a
+    // sprite: the shadow of a dense glyph, drawn with the glyph itself off
+    // the canvas. Rainbow heads share sprites in 10° steps of hue.
+    glowSprite(color) {
+        const key = `${color}|${this.config.fontSize}`;
+        let sprite = this.glowSprites.get(key);
+        if (sprite) return sprite;
+
+        const pad = 20;
+        sprite = document.createElement('canvas');
+        sprite.width = sprite.height = this.config.fontSize + pad * 2;
+        const g = sprite.getContext('2d');
+        g.font = `${this.config.fontSize}px 'Courier New', monospace`;
+        g.textBaseline = 'top';
+        g.shadowColor = color;
+        g.shadowBlur = 10;
+        g.shadowOffsetX = 1000;
+        g.fillText('龍', pad - 1000, pad);
+        sprite.pad = pad;
+        this.glowSprites.set(key, sprite);
+        return sprite;
     }
 
     start() {
@@ -160,6 +200,7 @@ class MatrixAnimationManager {
 
         this.isEnabled = true;
         this.canvas.style.display = 'block';
+        this.lastTime = 0;
         this.setupColumns();
         this.animate();
         console.log('Matrix animation started');
@@ -178,7 +219,10 @@ class MatrixAnimationManager {
         console.log('Matrix animation stopped');
     }
 
-    updateColumns() {
+    // Speeds and chances are per 60 fps frame; dt (seconds) scales them, so
+    // the rain falls at the same speed at any frame rate.
+    updateColumns(dt) {
+        const frames = dt * 60;
         const frameTime = Date.now();
         const maxTrailLength = Math.floor((this.canvas.height * this.config.tailLength) / this.config.fontSize);
         const minTrailLength = Math.max(5, Math.floor(maxTrailLength * 0.3));
@@ -188,7 +232,7 @@ class MatrixAnimationManager {
 
             // Check if column should be active
             if (!column.isActive) {
-                if (Math.random() < this.config.density * 0.01) { // Chance to reactivate
+                if (this.inTier(column) && Math.random() < this.config.density * 0.01 * frames) { // Chance to reactivate
                     column.isActive = true;
                     column.y = -column.trail * this.config.fontSize;
                     column.characters = [];
@@ -197,7 +241,7 @@ class MatrixAnimationManager {
             }
 
             // Move column down
-            column.y += column.speed;
+            column.y += column.speed * frames;
 
             // Reset column when it goes off screen
             if (column.y > this.canvas.height + column.trail * this.config.fontSize) {
@@ -207,7 +251,7 @@ class MatrixAnimationManager {
                 column.characters = [];
 
                 // Randomly deactivate column based on density
-                if (Math.random() > this.config.density) {
+                if (Math.random() > this.config.density || !this.inTier(column)) {
                     column.isActive = false;
                     continue;
                 }
@@ -264,14 +308,16 @@ class MatrixAnimationManager {
                 if (i === 0) {
                     alpha = 1;
 
+                    let glow;
                     if (this.config.theme === 'rainbow') {
                         this.ctx.fillStyle = this.getRainbowColor(column.x, frameTime);
-                        this.ctx.shadowColor = this.getRainbowColor(column.x, frameTime);
+                        const hue = Math.round((column.x * 137.508 + frameTime * 0.05) % 360 / 10) * 10 % 360;
+                        glow = this.glowSprite(`hsl(${hue}, 100%, 60%)`);
                     } else {
                         this.ctx.fillStyle = theme.glowColor;
-                        this.ctx.shadowColor = theme.glowColor;
+                        glow = this.glowSprite(theme.glowColor);
                     }
-                    this.ctx.shadowBlur = 10;
+                    this.ctx.drawImage(glow, column.x - glow.pad, charY - glow.pad);
                 } else {
                     if (this.config.theme === 'rainbow') {
                         const color = this.getRainbowColor(column.x, frameTime);
@@ -279,20 +325,21 @@ class MatrixAnimationManager {
                     } else {
                         this.ctx.fillStyle = theme.textColor.replace(')', `, ${alpha})`).replace('rgb', 'rgba');
                     }
-                    this.ctx.shadowBlur = 0;
                 }
 
                 // Draw the character
                 this.ctx.fillText(character.char, column.x, charY);
             }
         }
-
-        // Reset shadow
-        this.ctx.shadowBlur = 0;
     }
 
-    animate() {
+    animate(currentTime = 0) {
         if (!this.isEnabled) return;
+
+        // Clamped, so a stalled tab doesn't jump every column at once
+        if (!this.lastTime) this.lastTime = currentTime;
+        const dt = Math.min((currentTime - this.lastTime) / 1000, 0.1);
+        this.lastTime = currentTime;
 
         const theme = this.themes[this.config.theme];
 
@@ -307,10 +354,10 @@ class MatrixAnimationManager {
             this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
         }
 
-        this.updateColumns();
+        this.updateColumns(dt);
         this.drawColumns();
 
-        this.animationId = requestAnimationFrame(() => this.animate());
+        this.animationId = requestAnimationFrame((time) => this.animate(time));
     }
 
     destroy() {
