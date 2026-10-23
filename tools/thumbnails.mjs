@@ -27,6 +27,7 @@ const OVERRIDES = {
     fireflies: { configVersion: 2, glowSize: 12, brightness: 1.2 },
     snow: { configVersion: 1, treeCount: 14, accumulationRate: 0.4 },
     girih: { configVersion: 1, baseTiling: '3.12.12', scale: 340 },
+    'stained-glass': { configVersion: 1, light: 'afternoon' },
 };
 
 const { chrome, profile, cdp } = await launch({ width: 1280, height: 800 });
