@@ -262,6 +262,53 @@ const STAGE_CHECKS = {
         const resting = await framesIn(1500);
         if (resting > 1) record(`${resting} frames while the gardener rests between strokes`);
     },
+
+    // 8.7: a tap makes a ripple and the nearest koi turn towards it within
+    // 2 s; the number of koi follows the tier's density.
+    'koi-pond': async () => {
+        // Tap behind a koi, so it has to turn right round to come.
+        const { x, y, nearest } = await evaluate(`(() => {
+            const m = WP.stage.manager, fish = m.koi.filter(k => !k.leaving);
+            for (const k of fish) {
+                const x = Math.round(k.x - Math.cos(k.heading) * k.len * 1.4), y = Math.round(k.y - Math.sin(k.heading) * k.len * 1.4);
+                if (x < 40 || y < 40 || x > innerWidth - 80 || y > innerHeight - 40) continue;
+                const near = [...fish].sort((a, b) => Math.hypot(a.x - x, a.y - y) - Math.hypot(b.x - x, b.y - y))[0];
+                if (near === k) return { x, y, nearest: k.id };
+            }
+            return { x: 200, y: 300, nearest: null };
+        })()`);
+        if (nearest === null) return record('no koi to tap behind');
+        const ripples = await evaluate('WP.stage.manager.ripples.length');
+        await cdp.send('Input.dispatchMouseEvent', { type: 'mousePressed', x, y, button: 'left', clickCount: 1 });
+        await cdp.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x, y, button: 'left', clickCount: 1 });
+        const tapped = Date.now();
+        if (!(await evaluate('WP.stage.manager.ripples.length') > ripples)) record('a tap made no ripple');
+        if (!(await evaluate('WP.stage.manager.attracted')).includes(nearest)) record('the nearest koi wasn\'t called');
+        const turned = await waitFor(() => evaluate(`(() => {
+            const k = WP.stage.manager.koi.find(k => k.id === ${nearest});
+            const want = Math.atan2(${y} - k.y, ${x} - k.x), off = Math.abs(Math.atan2(Math.sin(want - k.heading), Math.cos(want - k.heading)));
+            return off < 0.5 || Math.hypot(k.x - ${x}, k.y - ${y}) < k.len * 0.5;
+        })()`), 2000);
+        if (!turned) record('the nearest koi didn\'t turn towards the tap within 2 s');
+        else console.log(`    koi-pond: nearest koi faced the tap after ${Date.now() - tapped} ms`);
+
+        // Density: live changes thin and refill the pond, without a reset.
+        const counts = [];
+        for (const density of [0.35, 1]) {
+            await evaluate(`WP.stage.manager.onQuality({ ...WP.host.quality, density: ${density} })`);
+            const want = await evaluate('WP.stage.manager.fishTarget()');
+            const settled = await waitFor(() => evaluate(`WP.stage.manager.koi.length === ${want} && WP.stage.manager.koi.every(k => !k.leaving)`), 8000);
+            counts.push(`${density}→${want}`);
+            if (!settled) record(`density ${density}: ${await evaluate('WP.stage.manager.koi.length')} koi, expected ${want}`);
+        }
+        // And a pinned Low tier starts with Low's share.
+        await cdp.send('Page.navigate', { url: `${WEB}/stage.html?w=koi-pond&tier=low` });
+        await waitFor(() => evaluate('WP.stage?.ready'));
+        const low = await evaluate('({ n: WP.stage.manager.koi.length, want: Math.round(WP.stage.manager.config.fishCount * WP.host.quality.density), effects: WP.host.quality.effects })');
+        if (low.n !== low.want) record(`?tier=low started with ${low.n} koi, expected ${low.want}`);
+        if (low.effects.includes('shadows') || low.effects.includes('sparkles')) record('Low kept shadows or sparkles');
+        console.log(`    koi-pond: density ${counts.join(', ')}; Low starts with ${low.n}`);
+    },
 };
 
 async function press(key) {

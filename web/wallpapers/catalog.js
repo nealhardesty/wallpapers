@@ -86,6 +86,9 @@
               { keys: ['r'], label: 'Rake the whole garden now', run: garden => { garden.rakeAll(); return 'Freshly raked'; } },
               { keys: ['e'], label: 'Smooth the sand flat', run: garden => { garden.smooth(); return 'Smooth sand'; } },
           ] },
+        { id: 'koi-pond', name: 'Koi Pond', icon: '🎏', accent: '#f08a4b', scripts: ['koi-pond/koi-art.js', 'koi-pond/koi-pond.js'],
+          make: host => new KoiPondAnimationManager(host), cost: 'medium', interactive: true, background: '#173a36',
+          effects: [['shadows', 'medium'], ['sparkles', 'medium']] },
         { id: 'bing', name: 'Bing Image of the Day', icon: '🖼️', accent: '#8ab4ff', scripts: ['bing/bing.js'],
           make: host => new BingWallpaperManager(host), cost: 'none', network: ['www.bing.com'] },
     ];
