@@ -1,11 +1,16 @@
 // Mountains Animation Module
 class MountainsAnimationManager {
-    constructor() {
+    constructor(host) {
+        this.host = host;
         this.canvas = null;
         this.ctx = null;
         this.mountainLayers = [];
         this.isEnabled = false;
         this.animationId = null;
+        this.lastTime = 0;
+        // Home-screen page position (onScroll), -0.5 to 0.5, eased towards
+        this.pan = 0;
+        this.panTarget = 0;
 
         // Configuration
         this.config = WP.settings.load();
@@ -167,7 +172,7 @@ class MountainsAnimationManager {
     // Append anchors (and their displaced detail) until the ridge runs past the
     // right edge of the canvas.
     extendRidge(layer) {
-        const limit = this.canvas.width + layer.spacing;
+        const limit = this.canvas.width + layer.spacing + this.panMargin();
         let guard = 0;
 
         while (layer.points[layer.points.length - 1].x < limit && guard++ < 500) {
@@ -244,7 +249,8 @@ class MountainsAnimationManager {
         this.isEnabled = true;
         this.canvas.style.display = 'block';
         this.generateMountainLayers();
-        this.animate();
+        this.lastTime = 0;
+        this.animate(0);
         console.log('Mountains animation started');
     }
 
@@ -261,16 +267,18 @@ class MountainsAnimationManager {
         console.log('Mountains animation stopped');
     }
 
-    updateMountains() {
+    // dt in seconds. Speeds are pixels per 60 fps frame, as they always were.
+    updateMountains(dt) {
+        const margin = 20 + this.panMargin();
         for (const layer of this.mountainLayers) {
             for (const point of layer.points) {
-                point.x -= layer.speed;
+                point.x -= layer.speed * 60 * dt;
             }
 
             // Drop points that have scrolled off the left, keeping one behind the
             // edge so the silhouette still enters from off-screen
             let cut = 0;
-            while (cut + 2 < layer.points.length && layer.points[cut + 1].x < -20) cut++;
+            while (cut + 2 < layer.points.length && layer.points[cut + 1].x < -margin) cut++;
             if (cut > 0) layer.points.splice(0, cut);
 
             this.extendRidge(layer);
@@ -312,6 +320,7 @@ class MountainsAnimationManager {
         const { crest, silhouette } = this.buildPaths(layer);
 
         ctx.save();
+        ctx.translate(this.panOffset(layer), 0);
 
         // Silhouette, hazier toward its base on the lighter ranges
         const haze = 0.3 * layer.shade;
@@ -334,7 +343,7 @@ class MountainsAnimationManager {
             snowGradient.addColorStop(0, this.rgb(snowColor, 1));
             snowGradient.addColorStop(1, this.rgb(snowColor, 0));
             ctx.fillStyle = snowGradient;
-            ctx.fillRect(0, 0, this.canvas.width, snowY);
+            ctx.fillRect(-this.canvas.width, 0, this.canvas.width * 3, snowY);
             ctx.restore();
         }
 
@@ -350,21 +359,43 @@ class MountainsAnimationManager {
         ctx.restore();
     }
 
-    animate() {
+    // Swiping between home screens (SPEC §6.4): x runs 0 to 1. The near
+    // ranges slide further than the distant ones.
+    onScroll(x) {
+        this.panTarget = x - 0.5;
+    }
+
+    // How far a layer slides at the end of the swipe range, and the extra
+    // ridge kept beyond each edge so sliding never shows its end.
+    panOffset(layer) {
+        return -this.pan * this.canvas.width * 0.12 * (0.2 + 0.8 * layer.depth);
+    }
+
+    panMargin() {
+        return this.canvas.width * 0.06;
+    }
+
+    animate(now) {
         if (!this.isEnabled) return;
+
+        // By elapsed time, so every frame rate scrolls at the same speed;
+        // clamped, so a long pause doesn't jump.
+        const dt = this.lastTime ? Math.min((now - this.lastTime) / 1000, 0.1) : 0;
+        this.lastTime = now;
+        this.pan += (this.panTarget - this.pan) * (1 - Math.exp(-dt * 4));
 
         // Clear canvas
         this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 
         // Scroll ridgelines and top them up on the right
-        this.updateMountains();
+        this.updateMountains(dt);
 
         // Draw back to front: layer 0 is the furthest range
         for (const layer of this.mountainLayers) {
             this.drawRidge(layer);
         }
 
-        this.animationId = requestAnimationFrame(() => this.animate());
+        this.animationId = requestAnimationFrame(time => this.animate(time));
     }
 
     destroy() {
