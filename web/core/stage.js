@@ -111,6 +111,41 @@
         // The time for anything that depends on it: real, or ?date= ticking
         // forward. Wallpapers use this, never new Date(), so ?date= tests them.
         now: WP.clock(params.date),
+        // Taps and drags for interactive wallpapers: { tap(x, y), start(x, y),
+        // move(x, y), end() }, all optional, in CSS px. A press that hardly
+        // moves is a tap; one that travels is a drag. On Android a quick
+        // sideways swipe is the launcher changing pages, so it's neither.
+        // Returns a function that stops listening.
+        gestures(on) {
+            let press = null;
+            const down = event => {
+                if (event.button > 0) return;
+                press = { x: event.clientX, y: event.clientY, at: event.timeStamp, dragging: false, swipe: false };
+            };
+            const moved = event => {
+                if (!press || press.swipe) return;
+                const dx = event.clientX - press.x, dy = event.clientY - press.y;
+                if (!press.dragging) {
+                    if (Math.hypot(dx, dy) < 8) return;
+                    if (kind === 'android' && Math.abs(dx) > 1.5 * Math.abs(dy) && event.timeStamp - press.at < 250) {
+                        press.swipe = true;
+                        return;
+                    }
+                    press.dragging = true;
+                    on.start?.(press.x, press.y);
+                }
+                on.move?.(event.clientX, event.clientY);
+            };
+            const up = event => {
+                if (!press) return;
+                if (press.dragging) on.end?.();
+                else if (!press.swipe && event.type === 'pointerup' && event.timeStamp - press.at < 600) on.tap?.(press.x, press.y);
+                press = null;
+            };
+            const listeners = [['pointerdown', down], ['pointermove', moved], ['pointerup', up], ['pointercancel', up]];
+            for (const [type, fn] of listeners) document.addEventListener(type, fn, { passive: true });
+            return () => { for (const [type, fn] of listeners) document.removeEventListener(type, fn); };
+        },
         reducedMotion: matchMedia('(prefers-reduced-motion: reduce)').matches,
         // Per-wallpaper state that isn't a setting (advent's last-seen day…).
         storage: {

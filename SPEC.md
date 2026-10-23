@@ -319,6 +319,7 @@ host = {
   frames: { count, workMs },              // from the frame pacer, for the governor and tests
   reducedMotion: boolean,                 // prefers-reduced-motion
   now(): Date,                            // the time: real, or ?date= ticking forward (8.0)
+  gestures({ tap, start, move, end }),    // taps and drags; Android page swipes are neither. Returns a stop function
   // phase 6: power { charging, level, saver, thermal } and idleUntil(ms) (§4.8)
 }
 ```
