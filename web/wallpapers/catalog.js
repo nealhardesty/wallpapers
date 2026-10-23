@@ -82,7 +82,10 @@
         { id: 'synthwave', name: 'Synthwave', icon: '🌇', accent: '#ff4fd8', scripts: ['synthwave/synthwave.js'], background: '#07011a',
           make: host => new SynthwaveAnimationManager(host), cost: 'low',
           effects: [['haze', 'medium']] },
-        { id: 'bing', name:'Bing Image of the Day', icon: '🖼️', accent: '#8ab4ff', scripts: ['bing/bing.js'],
+        { id: 'night-train', name: 'Night Train', icon: '🚆', accent: '#ffc77a', scripts: ['night-train/route.js', 'night-train/night-train.js'], background: '#03060f',
+          make: host => new NightTrainAnimationManager(host), cost: 'medium',
+          effects: [['reflection', 'medium'], ['softRain', 'medium']] },
+        { id: 'bing', name: 'Bing Image of the Day', icon: '🖼️', accent: '#8ab4ff', scripts: ['bing/bing.js'],
           make: host => new BingWallpaperManager(host), cost: 'none', network: ['www.bing.com'] },
     ];
 

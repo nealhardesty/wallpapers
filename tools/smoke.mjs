@@ -248,6 +248,79 @@ const STAGE_CHECKS = {
             return true;
         }],
     ],
+    'night-train': [
+        ['the carriage\'s reflection shows in tunnels and nowhere else', async () => {
+            await stageWith('night-train', null, '&seed=7');
+            await sleep(500);
+            const shown = {};
+            for (const kind of ['countryside', 'town', 'coast', 'bridge', 'station', 'tunnel']) {
+                shown[kind] = await evaluate(`(async () => {
+                    const m = WP.stage.manager;
+                    m.route.ensure(4e6);
+                    const s = m.route.segments.find(s => s.kind === '${kind}' && s.start > 0 && s.end - s.start > 2 * m.halfWidth() + 400);
+                    Object.assign(m.train, { x: (s.start + s.end) / 2, served: s.stop ?? -Infinity, dwell: 0 });
+                    await new Promise(r => setTimeout(r, 400));
+                    return m.reflectionShown / m.view.w;
+                })()`);
+                if (kind === 'tunnel') {
+                    const { data } = await cdp.send('Page.captureScreenshot', { format: 'png' });
+                    writeFileSync(join(SHOTS, 'night-train-tunnel.png'), Buffer.from(data, 'base64'));
+                }
+            }
+            for (const [kind, share] of Object.entries(shown)) {
+                if (kind === 'tunnel' ? share < 0.99 : share !== 0) record(`${kind}: reflection over ${(share * 100).toFixed(0)}% of the window`);
+            }
+            return true;
+        }],
+        ['Low drops the glass effects: no reflection, no soft streaks', async () => {
+            await stageWith('night-train', null, '&seed=7&tier=low');
+            await sleep(400);
+            const state = await evaluate(`(async () => {
+                const m = WP.stage.manager;
+                m.route.ensure(4e6);
+                const s = m.route.segments.find(s => s.kind === 'tunnel' && s.start > 0);
+                m.train.x = (s.start + s.end) / 2;
+                await new Promise(r => setTimeout(r, 400));
+                return { reflection: m.fade.reflection, soft: m.fade.soft, shown: m.reflectionShown };
+            })()`);
+            const { data } = await cdp.send('Page.captureScreenshot', { format: 'png' });
+            writeFileSync(join(SHOTS, 'night-train-low-tunnel.png'), Buffer.from(data, 'base64'));
+            if (state.reflection || state.soft || state.shown) record(`on Low: ${JSON.stringify(state)}`);
+            return true;
+        }],
+        ['waiting at a dry platform, it idles (about a frame a second)', async () => {
+            await stageWith('night-train', { configVersion: 1, rain: 0 }, '&seed=7');
+            await sleep(300);
+            await evaluate(`(() => {
+                const m = WP.stage.manager;
+                m.route.ensure(4e6);
+                const s = m.route.segments.find(s => s.kind === 'station');
+                Object.assign(m.train, { x: s.stop, v: 0, dwell: 30, served: s.stop });
+            })()`);
+            await sleep(400);
+            const before = await evaluate('WP.host.frames.count');
+            await sleep(3000);
+            const frames = await evaluate('WP.host.frames.count') - before;
+            const { data } = await cdp.send('Page.captureScreenshot', { format: 'png' });
+            writeFileSync(join(SHOTS, 'night-train-station.png'), Buffer.from(data, 'base64'));
+            if (frames > 6) record(`${frames} frames in 3 s at the platform`);
+            return true;
+        }],
+        ['every palette renders, each its own colours', async () => {
+            const seen = new Map();
+            for (const palette of await evaluate('Object.keys(NIGHT_TRAIN_PALETTES)')) {
+                if (!await stageWith('night-train', { configVersion: 1, palette }, '&seed=7')) return record(`${palette}: not ready`);
+                await sleep(600);
+                if (await evaluate(DRAWN) < 12) record(`${palette}: barely drawn`);
+                const average = JSON.stringify(await evaluate(AVERAGE));
+                if (seen.has(average)) record(`${palette} looks just like ${seen.get(average)}`);
+                seen.set(average, palette);
+                const { data } = await cdp.send('Page.captureScreenshot', { format: 'png' });
+                writeFileSync(join(SHOTS, `night-train-${palette}.png`), Buffer.from(data, 'base64'));
+            }
+            return true;
+        }],
+    ],
 };
 
 async function stageChecks(id) {
