@@ -14,10 +14,14 @@ wallpapers' only home. They run in three hosts:
 3. **Android live wallpaper**: a future app in `android/` that runs the same
    web code behind the home screen.
 
-> Status: **phases 1–5 done** (2026-10-22). The player, the stage, the
-> panel and all 17 wallpapers run from `web/index.html`, as a Chrome new-tab
-> extension, and on GitHub Pages at https://nealhardesty.github.io/wallpapers/.
-> Next up is Phase 6, mobile readiness and then Android.
+> Status: **phases 1–6 done** (2026-10-22), except the measurements that
+> need a real phone (6.2's numbers, 6.4a) and the first signed release
+> (6.6 needs the owner's keystore). The player, the stage, the panel and
+> all 17 wallpapers run from `web/index.html`, as a Chrome new-tab
+> extension, on GitHub Pages at https://nealhardesty.github.io/wallpapers/,
+> and as an Android live wallpaper. Every wallpaper is tiered and within
+> budget. Next up: Phase 7 (retire the homepage) and Phase 8 (new
+> wallpapers).
 
 ---
 
@@ -113,6 +117,7 @@ wallpapers/
 │   ├── app.webmanifest          # installable web app (Add to Home screen), linked only when served
 │   ├── core/
 │   │   ├── wp.js                # WP namespace + pure logic: seasons, params, settings, tiers, pacing
+│   │   ├── perf.js              # pure: quality per tier, Auto's ladder and governor, power policy
 │   │   ├── player.js            # chooses, mounts and crossfades stages; global keys
 │   │   ├── stage.js             # host, frame pacing, DPR cap, settings, messaging, boot
 │   │   ├── panel.js             # unified switcher + settings overlay (phase 4)
@@ -124,7 +129,8 @@ wallpapers/
 │   └── icons/                   # icon.svg (ours) and the PNGs `make icons` renders from it
 ├── tools/                       # node scripts (built-ins only): audit, lint, serve, build, smoke, tests, images
 ├── docs/                        # README screenshots (`make screenshots`)
-├── android/                     # Gradle project (phase 6)
+├── android/                     # the live wallpaper app (§6): Gradle wrapper, app/ (Kotlin)
+├── bench/                       # make bench results (results.json; android.json from a phone)
 ├── .github/workflows/ci.yml     # `make ci`; on master also `make site` → GitHub Pages; daily for bing.json
 ├── Dockerfile                   # the site in a container, served by tools/serve.mjs
 ├── Makefile
@@ -476,7 +482,7 @@ select: Today, Yesterday, then weekday dates.
   the corner, and never saves.
 - A unit test checks every offline wallpaper has a WebP under 40 KB.
 
-### 4.8 Performance tiers and power budget
+### 4.8 Performance tiers and power budget (built in Phase 6)
 
 Several wallpapers are expensive: fishtank, northern lights, halloween,
 fireplace, and quest with a palette. On a laptop that costs fan noise; on a
@@ -505,8 +511,10 @@ thumbnails (§4.7) are always shot at High.
 
 #### Modes: Auto, Low, Medium, High
 
-A global setting (`wp:performance`) holds the mode, with optional
-per-wallpaper overrides ("Follow global" by default).
+A global setting (`wp:performance`) holds the mode and the Battery-aware
+switch, storing only what differs from Auto and on. `?tier=` pins a tier
+for one page load. (Per-wallpaper overrides were planned; they aren't
+built, since the governor's per-wallpaper memory covers the need.)
 
 - **Low / Medium / High** pin the tier.
 - **Auto** (the default) is a governor (`core/perf.js`) that moves along a
@@ -521,8 +529,8 @@ per-wallpaper overrides ("Follow global" by default).
   ```
 
   - **What it measures:** for each frame, the time spent inside the
-    wallpaper's frame callback (`performance.now()` around it), plus
-    late frames.
+    wallpaper's frame callbacks (`performance.now()` around them).
+    Late frames aren't counted: the callback cost proved enough.
   - **Budget:** the callback must stay under **50%** of the frame interval
     at the current fps. That leaves room for the compositor, and on
     Android for the surface copy.
@@ -533,7 +541,14 @@ per-wallpaper overrides ("Follow global" by default).
     (`wp:perf:<id>`), so the next start begins there instead of at the top.
     No janky first second on every new tab.
   - **Replaces** the hand-rolled auto-quality in fishtank and halloween,
-    and their High / Balanced / Performance settings.
+    and their High / Balanced / Performance settings (removed; their
+    `configVersion` stays, since a removed key is simply dropped on load).
+  - **As built:** `WP.ladder(entry, policy)` makes the rungs, each a full
+    quality with a label ("High, fewer", "Medium, no bloom", "Low, 10 fps");
+    `WP.Governor` steps along them. `WP.GOVERNOR` holds the thresholds. The
+    memory is the label of the rung it settled on. Unit tests drive it with
+    a fake clock: slow frames step down by 2 s, a calm device climbs back
+    after 20 s, and a failed step up is locked out.
 
 #### Power policy: lowering the ceiling
 
@@ -558,77 +573,119 @@ they are stricter. "Battery-aware" can be switched off in the panel.
 
 #### What the core does, and what wallpapers implement
 
-Built in Phase 3, with no module changes:
+The core (`core/perf.js` for the logic, `core/stage.js` and
+`core/player.js` for the wiring), with no module changes:
 - **Frame pacing.** The stage replaces `requestAnimationFrame` before any
-  wallpaper code loads. It enforces the tier's fps cap (the slow cap for
-  `motion: 'slow'`) by skipping display ticks, pauses when hidden or told
-  to, and times every frame into `host.frames` for the governor.
-- **DPR cap.** It replaces the [Replaceable] `devicePixelRatio`, so the
-  modules that size by it (fishtank, halloween, advent, quest) see the
-  tier's cap.
-- **Render scale.** The player lays the stage out at `renderScale` × the
-  window and scales it up (§4.1).
-- **Pinned tiers.** `?tier=`, then the saved `wp:performance` mode, then the
-  host default (`WP.resolveTier`).
+  wallpaper code loads. It enforces the quality's fps cap (the slow cap
+  for `motion: 'slow'`) by skipping display ticks, pauses when hidden or
+  told to, times every frame into `host.frames`, and feeds the governor.
+- **DPR cap and render scale.** It replaces the [Replaceable]
+  `devicePixelRatio` with `min(real, dpr) × renderScale`, so modules that
+  size their canvas by it draw fewer pixels at the same layout size, and
+  the browser scales them up. (The first version laid the stage out at
+  `renderScale` and scaled the iframe up; that zoomed everything sized in
+  CSS px, 2× on Low, so it was replaced.) Modules that size by
+  `innerWidth` already draw one pixel per CSS px, which on a phone is
+  well under the native resolution. The Android app works the same way.
+- **Plans.** `WP.planQuality` turns the mode, the power policy and the
+  memory into the starting quality.
+- **Power.** The player gathers the signals and posts the policy to the
+  stage (`power` message); the stage re-plans.
+- **Reports.** The stage posts `quality` on every change and `stats` once
+  a second (fps, ms per frame, rung, idle, power reasons) for the panel's
+  readout and `?hud=1`.
 
-Still per wallpaper (phase 6):
-- **`onQuality(q)`**, where `q = { tier, fps, renderScale, dpr, density,
-  effects: Set, motion }`. The module scales its counts, rebuilds its
-  offscreen buffers, and toggles its effects.
-- **Idle frames.** A frame callback may return `false` ("nothing changed")
-  or call `host.idleUntil(ms)`. The core then produces no frames, and
-  Android doesn't post the surface, until there is input, a timer or the
-  deadline. Advent between door animations, a sleeping neko, paused quest
-  and Bing (a still image: **0 fps**) then cost almost nothing.
-- **Catalog** entries declare `effects`, ordered most expensive first (the
-  order the governor sheds them), alongside the existing `motion`:
+What a wallpaper implements (all optional):
+- **`host.quality`**: `{ tier, label, fps, renderScale, dpr, density,
+  effects: [names], motion }`, set before the manager is built. `effects`
+  is an array of the effect names that are on.
+- **`onQuality(quality)`**: called on every change. Scale counts by
+  `density` and toggle effects, trimming or adding gradually, never with
+  a visible reset.
+- **`host.idleUntil(ms)`**: no frames until `ms` from now (or until input,
+  a resize or new settings if omitted). Compute deadlines from
+  `performance.now()`, the clock it uses, not the rAF timestamp, which can
+  trail it by tens of ms. Neko asleep, paused quest and advent between its
+  own capped frames use it; Bing uses no frames at all.
+- **`onScroll(x)`**: the Android home-screen position, 0 to 1. Starfield,
+  mountains and parallax-clouds pan their layers by depth.
+- **Catalog `effects`**, `[name, lowest tier that keeps it]`, most
+  expensive first, the order the governor sheds them:
 
   ```js
-  effects: [['depthBlur', 'high'], ['caustics', 'medium'], ['godRays', 'medium'], ['glass', 'low']],
+  effects: [['depthBlur', 'medium'], ['caustics', 'medium']],
   ```
 
 #### Techniques catalogue (applied across modules)
 
 - **Never** call `getImageData`/`putImageData` per frame.
-  - Quest's palettes become palette-swapped sprite sheets, built once when
-    the palette changes.
-  - Fishtank's caustics become a small (128²) caustic texture, regenerated
-    at ≤ 10 fps and drawn scaled with `lighter` compositing.
-- **No live `shadowBlur` or `ctx.filter`.** Bake glows into sprite caches,
-  such as a matrix glyph atlas with the glow included, and advent doors.
-  Get depth-of-field blur by drawing distant layers into a downscaled
-  buffer and upscaling, which blurs for free.
-- **Bloom** runs at 1/8 resolution on Medium and is off on Low.
-- **Static layers** (backgrounds, hills, tank glass, castle) are rendered
-  once per resize or tier change, never per frame.
-- **Object pools** for particles, so garbage-collection pauses don't show
-  up as jank.
-- **Spatial grids** for O(n²) flocking (halloween's bats).
+  - Quest's palettes recolour through a proxy around its low-res context:
+    fill and stroke colours go through the palette's lookup table, and
+    each sprite, font atlas and room canvas is recoloured once, on first
+    draw (it was ~65% of a frame).
+  - Fishtank's caustics are 128² keyframes painted 10 times a second and
+    cross-faded with `lighter`; the cross-fade is what makes 10 fps look
+    smooth.
+- **No live `shadowBlur` or `ctx.filter`.** Bake glows into sprites: a
+  matrix head glow per colour (rainbow in 10° hue steps), advent's today
+  glow, northern-lights' stars per tint. Depth-of-field blur is a
+  half-resolution buffer over the blurred things' bounding box.
+- **Never build a gradient per particle per frame.** Bake it per level or
+  tint: fireplace's 660 coals now draw from 40 glow sprites (7.8 → 1.9 ms).
+- **Bloom** runs at 1/4 resolution on High, 1/8 on Medium, off on Low.
+- **Static layers** (backgrounds, hills, branches, the board) are rendered
+  once per resize or tier change. Advent goes further: every door at rest
+  lives in one cached layer, repainted only when a door changes state.
+- **Object pools** for particles; **spatial grids** for flocking
+  (halloween's bats).
+- **Time, not frames.** Frame rates run from 10 to 120 fps, so:
+  - move by the rAF timestamp's elapsed time, clamping dt at **100 ms**
+    (50 ms halves the speed of a 10 fps slow-motion tier);
+  - legacy per-frame systems (wind, accumulation, games) run on a fixed
+    60 Hz step from an accumulator, so every counter keeps its meaning;
+  - rates and chances per frame become per elapsed time, and random
+    jitter scales with the square root of the step;
+  - trails are kept in seconds, not points.
+- **Density** scales spawn rates as well as caps: on a phone most
+  particle wallpapers are limited by their spawn rate. Extra things leave
+  naturally (melt, fly off, finish their pass); new ones arrive from off
+  screen. Nothing pops.
+- **Effects fade** over about 1.5 s when the tier sheds or restores them.
+- **Pixel art and small text** may floor their own ratio at 1 when that's
+  cheap (quest is one upscaling copy; advent's day numbers became
+  unreadable at 0.5).
 
-#### Per-wallpaper plan
+#### Per-wallpaper plan, as built
 
-| Wallpaper | Expensive today | Medium | Low |
-|---|---|---|---|
-| fishtank | `ctx.filter` depth blur, per-frame caustics `putImageData`, god rays, glass | Downscale-blur depth, caustic texture at 10 fps | No depth blur (distant fish dimmed instead), no caustics, density 0.35 |
-| northern-lights | Full-resolution aurora, bloom chain, reflection | Bloom 1/8, reflection at half resolution | No bloom or reflection; slow-motion fps |
-| halloween | Bloom, grain, 3 fog banks, boids | Bloom 1/8, grain off, 2 fog banks | No bloom or grain, 1 fog bank, bats ×0.35, gridded boids |
-| fireplace | 4 full-screen buffers, up to 1,400 particles | Buffers at renderScale | Plus sparks ×0.35, smoke off |
-| quest | Per-frame palette filter, CRT, light canvas | Palette sheets (every tier), CRT off | Light map at half resolution; 30 fps is plenty for 8-bit |
-| leaves | 14k-leaf pile buffer, falling leaves | Pile cap 6k | Pile cap 2k, density |
-| advent | `shadowBlur` doors, confetti | Baked door art; idle between animations | Plus less confetti |
-| matrix | `shadowBlur` on every glyph | Glyph atlas with baked glow | Plus fewer columns |
-| starfield, mountains, parallax-clouds | Many layers | `motion: 'slow'` | Plus density |
-| snow, rain, cherry-blossoms, fireflies | Particle counts, glow | Density | Density, smaller glow sprites |
-| neko | Trivial | Idle while asleep | Same |
-| bing | A still image | 0 fps; redraw on resize only | Same |
+Busy % of the main thread on a phone at 4× CPU throttle (`make bench`),
+Low / Medium / High: before → after are in `bench/results.json`'s history
+and the commits.
+
+| Wallpaper | Effects (shed in this order) | Density and other tiering |
+|---|---|---|
+| fishtank | `depthBlur`, `caustics` (medium) | Whole roster stocked, `fishCount × density` swim, the rest fade out; motes. Low: distant fish sink into the water colour instead of blurring |
+| northern-lights | `bloom`, `reflection` (medium) | Low draws the curtains straight onto the sky (no aurora buffer); blur 1/8 on Medium; stars × density, from baked sprites |
+| halloween | `bloom` (medium), `grain` (high), `fogMid` (medium), `fogFar` (high) | Bats, wisps, candy, leaves × density; bats on a grid; the near fog bank is never shed |
+| fireplace | `smoke` (medium) | Coal glows baked per heat level; log buffer cropped to the log band; sparks and coals × density |
+| quest | `crt` (high) | Palette proxy every tier; light map half size on Low; idles while paused; fixed 60 Hz steps (up to 20 catch-up) |
+| advent | — | Doors-at-rest layer, baked glow; treat refreshes, particles and confetti × density; idles between its own capped frames (never fully still: today's treat plays) |
+| leaves | — | Drift capped at 6k (Medium) and 2k (Low), shallower banks of the same shape; falling × density |
+| matrix | — | Baked head glow; columns limited to a density share, thinning as passes finish |
+| snow, rain, fireflies, cherry-blossoms | — | Spawn rate and cap × density; fireflies' glow sprites 32/64/128 px by tier; cherry-blossoms' sky and branches cached |
+| starfield | — | Stars × density, joining at the far plane; `onScroll` |
+| mountains, parallax-clouds | — | No density (the layers are the composition, and they cost ~1%); `onScroll` |
+| neko | — | Idles between Z steps while asleep (~10 frames/s) |
+| bing | — | No frames at all; CSS background |
 
 #### In the panel
 
-- A global **Performance** row: `Auto · Low · Medium · High`, a
-  Battery-aware toggle, and a live readout such as
-  `⚡ Medium · 30 fps · 4.1 ms/frame · on battery · rung 6/12`.
-- Each thumbnail carries a cost badge (⚡ / ⚡⚡ / ⚡⚡⚡) taken from
-  `make bench`, so you can see the expensive ones before you pick.
+- A global **Performance** row: `Auto · Low · Medium · High`, a "Save
+  power on battery" switch, and a live readout from the stage's stats,
+  such as `⚡ Medium, fewer · 30 fps · 4.1 ms · rung 5/12 · on battery`.
+- Each tile carries a cost badge (⚡ / ⚡⚡ / ⚡⚡⚡) from
+  `web/wallpapers/costs.js`, which `make bench` writes from each
+  wallpaper's High busy share (under 10%, under 30%, above). The
+  catalog's hand-written `cost` stays as a design-time hint.
 - `?hud=1` shows a small corner overlay with fps, frame ms, tier, rung and
   power state. It's for tuning; it's never on by default.
 
@@ -636,35 +693,55 @@ Still per wallpaper (phase 6):
 
 - **`make bench`:** headless Chrome driven over the DevTools protocol, with
   Node's built-in `WebSocket` and no deps.
-  - Every wallpaper at every tier, for 10 s, at a phone viewport
-    (412×915, dpr 2.625).
+  - Every wallpaper at every pinned tier in the real player, fresh
+    settings, seed 7, 6 s each after a 1.5 s settle (`BENCH_SECONDS=`), at
+    a phone viewport (412×915, dpr 2.625). `node tools/bench.mjs <ids>`
+    re-measures a few and keeps the rest.
   - 4× CPU throttling (`Emulation.setCPUThrottlingRate`).
-  - Records p50/p95 callback ms, effective fps and main-thread busy %
-    (`Performance.getMetrics` TaskDuration).
-  - Writes `bench/results.json` and prints a table.
+  - Records p50/p95 callback ms (the stage keeps the last 240 frames in
+    `host.frames.recent`), effective fps and main-thread busy %
+    (`Performance.getMetrics` TaskDuration). Busy % covers the main thread
+    only, not raster or GPU work, so pixel fill still deserves cutting
+    where busy % is low.
+  - Writes `bench/results.json` and `web/wallpapers/costs.js`, and prints
+    a table; exits 1 over budget.
   - **Budgets:** at 4× throttle every wallpaper must stay under 25% busy on
     Low and under 50% on Medium. A miss is a bug.
   - Not in CI, because shared runners are too noisy; it's run before
     releases and after performance work.
-- **`make android-bench`** (phase 6): over `adb`.
-  - Resets `dumpsys batterystats`, runs each wallpaper at each tier for
-    10 minutes, then collects `dumpsys gfxinfo` and the battery stats.
-  - Estimates mAh per hour per wallpaper per tier, and records the table
-    in this SPEC. That's the real answer to "does Low actually save
-    battery?"
+- **`make android-bench`** (`tools/android-bench.mjs`): over `adb`, on
+  the installed debug build set as the wallpaper.
+  - It drives the live wallpaper's own WebView over the DevTools protocol
+    (debug builds enable WebView debugging; `adb forward` to its
+    `webview_devtools_remote_<pid>` socket), switching wallpaper and tier
+    with `WP.player`, so the app has no test mode.
+  - Per run: fps and ms from the page's stats, CPU share of the app plus
+    its WebView renderer processes from `/proc/<pid>/stat`, and the app's
+    drain from `dumpsys batterystats` after a reset, with the battery
+    marked unplugged (`dumpsys battery unplug`, reset at the end). 60 s
+    each by default; `ANDROID_BENCH_SECONDS=600` for the SPEC's 10 minutes.
+  - Writes `bench/android.json`, and puts the wallpaper back as it was.
+  - The real answer to "does Low actually save battery?" needs a real
+    phone; emulator battery numbers are meaningless.
 
 #### Android specifics
 
-- **Shrink the surface itself.** `SurfaceHolder.setFixedSize(w × s, h × s)`
-  makes the wallpaper surface smaller and lets the system compositor
-  upscale it in hardware. Under strategy 1 (VirtualDisplay) the WebView
-  viewport shrinks with it, so every cost shrinks.
+- **Render scale as in a browser.** The plan was to shrink the surface
+  with `SurfaceHolder.setFixedSize` and the virtual display's density with
+  it. Tried in Phase 6: resizing a VirtualDisplay's density doesn't
+  update the WebView's, so the page saw a quarter-size viewport (the same
+  zoom bug the browser had). The page's own pixel-ratio scaling works
+  everywhere, so the app leaves the surface alone.
 - **Copy only new frames.** Under strategy 2 (`draw()` copy), the engine
   copies only when JS reports a new frame. With idle frames this means
   zero copies while static.
 - **Power signals into JS.** The engine pushes them through
-  `evaluateJavascript("wp.power({...})")`; `host.power` holds the latest.
-- **Frame pacing.** The native side follows `Choreographer`, at the fps cap.
+  `evaluateJavascript("WP.power({...})")`: battery, saver, thermal status,
+  hidden, preview. The player merges them into its signals and posts the
+  policy to the stage.
+- **Frame pacing.** The page's own rAF pacing is enough under strategy 1:
+  the system composites the Presentation's window only when it has a new
+  frame.
 
 ---
 
@@ -734,65 +811,110 @@ Still per wallpaper (phase 6):
 
 ## 6. Android live wallpaper (`android/`)
 
-### 6.1 Rendering strategy: spike first
+### 6.1 Rendering strategy: VirtualDisplay (Spike A0, Phase 6)
 
 A `WallpaperService.Engine` hands us a bare `Surface`. A WebView is a View and
-does not draw onto a bare surface by itself. Candidates, in order of
-preference:
+does not draw onto a bare surface by itself. The candidates were:
 
-1. **VirtualDisplay → Presentation → WebView.** Create a `VirtualDisplay`
-   whose output is the engine's surface, and show a `Presentation` containing
-   a hardware-accelerated WebView on that display. If it works, there are no
-   per-frame copies. *This is our own reasoning; no prior art was found, so it
-   must be proven by the spike.*
-2. **Offscreen WebView drawn into the surface.** `webView.draw(holder.lockHardwareCanvas())`,
-   triggered from the page's rAF through a JS bridge. Prior art: a public
-   gist from 2019 that runs p5.js sketches this way. Its comments report
-   noticeable CPU cost, lower frame rates than an Activity, and WebGL
-   failing. We don't use WebGL.
-3. **Native port of a few wallpapers** to Kotlin Canvas. Last resort.
+1. **VirtualDisplay → Presentation → WebView.** A private `VirtualDisplay`
+   whose output is the engine's surface, and a `Presentation` holding a
+   hardware-accelerated WebView on that display. No per-frame copies.
+2. Offscreen WebView drawn into the surface with
+   `lockHardwareCanvas()` from the page's rAF: a copy per frame.
+3. Native ports of a few wallpapers. Last resort.
 
-The spike (A0) measures CPU, frame rate and battery for fishtank (worst case)
-and starfield (typical) on a real device, and picks one strategy.
+**Result: strategy 1 works**, and it's what ships (`LiveWallpaper.kt`).
+Tried on the API 37 emulator (Medium Phone, software GPU), the wallpaper
+picker's preview showed Halloween animating, with the page reporting
+ready and its frame stats over DevTools. What the spike found:
+- **The Presentation's window must be made hardware accelerated
+  explicitly** (`FLAG_HARDWARE_ACCELERATED`): a window created from a
+  service isn't, and the WebView then runs its JS but draws nothing (all
+  black, even in a DevTools screenshot).
+- **Don't resize the virtual display's density** to render fewer pixels:
+  the WebView keeps its old density, so the page saw a quarter-size
+  viewport. The page's own pixel-ratio scaling (§4.8) is used instead, so
+  the surface stays at full size.
+- Not yet measured: frame rate, CPU and battery on a real phone (the
+  emulator was software-rendered on an overloaded host, at 2–5 fps, and
+  its battery numbers mean nothing). `make android-bench` (§4.8) does it;
+  record the table there. Strategy 2 stays the fallback if a device's
+  VirtualDisplay misbehaves.
 
-### 6.2 App shape
+### 6.2 App shape (built in Phase 6)
 
-- Kotlin, Gradle wrapper, a single module. Application ID `com.roadwaffle.wallpapers` (permanent after the first release). `minSdk 26` (Android 8), which gives `lockHardwareCanvas` for fallback strategy 2; `targetSdk` follows the current Play/AGP requirement.
-- `web/` is copied into assets at build time and served through
-  `WebViewAssetLoader` (`https://appassets.androidplatform.net/`), so
-  `localStorage` has a stable origin.
-- `index.html?host=android` (the saved wallpaper; never `w=`, so the panel's choice sticks).
-- Performance and power follow §4.8: pause when invisible; Auto with a
-  Medium ceiling at 30 fps; power, battery and thermal signals pushed into
-  JS; the surface shrunk with `setFixedSize`.
-- Touch: `setTouchEventsEnabled(true)` and forward touches to the WebView,
-  so the neko cat follows a finger and taps feed the fish.
+- Kotlin, single module, AGP 9 (which compiles Kotlin itself), Gradle
+  wrapper pinned with its SHA-256. Application ID
+  `com.roadwaffle.wallpapers` (permanent after the first release),
+  `minSdk 26`, compile and target SDK 37. Its version is
+  `web/manifest.json`'s (0.6.0 → versionCode 600).
+- `web/` becomes the assets at build time (`SyncWeb` in
+  `app/build.gradle.kts`: everything but `bing.json` and the two web
+  manifests), served by `WebViewAssetLoader` at
+  `https://appassets.androidplatform.net/`, so every WebView in the app
+  shares one `localStorage`.
+- Files (`android/app/src/main/kotlin/com/roadwaffle/wallpapers/`):
+  - `LiveWallpaper.kt`: the engine (§6.1). Loads
+    `index.html?host=android`. Forwards touches to the WebView; pushes
+    `WP.power({ hidden })` on visibility, `WP.power({ preview })` in the
+    picker, the battery, saver and thermal state from `Power.kt`, and
+    `WP.scroll(x)` from `onOffsetsChanged`. Reports Material You colours
+    (`onComputeColors`) from the current wallpaper's catalog accent,
+    which the player sends through the bridge. Links (Bing's credit) open
+    the browser.
+  - `SettingsActivity.kt`: the launcher icon and the wallpaper's Settings,
+    `index.html?host=android&panel=open` (§6.3).
+  - `Web.kt`: the shared WebView: asset loader, no file access, nothing
+    outside our origin, the page's console in logcat under `Wallpapers`,
+    WebView debugging in debug builds only.
+  - `BingJson.kt`: answers the page's request for `bing.json` by fetching
+    Bing's archive natively (no CORS for the app), in the same shape
+    `tools/bing.mjs` writes, cached for an hour. The web code has no
+    Android case.
+  - `Bridge.kt`: `window.WallpapersApp`: `setAccent(color)`,
+    `canSetWallpaper()`, `setWallpaper()`.
+  - `Power.kt`: the sticky battery intent, power-save changes and the
+    thermal listener (API 29+), as the JSON `WP.power()` takes.
+- Permissions: `INTERNET` only (Bing).
+- Performance and power follow §4.8: hidden pauses; Auto with a Medium
+  ceiling at 30 fps; battery, saver and heat lower it; the picker preview
+  gets High.
+- Icons: `make icons` renders the launcher PNGs from the same SVG.
+- `make android-build | android-install | android-logcat |
+  android-emulator | android-bench | android-keystore | android-release`.
 
 ### 6.3 Settings on Android
 
-The wallpaper's "Settings" activity is just a WebView on the same page with
-the panel open (`?host=android&panel=open`). It shares `localStorage` with the
-wallpaper's WebView (same app, same origin), and the engine reloads settings
-on visibility. No native settings UI is needed. This is the main reason for
-the data-driven schema.
+The settings screen is the same page with the panel open. It shares
+`localStorage` with the wallpaper's WebView, and the wallpaper follows
+changes through `storage` events (the player listens for `wp:current`,
+`wp:<id>` and `wp:performance`; the same code keeps several browser tabs
+in step). The panel adds **Set as wallpaper** there, which opens the
+system picker on our component. No native settings UI.
 
-### 6.4 Android-only extras (optional)
+### 6.4 Android-only extras (built)
 
-- `onOffsetsChanged` → `onScroll(x)`: mountains, parallax clouds and
-  starfield pan as you swipe home-screen pages.
-- `onComputeColors()` samples the canvas, so Material You picks up the
-  wallpaper's palette.
+- `onOffsetsChanged` → `WP.scroll(x)` → `onScroll(x)`: starfield,
+  mountains and parallax-clouds pan their layers by depth as you swipe
+  between home screens.
+- `onComputeColors()` gives the current wallpaper's accent as the primary
+  colour, so Material You follows the wallpaper.
 
-### 6.5 Mobile readiness the web code needs first
+### 6.5 Mobile readiness (done in Phase 6)
 
-- Make the per-frame stepping time-based in parallax-clouds, mountains,
-  cherry-blossoms, neko and matrix.
-- Use pointer events instead of mouse-only listeners in halloween, fishtank,
-  neko and advent.
-- Implement the tiers in every wallpaper, following the per-wallpaper plan
-  in §4.8.
-- Neko: load sprites in parallel (they currently load one at a time and block
-  startup), or replace them entirely (§7.3).
+Time-based stepping and pointer events everywhere they were missing, and
+tiers in every wallpaper: §4.8, "Techniques" and "Per-wallpaper plan, as
+built". Neko's sprites are drawn in code (Phase 4).
+
+### 6.6 Distribution
+
+Sideloaded APKs on GitHub Releases. `make android-keystore` makes the
+release key once, outside the repo (`~/.wallpapers-release.jks`); CI
+signs with it from four secrets (`WALLPAPERS_KEYSTORE_BASE64`,
+`_PASSWORD`, `WALLPAPERS_KEY_ALIAS`, `WALLPAPERS_KEY_PASSWORD`). Pushing a
+tag `vX.Y.Z` that matches `web/manifest.json`'s version runs `make ci`,
+builds the signed APK and the extension zip, and publishes both on a
+GitHub Release. Every CI run also uploads the debug APK as an artifact.
 
 ---
 
@@ -937,6 +1059,17 @@ GitHub Actions runs only that.
 - `tools/chrome.mjs` holds the shared headless-Chrome plumbing (launch,
   DevTools protocol connection, extension loading) used by the smoke test,
   the thumbnails, the icons and the screenshots.
+- Phase 6 added:
+  - unit tests for `core/perf.js` with a fake clock: each tier's effects
+    and slow-motion fps, a ladder whose every rung is cheaper than the
+    one above, slow frames stepping down within 3 s, a calm device
+    climbing back after 20 s, a failed step up locked out (no flapping),
+    the power policy's ceilings, and pinned tiers never beating it
+  - smoke checks: `?tier=low` halves the pixel ratio but not the layout;
+    20 ms of injected work per frame makes Auto step down, render fewer
+    pixels, remember the rung and show it in `?hud=1`; `idleUntil` holds
+    frames until input
+  - `make bench` and `make android-bench` (§4.8, "Measuring it"); not in CI
 - `make screenshots` renders the README's images into `docs/` (the panel on
   a desktop, the bottom sheet on a phone, Pixel Quest). Like thumbnails,
   not part of `make ci`.
@@ -1034,17 +1167,16 @@ phase can mostly run in parallel.
 
 ### Phase 6: Mobile readiness, then Android
 
-- [ ] 6.1 Time-based stepping and pointer events (§6.5).
-- [ ] 6.1a Tiers in every wallpaper, following the §4.8 plan and techniques (no per-frame pixel reads, baked glows, density, effects). One wallpaper per commit; the heavy ones first:
-      fishtank · northern-lights · halloween · fireplace · quest · leaves · advent · matrix · starfield · mountains · parallax-clouds · snow · rain · cherry-blossoms · fireflies · neko · bing
-- [ ] 6.1b `make bench`, plus the budgets. → every wallpaper is under 25% busy on Low and under 50% on Medium at 4× throttle; results committed; thumbnails get ⚡ badges.
-- [ ] 6.1c Auto governor (ladder, hysteresis, per-wallpaper memory) and web power policy (`getBattery`, reduced motion); Performance row and `?hud=1`. → simulated slow frames step down within 3 s and recover without flapping (unit tests with a fake clock).
-- [ ] 6.2 **Spike A0:** VirtualDisplay vs `draw()` on a real device; record the numbers here.
-- [ ] 6.3 `android/` Gradle project; `make android-build`, `android-install`, `android-logcat`; assets synced from `web/`.
-- [ ] 6.4 Engine: visibility pause, touch forwarding, settings activity (§6.3), power/thermal/battery bridge, `setFixedSize` render scaling, copy-only-new-frames (§4.8).
-- [ ] 6.4a `make android-bench`: mAh per hour per wallpaper per tier on a real device; table recorded in §4.8.
-- [ ] 6.5 Extras: home-screen scroll parallax, `WallpaperColors` (optional).
-- [ ] 6.6 Distribution (decided): `make android-release` builds a signed APK; CI attaches it to a GitHub Release on tag. The keystore lives outside the repo; CI uses an encrypted secret. Play and F-Droid are not planned for now.
+- [x] 6.1 Time-based stepping and pointer events (§6.5). *(Done, in every wallpaper that stepped per frame, plus a 100 ms dt clamp everywhere.)*
+- [x] 6.1a Tiers in every wallpaper, following the §4.8 plan and techniques. One wallpaper per commit. *(Done by five parallel agents, one worktree each, merged. Effects declared for fishtank, northern-lights, halloween, fireplace and quest; "Per-wallpaper plan, as built" in §4.8.)*
+- [x] 6.1b `make bench`, plus the budgets. → every wallpaper is under 25% busy on Low and under 50% on Medium at 4× throttle; results committed; thumbnails get ⚡ badges. *(Done: worst is now fireplace at 12.8 / 17.0 / 24.1; advent went from 32.4 ✗ to 6.3 on Low. Badges are graded at High.)*
+- [x] 6.1c Auto governor (ladder, hysteresis, per-wallpaper memory) and web power policy (`getBattery`, reduced motion); Performance row and `?hud=1`. → simulated slow frames step down within 3 s and recover without flapping (unit tests with a fake clock). *(Done: `core/perf.js`; also `host.idleUntil`, `onScroll`, and render scale as a pixel ratio instead of a zoom.)*
+- [x] 6.2 **Spike A0:** VirtualDisplay vs `draw()`. *(VirtualDisplay works, with two gotchas recorded in §6.1. Done on the emulator; real-device numbers still to record.)*
+- [x] 6.3 `android/` Gradle project; `make android-build`, `android-install`, `android-logcat`; assets synced from `web/`. *(Done, plus `android-emulator`; CI builds the debug APK.)*
+- [x] 6.4 Engine: visibility pause, touch forwarding, settings activity (§6.3), power/thermal/battery bridge. *(Done. `setFixedSize` render scaling was tried and dropped (§6.1); copy-only-new-frames isn't needed under VirtualDisplay. Touch, swipes and the visibility pause on a real home screen are still to check by hand.)*
+- [ ] 6.4a `make android-bench`: mAh per hour per wallpaper per tier on a real device; table recorded in §4.8. *(Tool built; needs a real phone.)*
+- [x] 6.5 Extras: home-screen scroll parallax, `WallpaperColors`. *(Done.)*
+- [ ] 6.6 Distribution (decided): `make android-release` builds a signed APK; CI attaches it to a GitHub Release on tag. The keystore lives outside the repo; CI uses an encrypted secret. *(Built: `make android-keystore`, the `release` job. Waiting on the owner to make the key, add the secrets and tag v0.6.0.)*
 
 ### Phase 7: Retire the old homepage
 

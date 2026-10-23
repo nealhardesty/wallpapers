@@ -144,9 +144,7 @@
         return { ceiling, fpsCap, pause, reasons };
     };
 
-    // Everything that decides the quality a stage starts at, in one place,
-    // so the player (which lays the stage out at its renderScale) and the
-    // stage (which runs it) agree without talking first.
+    // Everything that decides the quality a stage starts at, in one place.
     //   mode: 'auto' or a pinned tier; memory: the label Auto settled on.
     WP.planQuality = ({ entry, mode = 'auto', policy, memory = null }) => {
         if (WP.TIERS[mode]) {

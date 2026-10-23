@@ -13,7 +13,7 @@ AVD ?= $(firstword $(shell $(ANDROID_HOME)/emulator/emulator -list-avds 2>/dev/n
 GRADLE = cd android && ./gradlew --quiet
 APP = com.roadwaffle.wallpapers
 
-.PHONY: help hooks serve serve-https cert bing-json thumbnails icons screenshots extension site android-build android-install android-logcat android-emulator android-release android-bench docker-build docker-run lint audit audit-staged audit-history test smoke ci clean
+.PHONY: help hooks serve serve-https cert bing-json thumbnails icons screenshots extension site android-build android-install android-logcat android-emulator android-release android-keystore android-bench docker-build docker-run lint audit audit-staged audit-history test smoke ci clean
 
 help: ## List every target
 	@awk 'BEGIN {FS = ":.*## "} /^[a-zA-Z0-9_-]+:.*## / {printf "  \033[36m%-17s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -75,6 +75,13 @@ android-release: ## Build the signed release APK into dist/ (needs WALLPAPERS_KE
 	@mkdir -p dist
 	@cp android/app/build/outputs/apk/release/app-release.apk dist/wallpapers-$$(node -p "require('./web/manifest.json').version").apk
 	@echo "android: dist/wallpapers-$$(node -p "require('./web/manifest.json').version").apk"
+
+KEYSTORE ?= $(HOME)/.wallpapers-release.jks
+android-keystore: ## Make the release signing key, outside the repo (KEYSTORE=, default ~/.wallpapers-release.jks); once, ever
+	@test ! -e "$(KEYSTORE)" || { echo "$(KEYSTORE) exists; it signs every release, so it's never replaced"; exit 1; }
+	"$(JAVA_HOME)/bin/keytool" -genkeypair -v -keystore "$(KEYSTORE)" -alias wallpapers -keyalg RSA -keysize 4096 -validity 36500 -dname "CN=Wallpapers"
+	@echo "\nBack it up somewhere safe: losing it means users must uninstall to update."
+	@echo "For CI: gh secret set WALLPAPERS_KEYSTORE_BASE64 < <(base64 -i \"$(KEYSTORE)\"), and set WALLPAPERS_KEYSTORE_PASSWORD, WALLPAPERS_KEY_ALIAS (wallpapers), WALLPAPERS_KEY_PASSWORD"
 
 android-bench: ## Each wallpaper at each tier on the connected device: frame times and battery (SPEC §4.8)
 	@ADB="$(ADB)" node tools/android-bench.mjs

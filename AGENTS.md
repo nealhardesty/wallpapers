@@ -67,7 +67,10 @@ SPEC.md §4 has the full contract. The short version:
      `z-index: -1`, `pointer-events: none`. Interactive wallpapers listen
      on `document`, using pointer events so touch works.
    - Animate only with `requestAnimationFrame` (the stage paces and pauses
-     it), and move by elapsed time from its timestamp, not per frame.
+     it), and move by elapsed time from its timestamp, not per frame:
+     frame rates run from 10 to 120 fps. Clamp dt at 100 ms (not 50: the
+     slow tier runs at 10 fps). Per-frame logic you can't avoid (games,
+     wind) runs on a fixed 60 Hz step from an accumulator.
    - Keep ground lines above `host.insets.bottom`.
    - Look alive on the first frame: seed the scene, don't fade in from
      black.
@@ -87,7 +90,21 @@ SPEC.md §4 has the full contract. The short version:
    - no per-frame `getImageData`/`putImageData`, `shadowBlur` or `ctx.filter`
    - cache static layers
    - pool particles
-   - check it at `?tier=low`
+   - bake glows and gradients into sprites, never one per particle per frame
+   - read `host.quality` when you build the scene: multiply counts *and*
+     spawn rates by `density`; declare optional costly effects in the
+     catalog (`effects: [['bloom', 'medium']]`, most expensive first) and
+     draw them only while `quality.effects` includes them
+   - implement `onQuality(quality)` so Auto can change it live: trim and
+     add gradually, fade effects, never reset the scene
+   - size your canvas by `devicePixelRatio` (the stage lowers it for
+     render scale), or by `innerWidth` for one pixel per CSS px
+   - when nothing will change for a while, `host.idleUntil(ms)` (deadline
+     from `performance.now()`) and the stage stops sending frames
+   - with depth layers, `onScroll(x)` (0 to 1) pans them as Android's home
+     screens swipe
+   - check it at `?tier=low` and `?hud=1`, and run `node tools/bench.mjs
+     <id>`: under 25% busy on Low and 50% on Medium
 6. **Verify.**
    - `make ci` must pass. The tests fail if your schema and defaults
      disagree, or the thumbnail is missing. The smoke test boots your

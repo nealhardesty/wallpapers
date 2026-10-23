@@ -131,16 +131,11 @@
     // SPEC §4.8. fps, the DPR cap and renderScale apply here. Render scale
     // lowers devicePixelRatio ([Replaceable], so modules that size their
     // canvas by it see ours): the layout stays the same size on screen and
-    // the canvas has fewer pixels, which the browser scales up. In the
-    // Android app the app shrinks the surface instead, which lowers the real
-    // ratio; there we pass it through. Density and effects are the
-    // wallpaper's to apply, in onQuality(quality) or by reading
-    // host.quality when it builds its scene.
-    const realDpr = Object.getOwnPropertyDescriptor(window, 'devicePixelRatio')?.get;
-    const nativeDpr = () => (realDpr ? realDpr.call(window) : 1) || 1;
-    const appScales = typeof window.WallpapersApp !== 'undefined';
-    const setDpr = q => { window.devicePixelRatio = Math.min(nativeDpr(), q.dpr) * (appScales ? 1 : q.renderScale); };
-    if (appScales) window.addEventListener('resize', () => host.quality && setDpr(host.quality));
+    // the canvas has fewer pixels, which the browser scales up. Density
+    // and effects are the wallpaper's to apply, in onQuality(quality) or by
+    // reading host.quality when it builds its scene.
+    const nativeDpr = window.devicePixelRatio || 1;
+    const setDpr = q => { window.devicePixelRatio = Math.min(nativeDpr, q.dpr) * q.renderScale; };
     let policy = WP.powerPolicy({ host: kind, reducedMotion: host.reducedMotion, batteryAware: read('wp:performance')?.batteryAware !== false });
 
     function applyQuality(quality) {
@@ -150,7 +145,7 @@
         setDpr(quality);
         if (!previous) return;
         tell({ type: 'quality', quality, rung: governor?.rung ?? null, of: governor?.rungs.length ?? null });
-        if (!appScales && (previous.dpr !== quality.dpr || previous.renderScale !== quality.renderScale)) window.dispatchEvent(new Event('resize'));
+        if (previous.dpr !== quality.dpr || previous.renderScale !== quality.renderScale) window.dispatchEvent(new Event('resize'));
         WP.stage.manager?.onQuality?.(quality);
         wake();
     }

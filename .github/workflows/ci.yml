@@ -3,6 +3,7 @@ name: ci
 on:
   push:
     branches: [master]
+    tags: ['v*']   # a release: signed APK and extension zip on a GitHub Release
   pull_request:
   schedule:
     - cron: '23 9 * * *'   # daily, after Bing's new image: refreshes bing.json on Pages
@@ -26,6 +27,57 @@ jobs:
         with:
           name: wallpapers-extension
           path: dist/wallpapers-extension-*.zip
+
+  android:
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - run: make android-build
+      - uses: actions/upload-artifact@v7
+        with:
+          name: wallpapers-android-debug
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+
+  # Tag vX.Y.Z (matching web/manifest.json's version) to publish. The
+  # keystore lives only in the repo's secrets (SPEC §6.6).
+  release:
+    needs: [ci, android]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Check the tag matches the version
+        run: test "${GITHUB_REF_NAME#v}" = "$(node -p "require('./web/manifest.json').version")"
+      - name: Build the signed APK and the extension
+        env:
+          KEYSTORE_BASE64: ${{ secrets.WALLPAPERS_KEYSTORE_BASE64 }}
+          WALLPAPERS_KEYSTORE_PASSWORD: ${{ secrets.WALLPAPERS_KEYSTORE_PASSWORD }}
+          WALLPAPERS_KEY_ALIAS: ${{ secrets.WALLPAPERS_KEY_ALIAS }}
+          WALLPAPERS_KEY_PASSWORD: ${{ secrets.WALLPAPERS_KEY_PASSWORD }}
+        run: |
+          test -n "$KEYSTORE_BASE64" || { echo "::error::set the WALLPAPERS_KEYSTORE_* secrets (README, Releasing)"; exit 1; }
+          echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
+          WALLPAPERS_KEYSTORE="$RUNNER_TEMP/release.jks" make android-release extension
+      - run: gh release create "$GITHUB_REF_NAME" --generate-notes dist/wallpapers-*.apk dist/wallpapers-extension-*.zip
+        env:
+          GH_TOKEN: ${{ github.token }}
 
   pages:
     needs: ci

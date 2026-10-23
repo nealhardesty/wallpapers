@@ -15,8 +15,8 @@ Everything is plain HTML, CSS and JavaScript, with no build step. Most
 wallpapers work fully offline. The online ones, such as the Bing image of
 the day, need no API keys.
 
-> **Status: working** as a web page and a Chrome new tab. Next: Android
-> live wallpapers. The plan and roadmap are in [SPEC.md](SPEC.md).
+> **Status: working** as a web page, a Chrome new tab and an Android live
+> wallpaper (sideloaded). The plan and roadmap are in [SPEC.md](SPEC.md).
 
 ## The wallpapers
 
@@ -54,10 +54,19 @@ once before pressing `,`, or use the gear in the top-right corner. The
 extension asks for one permission, reading `www.bing.com`, so the Bing
 wallpaper can fetch its photo; nothing else leaves your machine.
 
-**On a phone,** for now. Open the hosted copy and choose *Add to Home
-screen*: it opens full screen, with no browser around it. Hold the
-top-right corner for the panel. A real Android live wallpaper is next on
-the roadmap.
+**On Android, as a live wallpaper.** Download `wallpapers-<version>.apk`
+from the latest [release](https://github.com/nealhardesty/wallpapers/releases)
+(or `make android-install` with a phone connected) and install it; your
+phone asks you to allow installs from the browser once. Open **Wallpapers**
+from the app drawer: it's the panel, with a **Set as wallpaper** button.
+On the home screen, taps and drags reach the wallpaper (feed the fish, wake
+the cat), and the mountains, clouds and stars pan as you swipe between
+pages. It pauses whenever it's covered, and runs at Medium and 30 fps at
+most, lower on battery saver or when the phone is warm.
+
+**On any phone,** without installing anything: open the hosted copy and
+choose *Add to Home screen*. It opens full screen, with no browser around
+it. Hold the top-right corner for the panel.
 
 <img src="docs/phone.webp" width="260" alt="The panel as a bottom sheet on a phone">
 
@@ -84,8 +93,15 @@ mouse, a gear appears when you move toward that corner.
 - Every wallpaper, with a thumbnail. Hover one for a moment to see it play.
 - The current wallpaper's settings, which take effect as you change them.
   A dot marks anything you've changed; click it to put that setting back.
-- Performance (Auto, Low, Medium, High). Low draws fewer pixels and frames,
-  which is easier on batteries.
+- Performance: **Auto** (the default) watches how long each frame takes
+  and gives up detail in small steps when the device struggles, then
+  takes it back when it's calm; it remembers where each wallpaper settled.
+  **Low**, **Medium** and **High** pin it. Low draws fewer pixels, frames
+  and particles, and drops expensive effects such as bloom and blur.
+  Under it, a live readout shows what's happening.
+- **Save power on battery** (on by default): on battery, Auto stays at
+  Medium or below, and Low under 20%.
+- ⚡ badges on the tiles show how hard each wallpaper works a phone.
 - Reset, plus Export and Import, to move your settings to another browser.
 
 **Some wallpapers have their own keys** (press `?` to see them):
@@ -109,6 +125,7 @@ settings).
 | `?panel=open` | Open its settings on load |
 | `?w=advent&date=2026-12-25` | Time-travel the advent calendar (`&theme=` picks a theme) |
 | `?tier=low` | Low, medium or high performance tier (fewer pixels and frames on low) |
+| `?hud=1` | A corner readout: frame rate, frame cost, quality step, power |
 | `?seed=7` | The same random scene every time |
 
 `web/stage.html?w=<id>` shows a single wallpaper on its own, without the
@@ -122,6 +139,9 @@ Requirements:
   found)
 - `openssl`, for `make serve-https`
 - Docker, for the container
+- For Android: the Android SDK and a JDK 17 or later. With Android Studio
+  installed in the usual place, the Makefile finds both (`ANDROID_HOME=`
+  and `JAVA_HOME=` override). Gradle comes with the wrapper.
 
 There are no npm packages to install.
 
@@ -146,6 +166,14 @@ Run `make` to list every target.
 | `make screenshots` | Re-render the README's screenshots in `docs/` (committed: review the changes) |
 | `make extension` | Build the Chrome extension: `dist/extension/` to load unpacked, and a zip |
 | `make site` | Build the GitHub Pages copy in `dist/site/`, with a fresh `bing.json` |
+| `make bench` | Every wallpaper at every tier on a simulated phone (4× slower CPU); checks the budgets, writes `bench/results.json` and the ⚡ badges |
+| `make android-build` | Build the Android debug APK |
+| `make android-install` | Install it on the connected phone or emulator and open it |
+| `make android-logcat` | Follow the app's log, including the page's console |
+| `make android-emulator` | Boot an emulator in the background (`AVD=`, `EMULATOR_FLAGS=-no-window`) |
+| `make android-bench` | On a phone with the debug build set as wallpaper: frame cost, CPU and battery drain per wallpaper per tier |
+| `make android-keystore` | Make the release signing key, outside the repo (once, ever) |
+| `make android-release` | Build the signed release APK into `dist/` |
 | `make docker-build` | Build the container image `wallpapers` |
 | `make docker-run` | Run it at http://localhost:8000 (read-only, unprivileged) |
 | `make lint` | Syntax-check every script and JSON file |
@@ -164,6 +192,18 @@ To try the wallpapers on a phone, serve them on your network:
 certificate is self-signed, so the browser warns once. Accept it, or trust
 `.cert/cert.pem` on the device. HTTPS matters off localhost because some
 browser features only work on secure pages.
+
+### Releasing
+
+1. Once: `make android-keystore`, back the key up somewhere safe, and add
+   the four `WALLPAPERS_KEY*` secrets it prints to the GitHub repo
+   (`gh secret set`). Losing the key means people must uninstall to
+   update.
+2. Bump `version` in `web/manifest.json` (it's the extension's and the
+   app's version), commit, and push a matching tag: `git tag v0.6.0 &&
+   git push --tags`.
+3. CI checks everything, builds the signed APK and the extension zip, and
+   publishes both on a GitHub Release.
 
 ### Adding a wallpaper
 
