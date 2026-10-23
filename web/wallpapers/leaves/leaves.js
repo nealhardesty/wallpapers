@@ -23,6 +23,7 @@ class LeavesAnimationManager {
         // into separate banks instead of one level carpet: a column's leaves
         // stop being accepted at its own ceiling, not at a single global one.
         this.driftProfile = null;
+        this.pileShare = 1;
 
         // The drift runs to a couple of thousand leaves, far too many to redraw
         // as vector paths every frame, so it is painted once into its own canvas
@@ -263,6 +264,7 @@ class LeavesAnimationManager {
         if (!this.leafSprites) this.buildLeafSprites();
 
         this.buildDriftProfile();
+        this.fitPileToCap();
         this.pileDirty = true;
         this.seedPile();
     }
@@ -280,10 +282,32 @@ class LeavesAnimationManager {
         return this.host.quality?.density ?? 1;
     }
 
+    // A cap below what the banks need (a big screen on a lower tier) would
+    // fill them as one thin, level strip. Lowering the ceiling to what the
+    // cap can fill keeps the banks' shape, just shallower.
+    fitPileToCap() {
+        this.pileShare = 1;
+        const types = this.config.leafTypes.map(type => this.leafShapes[type]).filter(Boolean);
+        if (!types.length || !this.driftProfile) return;
+
+        // The average leaf createLeaf() makes, and the height it adds
+        const size = types.reduce((sum, shape) => sum + shape.size, 0) / types.length *
+                     (0.8 + this.config.leafSizeVariation / 2) * 1.07;
+        const perLeaf = this.pileContribution({ size }) * this.pileSpread[0];
+
+        let room = 0;
+        for (let i = 0; i < this.driftProfile.length; i++) room += this.columnCap(i);
+        this.pileShare = Math.min(1, this.maxSettled() * perLeaf / (room || 1));
+    }
+
+    onQuality() {
+        this.fitPileToCap();
+    }
+
     // Deepest the drift is allowed to get, as a share of the viewport
     pileCeiling() {
         if (!this.canvas) return 0;
-        return this.canvas.height * Math.max(0, Math.min(0.5, this.config.pileDepth));
+        return this.canvas.height * Math.max(0, Math.min(0.5, this.config.pileDepth)) * this.pileShare;
     }
 
     columnCap(index) {
