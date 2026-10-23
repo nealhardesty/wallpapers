@@ -410,13 +410,22 @@ const NekoSprites = {
     },
 };
 
+// While the cat sleeps only the z's move, and only in steps of this many
+// ms, so the stage can skip every frame in between (host.idleUntil). The
+// timer that wakes the stage can fire a touch early, so steps count from
+// slightly ahead of the clock.
+const NEKO_Z_STEP = 100;
+const NEKO_Z_AHEAD = 8;
+
 class NekoAnimationManager {
-    constructor() {
+    constructor(host) {
+        this.host = host;
         this.canvas = null;
         this.ctx = null;
         this.neko = null;
         this.isEnabled = false;
         this.animationId = null;
+        this.lastTime = 0;
         this.mousePosition = { x: 0, y: 0 };
         this.lastMouseMove = Date.now();
 
@@ -534,7 +543,8 @@ class NekoAnimationManager {
         this.isEnabled = true;
         this.canvas.style.display = 'block';
         this.initializeNeko();
-        this.animate();
+        this.lastTime = 0;
+        this.animate(0);
         console.log('Neko animation started');
     }
 
@@ -551,7 +561,9 @@ class NekoAnimationManager {
         console.log('Neko animation stopped');
     }
 
-    update() {
+    // frames: elapsed time in 60 fps frames, the unit the timers, speed and
+    // Animation Speed were tuned in.
+    update(frames) {
         if (!this.neko) return;
 
         const timeSinceMouseMove = Date.now() - this.lastMouseMove;
@@ -593,12 +605,12 @@ class NekoAnimationManager {
         }
 
         // Update state timer
-        this.neko.stateTimer++;
+        this.neko.stateTimer += frames;
 
         // Handle state transitions and animations
         this.updateState();
-        this.updatePosition();
-        this.updateAnimation();
+        this.updatePosition(frames);
+        this.updateAnimation(frames);
     }
 
     runTowardsMouse() {
@@ -692,7 +704,7 @@ class NekoAnimationManager {
         }
     }
 
-    updatePosition() {
+    updatePosition(frames) {
         if (!this.neko || !this.neko.isMoving) return;
 
         const dx = this.neko.targetX - this.neko.x;
@@ -704,8 +716,10 @@ class NekoAnimationManager {
             this.neko.vx = (dx / distance) * this.config.speed;
             this.neko.vy = (dy / distance) * this.config.speed;
 
-            this.neko.x += this.neko.vx;
-            this.neko.y += this.neko.vy;
+            // Never past the target: a long step would overshoot and dither
+            const step = Math.min(1, distance / (this.config.speed * frames));
+            this.neko.x += this.neko.vx * frames * step;
+            this.neko.y += this.neko.vy * frames * step;
 
             // Keep neko on screen
             this.neko.x = Math.max(16, Math.min(this.canvas.width - 16, this.neko.x));
@@ -719,15 +733,23 @@ class NekoAnimationManager {
         }
     }
 
-    updateAnimation() {
+    updateAnimation(frames) {
         if (!this.neko) return;
 
-        this.neko.animationTimer++;
+        this.neko.animationTimer += frames;
 
-        if (this.neko.animationTimer >= this.config.animationSpeed) {
+        // Asleep, slow breaths, like the classic Neko: a quarter of the pace
+        const every = this.config.animationSpeed * (this.neko.state === this.States.SLEEP ? 4 : 1);
+        if (this.neko.animationTimer >= every) {
             this.neko.animationFrame++;
             this.neko.animationTimer = 0;
         }
+    }
+
+    // Asleep, nothing changes until the next z step (a breath waits for
+    // one), so there's no need for frames in between: ms until that step.
+    sleepingFor() {
+        return NEKO_Z_STEP - (performance.now() + NEKO_Z_AHEAD) % NEKO_Z_STEP;
     }
 
     getCurrentSprite() {
@@ -812,9 +834,9 @@ class NekoAnimationManager {
         }
     }
 
-    // Three z's drifting up and away from a sleeping cat.
+    // Three z's drifting up and away from a sleeping cat, in steps.
     drawZs(size) {
-        const t = performance.now() / 1000;
+        const t = Math.floor((performance.now() + NEKO_Z_AHEAD) / NEKO_Z_STEP) * NEKO_Z_STEP / 1000;
         const ctx = this.ctx;
         ctx.save();
         ctx.fillStyle = '#d7dcef';
@@ -827,13 +849,21 @@ class NekoAnimationManager {
         ctx.restore();
     }
 
-    animate() {
+    animate(now) {
         if (!this.isEnabled) return;
 
-        this.update();
+        // By elapsed time, in 60 fps frames, so every frame rate runs at the
+        // same pace; clamped, so a long pause doesn't jump.
+        const frames = this.lastTime ? Math.min((now - this.lastTime) / 1000, 0.1) * 60 : 0;
+        this.lastTime = now;
+
+        this.update(frames);
         this.draw();
 
-        this.animationId = requestAnimationFrame(() => this.animate());
+        // A pointer wakes the stage early, and the cat with it.
+        if (this.neko.state === this.States.SLEEP) this.host.idleUntil(this.sleepingFor());
+
+        this.animationId = requestAnimationFrame(time => this.animate(time));
     }
 
     destroy() {
