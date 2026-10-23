@@ -21,6 +21,8 @@ const SEED = 7;
 // How long each wallpaper needs to look like itself, and settings that make
 // a better picture (they apply to this render only: thumb mode never saves).
 const SETTLE_MS = { snow: 7000, leaves: 3000, rain: 4000, fireplace: 4000, halloween: 4000, advent: 4000, quest: 5000, fishtank: 4000 };
+// Extra URL parameters: a fixed moment for wallpapers that follow the clock.
+const QUERY = { 'pixel-room': '&date=2026-10-22T18:20' };
 const OVERRIDES = {
     quest: { configVersion: 1, story: false },
     neko: { configVersion: 2, size: 128, coat: 'orange' },
@@ -43,7 +45,7 @@ try {
         await cdp.send('Page.navigate', { url: `${WEB}/stage.html?w=blank` });
         await sleep(300);
         await evaluate(`localStorage.clear(); ${OVERRIDES[id] ? `localStorage.setItem('wp:${id}', ${JSON.stringify(JSON.stringify(OVERRIDES[id]))})` : ''}`);
-        await cdp.send('Page.navigate', { url: `${WEB}/stage.html?w=${id}&seed=${SEED}&thumb=1` });
+        await cdp.send('Page.navigate', { url: `${WEB}/stage.html?w=${id}&seed=${SEED}&thumb=1${QUERY[id] || ''}` });
         await sleep(SETTLE_MS[id] ?? 3000);
         const { data } = await cdp.send('Page.captureScreenshot', {
             format: 'webp', quality: 82, clip: { x: 0, y: 0, width: 1280, height: 800, scale: 0.25 },

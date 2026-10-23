@@ -185,8 +185,90 @@ async function stage(id, entry) {
     if (drawn < 2 && id !== 'blank') record(entry.network ? 'background photo not shown' : 'nothing drawn');
     if (storage?.diff?.length) record(`fresh run would save: ${storage.diff.join(', ')} (defaults.js out of step)`);
     if (storage?.foreign?.length) record(`wrote storage outside its namespace: ${storage.foreign.join(', ')}`);
+    if (ready && STAGE_CHECKS[id] && !LIVE) await STAGE_CHECKS[id]();
     return { readyMs, drawn, problems: current.problems };
 }
+
+// Boot a stage with fresh storage, at a viewport if given, and wait for it.
+async function bootStage(query, viewport = null) {
+    if (viewport) await cdp.send('Emulation.setDeviceMetricsOverride', { mobile: viewport.width < 600, ...viewport });
+    else await cdp.send('Emulation.clearDeviceMetricsOverride');
+    await fresh(`${WEB}/stage.html?${query}`);
+    return waitFor(() => evaluate('WP.stage?.ready'));
+}
+
+// Frames per second the stage really ran, over `ms`.
+async function stageFps(ms = 3000) {
+    const before = await evaluate('WP.host.frames.count');
+    await sleep(ms);
+    return (await evaluate('WP.host.frames.count') - before) / (ms / 1000);
+}
+
+// Each wallpaper's own "→" checks (SPEC §9, Phase 8), after its stage run.
+const STAGE_CHECKS = {
+    // 8.1: idle between strokes on Low, and a new drawing on N.
+    harmonograph: async () => {
+        await bootStage('w=harmonograph&tier=low');
+        const at = await evaluate('WP.stage.manager.drawn');
+        const low = await stageFps();
+        if (low > 8) record(`Low ran at ${low} fps; it should idle between strokes (about 4)`);
+        if (await evaluate('WP.stage.manager.drawn') <= at) record('the pen did not move on Low');
+        await bootStage('w=harmonograph&tier=high');
+        if (await stageFps(1500) < 20) record('High didn\'t draw at the slow-motion rate');
+        await evaluate('WP.stage.manager.newDrawing()');
+        const fresh = await waitFor(() => evaluate("WP.stage.manager.phase === 'draw' && WP.stage.manager.pile.length === 1"), 8000);
+        if (!fresh) record('N did not pile the sheet and start a new one');
+    },
+    // 8.4: both layouts fill the screen at a whole scale with crisp pixels;
+    // the wall clock shows the stage's time; ≤ 12 fps on every tier.
+    'pixel-room': async () => {
+        const screens = [
+            { width: 1280, height: 800, deviceScaleFactor: 1, layout: 'landscape' },
+            { width: 1920, height: 1080, deviceScaleFactor: 1.25, layout: 'landscape' },
+            { width: 412, height: 915, deviceScaleFactor: 2.625, layout: 'portrait' },
+            { width: 800, height: 1280, deviceScaleFactor: 2, layout: 'portrait' },
+        ];
+        for (const { layout, ...viewport } of screens) {
+            await bootStage('w=pixel-room', viewport);
+            const v = await evaluate(`(() => {
+                const m = WP.stage.manager, c = m.canvas, r = c.getBoundingClientRect(), s = getComputedStyle(c);
+                return { ...m.view, cw: c.width, ch: c.height, left: r.left, top: r.top, right: r.right, bottom: r.bottom,
+                    iw: innerWidth, ih: innerHeight, rendering: s.imageRendering, perPixel: r.width * m.view.ratio / c.width };
+            })()`);
+            const where = `${viewport.width}×${viewport.height}@${viewport.deviceScaleFactor}`;
+            if (v.layout !== layout) record(`${where}: ${v.layout} layout`);
+            if (Math.abs(v.ratio - viewport.deviceScaleFactor) > 0.01) record(`${where}: read the pixel ratio as ${v.ratio}`);
+            if (!Number.isInteger(v.scale) || Math.abs(v.perPixel - v.scale) > 0.01) record(`${where}: ${v.perPixel} device px per art px`);
+            if (v.left > 0.01 || v.top > 0.01 || v.right < v.iw - 0.01 || v.bottom < v.ih - 0.01) record(`${where}: canvas doesn't cover the screen`);
+            if (v.cw * v.scale < v.deviceW || v.ch * v.scale < v.deviceH) record(`${where}: buffer too small`);
+            if (v.rendering !== 'pixelated') record(`${where}: image-rendering ${v.rendering}`);
+        }
+        await cdp.send('Emulation.clearDeviceMetricsOverride');
+        for (const [date, hour, minute, phase, lamp] of [['2026-03-14T09:41', 9, 41, 'day', false], ['2026-03-14T22:30', 22, 30, 'night', true]]) {
+            await bootStage(`w=pixel-room&date=${date}`);
+            const seen = await evaluate('(m => ({ ...m.clockReading(), phase: m.state.phase, lamp: m.state.lamp }))(WP.stage.manager)');
+            if (seen.hour !== hour || seen.minute !== minute) record(`?date=${date}: the clock reads ${seen.hour}:${seen.minute}`);
+            if (seen.phase !== phase || seen.lamp !== lamp) record(`?date=${date}: ${seen.phase}, lamp ${seen.lamp ? 'on' : 'off'}`);
+        }
+        // A tap on the lamp switches it; a tap on the sleeping cat wakes it.
+        await bootStage('w=pixel-room&date=2026-03-14T09:41');
+        const tapAt = async art => {
+            const [x, y] = await evaluate(`(m => [(m.ox + ${art[0]}) * m.view.scale + m.view.left, (m.oy + ${art[1]}) * m.view.scale + m.view.top].map(v => v / m.view.ratio))(WP.stage.manager)`);
+            for (const type of ['mousePressed', 'mouseReleased']) await cdp.send('Input.dispatchMouseEvent', { type, x, y, button: 'left', clickCount: 1 });
+            await sleep(200);
+        };
+        await tapAt(await evaluate('(l => [l.x + 8, l.y + 3])(WP.stage.manager.L.lamp)'));
+        if (!await evaluate('WP.stage.manager.timeState().lamp')) record('a tap on the lamp left it off');
+        await tapAt(await evaluate('(b => [b.x + b.w / 2, b.y + b.h / 2])(WP.stage.manager.catBox())'));
+        if (await evaluate('WP.stage.manager.cat.state') !== 'wake') record('a tap on the cat didn\'t wake it');
+        for (const tier of ['low', 'medium', 'high']) {
+            await bootStage(`w=pixel-room&tier=${tier}`);
+            await sleep(500);
+            const fps = await stageFps();
+            if (fps > 12 || fps < 7) record(`${tier}: ${fps} fps; expected 8–12`);
+        }
+    },
+};
 
 async function press(key) {
     const text = key.length === 1 ? key : undefined;

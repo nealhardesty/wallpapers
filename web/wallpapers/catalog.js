@@ -79,6 +79,17 @@
               { keys: ['m'], label: 'Next companion', run: quest => questCycle(quest, 'companion', Object.keys(QuestArt.COMPANIONS), QuestArt.COMPANIONS) },
               { keys: ['p'], label: 'Next palette', run: quest => questCycle(quest, 'palette', Object.keys(QuestEngineData.FILTERS)) },
           ] },
+        { id: 'harmonograph', name: 'Harmonograph', icon: '🖋️', accent: '#e0c79a', background: '#1c1511',
+          scripts: ['harmonograph/harmonograph-math.js', 'harmonograph/harmonograph.js'],
+          make: host => new HarmonographAnimationManager(host), cost: 'low', motion: 'slow',
+          keys: [{ keys: ['n'], label: 'New drawing', run: harmonograph => { harmonograph.newDrawing(); return 'A fresh sheet'; } }] },
+        { id: 'pixel-room', name: 'Pixel Room', icon: '🛋️', accent: '#f0a04b', background: '#1d1828',
+          scripts: ['pixel-room/pixel-room-art.js', 'pixel-room/pixel-room.js'],
+          make: host => new PixelRoomAnimationManager(host), cost: 'low', interactive: true,
+          keys: [
+              { keys: ['l'], label: 'Switch the lamp', run: room => room.toggleLamp() },
+              { keys: ['p'], label: 'Pet the cat', run: room => room.pet() },
+          ] },
         { id: 'bing', name: 'Bing Image of the Day', icon: '🖼️', accent: '#8ab4ff', scripts: ['bing/bing.js'],
           make: host => new BingWallpaperManager(host), cost: 'none', network: ['www.bing.com'] },
     ];
