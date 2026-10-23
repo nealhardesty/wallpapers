@@ -340,17 +340,19 @@ async function playerSuite(catalog) {
         return true;
     });
 
-    await check('?tier=low lays out at half size and caps the frame rate', async () => {
+    await check('?tier=low halves the pixel ratio, not the layout, and caps the frame rate', async () => {
         await fresh(`${WEB}/index.html?w=starfield&tier=low`);
         await playerReady();
         const cover = await evaluate("document.querySelector('iframe').getBoundingClientRect().width / innerWidth");
         const layout = await inStage('innerWidth') / await evaluate('innerWidth');
+        const ratio = await inStage('devicePixelRatio') / Math.min(1, await evaluate('devicePixelRatio'));
         // starfield is motion: 'slow', so Low caps it at 10 fps.
         const before = await inStage('WP.host.frames.count');
         await sleep(2000);
         const fps = (await inStage('WP.host.frames.count') - before) / 2;
         if (Math.abs(cover - 1) > 0.01) record(`stage covers ${cover.toFixed(2)} of the width`);
-        if (Math.abs(layout - 0.5) > 0.02) record(`stage laid out at ${layout.toFixed(2)} of the width; expected 0.5`);
+        if (Math.abs(layout - 1) > 0.01) record(`stage laid out at ${layout.toFixed(2)} of the width; expected all of it`);
+        if (Math.abs(ratio - 0.5) > 0.01) record(`stage pixel ratio is ${ratio.toFixed(2)} of Low's cap; expected 0.5`);
         if (fps > 13 || fps < 5) record(`ran at ${fps} fps; expected about 10 (slow motion on Low)`);
         return true;
     });
@@ -371,7 +373,7 @@ async function playerSuite(catalog) {
         return true;
     });
 
-    await check('Auto steps down from slow frames; the player follows its scale', async () => {
+    await check('Auto steps down from slow frames, and renders fewer pixels', async () => {
         await fresh(`${WEB}/index.html?w=rain&hud=1`);
         await playerReady();
         // 20 ms of work every frame: over half of any frame interval.
@@ -380,9 +382,9 @@ async function playerSuite(catalog) {
         if (!stepped) return record('still on High after 4 s of slow frames');
         const deeper = await waitFor(() => inStage("WP.host.quality.renderScale < 1 && WP.host.quality.renderScale"), 12000);
         await sleep(300);
-        const layout = await inStage('innerWidth') / await evaluate('innerWidth');
+        const ratio = await inStage(`devicePixelRatio / Math.min(${await evaluate('devicePixelRatio')}, WP.host.quality.dpr)`);
         if (!deeper) record('never reached a smaller render scale');
-        else if (Math.abs(layout - deeper) > 0.03) record(`stage laid out at ${layout.toFixed(2)}; its quality says ${deeper}`);
+        else if (Math.abs(ratio - deeper) > 0.03) record(`stage pixel ratio is ${ratio.toFixed(2)} of its cap; its quality says ${deeper}`);
         if (!await inStage("localStorage.getItem('wp:perf:rain')")) record('settled rung not remembered');
         const hud = await waitFor(() => evaluate("document.querySelector('.hud')?.textContent"));
         if (!/fps · .* ms · rung \d+\/\d+/.test(hud || '')) record(`hud says: ${hud}`);
