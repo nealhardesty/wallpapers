@@ -46,6 +46,16 @@ const READY_MS = 10000;
 // A 1x1 PNG standing in for Bing's photo.
 const PIXEL = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64');
 const BING_JSON = { images: [{ url: '/th?id=smoke-fixture.jpg', copyright: 'Smoke fixture (Test)', copyrightlink: 'https://www.bing.com/', startdate: '20261022' }] };
+// Satellites: made-up but valid elements in CelesTrak's JSON shape, from two
+// hours ago (so never stale), and a fictional place for the geocoder.
+const SATELLITE_JSON = () => {
+    const epoch = new Date(Date.now() - 2 * 3600000).toISOString().replace('Z', '');
+    const orbit = (name, id, n, e, i, node, argp, m) => ({ OBJECT_NAME: name, OBJECT_ID: 'FIXTURE', NORAD_CAT_ID: id, EPOCH: epoch, MEAN_MOTION: n,
+        ECCENTRICITY: e, INCLINATION: i, RA_OF_ASC_NODE: node, ARG_OF_PERICENTER: argp, MEAN_ANOMALY: m, BSTAR: 0.0001, MEAN_MOTION_DOT: 0.00001, MEAN_MOTION_DDOT: 0 });
+    return [orbit('FIXTURE STATION', 99001, 15.5, 0.0004, 51.6, 10, 80, 0),
+        ...Array.from({ length: 11 }, (_, k) => orbit(`FIXTURE SAT ${k + 1}`, 99002 + k, 14 + k / 10, 0.001 * (k + 1), 50 + k * 4, k * 33, k * 20, k * 31))];
+};
+const GEOCODE_JSON = { results: [{ name: 'Testville', latitude: 12.34, longitude: -56.78, admin1: 'Fixture County', country: 'Exampleland' }] };
 
 // ---- Page plumbing ----------------------------------------------------------
 
@@ -61,7 +71,7 @@ const contexts = new Map();
 function listen() {
     cdp.on('Runtime.exceptionThrown', ({ exceptionDetails: d }) => record(`exception: ${d.exception?.description || d.text}`));
     cdp.on('Runtime.consoleAPICalled', ({ type, args }) => type === 'error' && record(`console.error: ${args.map(a => a.value ?? a.description).join(' ')}`));
-    cdp.on('Log.entryAdded', ({ entry: e }) => e.level === 'error' && record(`log: ${e.text} ${e.url || ''}`));
+    cdp.on('Log.entryAdded', ({ entry: e }) => e.level === 'error' && !(current.offline && e.source === 'network') && record(`log: ${e.text} ${e.url || ''}`));
     cdp.on('Runtime.executionContextCreated', ({ context }) => {
         if (context.auxData?.isDefault) contexts.set(context.auxData.frameId, context.id);
     });
@@ -82,6 +92,10 @@ function listen() {
         // The fixture's photo can arrive after its test has ended; only the
         // fixture names it, so it's never a wallpaper going online.
         if (url.startsWith('https://www.bing.com/th?id=smoke-fixture')) return fulfil(PIXEL, 'image/png');
+        if (current.network && url.startsWith('https://celestrak.org/NORAD/elements/gp.php?')) return fulfil(Buffer.from(JSON.stringify(SATELLITE_JSON())), 'application/json');
+        if (current.network && url.startsWith('https://geocoding-api.open-meteo.com/v1/search?')) return fulfil(Buffer.from(JSON.stringify(GEOCODE_JSON)), 'application/json');
+        // A deliberately offline check: requests fail, quietly.
+        if (current.offline) return cdp.send('Fetch.failRequest', { requestId, errorReason: 'InternetDisconnected' });
         record(`network blocked: ${url}`);
         return cdp.send('Fetch.failRequest', { requestId, errorReason: 'BlockedByClient' });
     });
@@ -175,14 +189,15 @@ async function stage(id, entry) {
     await sleep(RUN_MS);
 
     const ready = state?.ready;
-    const drawn = entry.network
+    const photo = entry.network && !entry.offline;
+    const drawn = photo
         ? (await evaluate(`getComputedStyle(document.body).backgroundImage.includes("${BING_PHOTO}") ? 99 : 0`))
         : await evaluate(DRAWN);
     const { data } = await cdp.send('Page.captureScreenshot', { format: 'png' });
     writeFileSync(join(SHOTS, `${id}.png`), Buffer.from(data, 'base64'));
     const storage = ready ? await evaluate(STORAGE) : null;
 
-    if (drawn < 2 && id !== 'blank') record(entry.network ? 'background photo not shown' : 'nothing drawn');
+    if (drawn < 2 && id !== 'blank') record(photo ? 'background photo not shown' : 'nothing drawn');
     if (storage?.diff?.length) record(`fresh run would save: ${storage.diff.join(', ')} (defaults.js out of step)`);
     if (storage?.foreign?.length) record(`wrote storage outside its namespace: ${storage.foreign.join(', ')}`);
     return { readyMs, drawn, problems: current.problems };
@@ -355,6 +370,60 @@ async function playerSuite(catalog) {
         return true;
     });
 
+    await check('satellites: elements fetched once, then cached for 12 h', async () => {
+        current.network = true;
+        await fresh(`${WEB}/stage.html?w=satellites`);
+        const live = await waitFor(() => evaluate("WP.stage.ready && WP.stage.manager.source === 'live'"));
+        if (!live) record(`never used the fixture's elements (source: ${await evaluate('WP.stage.manager?.source')})`);
+        if (!await evaluate("WP.stage.manager.sats.some(s => s.label === 'FIXTURE STATION')")) record('fixture station missing');
+        await cdp.send('Page.navigate', { url: `${WEB}/stage.html?w=satellites` });
+        await waitFor(() => evaluate('WP.stage.ready'));
+        await sleep(800);
+        const source = await evaluate('WP.stage.manager.source');
+        const asked = current.requests.filter(url => url.startsWith('https://celestrak.org/')).length;
+        if (asked !== 1) record(`asked CelesTrak ${asked} times; once is the limit`);
+        if (source !== 'cache') record(`second start used ${source}, not the cache`);
+        return true;
+    });
+
+    await check('satellites: offline and with nothing cached, sample orbits, labelled', async () => {
+        current.offline = true;
+        await fresh(`${WEB}/stage.html?w=satellites`);
+        await waitFor(() => evaluate('WP.stage.ready'));
+        await sleep(1500);
+        const state = await evaluate('({ source: WP.stage.manager.source, status: WP.stage.manager.status.text, sats: WP.stage.manager.sats.length })');
+        if (state.source !== 'sample' || !state.sats) record(`offline it shows ${state.sats} from ${state.source}`);
+        if (!state.status.includes('Sample orbits')) record(`not labelled as a sample: ${state.status}`);
+        if (await evaluate(DRAWN) < 2) record('nothing drawn offline');
+        return true;
+    });
+
+    await check('location: a typed place, geocoded once and rounded, reaches the stage', async () => {
+        current.network = true;
+        await fresh(`${WEB}/index.html?w=satellites&panel=open`);
+        await playerReady();
+        if (await evaluate("document.querySelector('iframe').allow") !== 'geolocation') record('the stage iframe may not ask for geolocation');
+        if (!await waitFor(() => evaluate("!!document.querySelector('#panel .location-input')"), 4000)) return record('no location controls');
+        await evaluate(`(() => {
+            document.querySelector('#panel .location-input').value = 'Testville';
+            document.querySelector('#panel .location-find').requestSubmit();
+        })()`);
+        const chip = await waitFor(() => evaluate("document.querySelector('#panel .location-results .chip')?.textContent"), 4000);
+        if (chip !== 'Testville, Fixture County, Exampleland') return record(`results: ${chip}`);
+        await evaluate("document.querySelector('#panel .location-results .chip').click()");
+        const saved = await evaluate("JSON.parse(localStorage.getItem('wp:location'))");
+        if (JSON.stringify(saved) !== JSON.stringify({ lat: 12.3, lon: -56.8, label: 'Testville, Exampleland', source: 'typed' })) record(`saved ${JSON.stringify(saved)}`);
+        const label = await waitFor(() => inStage("WP.stage.ready && WP.stage.manager.place?.label"), 6000);
+        if (label !== 'Testville, Exampleland') record(`the stage has ${label}`);
+        if (await inStage('WP.stage.manager.observer.lat') !== 12.3) record('the sky isn\'t over the place');
+        const asked = current.requests.filter(url => url.startsWith('https://geocoding-api.open-meteo.com/')).length;
+        if (asked !== 1) record(`asked the geocoder ${asked} times`);
+        await fresh(`${WEB}/index.html?w=rain`);
+        await playerReady();
+        if (await evaluate("document.querySelector('iframe').allow")) record('rain was allowed geolocation');
+        return true;
+    });
+
     await check('the corner gear appears when the pointer comes near', async () => {
         await fresh(`${WEB}/index.html?w=rain`);
         await playerReady();
@@ -505,7 +574,7 @@ async function main(only) {
         await cdp.send('Fetch.enable', { patterns: [{ urlPattern: '*' }] });
         await cdp.send('Page.navigate', { url: `${WEB}/stage.html?w=blank` });
         await waitFor(() => evaluate('WP.stage?.ready'));
-        const catalog = await evaluate('WP.catalog.map(e => ({ id: e.id, pseudo: !!e.pseudo, disabled: e.disabled || null, network: !!e.network }))');
+        const catalog = await evaluate('WP.catalog.map(e => ({ id: e.id, pseudo: !!e.pseudo, disabled: e.disabled || null, network: !!e.network, offline: !!e.offline }))');
         const ids = only.length ? only : catalog.filter(e => !e.pseudo).map(e => e.id);
 
         let failed = 0;

@@ -11,6 +11,9 @@
 //                run in the stage, and may return a toast
 //   interactive  wants pointer and/or keys        motion  'slow' gets a lower fps cap
 //   network      talks to these hosts (SPEC §1)   cost    hint for mobile defaults
+//   offline      a network wallpaper that still draws its own scene without
+//                the network: it gets a thumbnail, previews and the pixel checks
+//   needs        host capabilities it asks for: 'location' (SPEC §10.1)
 //   disabled     why it can't be shown yet        pseudo  not a real wallpaper
 
 (function () {
@@ -79,6 +82,11 @@
               { keys: ['m'], label: 'Next companion', run: quest => questCycle(quest, 'companion', Object.keys(QuestArt.COMPANIONS), QuestArt.COMPANIONS) },
               { keys: ['p'], label: 'Next palette', run: quest => questCycle(quest, 'palette', Object.keys(QuestEngineData.FILTERS)) },
           ] },
+        { id: 'satellites', name: 'Satellites', icon: '🛰️', accent: '#7fd4ff', background: '#05070f',
+          scripts: ['satellites/sgp4.js', 'satellites/data.js', 'satellites/satellites.js'],
+          make: host => new SatellitesAnimationManager(host), cost: 'low', motion: 'slow', interactive: true,
+          network: ['celestrak.org', 'geocoding-api.open-meteo.com'], offline: true, needs: ['location'],
+          keys: [{ keys: ['n'], label: 'When the space station passes next', run: sky => sky.passText() || 'No space station in this group' }] },
         { id: 'bing', name: 'Bing Image of the Day', icon: '🖼️', accent: '#8ab4ff', scripts: ['bing/bing.js'],
           make: host => new BingWallpaperManager(host), cost: 'none', network: ['www.bing.com'] },
     ];

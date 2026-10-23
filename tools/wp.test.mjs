@@ -39,6 +39,26 @@ test('URL parameters: only known keys, values as given', () => {
     assert.equal(WP.parseParams('?date=2026-12-25').date, '2026-12-25');
 });
 
+test('location: rounded to 0.1° and checked on the way out of storage', () => {
+    assert.deepEqual(plain(WP.roundLocation(12.3456, -56.789)), { lat: 12.3, lon: -56.8 });
+    assert.deepEqual(plain(WP.roundLocation(95, 190)), { lat: 90, lon: -170 }, 'clamped and wrapped');
+    assert.deepEqual(plain(WP.roundLocation(-0.04, 0.04)), { lat: 0, lon: 0 }, 'no negative zero');
+    assert.deepEqual(plain(WP.readLocation({ lat: 12.34, lon: -56.78, label: 'Testville', source: 'typed' })),
+        { lat: 12.3, lon: -56.8, label: 'Testville', source: 'typed' });
+    assert.equal(WP.readLocation(null), null);
+    assert.equal(WP.readLocation({ lat: 'here', lon: 1 }), null);
+    assert.equal(WP.readLocation({ lat: 1, lon: 2, source: 'gps' }).source, 'typed', 'an unknown source');
+    assert.equal(WP.readLocation({ lat: 1, lon: 2, label: 7 }).label, '');
+});
+
+test('location: wallpapers that need it say so, and are network wallpapers with an offline scene', () => {
+    for (const entry of WP.catalog.filter(e => e.needs)) {
+        assert.ok(entry.needs.every(need => ['location'].includes(need)), entry.id);
+        if (entry.needs.includes('location')) assert.ok(entry.network?.includes('geocoding-api.open-meteo.com'), `${entry.id}: the panel's geocoder`);
+    }
+    assert.deepEqual(URL_ALLOW['web/core/location.js'], ['geocoding-api.open-meteo.com']);
+});
+
 const defaults = { configVersion: 2, count: 10, colours: ['red', 'blue'], on: true };
 
 test('clock: with no ?date=, the real time', () => {
@@ -282,7 +302,7 @@ test('schema: every default fits its control (range, step grid, options)', () =>
 });
 
 test('thumbnails: every offline wallpaper has a small one', () => {
-    for (const entry of WP.catalog.filter(e => !e.pseudo && !e.disabled && !e.network && e.id !== 'blank')) {
+    for (const entry of WP.catalog.filter(e => !e.pseudo && !e.disabled && (!e.network || e.offline) && e.id !== 'blank')) {
         const path = join(WEB, 'wallpapers', entry.id, 'thumb.webp');
         assert.ok(existsSync(path), `${entry.id}: run make thumbnails`);
         const bytes = readFileSync(path);

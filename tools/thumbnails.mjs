@@ -26,7 +26,11 @@ const OVERRIDES = {
     neko: { configVersion: 2, size: 128, coat: 'orange' },
     fireflies: { configVersion: 2, glowSize: 12, brightness: 1.2 },
     snow: { configVersion: 1, treeCount: 14, accumulationRate: 0.4 },
+    satellites: { configVersion: 1, facing: 'east' },
 };
+// URL parameters for a better picture: satellites as its sample station
+// passes overhead before dawn (thumb mode never fetches, so it's the sample).
+const PARAMS = { satellites: '&date=2026-10-14T04:47:15' };
 
 const { chrome, profile, cdp } = await launch({ width: 1280, height: 800 });
 try {
@@ -36,14 +40,14 @@ try {
     const evaluate = async expression => (await cdp.send('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true })).result?.value;
     await cdp.send('Page.navigate', { url: `${WEB}/stage.html?w=blank` });
     await sleep(500);
-    const catalog = await evaluate('WP.catalog.filter(e => !e.pseudo && !e.disabled && !e.network && e.id !== "blank").map(e => e.id)');
+    const catalog = await evaluate('WP.catalog.filter(e => !e.pseudo && !e.disabled && (!e.network || e.offline) && e.id !== "blank").map(e => e.id)');
     const ids = process.argv.slice(2).length ? process.argv.slice(2) : catalog;
 
     for (const id of ids) {
         await cdp.send('Page.navigate', { url: `${WEB}/stage.html?w=blank` });
         await sleep(300);
         await evaluate(`localStorage.clear(); ${OVERRIDES[id] ? `localStorage.setItem('wp:${id}', ${JSON.stringify(JSON.stringify(OVERRIDES[id]))})` : ''}`);
-        await cdp.send('Page.navigate', { url: `${WEB}/stage.html?w=${id}&seed=${SEED}&thumb=1` });
+        await cdp.send('Page.navigate', { url: `${WEB}/stage.html?w=${id}&seed=${SEED}&thumb=1${PARAMS[id] || ''}` });
         await sleep(SETTLE_MS[id] ?? 3000);
         const { data } = await cdp.send('Page.captureScreenshot', {
             format: 'webp', quality: 82, clip: { x: 0, y: 0, width: 1280, height: 800, scale: 0.25 },
