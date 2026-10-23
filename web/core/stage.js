@@ -146,6 +146,17 @@
             for (const [type, fn] of listeners) document.addEventListener(type, fn, { passive: true });
             return () => { for (const [type, fn] of listeners) document.removeEventListener(type, fn); };
         },
+        // Where the user is, for wallpapers that declare needs: ['location']
+        // (SPEC §10.1): { lat, lon, label, source }, rounded to 0.1°, or null
+        // until one is set in the panel. A browser position is refreshed
+        // here, quietly, only if permission was granted already: the stage
+        // never asks. A move rewrites wp:location, and the player rebuilds.
+        async location() {
+            if (!entry.needs?.includes('location')) return null;
+            const saved = WP.readLocation(read(WP.LOCATION_KEY));
+            if (saved?.source === 'browser' && !params.thumb) refreshPosition(saved);
+            return saved;
+        },
         reducedMotion: matchMedia('(prefers-reduced-motion: reduce)').matches,
         // Per-wallpaper state that isn't a setting (advent's last-seen day…).
         storage: {
@@ -153,6 +164,16 @@
             set: (key, value) => write(`wp:${id}:${key}`, value),
         },
     };
+
+    function refreshPosition(saved) {
+        navigator.permissions?.query({ name: 'geolocation' }).then(status => {
+            if (status.state !== 'granted') return;
+            navigator.geolocation.getCurrentPosition(({ coords }) => {
+                const next = WP.roundLocation(coords.latitude, coords.longitude);
+                if (next.lat !== saved.lat || next.lon !== saved.lon) write(WP.LOCATION_KEY, { ...saved, ...next });
+            }, () => {}, { maximumAge: 3600000, timeout: 20000 });
+        }).catch(() => {});
+    }
 
     // ---- Settings -----------------------------------------------------------
     // defaults.js registers values with WP.defaults(); the stored form is

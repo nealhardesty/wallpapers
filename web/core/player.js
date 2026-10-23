@@ -56,6 +56,9 @@
         const frame = document.createElement('iframe');
         frame.className = 'stage entering';
         frame.title = WP.entry(id).name;
+        // Geolocation is blocked in a cross-origin frame (every stage, on
+        // file://) unless allowed, so only wallpapers that need it get it.
+        if (WP.entry(id).needs?.includes('location')) frame.allow = 'geolocation';
         frame.src = stageUrl(id);
         document.body.prepend(frame);
         const mounted = stage = { id, frame, ready: false };
@@ -118,6 +121,12 @@
         rebuildTimer = setTimeout(() => stage && mount(stage.id), REBUILD_MS);
     }
 
+    // The location changed (the panel, another tab, the stage's own refresh):
+    // a wallpaper that uses it starts again from the new place.
+    function relocate() {
+        if (stage && WP.entry(stage.id).needs?.includes('location')) rebuild();
+    }
+
     // wp:performance holds only what differs from Auto and battery-aware.
     function savePerformance(patch) {
         const saved = { mode: 'auto', batteryAware: true, ...WP.store.get('wp:performance'), ...patch };
@@ -155,6 +164,8 @@
             if (saved && saved !== choice && usable(saved)) show(saved);
         } else if (event.key === `wp:${stage.id}`) {
             rebuild();
+        } else if (event.key === WP.LOCATION_KEY) {
+            relocate();
         } else if (event.key === 'wp:performance') {
             signals.batteryAware = WP.store.get('wp:performance')?.batteryAware !== false;
             power();
@@ -321,6 +332,7 @@
         setBatteryAware,
         describe,
         applySettings,
+        relocate,
         focusStage,
         toast,
         get choice() { return choice; },

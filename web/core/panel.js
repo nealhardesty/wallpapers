@@ -20,6 +20,7 @@
     let panel = null, picker = null, title = null, subtitle = null, body = null, tierButtons = null, tierNote = null, resetButton = null;
     let liveLine = null, batterySwitch = null;
     let shownFor = null;   // the wallpaper whose settings are on screen
+    let place = null;      // the location controls, for wallpapers that need one (core/location.js)
     const loaded = {};     // id → Promise for its defaults.js and settings.js
 
     const script = src => new Promise(resolve => {
@@ -106,7 +107,7 @@
         // Every offline wallpaper with code has one (tested); Blank and the
         // network-backed Bing don't.
         const entry = WP.entry(id);
-        if (!entry.scripts?.length || entry.network) return;
+        if (!entry.scripts?.length || (entry.network && !entry.offline)) return;
         const src = `wallpapers/${id}/thumb.webp`;
         const image = new Image();
         image.onload = () => {
@@ -123,7 +124,7 @@
     function preview(tile, id) {
         endPreview();
         const target = id === 'seasonal' ? WP.seasonalFor(new Date()) : id;
-        if (target === WP.player.resolved || WP.entry(target).network || WP.player.host === 'android'
+        if (target === WP.player.resolved || (WP.entry(target).network && !WP.entry(target).offline) || WP.player.host === 'android'
             || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
         previewTimer = setTimeout(() => {
             previewFrame = h('iframe', {
@@ -160,8 +161,9 @@
         resetButton.hidden = !entry.scripts?.length;
         renderTier();
 
-        if (shownFor === id) return;
+        if (shownFor === id) return place?.update();
         shownFor = id;
+        place = null;
         body.replaceChildren();
         if (!entry.scripts?.length) {
             body.append(h('p', { class: 'settings-note' }, `${entry.name} has nothing to adjust.`));
@@ -185,6 +187,13 @@
                 WP.player.applySettings(id, config);
             },
         });
+        // Where you are, for wallpapers that need it (SPEC §10.1), above their settings.
+        if (entry.needs?.includes('location')) {
+            if (!WP.locationControls) await script('core/location.js');
+            if (shownFor !== id) return;
+            place = WP.locationControls({ entry, onChange: () => WP.player.relocate() });
+            body.append(place.element);
+        }
         if (choice === 'seasonal') body.append(h('p', { class: 'settings-note' }, `These are ${entry.name}’s own settings; Seasonal uses them whenever it shows ${entry.name}.`));
         body.append(form.element);
     }

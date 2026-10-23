@@ -50,6 +50,24 @@
         return () => new Date(now() + offset);
     };
 
+    // Location (SPEC §10.1), for wallpapers that declare needs: ['location'].
+    // Coarse is enough: coordinates are rounded to 0.1° (about 10 km) before
+    // they're stored, and they stay on this device, under wp:location, shared
+    // by every wallpaper that needs them. A stored place is checked on the
+    // way out, since storage is anyone's to edit.
+    WP.LOCATION_KEY = 'wp:location';
+    const tenth = x => Math.round(x * 10) / 10 || 0;
+    WP.roundLocation = (lat, lon) => ({
+        lat: tenth(Math.max(-90, Math.min(90, lat))),
+        lon: tenth(((lon + 180) % 360 + 360) % 360 - 180),
+    });
+    WP.readLocation = stored => {
+        if (!stored || !Number.isFinite(stored.lat) || !Number.isFinite(stored.lon)) return null;
+        const source = ['typed', 'browser', 'device'].includes(stored.source) ? stored.source : 'typed';
+        const label = typeof stored.label === 'string' ? stored.label.slice(0, 80) : '';
+        return { ...WP.roundLocation(stored.lat, stored.lon), label, source };
+    };
+
     // Settings are stored as overrides only: the keys that differ from the
     // wallpaper's defaults.js. Stored overrides from another configVersion
     // are dropped, as are keys the defaults no longer have.
