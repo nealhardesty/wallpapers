@@ -32,7 +32,7 @@ import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { launch, sleep } from './chrome.mjs';
-import { createMock, MOCK_ORIGIN, MOCK_USER, QUICK_CODE } from './jellyfin-mock.mjs';
+import { createMock, ITEMS, MOCK_ORIGIN, MOCK_USER, QUICK_CODE } from './jellyfin-mock.mjs';
 
 const ROOT = resolve(import.meta.dirname, '..');
 const LIVE = process.env.SMOKE_URL?.replace(/\/$/, '') || null;
@@ -145,7 +145,7 @@ function listen() {
             const answer = current.jellyfin.handle({ method: request.method, url, headers: request.headers, body: request.postData || '' });
             return reply('Fetch.fulfillRequest', {
                 requestId, responseCode: answer.status, body: answer.body.toString('base64'),
-                responseHeaders: [{ name: 'Content-Type', value: answer.type }, { name: 'Access-Control-Allow-Origin', value: '*' },
+                responseHeaders: [...Object.entries(answer.headers || {}).map(([name, value]) => ({ name, value })), { name: 'Content-Type', value: answer.type }, { name: 'Access-Control-Allow-Origin', value: '*' },
                     { name: 'Access-Control-Allow-Headers', value: 'authorization, content-type' }, { name: 'Access-Control-Allow-Methods', value: 'GET, POST, DELETE' }],
             });
         }
@@ -985,7 +985,9 @@ const STAGE_CHECKS = {
             const mock = jellyfinServer();
             await fresh(`${WEB}/stage.html?w=jellyfin&thumb=1`);
             await stageReady();
-            const titled = await evaluate('JellyfinFrames.list().filter(f => f.titled).map(f => f.id)');
+            // The frames that write the title as text; the drive-in hangs its
+            // letters one by one (the next check covers every titled frame).
+            const titled = ['gallery', 'arcade'];
             const squash = text => text.toLowerCase().replace(/[^a-z0-9]/g, '');
             for (const frame of titled) {
                 await fresh(`${WEB}/stage.html?w=jellyfin&tier=high`, jellyfinSignedIn(mock, { order: 'inOrder', subtitles: 'off', frame }));   // a fixed tier: Auto's changes repaint too
@@ -1003,6 +1005,23 @@ const STAGE_CHECKS = {
                 await shoot(`jellyfin-${frame}-titled`);
             }
             return titled.length > 0 || record('no titled frames');
+        }],
+        ['resume: a new tab carries on where the last left off, and keeps saving its place', async () => {
+            const mock = jellyfinServer();
+            const ids = ITEMS.map(item => item.Id), long = ITEMS.find(item => item.seconds >= 120).Id;
+            // As a tab before this one left things: the bag one step before
+            // the long film, and its place saved 15 s in.
+            const stored = { ...jellyfinSignedIn(mock, { order: 'inOrder', subtitles: 'off', segment: 'whole' }),
+                'wp:jellyfin:bag': { key: `o:${[...ids].sort().join(',')}`, order: ids, at: ids.indexOf(long) - 1 },
+                'wp:jellyfin:positions': { [long]: 15 } };
+            await fresh(`${WEB}/stage.html?w=jellyfin`, stored);
+            if (!await waitFor(() => counts(`m.state === 'playing' && m.item.Id === ${JSON.stringify(long)} && m.video.currentTime > 14`), 10000)) {
+                return record(`started at ${await counts('m.video?.currentTime')} on ${await counts('m.item?.Name')}`);
+            }
+            await sleep(11000);   // past one save
+            const saved = await evaluate(`JSON.parse(localStorage.getItem('wp:jellyfin:positions'))[${JSON.stringify(long)}]`);
+            if (!(saved >= 24)) record(`saved position ${saved}, not past 24 s`);
+            return true;
         }],
         ['on Low only the video moves', async () => {
             const mock = jellyfinServer();

@@ -247,7 +247,9 @@ class JellyfinAnimationManager {
         const bottom = Math.min(s.y + s.h, innerHeight - this.host.insets.bottom);
         if (this.video && this.state === 'playing' && this.muted && now < this.badgeUntil) {
             const size = Math.max(28, Math.min(44, s.w * 0.05));
-            this.badge = { x: s.x + s.w - size - 12, y: s.y + 12, size };
+            // Frames with their own on-screen display (osd: REC, PLAY ▶) keep its
+            // corners; the badge goes top centre.
+            this.badge = { x: this.frameDef.osd ? s.x + (s.w - size) / 2 : s.x + s.w - size - 12, y: s.y + 12, size };
             ctx.save();
             ctx.globalAlpha = fade(this.badgeUntil);
             ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
@@ -261,7 +263,7 @@ class JellyfinAnimationManager {
             ctx.restore();
             wait = Math.min(wait, this.badgeUntil - now < 600 ? 50 : this.badgeUntil - 600 - now);
         }
-        if (this.item && this.config.showTitle && !this.frameDef.titled && now < this.titleUntil && this.showing()) {
+        if (this.item && this.config.showTitle && !this.frameDef.titled && !this.frameDef.osd && now < this.titleUntil && this.showing()) {
             const px = Math.max(13, Math.min(24, s.w * 0.028));
             ctx.save();
             ctx.globalAlpha = fade(this.titleUntil, 1200);

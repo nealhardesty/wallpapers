@@ -392,10 +392,11 @@
         proscenium(ctx, L);
         curtains(ctx, L, 0);
         valance(ctx, L);
-        JellyfinFrames.cutScreen(ctx, L.screen);
         stage(ctx, L, w);
         for (const e of L.exits) exitSign(ctx, e, L);
         seats(ctx, L, w, random);
+        // Last, so no shading laid over the house darkens the picture.
+        JellyfinFrames.cutScreen(ctx, L.screen);
     }
 
     // ---- What moves --------------------------------------------------------------

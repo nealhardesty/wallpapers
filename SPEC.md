@@ -14,14 +14,14 @@ wallpapers' only home. They run in three hosts:
 3. **Android live wallpaper**: a future app in `android/` that runs the same
    web code behind the home screen.
 
-> Status: **phases 1–8 done** (2026-10-22), except what needs the owner:
+> Status: **phases 1–9 done** (2026-10-23), except what needs the owner:
 > measurements on a real phone (6.2's numbers, 6.4a), the first signed
 > release (6.6), the switch-over itself (7.2), and trying Phase 8's touch
-> and location on a phone. The player, the stage, the panel and all 32
-> wallpapers run from `web/index.html`, as a Chrome new-tab extension, on
+> and location, and Jellyfin, on a phone. The player, the stage, the panel
+> and all 33 wallpapers run from `web/index.html`, as a Chrome new-tab extension, on
 > GitHub Pages at https://nealhardesty.github.io/wallpapers/, and as an
 > Android live wallpaper. Every wallpaper is tiered and within budget.
-> Next up: Phase 9 (Jellyfin).
+> Next: nothing is planned; §10 holds the ideas.
 
 ---
 
@@ -94,6 +94,12 @@ Added in Phase 8, drawn in code (designs in §10.6–10.20):
 | `lighthouse` | lighthouse-light.js, lighthouse-sea.js, lighthouse.js | ~1.4k lines | Network: `marine-api.open-meteo.com`, only with Live Swell on; keys L, S |
 | `wiki-pond` | wiki-pond-events.js, wiki-pond.js | ~0.8k lines | Network: `stream.wikimedia.org` (EventSource); made-up edits in thumb mode |
 | `satellites` | sgp4.js, data.js, satellites.js | ~55 KB | Network: `celestrak.org` (+ the panel's geocoder); needs location; offline sample orbits; key N |
+
+Added in Phase 9 (design in §10.21):
+
+| id | Files | Size | Notes |
+|---|---|---|---|
+| `jellyfin` | jellyfin-logic.js, jellyfin-api.js, jellyfin-frames.js, frames/*.js (11 frames), jellyfin.js | ~9k lines | Network: `'user'` (the user's own server); a real `<video>`; sign-in through the panel's extras; keys Space, M, N/P, ←/→, S, I, V |
 
 About 1.7 MB of JavaScript in total. **Not imported:** links, weather, clocks,
 search/omniprompt, custom links, status bar, Docker/nginx, the homepage's
@@ -1321,8 +1327,35 @@ groundwork comes first. It has the same done-checks as Phase 8, plus its own:
 - [x] 9.3 **Host media hooks:** `host.onPause(fn)` / `host.onResume(fn)` (the stage's pause stops rAF but would leave a `<video>` playing), `allow="autoplay"` on the stage iframe for wallpapers that declare `media: true`, and settings controls the panel lacks: an action button, a status line, and a select whose options the wallpaper loads (playlists, libraries). → smoke: pausing the stage pauses the fixture video within 100 ms; switching away releases the decoder (`video.src` cleared).
 - [x] 9.4 **Sign-in and choosing what to play:** Quick Connect first, username and password as the fallback, a token kept only in `wp:jellyfin:auth` and left out of Export, Sign out revokes it. Playlist (shuffled by default), or random from a library. → smoke against the mock: sign in, list, pick, play; Export JSON has no token; the password is never stored.
 - [x] 9.5 **Playback:** shuffle by default, the order selectable; resume where it left off across new tabs; one tab plays at a time; muted start by default; subtitles chosen automatically (§10.21). → unit tests on stream picking (English full over forced over none; text vs image formats) and the shuffle bag; smoke: a second stage takes over and the first goes quiet.
-- [ ] 9.6 **Frames** (§10.21 *Frames*): None and Old TV first, then the rest one per commit. → each frame has a landscape and a portrait layout, its screen rect keeps the video's aspect ratio, the static art is built once per resize, and on Low only the video moves.
+- [x] 9.6 **Frames** (§10.21 *Frames*): None and Old TV first, then the rest one per commit. → each frame has a landscape and a portrait layout, its screen rect keeps the video's aspect ratio, the static art is built once per resize, and on Low only the video moves.
 - [x] 9.7 **Power** (§10.21 *Energy*): the server-side resolution cap by tier, poster mode on battery saver or under 20%, and a `make bench` entry. → on battery the request asks for ≤ 720p; with battery saver on, no video element exists.
+
+Done 2026-10-23. Every "→" check is a smoke check (`node tools/smoke.mjs
+jellyfin`, against the fixture server) or a unit test (`tools/jellyfin.test.mjs`).
+Built differently from the plan, on the spike's evidence:
+- **No extension permission at all:** Jellyfin's CORS answers every origin,
+  so `optional_host_permissions` was dropped (a test keeps it out).
+- **Android needed more than planned:** `MIXED_CONTENT_ALWAYS_ALLOW` for the
+  API, cleartext allowed by a network security config, Android 17's runtime
+  `ACCESS_LOCAL_NETWORK` (asked from the settings screen, by the panel's
+  Connect button; the dialog calls it "nearby devices"), and `MediaProxy`,
+  which carries `/jellyfin-media/http/<host>/…` through the app, since
+  WebView blocks http `<video>` even then. Tried on an Android 17 emulator:
+  the prompt, a password sign-in, direct play, HLS at the cap, burned-in
+  image subtitles, and the live wallpaper's preview.
+- **The resolution cap is a width:** Jellyfin 12.3 scales transcodes by
+  `MaxWidth` and ignores `MaxHeight`, so the device profile caps both, and
+  the bitrate ceiling follows the height.
+- **9.3's hooks** were the manager's existing `onPause()`/`onResume()`; what
+  was new is the panel's extras, `host.panel`, `host.toast`, `host.power`
+  with `onPower`, `media: true` and catalog `secrets`.
+- **Keys:** `c` belongs to the player, so `V` cycles frames.
+- **frameMotion's lowest tier is Medium,** not Low as first written, so that
+  on Low only the video moves.
+- **Frames:** None, Old TV, Mantel, Cinema, Drive-in, Porthole, Gallery,
+  Arcade, Ambilight, Camcorder and VHS, plus Seasonal. Frames may declare
+  `titled` (the art shows the title and repaints once per item) and `osd`
+  (their own on-screen display: no title card, the 🔇 badge top centre).
 
 ---
 
@@ -2192,11 +2225,9 @@ New questions go here, each with a recommendation.
   ever typed into a wallpaper. *Recommendation:* keep the password form as
   a fallback for servers with Quick Connect turned off, never store the
   password, and say so beside the field.
-- **Jellyfin on GitHub Pages:** a public https page can't fetch an http LAN
-  server (mixed content), and Chrome asks before a public page reaches a
-  private address. *Recommendation:* support it for https servers, and
-  point everyone else at the extension, `make serve` or the Android app,
-  with that explanation shown in the panel instead of a vague failure.
+- **Jellyfin on GitHub Pages:** settled by spike 9.0. After Chrome's local
+  network prompt, Pages reaches an https server, or an http one addressed
+  by IP; only an http *hostname* stays blocked, and the panel says so.
 
 ---
 

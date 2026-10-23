@@ -19,7 +19,10 @@
 //     idle(ctx, layout, env, kind)     the screen when nothing plays: 'setup', 'connecting',
 //                                        'offline', 'empty', 'loading', 'away' (another tab plays)
 //     cue(ctx, text, layout, env)      a subtitle line, in the frame's style, inside the screen
-//     titled?: true                    paint() shows env.title itself (a marquee, a plaque)
+//     titled?: true                    paint() shows env.title itself (a marquee, a plaque);
+//                                        the art repaints once per new item
+//     osd?: true                       it draws its own on-screen display (REC, PLAY ▶): no
+//                                        title card from the manager, and 🔇 goes top centre
 //     videoFilter?: 'sepia(0.3)'       a CSS filter on the <video> (effect 'videoFilter')
 //   });
 //

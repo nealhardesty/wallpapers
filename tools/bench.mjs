@@ -71,7 +71,7 @@ try {
     cdp.on('Fetch.requestPaused', ({ requestId, request }) => {
         const answer = jellyfin.handle({ method: request.method, url: request.url, headers: request.headers, body: request.postData || '' });
         cdp.send('Fetch.fulfillRequest', { requestId, responseCode: answer.status, body: answer.body.toString('base64'),
-            responseHeaders: [{ name: 'Content-Type', value: answer.type }, { name: 'Access-Control-Allow-Origin', value: '*' }, { name: 'Access-Control-Allow-Headers', value: 'authorization, content-type' }] }).catch(() => {});
+            responseHeaders: [...Object.entries(answer.headers || {}).map(([name, value]) => ({ name, value })), { name: 'Content-Type', value: answer.type }, { name: 'Access-Control-Allow-Origin', value: '*' }, { name: 'Access-Control-Allow-Headers', value: 'authorization, content-type' }] }).catch(() => {});
     });
     await cdp.send('Emulation.setDeviceMetricsOverride', PHONE);
     await cdp.send('Page.navigate', { url: `${WEB}/stage.html?w=blank` });

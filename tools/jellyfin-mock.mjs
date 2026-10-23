@@ -76,7 +76,7 @@ export function createMock() {
         return json({ AccessToken: token, User: { Id: MOCK_USER.id, Name: MOCK_USER.name }, ServerId: 'fixture-server' });
     };
 
-    // { method, url, headers, body } → { status, type, body: Buffer }
+    // { method, url, headers, body } → { status, type, body: Buffer, headers? }
     function handle({ method, url, headers = {}, body = '' }) {
         const { pathname: path, searchParams: query } = new URL(url, MOCK_ORIGIN);
         state.log.push({ method, path, auth: Object.keys(headers).some(k => k.toLowerCase() === 'authorization'), body: body || '' });
@@ -109,7 +109,13 @@ export function createMock() {
 
         // Media and subtitles: tokens ride in the query, or not at all (as on a real server).
         const item = ITEMS.find(i => lower.includes(i.Id));
-        if (/^\/videos\/[^/]+\/stream/.test(lower) && item) return { status: 200, type: 'video/webm', body: clip };
+        if (/^\/videos\/[^/]+\/stream/.test(lower) && item) {
+            // Ranges, as a real server does, so the video can seek (resume).
+            const range = /bytes=(\d+)-(\d*)/.exec(Object.entries(headers).find(([k]) => k.toLowerCase() === 'range')?.[1] || '');
+            if (!range) return { status: 200, type: 'video/webm', body: clip, headers: { 'Accept-Ranges': 'bytes' } };
+            const from = Number(range[1]), to = Math.min(clip.length - 1, range[2] ? Number(range[2]) : clip.length - 1);
+            return { status: 206, type: 'video/webm', body: clip.subarray(from, to + 1), headers: { 'Accept-Ranges': 'bytes', 'Content-Range': `bytes ${from}-${to}/${clip.length}` } };
+        }
         if (/\/subtitles\/\d+\/(\d+\/)?stream\.vtt$/.test(lower) && item) return { status: 200, type: 'text/vtt; charset=utf-8', body: Buffer.from(vtt(item, Number(lower.match(/subtitles\/(\d+)/)[1]))) };
         if (/^\/items\/[^/]+\/images\//.test(lower)) return { status: 200, type: 'image/jpeg', body: backdrop };
 
@@ -151,7 +157,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
         request.on('data', chunk => chunks.push(chunk));
         request.on('end', () => {
             const answer = mock.handle({ method: request.method, url: request.url, headers: request.headers, body: Buffer.concat(chunks).toString() });
-            response.writeHead(answer.status, { 'Content-Type': answer.type, 'Access-Control-Allow-Origin': '*',
+            response.writeHead(answer.status, { ...answer.headers, 'Content-Type': answer.type, 'Access-Control-Allow-Origin': '*',
                 'Access-Control-Allow-Headers': 'authorization, content-type', 'Access-Control-Allow-Methods': 'GET, POST, DELETE' });
             response.end(answer.body);
         });

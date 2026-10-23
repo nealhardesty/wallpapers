@@ -335,6 +335,7 @@
 
     JellyfinFrames.add({
         id: 'camcorder',
+        osd: true,
         name: 'Camcorder',
         icon: '📹',
         videoFilter: 'saturate(1.15) contrast(1.06) brightness(1.03)',
@@ -675,6 +676,7 @@
 
     JellyfinFrames.add({
         id: 'vhs',
+        osd: true,
         name: 'VHS',
         icon: '📼',
         videoFilter: 'saturate(0.8) contrast(1.12) brightness(1.04) sepia(0.08)',
