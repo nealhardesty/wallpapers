@@ -1,12 +1,17 @@
 // Parallax Clouds Animation Module - Super Mario Style
 class ParallaxCloudsAnimationManager {
-    constructor() {
+    constructor(host) {
+        this.host = host;
         this.canvas = null;
         this.ctx = null;
         this.cloudLayers = [];
         this.isEnabled = false;
         this.animationId = null;
         this.time = 0;
+        this.lastTime = 0;
+        // Home-screen page position (onScroll), -0.5 to 0.5, eased towards
+        this.pan = 0;
+        this.panTarget = 0;
 
         // Configuration
         this.config = WP.settings.load();
@@ -257,19 +262,27 @@ class ParallaxCloudsAnimationManager {
         this.ctx.restore();
     }
 
-    updateCloudPositions() {
+    // Swiping between home screens (SPEC §6.4): x runs 0 to 1. The front
+    // layers slide further than the back ones.
+    onScroll(x) {
+        this.panTarget = x - 0.5;
+    }
+
+    // frames: elapsed time in 60 fps frames, the unit every speed setting
+    // was tuned in.
+    updateCloudPositions(frames) {
         for (const layer of this.cloudLayers) {
             // Update float offset for vertical bobbing
-            layer.floatOffset += this.config.floatSpeed;
+            layer.floatOffset += this.config.floatSpeed * frames;
 
             for (const cloud of layer.clouds) {
                 // Horizontal movement
-                cloud.x -= layer.speed;
+                cloud.x -= layer.speed * frames;
 
                 // Add some wind variation
-                cloud.windOffset += 0.01;
+                cloud.windOffset += 0.01 * frames;
                 const windEffect = Math.sin(cloud.windOffset) * this.config.windVariation;
-                cloud.x += windEffect;
+                cloud.x += windEffect * frames;
 
                 // Wrap around when cloud goes off screen
                 if (cloud.x < -cloud.size - 200) {
@@ -286,8 +299,9 @@ class ParallaxCloudsAnimationManager {
         this.isEnabled = true;
         this.canvas.style.display = 'block';
         this.time = 0;
+        this.lastTime = 0;
         this.initializeCloudLayers();
-        this.animate();
+        this.animate(0);
         console.log('Parallax Clouds animation started');
     }
 
@@ -304,10 +318,15 @@ class ParallaxCloudsAnimationManager {
         console.log('Parallax Clouds animation stopped');
     }
 
-    animate() {
+    animate(now) {
         if (!this.isEnabled) return;
 
-        this.time += 0.016; // Approximately 60fps
+        // By elapsed time, so every frame rate drifts at the same speed;
+        // clamped, so a long pause doesn't jump.
+        const dt = this.lastTime ? Math.min((now - this.lastTime) / 1000, 0.1) : 0;
+        this.lastTime = now;
+        this.time += dt;
+        this.pan += (this.panTarget - this.pan) * (1 - Math.exp(-dt * 4));
 
         // Draw sky background
         const theme = this.colorThemes[this.config.colorTheme];
@@ -316,11 +335,12 @@ class ParallaxCloudsAnimationManager {
         this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
         // Update cloud positions
-        this.updateCloudPositions();
+        this.updateCloudPositions(dt * 60);
 
         // Draw clouds from back to front (reverse order for proper layering)
         for (let i = this.cloudLayers.length - 1; i >= 0; i--) {
             const layer = this.cloudLayers[i];
+            const panX = -this.pan * this.canvas.width * 0.12 * (0.2 + 0.8 * layer.depth);
 
             for (const cloud of layer.clouds) {
                 // Calculate position with vertical floating
@@ -329,13 +349,13 @@ class ParallaxCloudsAnimationManager {
                 this.drawPixelatedCloud(
                     cloud,
                     layer,
-                    cloud.x,
+                    cloud.x + panX,
                     cloud.y + layer.yOffset + floatY
                 );
             }
         }
 
-        this.animationId = requestAnimationFrame(() => this.animate());
+        this.animationId = requestAnimationFrame(time => this.animate(time));
     }
 
     destroy() {

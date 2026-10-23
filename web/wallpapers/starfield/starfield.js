@@ -11,7 +11,8 @@ const STAR_TINTS = [
 ];
 
 class StarfieldAnimationManager {
-    constructor() {
+    constructor(host) {
+        this.host = host;
         this.canvas = null;
         this.ctx = null;
         this.stars = [];
@@ -25,6 +26,31 @@ class StarfieldAnimationManager {
         this.depth = 1200;     // far clipping plane in world units
         this.focal = 800;      // recomputed from the canvas on resize
         this.backdrop = null;  // pre-rendered deep-sky background
+
+        // Share of the stars on screen at this quality (SPEC §4.8)
+        this.density = host.quality.density;
+        // Home-screen page position (onScroll), -0.5 to 0.5, eased towards.
+        // It slides the camera sideways, so near stars move more than far ones.
+        this.pan = 0;
+        this.panTarget = 0;
+        this.frameTime = 0;    // seconds since the previous frame, for draw()
+    }
+
+    // A new quality: stars join at the far plane or leave as they pass the
+    // camera, so the sky thins or fills without a jump.
+    onQuality(quality) {
+        this.density = quality.density;
+    }
+
+    // Swiping between home screens (SPEC §6.4): x runs 0 to 1.
+    onScroll(x) {
+        this.panTarget = x - 0.5;
+    }
+
+    // The camera's sideways offset in world units: at the far plane the sky
+    // slides 5% of the width either way, nearer stars further.
+    cameraX() {
+        return this.pan * this.canvas.width * 0.1 * this.depth / this.focal;
     }
 
     loadConfig() {
@@ -190,14 +216,15 @@ class StarfieldAnimationManager {
                `${Math.round(255 + (b - 255) * strength)})`;
     }
 
+    // The settings' count × the quality's density.
     getCurrentStarCount() {
         if (!this.config.galaxyApproachEnabled) {
-            return this.config.baseStarCount;
+            return Math.round(this.config.baseStarCount * this.density);
         }
 
         const progress = Math.min(this.galaxyProgress, 1);
-        return Math.floor(this.config.baseStarCount +
-            (this.config.maxStarCount - this.config.baseStarCount) * progress);
+        return Math.floor((this.config.baseStarCount +
+            (this.config.maxStarCount - this.config.baseStarCount) * progress) * this.density);
     }
 
 
@@ -228,7 +255,7 @@ class StarfieldAnimationManager {
         // would draw a trail streaking out of the top-left corner on its first
         // frame. Seeding both to the same point means no trail until it moves.
         const star = {
-            x: offsetX * scale,
+            x: offsetX * scale + this.cameraX(),
             y: offsetY * scale,
             z: z,
             sx: w / 2 + offsetX,    // projected screen position
@@ -269,10 +296,12 @@ class StarfieldAnimationManager {
 
         // First frame has no reference point, and a backgrounded tab can hand
         // us a gap of many seconds - either would fling every star past the
-        // camera at once, so clamp it
+        // camera at once, so clamp it (to 100 ms: Low runs at 10 fps)
         if (!this.lastTime) this.lastTime = currentTime;
-        const deltaTime = Math.min((currentTime - this.lastTime) / 1000, 0.05);
+        const deltaTime = Math.min((currentTime - this.lastTime) / 1000, 0.1);
         this.lastTime = currentTime;
+        this.frameTime = deltaTime;
+        this.pan += (this.panTarget - this.pan) * (1 - Math.exp(-deltaTime * 4));
 
         this.updateGalaxyProgress();
         this.updateStars(deltaTime);
@@ -287,14 +316,26 @@ class StarfieldAnimationManager {
         const margin = 60;
         // warpSpeed is expressed per 60fps frame; convert to per second
         const travel = this.config.warpSpeed * 60 * deltaTime;
+        const camX = this.cameraX();
+        // Past the camera or off screen: back to the far plane, unless there
+        // are more stars than this quality wants
+        const recycle = i => {
+            if (this.stars.length > this.getCurrentStarCount()) {
+                this.stars[i] = this.stars[this.stars.length - 1];
+                this.stars.pop();
+            } else {
+                this.respawnStar(this.stars[i]);
+            }
+        };
 
-        for (const star of this.stars) {
+        for (let i = this.stars.length - 1; i >= 0; i--) {
+            const star = this.stars[i];
             star.psx = star.sx;
             star.psy = star.sy;
 
             star.z -= travel;
             if (star.z < 1) {
-                this.respawnStar(star);
+                recycle(i);
                 continue;
             }
 
@@ -303,14 +344,14 @@ class StarfieldAnimationManager {
             // frame, so every star's offset compounded exponentially and shot
             // off screen within a few frames.
             const scale = this.focal / star.z;
-            star.sx = centerX + star.x * scale;
+            star.sx = centerX + (star.x - camX) * scale;
             star.sy = centerY + star.y * scale;
 
             star.twinkle += star.twinkleSpeed * deltaTime;
 
             if (star.sx < -margin || star.sx > this.canvas.width + margin ||
                 star.sy < -margin || star.sy > this.canvas.height + margin) {
-                this.respawnStar(star);
+                recycle(i);
             }
         }
     }
@@ -322,8 +363,10 @@ class StarfieldAnimationManager {
 
         // Blend the deep-sky backdrop over the last frame. At full opacity this
         // is an ordinary clear; below that, previous frames bleed through as
-        // motion trails.
-        ctx.globalAlpha = Math.max(0, 1 - this.config.trailLength);
+        // motion trails. Trail Length is what's kept per frame at 30 fps, so
+        // trails fade over the same time at any frame rate.
+        const frames = this.frameTime ? this.frameTime * 30 : 1;
+        ctx.globalAlpha = Math.max(0, 1 - Math.pow(this.config.trailLength, frames));
         if (this.backdrop) {
             ctx.drawImage(this.backdrop, 0, 0);
         } else {

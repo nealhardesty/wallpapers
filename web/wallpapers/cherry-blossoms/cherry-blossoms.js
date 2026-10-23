@@ -1,11 +1,16 @@
 class CherryBlossomAnimationManager {
-    constructor() {
+    constructor(host) {
+        this.host = host;
         this.canvas = null;
         this.ctx = null;
         this.petals = [];
         this.branches = [];
+        this.backdrop = null;  // sky and branches, drawn once per resize
         this.animationId = null;
         this.isRunning = false;
+        this.lastTime = 0;
+        // Share of the petals falling at this quality (SPEC §4.8)
+        this.density = host.quality.density;
         this.config = this.loadConfig();
         this.wind = {
             strength: 0,
@@ -30,9 +35,11 @@ class CherryBlossomAnimationManager {
 
         this.createCanvas();
         this.initializeBranches();
+        this.buildBackdrop();
         this.initializePetals();
         this.isRunning = true;
-        this.animate();
+        this.lastTime = 0;
+        this.animate(0);
     }
 
     stop() {
@@ -51,6 +58,19 @@ class CherryBlossomAnimationManager {
         }
         this.petals = [];
         this.branches = [];
+        this.backdrop = null;
+    }
+
+    // A new quality: petals join from above the top or leave as they fall
+    // out of sight, so the fall thins or thickens without a jump.
+    onQuality(quality) {
+        this.density = quality.density;
+        while (this.petals.length < this.petalTarget()) this.petals.push(this.createPetal());
+    }
+
+    // The Petal Count setting × the quality's density.
+    petalTarget() {
+        return Math.round(this.config.petalCount * this.density);
     }
 
     createCanvas() {
@@ -76,6 +96,23 @@ class CherryBlossomAnimationManager {
         if (!this.canvas) return;
         this.canvas.width = window.innerWidth;
         this.canvas.height = window.innerHeight;
+        if (this.ctx) this.buildBackdrop();
+    }
+
+    // The sky gradient and the branches never move, so they're painted once
+    // per resize and copied in each frame.
+    buildBackdrop() {
+        const c = document.createElement('canvas');
+        c.width = this.canvas.width;
+        c.height = this.canvas.height;
+        const ctx = c.getContext('2d');
+        const gradient = ctx.createLinearGradient(0, 0, 0, c.height);
+        gradient.addColorStop(0, '#fff5f5');
+        gradient.addColorStop(1, '#ffeef0');
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, c.width, c.height);
+        this.drawBranches(ctx);
+        this.backdrop = c;
     }
 
     initializeBranches() {
@@ -99,8 +136,10 @@ class CherryBlossomAnimationManager {
                 const x = branch.x + Math.cos(branch.angle + Math.sin(progress * Math.PI) * 0.3) * branch.length * progress;
                 const y = branch.y + Math.sin(branch.angle + Math.sin(progress * Math.PI) * 0.3) * branch.length * progress;
                 const thickness = branch.thickness * (1 - progress * 0.7);
+                // Some joints carry a small blossom, chosen once so they hold still
+                const blossom = j > 0 && j < segmentCount && Math.random() < 0.3 ? 4 + Math.random() * 3 : 0;
 
-                branch.segments.push({ x, y, thickness });
+                branch.segments.push({ x, y, thickness, blossom });
             }
 
             this.branches.push(branch);
@@ -109,7 +148,7 @@ class CherryBlossomAnimationManager {
 
     initializePetals() {
         this.petals = [];
-        for (let i = 0; i < this.config.petalCount; i++) {
+        for (let i = 0; i < this.petalTarget(); i++) {
             this.petals.push(this.createPetal());
         }
     }
@@ -132,11 +171,13 @@ class CherryBlossomAnimationManager {
         };
     }
 
-    updateWind() {
-        this.wind.timer++;
+    // frames: elapsed time in 60 fps frames, the unit the wind settings
+    // (chance per frame, duration in frames) were tuned in.
+    updateWind(frames) {
+        this.wind.timer += frames;
 
         if (this.wind.phase === 'calm') {
-            if (Math.random() < this.config.windChance) {
+            if (Math.random() < 1 - Math.pow(1 - this.config.windChance, frames)) {
                 this.wind.phase = 'rising';
                 this.wind.direction = (Math.random() - 0.5) * Math.PI / 2; // Wind direction
                 this.wind.duration = this.config.windDuration;
@@ -169,32 +210,40 @@ class CherryBlossomAnimationManager {
         }
     }
 
-    animate() {
+    animate(now) {
         if (!this.isRunning) return;
 
-        this.updateWind();
-        this.updatePetals();
+        // By elapsed time, in 60 fps frames, so every frame rate falls at
+        // the same speed; clamped, so a long pause doesn't jump.
+        const frames = this.lastTime ? Math.min((now - this.lastTime) / 1000, 0.1) * 60 : 0;
+        this.lastTime = now;
+
+        this.updateWind(frames);
+        this.updatePetals(frames);
         this.draw();
 
-        this.animationId = requestAnimationFrame(() => this.animate());
+        this.animationId = requestAnimationFrame(time => this.animate(time));
     }
 
-    updatePetals() {
-        this.petals.forEach(petal => {
+    updatePetals(frames) {
+        const target = this.petalTarget();
+        for (let i = this.petals.length - 1; i >= 0; i--) {
+            const petal = this.petals[i];
             // Update sway motion
-            petal.swayPhase += petal.swaySpeed;
+            petal.swayPhase += petal.swaySpeed * frames;
             const sway = Math.sin(petal.swayPhase) * this.config.swayAmount;
 
-            // Apply wind effects
+            // Apply wind effects. Turbulence is noise, so it scales with the
+            // square root of the step: the same jitter over a second at any rate.
             const windEffect = this.wind.strength * Math.cos(this.wind.direction);
-            const windTurbulence = this.wind.strength * 0.3 * (Math.random() - 0.5);
+            const windTurbulence = this.wind.strength * 0.3 * (Math.random() - 0.5) * Math.sqrt(frames);
 
             // Update position
-            petal.x += petal.vx + sway * 0.1 + windEffect + windTurbulence;
-            petal.y += petal.vy;
+            petal.x += (petal.vx + sway * 0.1 + windEffect) * frames + windTurbulence;
+            petal.y += petal.vy * frames;
 
             // Update rotation
-            petal.rotation += petal.rotationSpeed + windEffect * 0.02;
+            petal.rotation += (petal.rotationSpeed + windEffect * 0.02) * frames;
 
             // Fade effect as petals fall
             if (this.config.fadeEnabled) {
@@ -205,25 +254,20 @@ class CherryBlossomAnimationManager {
                 }
             }
 
-            // Reset petal when it goes off screen
+            // Reset petal when it goes off screen, unless there are more
+            // than this quality wants
             if (petal.y > this.canvas.height + 50 ||
                 petal.x < -50 || petal.x > this.canvas.width + 50 ||
                 petal.alpha <= 0) {
-                Object.assign(petal, this.createPetal());
+                if (this.petals.length > target) this.petals.splice(i, 1);
+                else Object.assign(petal, this.createPetal());
             }
-        });
+        }
     }
 
     draw() {
-        // Clear canvas with gradient background for depth
-        const gradient = this.ctx.createLinearGradient(0, 0, 0, this.canvas.height);
-        gradient.addColorStop(0, '#fff5f5');
-        gradient.addColorStop(1, '#ffeef0');
-        this.ctx.fillStyle = gradient;
-        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
-
-        // Draw branches first (background)
-        this.drawBranches();
+        // Sky and branches (background)
+        this.ctx.drawImage(this.backdrop, 0, 0);
 
         // Sort petals by layer for depth effect
         const sortedPetals = [...this.petals].sort((a, b) => a.layer - b.layer);
@@ -232,63 +276,60 @@ class CherryBlossomAnimationManager {
         sortedPetals.forEach(petal => this.drawPetal(petal));
     }
 
-    drawBranches() {
+    drawBranches(ctx) {
         if (!this.config.showBranches) return;
 
         this.branches.forEach(branch => {
-            this.ctx.strokeStyle = '#4a2c1a';
-            this.ctx.lineCap = 'round';
-            this.ctx.lineJoin = 'round';
+            ctx.strokeStyle = '#4a2c1a';
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
 
             // Draw branch segments
-            this.ctx.beginPath();
+            ctx.beginPath();
             branch.segments.forEach((segment, index) => {
-                this.ctx.lineWidth = segment.thickness;
+                ctx.lineWidth = segment.thickness;
                 if (index === 0) {
-                    this.ctx.moveTo(segment.x, segment.y);
+                    ctx.moveTo(segment.x, segment.y);
                 } else {
-                    this.ctx.lineTo(segment.x, segment.y);
+                    ctx.lineTo(segment.x, segment.y);
                 }
             });
-            this.ctx.stroke();
+            ctx.stroke();
 
             // Add small cherry blossoms on branches
-            branch.segments.forEach((segment, index) => {
-                if (index > 0 && index < branch.segments.length - 1 && Math.random() < 0.3) {
-                    this.drawBranchBlossom(segment.x, segment.y);
-                }
+            branch.segments.forEach(segment => {
+                if (segment.blossom) this.drawBranchBlossom(ctx, segment.x, segment.y, segment.blossom);
             });
         });
     }
 
-    drawBranchBlossom(x, y) {
+    drawBranchBlossom(ctx, x, y, blossomSize) {
         const petalCount = 5;
-        const blossomSize = 4 + Math.random() * 3;
 
-        this.ctx.save();
-        this.ctx.translate(x, y);
+        ctx.save();
+        ctx.translate(x, y);
 
         // Draw petals
         for (let i = 0; i < petalCount; i++) {
             const angle = (i / petalCount) * Math.PI * 2;
-            this.ctx.save();
-            this.ctx.rotate(angle);
+            ctx.save();
+            ctx.rotate(angle);
 
-            this.ctx.fillStyle = '#ffb7c5';
-            this.ctx.beginPath();
-            this.ctx.ellipse(0, -blossomSize, blossomSize * 0.6, blossomSize, 0, 0, Math.PI * 2);
-            this.ctx.fill();
+            ctx.fillStyle = '#ffb7c5';
+            ctx.beginPath();
+            ctx.ellipse(0, -blossomSize, blossomSize * 0.6, blossomSize, 0, 0, Math.PI * 2);
+            ctx.fill();
 
-            this.ctx.restore();
+            ctx.restore();
         }
 
         // Draw center
-        this.ctx.fillStyle = '#ffe4b5';
-        this.ctx.beginPath();
-        this.ctx.arc(0, 0, blossomSize * 0.3, 0, Math.PI * 2);
-        this.ctx.fill();
+        ctx.fillStyle = '#ffe4b5';
+        ctx.beginPath();
+        ctx.arc(0, 0, blossomSize * 0.3, 0, Math.PI * 2);
+        ctx.fill();
 
-        this.ctx.restore();
+        ctx.restore();
     }
 
     drawPetal(petal) {
