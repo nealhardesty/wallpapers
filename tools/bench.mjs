@@ -53,7 +53,10 @@ const percentile = (values, p) => { const s = [...values].sort((a, b) => a - b);
 let results = existsSync(RESULTS) ? JSON.parse(readFileSync(RESULTS, 'utf8')).wallpapers : {};
 let missed = 0;
 try {
-    for (const domain of ['Page', 'Runtime', 'Performance']) await cdp.send(`${domain}.enable`);
+    for (const domain of ['Page', 'Runtime', 'Performance', 'Network']) await cdp.send(`${domain}.enable`);
+    // CelesTrak asks clients not to refetch what hasn't changed, and blocks
+    // those who do: satellites benches on its sample orbits, which cost the same.
+    await cdp.send('Network.setBlockedURLs', { urls: ['*://celestrak.org/*'] });
     await cdp.send('Emulation.setDeviceMetricsOverride', PHONE);
     await cdp.send('Page.navigate', { url: `${WEB}/stage.html?w=blank` });
     await sleep(500);
