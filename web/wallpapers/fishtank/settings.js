@@ -19,8 +19,6 @@ WP.schema('fishtank', [
     { key: 'godRays', label: 'Light shafts', type: 'toggle' },
     { key: 'depthBlur', label: 'Depth of field (blurs distant fish)', type: 'toggle' },
     { key: 'motes', label: 'Floating particles', type: 'toggle' },
-    { group: '⚡ Rendering' },
-    { key: 'quality', label: 'Quality', type: 'select', options: [['auto', '🎚️ Auto (match the frame rate)'], ['high', '💎 High (full resolution)'], ['balanced', '⚖️ Balanced'], ['performance', '🚀 Performance']] },
     { group: '🖱️ Interaction' },
     { key: 'cursorMode', label: 'Cursor', type: 'select', options: [['curious', '🐟 Fish come to investigate'], ['shy', '💨 Fish keep their distance'], ['off', 'Ignore the cursor']] },
     { key: 'clickToFeed', label: 'Click to drop food', type: 'toggle' },
