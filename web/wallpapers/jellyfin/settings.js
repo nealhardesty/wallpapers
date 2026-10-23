@@ -55,7 +55,7 @@
 
         { group: '🖼️ Frame' },
         { key: 'frame', label: 'Frame', type: 'select',
-          options: [['old-tv', '📺 Old TV'], ['none', '⬛ None']] },
+          options: [['old-tv', '📺 Old TV'], ['drive-in', '🚗 Drive-in'], ['porthole', '⚓ Porthole'], ['none', '⬛ None']] },
         { key: 'fit', label: 'Fit', type: 'select', when: config => config.frame === 'none', options: [['contain', 'Whole picture'], ['cover', 'Fill the screen']] },
         { key: 'showTitle', label: 'Show the title', type: 'toggle' },
 

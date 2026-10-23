@@ -959,6 +959,24 @@ const STAGE_CHECKS = {
             if (!(await counts('m.video.currentTime') > time + 1)) record('the video stood still');
             return true;
         }],
+        ['titled frames: the marquee and plaque repaint with each title, and hold still on Low', async () => {
+            const mock = jellyfinServer();
+            for (const frame of ['drive-in', 'porthole']) {
+                await fresh(`${WEB}/stage.html?w=jellyfin&tier=low`, jellyfinSignedIn(mock, { order: 'inOrder', subtitles: 'off', frame }));
+                if (!await waitFor(() => counts(`m.state === 'playing' && m.video.currentTime > 0.2`), 10000)) { record(`${frame}: never played`); continue; }
+                await counts(`(f => { const paint = f.paint; f.paint = (ctx, L, env) => { window.painted = env.title; return paint(ctx, L, env); }; })(m.frameDef)`);
+                await counts('m.skip(1)');
+                const title = await waitFor(() => counts(`m.state === 'playing' && m.video.currentTime > 0.2 && m.item.Name !== 'Test Pattern No. 3' && JellyfinLogic.titleOf(m.item)`), 8000);
+                const painted = await evaluate('window.painted');
+                if (!title || painted !== title) record(`${frame}: the art shows ${JSON.stringify(painted)}, not ${JSON.stringify(title)}`);
+                await sleep(4600);   // past the 🔇 badge's fade
+                const before = await evaluate('WP.host.frames.count');
+                await sleep(2000);
+                const drawn = await evaluate('WP.host.frames.count') - before;
+                if (drawn > 1) record(`${frame}: ${drawn} overlay frames in 2 s on Low`);
+            }
+            return true;
+        }],
         ['power: on battery at most 720p; battery saver shows posters, with no video at all', async () => {
             const mock = jellyfinServer();
             await fresh(`${WEB}/index.html?w=jellyfin&tier=high`, jellyfinSignedIn(mock, { order: 'inOrder', subtitles: 'off' }));
