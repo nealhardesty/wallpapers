@@ -188,6 +188,147 @@ async function stage(id, entry) {
     return { readyMs, drawn, problems: current.problems };
 }
 
+// ---- Wallpapers' own checks (their SPEC §9 "→" checks) ------------------------
+
+// A stage with these settings stored, booted; true once it's ready.
+async function stageWith(id, settings, query = '') {
+    await fresh(`${WEB}/stage.html?w=blank`);
+    await waitFor(() => evaluate('WP.stage?.ready'));
+    if (settings) await evaluate(`localStorage.setItem('wp:${id}', ${JSON.stringify(JSON.stringify(settings))})`);
+    await cdp.send('Page.navigate', { url: `${WEB}/stage.html?w=${id}${query}` });
+    return waitFor(() => evaluate('WP.stage?.ready'));
+}
+
+// The average colour of the screen, as a 0-255 triple: tells palettes apart.
+const AVERAGE = `(() => {
+    const probe = document.createElement('canvas');
+    probe.width = probe.height = 16;
+    const g = probe.getContext('2d', { willReadFrequently: true });
+    g.drawImage(document.querySelector('canvas'), 0, 0, 16, 16);
+    const d = g.getImageData(0, 0, 16, 16).data, sum = [0, 0, 0];
+    for (let i = 0; i < d.length; i += 4) for (let c = 0; c < 3; c++) sum[c] += d[i + c];
+    return sum.map(v => Math.round(v / 256));
+})()`;
+
+const STAGE_CHECKS = {
+    synthwave: [
+        ['every palette renders, each its own colours', async () => {
+            // The panel's options; the unit tests hold them to the palettes
+            const palettes = await evaluate('Object.keys(SYNTHWAVE_PALETTES)');
+            const seen = new Map();
+            for (const palette of palettes) {
+                if (!await stageWith('synthwave', { configVersion: 1, palette }, '&seed=7')) return record(`${palette}: not ready`);
+                await sleep(600);
+                if (await evaluate(DRAWN) < 30) record(`${palette}: barely drawn`);
+                const average = JSON.stringify(await evaluate(AVERAGE));
+                if (seen.has(average)) record(`${palette} looks just like ${seen.get(average)}`);
+                seen.set(average, palette);
+                const { data } = await cdp.send('Page.captureScreenshot', { format: 'png' });
+                writeFileSync(join(SHOTS, `synthwave-${palette}.png`), Buffer.from(data, 'base64'));
+            }
+            return seen.size === palettes.length;
+        }],
+        ['the grid covers the same ground per second at 20 fps as at full rate', async () => {
+            const rates = {};
+            for (const tier of ['low', 'high']) {
+                await stageWith('synthwave', null, `&tier=${tier}`);
+                await sleep(400);
+                const at = () => evaluate('({ d: WP.stage.manager.distance, t: performance.now(), n: WP.host.frames.count })');
+                const a = await at();
+                await sleep(2500);
+                const b = await at();
+                rates[tier] = { speed: (b.d - a.d) / ((b.t - a.t) / 1000), fps: (b.n - a.n) / ((b.t - a.t) / 1000) };
+            }
+            const expected = await evaluate('SynthwaveGrid.SPEED');
+            for (const [tier, { speed, fps }] of Object.entries(rates)) {
+                if (Math.abs(speed / expected - 1) > 0.08) record(`${tier}: ${speed.toFixed(2)} units/s at ${fps.toFixed(0)} fps; expected ${expected}`);
+            }
+            if (rates.low.fps > 24) record(`Low ran at ${rates.low.fps.toFixed(0)} fps, so the comparison proves nothing`);
+            console.log(`      ${Object.entries(rates).map(([t, r]) => `${t}: ${r.speed.toFixed(3)} units/s at ${r.fps.toFixed(0)} fps`).join(', ')}`);
+            return true;
+        }],
+    ],
+    'night-train': [
+        ['the carriage\'s reflection shows in tunnels and nowhere else', async () => {
+            await stageWith('night-train', null, '&seed=7');
+            await sleep(500);
+            const shown = {};
+            for (const kind of ['countryside', 'town', 'coast', 'bridge', 'station', 'tunnel']) {
+                shown[kind] = await evaluate(`(async () => {
+                    const m = WP.stage.manager;
+                    m.route.ensure(4e6);
+                    const s = m.route.segments.find(s => s.kind === '${kind}' && s.start > 0 && s.end - s.start > 2 * m.halfWidth() + 400);
+                    Object.assign(m.train, { x: (s.start + s.end) / 2, served: s.stop ?? -Infinity, dwell: 0 });
+                    await new Promise(r => setTimeout(r, 400));
+                    return m.reflectionShown / m.view.w;
+                })()`);
+                if (kind === 'tunnel') {
+                    const { data } = await cdp.send('Page.captureScreenshot', { format: 'png' });
+                    writeFileSync(join(SHOTS, 'night-train-tunnel.png'), Buffer.from(data, 'base64'));
+                }
+            }
+            for (const [kind, share] of Object.entries(shown)) {
+                if (kind === 'tunnel' ? share < 0.99 : share !== 0) record(`${kind}: reflection over ${(share * 100).toFixed(0)}% of the window`);
+            }
+            return true;
+        }],
+        ['Low drops the glass effects: no reflection, no soft streaks', async () => {
+            await stageWith('night-train', null, '&seed=7&tier=low');
+            await sleep(400);
+            const state = await evaluate(`(async () => {
+                const m = WP.stage.manager;
+                m.route.ensure(4e6);
+                const s = m.route.segments.find(s => s.kind === 'tunnel' && s.start > 0);
+                m.train.x = (s.start + s.end) / 2;
+                await new Promise(r => setTimeout(r, 400));
+                return { reflection: m.fade.reflection, soft: m.fade.soft, shown: m.reflectionShown };
+            })()`);
+            const { data } = await cdp.send('Page.captureScreenshot', { format: 'png' });
+            writeFileSync(join(SHOTS, 'night-train-low-tunnel.png'), Buffer.from(data, 'base64'));
+            if (state.reflection || state.soft || state.shown) record(`on Low: ${JSON.stringify(state)}`);
+            return true;
+        }],
+        ['waiting at a dry platform, it idles (about a frame a second)', async () => {
+            await stageWith('night-train', { configVersion: 1, rain: 0 }, '&seed=7');
+            await sleep(300);
+            await evaluate(`(() => {
+                const m = WP.stage.manager;
+                m.route.ensure(4e6);
+                const s = m.route.segments.find(s => s.kind === 'station');
+                Object.assign(m.train, { x: s.stop, v: 0, dwell: 30, served: s.stop });
+            })()`);
+            await sleep(400);
+            const before = await evaluate('WP.host.frames.count');
+            await sleep(3000);
+            const frames = await evaluate('WP.host.frames.count') - before;
+            const { data } = await cdp.send('Page.captureScreenshot', { format: 'png' });
+            writeFileSync(join(SHOTS, 'night-train-station.png'), Buffer.from(data, 'base64'));
+            if (frames > 6) record(`${frames} frames in 3 s at the platform`);
+            return true;
+        }],
+        ['every palette renders, each its own colours', async () => {
+            const seen = new Map();
+            for (const palette of await evaluate('Object.keys(NIGHT_TRAIN_PALETTES)')) {
+                if (!await stageWith('night-train', { configVersion: 1, palette }, '&seed=7')) return record(`${palette}: not ready`);
+                await sleep(600);
+                if (await evaluate(DRAWN) < 12) record(`${palette}: barely drawn`);
+                const average = JSON.stringify(await evaluate(AVERAGE));
+                if (seen.has(average)) record(`${palette} looks just like ${seen.get(average)}`);
+                seen.set(average, palette);
+                const { data } = await cdp.send('Page.captureScreenshot', { format: 'png' });
+                writeFileSync(join(SHOTS, `night-train-${palette}.png`), Buffer.from(data, 'base64'));
+            }
+            return true;
+        }],
+    ],
+};
+
+async function stageChecks(id) {
+    const { check, failed } = checker();
+    for (const [name, fn] of STAGE_CHECKS[id] || []) await check(`${id}: ${name}`, fn);
+    return failed();
+}
+
 async function press(key) {
     const text = key.length === 1 ? key : undefined;
     await cdp.send('Input.dispatchKeyEvent', { type: 'keyDown', key, text, ...(key.startsWith('Arrow') ? { code: key, windowsVirtualKeyCode: { ArrowLeft: 37, ArrowUp: 38, ArrowRight: 39, ArrowDown: 40 }[key] } : {}), ...(key === 'Escape' ? { windowsVirtualKeyCode: 27, code: 'Escape' } : {}) });
@@ -518,6 +659,7 @@ async function main(only) {
             if (verdict === '✗') failed++;
             console.log(`${id.padEnd(18)} ${String(r.readyMs).padStart(5)}ms ${String(r.drawn).padStart(6)}  ${verdict}`);
             if (verdict === '✗') for (const p of [...new Set(r.problems)]) console.log(`    ${p}`);
+            failed += await stageChecks(id);
         }
         if (!only.length) {
             console.log('player');
