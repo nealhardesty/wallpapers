@@ -23,6 +23,7 @@ class RainAnimationManager {
         this.windSystem = null;
 
         this.lastTime = 0;
+        this.windTime = 0;
         this.spawnCarry = 0;
         this.flash = 0;
         this.bolt = null;
@@ -31,6 +32,12 @@ class RainAnimationManager {
 
         // Configuration
         this.config = WP.settings.load();
+    }
+
+    // Lower tiers rain less (SPEC §4.8): the rate and the ceiling both
+    // follow host.quality.density, so the settings keep their meaning.
+    density() {
+        return this.host.quality?.density ?? 1;
     }
 
     groundLevel() {
@@ -84,6 +91,7 @@ class RainAnimationManager {
         this.puddles = [];
         this.ripples = [];
         this.lastTime = 0;
+        this.windTime = 0;
         this.spawnCarry = 0;
         this.flash = 0;
         this.bolt = null;
@@ -178,10 +186,11 @@ class RainAnimationManager {
 
         // Spawn, carrying the fractional remainder between frames so the rate
         // stays honest at any refresh rate
-        this.spawnCarry += this.config.spawnRate * dt * 60;
+        const density = this.density();
+        this.spawnCarry += this.config.spawnRate * density * dt * 60;
         while (this.spawnCarry >= 1) {
             this.spawnCarry -= 1;
-            if (this.raindrops.length < this.config.maxRaindrops) {
+            if (this.raindrops.length < this.config.maxRaindrops * density) {
                 this.raindrops.push(this.createRaindrop());
             }
         }
@@ -215,9 +224,9 @@ class RainAnimationManager {
             }
         }
 
-        while (this.raindrops.length > this.config.maxRaindrops) {
-            this.raindrops.shift();
-        }
+        // Over the ceiling after a drop in tier: no trim, because the drops
+        // already falling reach the ground within a couple of seconds, which
+        // thins the rain gradually instead of wiping part of it out at once
     }
 
     updateSplashes(dt) {
@@ -467,12 +476,18 @@ class RainAnimationManager {
         if (!this.isEnabled) return;
 
         if (!this.lastTime) this.lastTime = currentTime;
-        const dt = Math.min((currentTime - this.lastTime) / 1000, 0.05);
+        const dt = Math.min((currentTime - this.lastTime) / 1000, 0.1);
         this.lastTime = currentTime;
 
         this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 
-        this.windSystem?.update();
+        // The wind counts in 60 fps frames, so it steps at 60 a second
+        // whatever the frame rate
+        this.windTime += dt;
+        while (this.windTime >= 1 / 60) {
+            this.windTime -= 1 / 60;
+            this.windSystem?.update();
+        }
         this.updateRaindrops(dt);
         this.updateSplashes(dt);
         this.updateLightning(dt);
