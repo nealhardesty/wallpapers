@@ -14,14 +14,14 @@ wallpapers' only home. They run in three hosts:
 3. **Android live wallpaper**: a future app in `android/` that runs the same
    web code behind the home screen.
 
-> Status: **phases 1–7 done** (2026-10-22), except what needs the owner:
+> Status: **phases 1–8 done** (2026-10-22), except what needs the owner:
 > measurements on a real phone (6.2's numbers, 6.4a), the first signed
-> release (6.6), and the switch-over itself (7.2). The player, the stage, the panel and
-> all 17 wallpapers run from `web/index.html`, as a Chrome new-tab
-> extension, on GitHub Pages at https://nealhardesty.github.io/wallpapers/,
-> and as an Android live wallpaper. Every wallpaper is tiered and within
-> budget, and everything the homepage had for wallpapers is here, settings
-> included (Appendix B). Next up: Phase 8 (new wallpapers).
+> release (6.6), the switch-over itself (7.2), and trying Phase 8's touch
+> and location on a phone. The player, the stage, the panel and all 32
+> wallpapers run from `web/index.html`, as a Chrome new-tab extension, on
+> GitHub Pages at https://nealhardesty.github.io/wallpapers/, and as an
+> Android live wallpaper. Every wallpaper is tiered and within budget.
+> Next up: Phase 9 (Jellyfin).
 
 ---
 
@@ -74,6 +74,26 @@ Imported from the private homepage repo, as a **fresh copy with no git history**
 | `quest` | quest.js, quest-art.js, quest-world.js, quest.html | 538 KB | Interactive. Playable with keys and touch when standalone. |
 | `bing` | wallpaper.js (part) | 12 KB | Image of the day, including the info overlay and the 0–7-day picker. **Imported in full**, with per-host fetching (§4.6). |
 | `blank` | — | — | Plain dark background. |
+
+Added in Phase 8, drawn in code (designs in §10.6–10.20):
+
+| id | Files | Size | Notes |
+|---|---|---|---|
+| `harmonograph` | harmonograph-math.js, harmonograph.js | ~0.8k lines | Pure segment generator, unit-tested; key N |
+| `pixel-room` | pixel-room-art.js, pixel-room.js | ~1.6k lines | 32-colour palette, sprites in code; interactive; follows `host.now()` |
+| `girih` | girih-geometry.js, girih.js | ~800 lines | Pure strapwork generator, shared with stained-glass; keys N, T |
+| `stained-glass` | stained-glass.js (+ girih/girih-geometry.js) | ~930 lines | Light by `host.now()`; key N |
+| `synthwave` | synthwave.js | ~600 lines | Pure grid maths (`SynthwaveGrid`) |
+| `zen-garden` | zen-geometry.js, zen-garden.js | ~1,000 lines | Interactive (rake); idles between strokes; keys N, R, E |
+| `koi-pond` | koi-art.js, koi-pond.js | ~1,150 lines | Interactive (tap, feed); seasons by `host.now()` |
+| `murmuration` | flock.js, murmuration.js | ~1,050 lines | 3,000 birds; pure flock, unit-tested; interactive (falcon); keys D, R, N |
+| `lanterns` | lanterns.js | ~560 lines | Interactive (release); key L/Space |
+| `rainy-window` | rainy-window-city.js, rainy-window.js | 60 KB | Interactive (fog drawing); lights by the hour; key W |
+| `night-train` | route.js, night-train.js | ~1,250 lines | Pure seeded route (`NightTrainRoute`) |
+| `fireworks` | fireworks-show.js, fireworks.js | 41 KB | Interactive (tap); modes auto/tap/newyear; keys Space/L, G |
+| `lighthouse` | lighthouse-light.js, lighthouse-sea.js, lighthouse.js | ~1.4k lines | Network: `marine-api.open-meteo.com`, only with Live Swell on; keys L, S |
+| `wiki-pond` | wiki-pond-events.js, wiki-pond.js | ~0.8k lines | Network: `stream.wikimedia.org` (EventSource); made-up edits in thumb mode |
+| `satellites` | sgp4.js, data.js, satellites.js | ~55 KB | Network: `celestrak.org` (+ the panel's geocoder); needs location; offline sample orbits; key N |
 
 About 1.7 MB of JavaScript in total. **Not imported:** links, weather, clocks,
 search/omniprompt, custom links, status bar, Docker/nginx, the homepage's
@@ -320,8 +340,15 @@ host = {
   reducedMotion: boolean,                 // prefers-reduced-motion
   now(): Date,                            // the time: real, or ?date= ticking forward (8.0)
   gestures({ tap, start, move, end }),    // taps and drags; Android page swipes are neither. Returns a stop function
-  // phase 6: power { charging, level, saver, thermal } and idleUntil(ms) (§4.8)
+  location(): Promise<{lat, lon, label, source} | null>,  // §10.1, for wallpapers that declare needs: ['location']
+  idleUntil(ms),                          // no frames until then, or input (§4.8)
 }
+// Optional on the manager, beside onQuality and onScroll: onPause() and
+// onResume(), when the stage pauses (hidden tab, Android screen off), for
+// anything rAF doesn't stop, such as Wiki Pond's EventSource.
+// Catalog, beside network: offline (a network wallpaper that still draws its
+// own scene: it gets a thumbnail, live previews and the smoke pixel check)
+// and needs: ['location'] (the stage iframe gets allow="geolocation").
 ```
 
 The host kind is detected from `location` and a `?host=` override.
@@ -680,6 +707,21 @@ and the commits.
 | mountains, parallax-clouds | — | No density (the layers are the composition, and they cost ~1%); `onScroll` |
 | neko | — | Idles between Z steps while asleep (~10 frames/s) |
 | bing | — | No frames at all; CSS background |
+| harmonograph | — | Sheet canvas (paper + ink) cached; frames copy only the touched rectangle; slides are the only full-screen frames; Low: stride 2, one stroke at a time, idles between; idles while a finished drawing is admired |
+| pixel-room | — | ~320×180 buffer at a whole device-pixel scale; lit room rebuilt only when the light changes; 10 ticks/s on every tier via idleUntil |
+| girih | `sheen` (medium) | Repaints only while θ moves; holds idle (no frames on Low); tilings crossfade by CSS opacity; Truchet redraws flipping tiles only |
+| stained-glass | — | Glass and wall per resize, light per minute at 0.3–0.5× res; motes and shaft strips × density; idles when nothing moves |
+| synthwave | `haze` (medium) | Low draws every other grid line; palm spacing and car rate × density; everything static baked; onScroll |
+| zen-garden | — | Static layers; dirty-rectangle copies; idles between gardener strokes, gusts and leaves; leaf rate × density |
+| koi-pond | `shadows`, `sparkles` (medium) | fishCount × density, fish diving away or rising in; quarter-resolution shadow buffer; pooled ripples, glints and petals |
+| murmuration | — | Birds × density (3000/1950/1050), added from off screen or flown off the sides; typed-array flock, neighbour search amortised over ~0.1 s; four filled paths a frame; idles through the night |
+| lanterns | `ripples` (medium) | Lanterns and release rate × density, fixed pool; baked sprites at 3 sizes, additive flicker; Low reflects every other lantern as one plain copy |
+| rainy-window | `fog` (medium) | Sharp and blurred city once per resize; a window switch re-blurs a patch; mask and blur at half resolution; drops × density; Low: softened city, no mask |
+| night-train | `reflection`, `softRain` (medium) | Tiles painted once as they scroll in; Low halves near detail; drops and flakes × density; idles at platforms (≈1 fps dry); onScroll |
+| fireworks | `smoke` (medium) | Particle pool 2600 × density; trails in a few batched strokes; reflection from a half-size buffer; idles with an empty sky (tap, New Year); the finale is the budget case |
+| lighthouse | `spray`, `glints` (medium) | Rain, ships, clouds, spray × density; sky, headland and beam sprite baked per resize; onScroll moves the camera |
+| wiki-pond | — | Ripple pool 60 + 140 × density, 8/s × (0.4 + 0.6 × density); pond baked; listens in bursts on Android |
+| satellites | — | Stars × density; sky and ground one layer every 30 s; positions once a second, interpolated; idle until the next second when nothing's up; onScroll |
 
 #### In the panel
 
@@ -1212,6 +1254,14 @@ phase can mostly run in parallel.
 ### Phase 8: New wallpapers
 
 Picked by the owner from the 2026-10-22 brainstorm; each design is in §10.
+**Done 2026-10-22**, built in parallel (two wallpapers per branch) and
+merged; each §10 section ends with what was built. Shared pieces that came
+with it: `host.now()` (8.0), `host.gestures()` for taps and drags, the
+`location` capability (§10.1), the catalog's `offline` and `needs`, the
+manager's `onPause`/`onResume`, per-wallpaper smoke checks in
+`STAGE_CHECKS` (in `tools/smoke.mjs`, run with `node tools/smoke.mjs <id>`),
+and the `make bench` target, which until now existed only in the docs.
+Still for the owner: touch, swipes and location on a real phone.
 Every task follows "Building a new wallpaper" in `AGENTS.md`, and is done
 only when `make ci` passes, `thumb.webp` is committed, `dist/smoke/<id>.png`
 and `?tier=low` and `?host=android` have been looked at, and the wallpaper is
@@ -1220,21 +1270,21 @@ ordered cheapest and offline first; the network ones come last, because
 each needs fixtures and an audit allowlist entry.
 
 - [x] 8.0 **A clock for time-aware wallpapers.** `host.now()` returns a `Date`: the real time, or, with `?date=YYYY-MM-DD` or `?date=YYYY-MM-DDTHH:MM`, that moment ticking forward from when the stage started. A date alone keeps the real time of day; seconds are optional. Advent moves onto it. 8.3, 8.4, 8.10 and 8.12 depend on it. → unit tests: no param, a date, a date and time; advent's time travel still passes the smoke run.
-- [ ] 8.1 **Harmonograph** (§10.6). → the same seed draws the same figure at 20 fps and at 120 fps (unit test on the segment generator); idle between strokes on Low.
-- [ ] 8.2 **Girih** (§10.7). → every base tiling renders at every contact angle with no gaps (unit test on the strapwork generator); one full-screen redraw per morph step, none while holding.
-- [ ] 8.3 **Stained Glass** (§10.8). → the glass layer is built once per resize (frame counter in the smoke run); `?date=` noon and midnight give different light.
-- [ ] 8.4 **Pixel Room** (§10.9). → landscape and portrait layouts both fill the screen with integer scaling and no blurry pixels; the wall clock shows the stage's time; ≤ 12 fps on every tier.
-- [ ] 8.5 **Synthwave** (§10.10). → the grid scrolls by elapsed time (same distance at 30 and 60 fps); no `shadowBlur`; every palette renders.
-- [ ] 8.6 **Zen Garden** (§10.11). → the first frame is a raked garden; a scripted drag in the smoke run leaves grooves; with no input it idles between gardener strokes.
-- [ ] 8.7 **Koi Pond** (§10.12). → a tap makes a ripple and the nearest koi turn towards it within 2 s; fish count follows `density`.
-- [ ] 8.8 **Murmuration** (§10.13). → 3,000 birds at High, inside the §4.8 Medium budget at 4× throttle; the flock never leaves the sky for more than a few seconds; pointer falcon splits it.
-- [ ] 8.9 **Lantern Festival** (§10.14). → the first frame already has lanterns in the sky; a tap releases one from the shore under the pointer; the pool never grows past its cap.
-- [ ] 8.10 **Rainy Window** (§10.15). → fog regrows over a finger-drawn line within a minute; lit windows follow the hour (`?date=…T22:00` vs `T03:00`); the sharp and blurred layers are built once per resize.
-- [ ] 8.11 **Night Train** (§10.16). → a tunnel and a station both appear within a 10-minute seeded run; the reflection only shows in tunnels; Low drops the glass effects and still looks deliberate.
-- [ ] 8.12 **Fireworks** (§10.17). → `auto` mode never leaves the sky empty for more than its lull; a `?date=` of 31 Dec 23:59:50 counts down and fires the finale at midnight; tap mode is silent until tapped.
-- [ ] 8.13 **Lighthouse** (§10.18). Adds `marine-api.open-meteo.com` to the catalog and `URL_ALLOW`. → offline and fixture runs both draw a sea; a high-swell fixture visibly raises the waves; the beam keeps its flash character at any fps.
-- [ ] 8.14 **Wiki Pond** (§10.19). Adds `stream.wikimedia.org`. → a synthetic SSE fixture drives ripples in the smoke run; with the network blocked it shows the quiet offline pond, not a blank screen; the stream closes on `stop()` and while paused.
-- [ ] 8.15 **Satellites** (§10.20). Needs the §10.1 `location` capability first. Adds `celestrak.org`. → the propagator stays within 1° of the published SGP4 verification vectors (§10.20) for a LEO case, seen from a test observer, up to 3 days from epoch; elements are fetched at most once per 12 h, and stale ones are labelled.
+- [x] 8.1 **Harmonograph** (§10.6). → the same seed draws the same figure at 20 fps and at 120 fps (unit test on the segment generator); idle between strokes on Low.
+- [x] 8.2 **Girih** (§10.7). → every base tiling renders at every contact angle with no gaps (unit test on the strapwork generator); one full-screen redraw per morph step, none while holding.
+- [x] 8.3 **Stained Glass** (§10.8). → the glass layer is built once per resize (frame counter in the smoke run); `?date=` noon and midnight give different light.
+- [x] 8.4 **Pixel Room** (§10.9). → landscape and portrait layouts both fill the screen with integer scaling and no blurry pixels; the wall clock shows the stage's time; ≤ 12 fps on every tier.
+- [x] 8.5 **Synthwave** (§10.10). → the grid scrolls by elapsed time (same distance at 30 and 60 fps); no `shadowBlur`; every palette renders.
+- [x] 8.6 **Zen Garden** (§10.11). → the first frame is a raked garden; a scripted drag in the smoke run leaves grooves; with no input it idles between gardener strokes.
+- [x] 8.7 **Koi Pond** (§10.12). → a tap makes a ripple and the nearest koi turn towards it within 2 s; fish count follows `density`.
+- [x] 8.8 **Murmuration** (§10.13). → 3,000 birds at High, inside the §4.8 Medium budget at 4× throttle; the flock never leaves the sky for more than a few seconds; pointer falcon splits it.
+- [x] 8.9 **Lantern Festival** (§10.14). → the first frame already has lanterns in the sky; a tap releases one from the shore under the pointer; the pool never grows past its cap.
+- [x] 8.10 **Rainy Window** (§10.15). → fog regrows over a finger-drawn line within a minute; lit windows follow the hour (`?date=…T22:00` vs `T03:00`); the sharp and blurred layers are built once per resize.
+- [x] 8.11 **Night Train** (§10.16). → a tunnel and a station both appear within a 10-minute seeded run; the reflection only shows in tunnels; Low drops the glass effects and still looks deliberate.
+- [x] 8.12 **Fireworks** (§10.17). → `auto` mode never leaves the sky empty for more than its lull; a `?date=` of 31 Dec 23:59:50 counts down and fires the finale at midnight; tap mode is silent until tapped.
+- [x] 8.13 **Lighthouse** (§10.18). Adds `marine-api.open-meteo.com` to the catalog and `URL_ALLOW`. → offline and fixture runs both draw a sea; a high-swell fixture visibly raises the waves; the beam keeps its flash character at any fps.
+- [x] 8.14 **Wiki Pond** (§10.19). Adds `stream.wikimedia.org`. → a synthetic SSE fixture drives ripples in the smoke run; with the network blocked it shows the quiet offline pond, not a blank screen; the stream closes on `stop()` and while paused.
+- [x] 8.15 **Satellites** (§10.20). Needs the §10.1 `location` capability first. Adds `celestrak.org`. → the propagator stays within 1° of the published SGP4 verification vectors (§10.20) for a LEO case, seen from a test observer, up to 3 days from epoch; elements are fetched at most once per 12 h, and stale ones are labelled.
 
 ### Phase 9: Jellyfin player (owner: high priority)
 
@@ -1286,6 +1336,8 @@ a host capability, like `network`:
   location may need `ACCESS_BACKGROUND_LOCATION`. Using the last known
   location, refreshed while the settings activity is open, probably avoids
   that. Verify before promising anything.
+
+**As built (Phase 8):** one shared key, `wp:location`, rounded to 0.1° before it's written; it describes the device, so later wallpapers reuse it without asking again, and it travels with Export. The panel's 📍 section (`core/location.js`, loaded only for wallpapers that need it) takes a typed place (Open-Meteo's geocoder, once), "Use my location" (Android's bridge when present, else the browser's Geolocation API) and Forget. The stage refreshes a browser fix only when permission is already granted; it never prompts. The player rebuilds the stage when the place changes. Android: `ACCESS_COARSE_LOCATION`, asked from the settings screen only; `locate()` returns the newest last-known fix (or one network fix on API 30+), so no background location is needed. Built, not yet tried on a device.
 
 ### 10.2 Weather forecast (owner)
 
@@ -1423,6 +1475,8 @@ paper. When it has run down, the sheet slides off and a fresh one starts.
 - **First frame:** a sheet already part-drawn, at a seeded point in its run.
 - **Keys:** `n` new drawing.
 
+**As built:** three pendulums (x, y, and a rotary one turning the paper), each axis scaled to the figure's reach. The drawing is a fixed grid of 16,008 points inked in 12-point strokes, each a pure function of the grid, so frame rate only sets how far the pen has got; unit tests compare 20 fps with jittery 120 fps. Ink width and alpha follow pen speed. Finished sheets are signed in pencil, admired, then fly onto a two-sheet pile. Low uses stride 2 and idles between strokes (~5 fps).
+
 ### 10.7 Girih (`girih`, owner pick)
 
 Islamic geometric star patterns that slowly breathe from one form into
@@ -1450,6 +1504,8 @@ another.
 - **Test:** the strapwork generator is pure, so unit tests check every base
   tiling at sampled θ for closed cells and no gaps.
 
+**As built:** partner rays meet on the vertex bisector at |MP| = ½·sin(α/2)/sin(θ+α/2); stars and vertex kites tile each polygon, and unit tests check every tiling from 15° to 85° for closed cells and straight crossings. Strands cross only at edge midpoints, where "the ray towards the next vertex goes over" makes the interlace alternate everywhere. Repaints only while θ moves; tilings crossfade by CSS opacity on a second canvas; patina and sheen are compositor-blended overlays. Extras: Iznik and midnight palettes, medallions, morph and angle settings.
+
 ### 10.8 Stained Glass (`stained-glass`, owner pick)
 
 A leaded glass window with light moving through it over the day, throwing
@@ -1474,6 +1530,8 @@ coloured shafts across the floor below.
   `motion: 'slow'`.
 - **Settings:** `design`, `palette` (cathedral, art nouveau, sea glass,
   sunset), `cellCount`, `shafts`, `dustMotes`.
+
+**As built:** a dark stone wall above a flagstone floor; three lancets on wide screens, one on phones. Designs rose, abstract, landscape (lead follows the scene's outlines) and geometric (Girih's own cells, the file shared through `scripts`). A seasonal sun model from `host.now()` gives coloured shafts, a pool of window light on the floor, and candlelight at night; the light layer is rebuilt once a minute at reduced resolution, clouds only change its opacity, and motes light up inside the shafts from a 40×40 light map. `light` can pin a time of day.
 
 ### 10.9 Pixel Room (`pixel-room`, owner pick)
 
@@ -1502,6 +1560,8 @@ a plant, a lamp, and a window onto the real time of day.
   `weather` (clear, sometimes rain, always rain).
 - **Interactive:** a tap on the cat wakes it, on the lamp toggles it.
 
+**As built:** the canvas is the art buffer, at the largest whole device-pixel scale that keeps 90% of the safe area, `pixelated`; the real ratio comes from a `min-resolution` search, since the stage lowers `devicePixelRatio`. Light is an old-games palette remap through a Bayer-dithered light map, rebuilt only when the light changes. The window follows the hour, the season and the moon's phase; the lamp is on from dusk to 23:30; the cat runs sleep → yawn → stretch → wash → the window → back to bed. Furniture is drawn in code from palette rectangles; sprites are rows of palette keys.
+
 ### 10.10 Synthwave (`synthwave`, owner pick)
 
 The retro drive: a neon grid rushing towards a striped sun, wireframe
@@ -1520,6 +1580,8 @@ mountains, palms sliding past.
   sunset orange), `speed`, `palms`, `scanlines`, `sunStripes`.
 - **Cost:** low. Lines and a few cached layers. Low halves the line count
   and drops the haze.
+
+**As built:** the grid's lines sit at fixed world positions and the camera's distance advances by clamped elapsed time (`SynthwaveGrid`, unit-tested at 10–120 fps; the smoke run measures 3.00 units/s at 20 and 60 fps). The haze is the grid redrawn into a quarter-size buffer and added back with `lighter`. Sun gaps are born a third of the way down and widen towards the horizon. A highway carries the odd overtaking car; palms have a neon rim on the road side.
 
 ### 10.11 Zen Garden (`zen-garden`, owner pick)
 
@@ -1549,6 +1611,8 @@ draw; an unseen gardener tends it when you don't.
 - **Android:** the best touch wallpaper. Swipes between home screens must
   not rake (see the shared rules).
 
+**As built:** three cached layers (clean base, the garden, stones and light), dirty-rectangle copies. Each tine lays clean sand under itself, then a groove and a ridge offset sideways, lit from the upper left; tines bend radially around stones. Wind lays the base back at an alpha that leaves 5% of a groove after `fadeMinutes`, at most every 3 s. Frames run only for strokes and falling leaves; otherwise `idleUntil` the next gust, gardener stroke or leaf. Keys N new stones, R rake, E smooth.
+
 ### 10.12 Koi Pond (`koi-pond`, owner pick)
 
 Koi seen from above, gliding under lily pads. Petals or leaves land on the
@@ -1575,6 +1639,8 @@ water; a tap sends out ripples and draws the fish.
 - **Cost:** medium at most; a dozen fish with clipping is cheap. Low drops
   the shadows and sparkles.
 
+**As built:** 10-point spine chains with a bend limit and a travelling wave; the body is a cached sprite of the straight fish drawn in slices along the spine, so the pattern bends. Shadows on a quarter-resolution buffer; 48 pooled ripples; a tap turns the nearest koi in about 0.9 s (smoke). Density changes send fish diving away or rising in. `seasonal` became `season` (auto or any season); `touch` is ripple or ignore.
+
 ### 10.13 Murmuration (`murmuration`, owner pick)
 
 Thousands of starlings at dusk over a marsh, swirling in one shape-shifting
@@ -1600,6 +1666,8 @@ cloud, and splitting when a falcon dives through.
   winter), `falcon` (pointer, auto, off), `minutes`.
 - **Cost:** medium (the flocking, not the drawing). `cost: 'medium'`.
 
+**As built:** the flock flies in 3D, each bird steering by its 7 nearest neighbours in 3D, found on a counting-sort grid and re-searched every ~0.1 s, all in typed arrays: 24.7% busy at High with 3,000 birds. The flock is held in a turning, breathing flattened ellipsoid, which gives the ribbons and veils of real murmurations. An alarm wave passes along the neighbour links. Hover is the falcon (drag on touch); a tap sends a wild one diving. Cycle: swirl, roost into the reeds (~40 s), 12 s of night with no frames, then a new flock.
+
 ### 10.14 Lantern Festival (`lanterns`, owner pick)
 
 Paper sky lanterns rising from a lakeshore into the night, with their
@@ -1620,6 +1688,8 @@ reflections trembling on the water. Tap to release one.
   paper, mixed), `reflections`, `touch`.
 - **Cost:** low to medium; Low drops the reflections to every other lantern.
   `motion: 'slow'` suits it.
+
+**As built:** a perspective lake, with each lantern's position a pure function of its age (so the sky is pre-seeded by age, and identical at any fps). Sprites per tint at 14/28/56 px; the flame is an additive glow flickering by alpha. Reflections are the sprite stretched in three independently wobbling slices; Low keeps one plain copy for every other lantern. Fixed pool of `count + 12`, recycling the furthest-flown. Releases come from watchers, boats and the far shore.
 
 ### 10.15 Rainy Window (`rainy-window`, owner pick)
 
@@ -1649,6 +1719,8 @@ in the fog.
 - **Cost:** medium; Low drops the mask (no fog, just drops on a softened
   city) and halves the drops.
 
+**As built:** a seeded skyline (downtown, harbour, hills); sharp and half-resolution blurred layers built once per resize, a switched window re-blurring only its patch. The fog mask is half resolution, cleared by drops and fingers and regrown in 7% steps timed by `fogReturn`. Drops grow, stall, run, merge by volume and shed beads; each is an upside-down clipped copy of the sharp city with a baked rim. Lit windows follow `RainyCity.litShare(hour)`: 2,042 at 22:00 against 134 at 03:00 in the smoke run. Not done: rain from §10.2's weather.
+
 ### 10.16 Night Train (`night-train`, owner pick)
 
 The view from a train window at night: the land sliding past at different
@@ -1671,6 +1743,8 @@ speeds, rain streaking sideways, tunnels, stations.
   `palette` (blue night, sodium, snow route with falling flakes).
 - **Cost:** medium. Low drops the reflection and the streak layer's
   softness, and halves the near-layer detail.
+
+**As built:** `route.js` is pure: a station every 150–260 s, tunnels after 70 s (forced by 200 s), and a braking curve that stops the platform's middle at the window; 300 seeds each pass a tunnel and a station inside 10 minutes. Middle and near layers are 512 px tiles painted once from the route as they scroll in. The carriage's reflection (seat backs, a reading lamp, a cat in a basket) shows only over tunnel spans. A dry platform idles at about a frame a second.
 
 ### 10.17 Fireworks (`fireworks`, owner pick)
 
@@ -1702,6 +1776,8 @@ countdown and finale at midnight on New Year's.
 - **Option (owner to decide):** Seasonal (3.7) could pick Fireworks for
   31 December and 1 January.
 
+**As built:** `FireworksShow` is pure (run, phase, `newYear(date)`); lulls are capped so the sky is never empty for more than 8 s (unit-tested over 2-hour simulations). Particle trails are 30 Hz histories stroked as a few batched `Path2D`s. At midnight on New Year's the year is written in stars, then a 45 s finale and a show until 00:05. Tap and New Year modes idle with an empty sky. Seasonal is unchanged; whether it picks Fireworks on 31 December and 1 January is still the owner's call.
+
 ### 10.18 Lighthouse (`lighthouse`, owner pick)
 
 A lighthouse on a headland at night. The beam sweeps over a heaving sea and
@@ -1728,6 +1804,8 @@ real ocean's swell.
 - **Settings:** `sea`, `liveSwell`, `oceanPoint`, `characteristic`, `ships`,
   `rain`.
 - **Cost:** medium; Low drops spray and in-beam particles.
+
+**As built:** the characteristic is parsed into "on" intervals and is a pure function of time (unit-tested at 10–144 fps with jitter); a rotating beam faces the viewer exactly at its flash peak, when the lantern flares and the night brightens. The sea is 22 perspective bands of 4 peaked wave trains at deep-water speed. Presets calm to gale drive foam, rain, clouds and lightning. Live Swell (off by default) follows Open-Meteo's hourly forecast for generic open-ocean points, cached for 48 h. The moon's phase follows `host.now()`. Icon 🌊: there's no lighthouse emoji.
 
 ### 10.19 Wiki Pond (`wiki-pond`, owner pick)
 
@@ -1760,6 +1838,8 @@ ring is the size of the change; its colour says who made it.
   `palette`.
 - **Smoke:** a synthetic SSE fixture with made-up titles and users, never a
   recording of the live stream.
+
+**As built:** EventSource, canary events dropped; `~` names are temporary accounts, IP names anonymous; ring size log2(1 + |Δbytes|). On Android it listens in bursts (30 s on, 90 s off, the catch spread over the gap), since the server can't filter by wiki. Reconnects after 1 s, backing off to 60 s while failing; a 45 s silence reopens it. The stream closes on `stop()` and through the stage's new `onPause`. Sound (off by default) is a pentatonic note per edit.
 
 ### 10.20 Satellites (`satellites`, owner pick)
 
@@ -1794,6 +1874,8 @@ moving point of light.
   `trails`, `horizon`.
 - **Cost:** low; positions are recomputed once a second and interpolated.
   `motion: 'slow'`.
+
+**As built:** full near-Earth SGP4 written from Spacetrack Report #3 as revised by Vallado et al. (2006), matching the verification vectors to under a metre; a J2-secular-only model measured 11–26 km off over 2–3 days (1.5–3°), so it was dropped. Deep-space orbits are skipped. Stereographic sky with a flat horizon; colour from the sun per pixel on a 128-px image every 30 s. Visible needs the sun below −6°, the satellite sunlit (shadow cylinder, 60 km soft edge) and above the ridge; unseen ones are optional faint rings. Elements cached per group, fetched at most every 12 h, stale after 3 days; offline, seeded sample orbits, labelled. `make bench` blocks CelesTrak.
 
 ### 10.21 Jellyfin player (`jellyfin`, owner pick, high priority)
 

@@ -72,13 +72,18 @@ SPEC.md §4 has the full contract. The short version:
      slow tier runs at 10 fps). Per-frame logic you can't avoid (games,
      wind) runs on a fixed 60 Hz step from an accumulator.
    - Keep ground lines above `host.insets.bottom`.
+   - Taps and drags go through `host.gestures({ tap, start, move, end })`,
+     so Android's page swipes never count; give touch a setting to ignore it.
+   - Anything that needs pausing beyond rAF (a stream, a timer) implements
+     `onPause()` and `onResume()`.
    - Anything that depends on the date or hour reads `host.now()`, never
      `new Date()`, so `?date=2026-12-31T23:59:50` can test it.
    - Look alive on the first frame: seed the scene, don't fade in from
      black.
 4. **Public-repo rules.**
    - No API keys.
-   - No network unless declared in the catalog's `network`, allowed in
+   - No network unless declared in the catalog's `network` (with
+     `offline: true` if it still draws its own scene without it), allowed in
      `URL_ALLOW` in `tools/audit.mjs` *and* listed in `host_permissions`
      in `web/manifest.json` (the tests check all three agree), with an
      offline state that isn't blank.
@@ -114,6 +119,9 @@ SPEC.md §4 has the full contract. The short version:
      the network, writes storage outside `wp:<id>:*`, or would save anything
      on a fresh run. It also drives your panel: every control must render,
      and a change must reach the running wallpaper.
+   - Prove the wallpaper's own promises with an entry in `STAGE_CHECKS` in
+     `tools/smoke.mjs` (`node tools/smoke.mjs <id>` runs it) and, for pure
+     logic, a `tools/<id>.test.mjs`.
    - Look at `dist/smoke/<id>.png`.
    - Try `web/index.html?w=<id>&panel=open`, `?w=<id>&tier=low` and
      `?w=<id>&host=android`.

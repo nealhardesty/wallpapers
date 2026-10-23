@@ -2,10 +2,11 @@
 
 Toy animated wallpapers: snow, rain, falling leaves, fireflies, a fireplace,
 northern lights, a fish tank, a Halloween night, an advent calendar, a
-self-playing 8-bit adventure, and more. Each one is a full-screen canvas
+self-playing 8-bit adventure, koi, a zen garden, a night train, fireworks,
+the real satellites overhead, and more: 32 in all. Each one is a full-screen canvas
 animation with no page around it. Most just play; some also respond to you.
-Click to feed the fish, light the jack-o'-lanterns, or take over Pixel
-Quest's hero with the arrow keys.
+Click to feed the fish, light the jack-o'-lanterns, rake the sand, or take
+over Pixel Quest's hero with the arrow keys.
 
 **[Try it: nealhardesty.github.io/wallpapers](https://nealhardesty.github.io/wallpapers/)**, then press `,`.
 
@@ -28,6 +29,19 @@ Click one to see it live.
 | [<img src="web/wallpapers/fireplace/thumb.webp" width="200" alt="Fireplace">](https://nealhardesty.github.io/wallpapers/?w=fireplace)<br>🔥 Fireplace | [<img src="web/wallpapers/northern-lights/thumb.webp" width="200" alt="Northern Lights">](https://nealhardesty.github.io/wallpapers/?w=northern-lights)<br>🌌 Northern Lights | [<img src="web/wallpapers/parallax-clouds/thumb.webp" width="200" alt="Parallax Clouds">](https://nealhardesty.github.io/wallpapers/?w=parallax-clouds)<br>☁️ Parallax Clouds | [<img src="web/wallpapers/mountains/thumb.webp" width="200" alt="Mountains">](https://nealhardesty.github.io/wallpapers/?w=mountains)<br>🏔️ Mountains |
 | [<img src="web/wallpapers/starfield/thumb.webp" width="200" alt="Starfield">](https://nealhardesty.github.io/wallpapers/?w=starfield)<br>🌠 Starfield | [<img src="web/wallpapers/cherry-blossoms/thumb.webp" width="200" alt="Cherry Blossoms">](https://nealhardesty.github.io/wallpapers/?w=cherry-blossoms)<br>🌸 Cherry Blossoms | [<img src="web/wallpapers/halloween/thumb.webp" width="200" alt="Halloween Night">](https://nealhardesty.github.io/wallpapers/?w=halloween)<br>🎃 Halloween Night | [<img src="web/wallpapers/neko/thumb.webp" width="200" alt="Neko">](https://nealhardesty.github.io/wallpapers/?w=neko)<br>🐈 Neko |
 | [<img src="web/wallpapers/matrix/thumb.webp" width="200" alt="Matrix">](https://nealhardesty.github.io/wallpapers/?w=matrix)<br>🟩 Matrix | [<img src="web/wallpapers/fishtank/thumb.webp" width="200" alt="Fish Tank">](https://nealhardesty.github.io/wallpapers/?w=fishtank)<br>🐠 Fish Tank | [<img src="web/wallpapers/advent/thumb.webp" width="200" alt="Advent Calendar">](https://nealhardesty.github.io/wallpapers/?w=advent)<br>🎁 Advent Calendar | [<img src="web/wallpapers/quest/thumb.webp" width="200" alt="Pixel Quest">](https://nealhardesty.github.io/wallpapers/?w=quest)<br>⚔️ Pixel Quest |
+| [<img src="web/wallpapers/harmonograph/thumb.webp" width="200" alt="Harmonograph">](https://nealhardesty.github.io/wallpapers/?w=harmonograph)<br>🖋️ Harmonograph | [<img src="web/wallpapers/pixel-room/thumb.webp" width="200" alt="Pixel Room">](https://nealhardesty.github.io/wallpapers/?w=pixel-room)<br>🛋️ Pixel Room | [<img src="web/wallpapers/girih/thumb.webp" width="200" alt="Girih">](https://nealhardesty.github.io/wallpapers/?w=girih)<br>✴️ Girih | [<img src="web/wallpapers/stained-glass/thumb.webp" width="200" alt="Stained Glass">](https://nealhardesty.github.io/wallpapers/?w=stained-glass)<br>⛪ Stained Glass |
+| [<img src="web/wallpapers/synthwave/thumb.webp" width="200" alt="Synthwave">](https://nealhardesty.github.io/wallpapers/?w=synthwave)<br>🌇 Synthwave | [<img src="web/wallpapers/zen-garden/thumb.webp" width="200" alt="Zen Garden">](https://nealhardesty.github.io/wallpapers/?w=zen-garden)<br>🪨 Zen Garden | [<img src="web/wallpapers/koi-pond/thumb.webp" width="200" alt="Koi Pond">](https://nealhardesty.github.io/wallpapers/?w=koi-pond)<br>🎏 Koi Pond | [<img src="web/wallpapers/murmuration/thumb.webp" width="200" alt="Murmuration">](https://nealhardesty.github.io/wallpapers/?w=murmuration)<br>🐦 Murmuration |
+| [<img src="web/wallpapers/lanterns/thumb.webp" width="200" alt="Lantern Festival">](https://nealhardesty.github.io/wallpapers/?w=lanterns)<br>🏮 Lantern Festival | [<img src="web/wallpapers/rainy-window/thumb.webp" width="200" alt="Rainy Window">](https://nealhardesty.github.io/wallpapers/?w=rainy-window)<br>🪟 Rainy Window | [<img src="web/wallpapers/night-train/thumb.webp" width="200" alt="Night Train">](https://nealhardesty.github.io/wallpapers/?w=night-train)<br>🚆 Night Train | [<img src="web/wallpapers/fireworks/thumb.webp" width="200" alt="Fireworks">](https://nealhardesty.github.io/wallpapers/?w=fireworks)<br>🎆 Fireworks |
+| [<img src="web/wallpapers/lighthouse/thumb.webp" width="200" alt="Lighthouse">](https://nealhardesty.github.io/wallpapers/?w=lighthouse)<br>🌊 Lighthouse | [<img src="web/wallpapers/wiki-pond/thumb.webp" width="200" alt="Wiki Pond">](https://nealhardesty.github.io/wallpapers/?w=wiki-pond)<br>🪷 Wiki Pond | [<img src="web/wallpapers/satellites/thumb.webp" width="200" alt="Satellites">](https://nealhardesty.github.io/wallpapers/?w=satellites)<br>🛰️ Satellites |   |
+
+The second half is new: a harmonograph inking its figures, a pixel-art room
+with a cat that keeps the real hours, Islamic star patterns that breathe, a
+stained-glass window lit by the time of day, the synthwave drive, a zen
+garden to rake, koi to feed, a starling murmuration you can scatter as the
+falcon, sky lanterns to release, a rainy window to draw on, the view from a
+night train, fireworks (with a New Year's countdown), a lighthouse that
+keeps a real light's rhythm, every Wikipedia edit as a ripple on a pond, and
+the real satellites crossing your sky.
 
 Also: **Seasonal** 📅 picks by month (the default), **Blank** ⬛ is just
 black, and the **Bing Image of the Day** 🖼️ shows Bing's photo with its
@@ -141,6 +155,24 @@ mouse, a gear appears when you move toward that corner.
 - Pixel Quest: `N` new quest, `H` hero, `V` look, `T` hat, `M` companion,
   `P` palette. Arrows or WASD and Space take over the hero.
 - Advent calendar: arrows time-travel, `0` today, `T` theme, `R` replay.
+- Harmonograph `N` new drawing · Girih `N` next pattern, `T` tiling ·
+  Stained Glass `N` new window · Pixel Room `L` lamp, `P` pet the cat ·
+  Zen Garden `N` new stones, `R` rake, `E` smooth · Murmuration `D` falcon
+  dive, `R` roost, `N` new evening · Lantern Festival `L` or Space release
+  one · Rainy Window `W` wipe · Fireworks Space or `L` launch, `G` finale ·
+  Lighthouse `L` next light, `S` sea state · Satellites `N` next station pass.
+
+**Touch and drag:** tap or drag on Zen Garden (rake), Koi Pond (ripples;
+feed them in settings), Murmuration (you're the falcon), Lantern Festival,
+Rainy Window (draw in the fog), Fireworks, Pixel Room (the cat and the lamp)
+and Satellites (what's that one?). Each has a setting to ignore touch. On
+Android, a quick sideways swipe changes home screens and never counts.
+
+**Online, but never blank:** Satellites (CelesTrak's orbits), Wiki Pond
+(Wikipedia's live edits) and Lighthouse (Open-Meteo's swell, only with Live
+Swell on) need no keys and draw their own scene offline. Satellites asks
+where you are, in its settings: type a town, or allow your location. It's
+rounded to about 10 km and stays in your browser.
 
 ![Pixel Quest, mid-adventure](docs/quest.webp)
 
