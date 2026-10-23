@@ -55,8 +55,8 @@
 
         { group: '🖼️ Frame' },
         { key: 'frame', label: 'Frame', type: 'select',
-          options: [['old-tv', '📺 Old TV'], ['mantel', '🔥 Mantel'], ['cinema', '🎭 Cinema'], ['ambilight', '🌈 Ambilight'],
-              ['camcorder', '📹 Camcorder'], ['vhs', '📼 VHS'], ['none', '⬛ None']] },
+          options: [['old-tv', '📺 Old TV'], ['mantel', '🔥 Mantel'], ['cinema', '🎭 Cinema'], ['gallery', '🖼️ Gallery'], ['arcade', '🕹️ Arcade'],
+              ['ambilight', '🌈 Ambilight'], ['camcorder', '📹 Camcorder'], ['vhs', '📼 VHS'], ['none', '⬛ None']] },
         { key: 'fit', label: 'Fit', type: 'select', when: config => config.frame === 'none', options: [['contain', 'Whole picture'], ['cover', 'Fill the screen']] },
         { key: 'showTitle', label: 'Show the title', type: 'toggle' },
 

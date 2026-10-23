@@ -169,7 +169,7 @@
         { id: 'jellyfin', name: 'Jellyfin', icon: '📺', accent: '#b07cf0', background: '#000',
           scripts: ['jellyfin/jellyfin-logic.js', 'jellyfin/jellyfin-api.js', 'jellyfin/jellyfin-frames.js',
               'jellyfin/frames/none.js', 'jellyfin/frames/old-tv.js', 'jellyfin/frames/mantel.js', 'jellyfin/frames/cinema.js',
-              'jellyfin/frames/ambilight.js', 'jellyfin/frames/camcorder.js',
+              'jellyfin/frames/gallery.js', 'jellyfin/frames/arcade.js', 'jellyfin/frames/ambilight.js', 'jellyfin/frames/camcorder.js',
               'jellyfin/jellyfin.js'],
           make: host => new JellyfinAnimationManager(host), cost: 'high', motion: 'slow', interactive: true,
           network: 'user', offline: true, media: true, secrets: ['auth'],
