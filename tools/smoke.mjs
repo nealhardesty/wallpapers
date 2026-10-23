@@ -958,60 +958,64 @@ async function playerSuite(catalog) {
         return true;
     });
 
-    await check('satellites: elements fetched once, then cached for 12 h', async () => {
-        current.network = true;
-        await fresh(`${WEB}/stage.html?w=satellites`);
-        const live = await waitFor(() => evaluate("WP.stage.ready && WP.stage.manager.source === 'live'"));
-        if (!live) record(`never used the fixture's elements (source: ${await evaluate('WP.stage.manager?.source')})`);
-        if (!await evaluate("WP.stage.manager.sats.some(s => s.label === 'FIXTURE STATION')")) record('fixture station missing');
-        await cdp.send('Page.navigate', { url: `${WEB}/stage.html?w=satellites` });
-        await waitFor(() => evaluate('WP.stage.ready'));
-        await sleep(800);
-        const source = await evaluate('WP.stage.manager.source');
-        const asked = current.requests.filter(url => url.startsWith('https://celestrak.org/')).length;
-        if (asked !== 1) record(`asked CelesTrak ${asked} times; once is the limit`);
-        if (source !== 'cache') record(`second start used ${source}, not the cache`);
-        return true;
-    });
+    // Fixtures only: live, CelesTrak and the geocoder are real (and CelesTrak
+    // shouldn't be asked on every run).
+    if (!LIVE) {
+        await check('satellites: elements fetched once, then cached for 12 h', async () => {
+            current.network = true;
+            await fresh(`${WEB}/stage.html?w=satellites`);
+            const live = await waitFor(() => evaluate("WP.stage.ready && WP.stage.manager.source === 'live'"));
+            if (!live) record(`never used the fixture's elements (source: ${await evaluate('WP.stage.manager?.source')})`);
+            if (!await evaluate("WP.stage.manager.sats.some(s => s.label === 'FIXTURE STATION')")) record('fixture station missing');
+            await cdp.send('Page.navigate', { url: `${WEB}/stage.html?w=satellites` });
+            await waitFor(() => evaluate('WP.stage.ready'));
+            await sleep(800);
+            const source = await evaluate('WP.stage.manager.source');
+            const asked = current.requests.filter(url => url.startsWith('https://celestrak.org/')).length;
+            if (asked !== 1) record(`asked CelesTrak ${asked} times; once is the limit`);
+            if (source !== 'cache') record(`second start used ${source}, not the cache`);
+            return true;
+        });
 
-    await check('satellites: offline and with nothing cached, sample orbits, labelled', async () => {
-        current.offline = true;
-        await fresh(`${WEB}/stage.html?w=satellites`);
-        await waitFor(() => evaluate('WP.stage.ready'));
-        await sleep(1500);
-        const state = await evaluate('({ source: WP.stage.manager.source, status: WP.stage.manager.status.text, sats: WP.stage.manager.sats.length })');
-        if (state.source !== 'sample' || !state.sats) record(`offline it shows ${state.sats} from ${state.source}`);
-        if (!state.status.includes('Sample orbits')) record(`not labelled as a sample: ${state.status}`);
-        if (await evaluate(DRAWN) < 2) record('nothing drawn offline');
-        return true;
-    });
+        await check('satellites: offline and with nothing cached, sample orbits, labelled', async () => {
+            current.offline = true;
+            await fresh(`${WEB}/stage.html?w=satellites`);
+            await waitFor(() => evaluate('WP.stage.ready'));
+            await sleep(1500);
+            const state = await evaluate('({ source: WP.stage.manager.source, status: WP.stage.manager.status.text, sats: WP.stage.manager.sats.length })');
+            if (state.source !== 'sample' || !state.sats) record(`offline it shows ${state.sats} from ${state.source}`);
+            if (!state.status.includes('Sample orbits')) record(`not labelled as a sample: ${state.status}`);
+            if (await evaluate(DRAWN) < 2) record('nothing drawn offline');
+            return true;
+        });
 
-    await check('location: a typed place, geocoded once and rounded, reaches the stage', async () => {
-        current.network = true;
-        await fresh(`${WEB}/index.html?w=satellites&panel=open`);
-        await playerReady();
-        if (await evaluate("document.querySelector('iframe').allow") !== 'geolocation') record('the stage iframe may not ask for geolocation');
-        if (!await waitFor(() => evaluate("!!document.querySelector('#panel .location-input')"), 4000)) return record('no location controls');
-        await evaluate(`(() => {
-            document.querySelector('#panel .location-input').value = 'Testville';
-            document.querySelector('#panel .location-find').requestSubmit();
-        })()`);
-        const chip = await waitFor(() => evaluate("document.querySelector('#panel .location-results .chip')?.textContent"), 4000);
-        if (chip !== 'Testville, Fixture County, Exampleland') return record(`results: ${chip}`);
-        await evaluate("document.querySelector('#panel .location-results .chip').click()");
-        const saved = await evaluate("JSON.parse(localStorage.getItem('wp:location'))");
-        if (JSON.stringify(saved) !== JSON.stringify({ lat: 12.3, lon: -56.8, label: 'Testville, Exampleland', source: 'typed' })) record(`saved ${JSON.stringify(saved)}`);
-        const label = await waitFor(() => inStage("WP.stage.ready && WP.stage.manager.place?.label"), 6000);
-        if (label !== 'Testville, Exampleland') record(`the stage has ${label}`);
-        if (await inStage('WP.stage.manager.observer.lat') !== 12.3) record('the sky isn\'t over the place');
-        const asked = current.requests.filter(url => url.startsWith('https://geocoding-api.open-meteo.com/')).length;
-        if (asked !== 1) record(`asked the geocoder ${asked} times`);
-        await fresh(`${WEB}/index.html?w=rain`);
-        await playerReady();
-        if (await evaluate("document.querySelector('iframe').allow")) record('rain was allowed geolocation');
-        return true;
-    });
+        await check('location: a typed place, geocoded once and rounded, reaches the stage', async () => {
+            current.network = true;
+            await fresh(`${WEB}/index.html?w=satellites&panel=open`);
+            await playerReady();
+            if (await evaluate("document.querySelector('iframe').allow") !== 'geolocation') record('the stage iframe may not ask for geolocation');
+            if (!await waitFor(() => evaluate("!!document.querySelector('#panel .location-input')"), 4000)) return record('no location controls');
+            await evaluate(`(() => {
+                document.querySelector('#panel .location-input').value = 'Testville';
+                document.querySelector('#panel .location-find').requestSubmit();
+            })()`);
+            const chip = await waitFor(() => evaluate("document.querySelector('#panel .location-results .chip')?.textContent"), 4000);
+            if (chip !== 'Testville, Fixture County, Exampleland') return record(`results: ${chip}`);
+            await evaluate("document.querySelector('#panel .location-results .chip').click()");
+            const saved = await evaluate("JSON.parse(localStorage.getItem('wp:location'))");
+            if (JSON.stringify(saved) !== JSON.stringify({ lat: 12.3, lon: -56.8, label: 'Testville, Exampleland', source: 'typed' })) record(`saved ${JSON.stringify(saved)}`);
+            const label = await waitFor(() => inStage("WP.stage.ready && WP.stage.manager.place?.label"), 6000);
+            if (label !== 'Testville, Exampleland') record(`the stage has ${label}`);
+            if (await inStage('WP.stage.manager.observer.lat') !== 12.3) record('the sky isn\'t over the place');
+            const asked = current.requests.filter(url => url.startsWith('https://geocoding-api.open-meteo.com/')).length;
+            if (asked !== 1) record(`asked the geocoder ${asked} times`);
+            await fresh(`${WEB}/index.html?w=rain`);
+            await playerReady();
+            if (await evaluate("document.querySelector('iframe').allow")) record('rain was allowed geolocation');
+            return true;
+        });
 
+    }
     await check('the corner gear appears when the pointer comes near', async () => {
         await fresh(`${WEB}/index.html?w=rain`);
         await playerReady();
