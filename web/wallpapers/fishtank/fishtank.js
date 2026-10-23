@@ -109,11 +109,6 @@ class FishTankAnimationManager {
         this.w = 0;
         this.h = 0;
         this.dpr = 1;
-        this.autoScale = 1.25;
-        this.autoFailures = 0;
-        this.autoPending = false;
-        this.autoClimbs = 0;
-        this.frameSamples = [];
         this.time = 0;
         this.lastTime = 0;
 
@@ -133,12 +128,17 @@ class FishTankAnimationManager {
         this.sceneCanvas = null;
         this.sceneCtx = null;
 
-        // Low-resolution caustic field, stretched over the tank each frame
-        this.causticCanvas = null;
-        this.causticCtx = null;
+        // Low-resolution caustic field, regenerated ten times a second into
+        // two small textures that are cross-faded and stretched over the tank
+        this.causticCanvases = null;
         this.causticData = null;
-        this.causticW = 192;
-        this.causticH = 120;
+        this.causticW = 128;
+        this.causticH = 128;
+
+        // Distant fish are drawn into this downscaled buffer and upscaled,
+        // which softens them for free (depth of field without ctx.filter)
+        this.blurCanvas = null;
+        this.blurCtx = null;
 
         // Substrate height field, sampled every substrateStep px
         this.substrate = null;
@@ -412,16 +412,9 @@ class FishTankAnimationManager {
     // How many device pixels to render per CSS pixel. Every full-screen pass
     // in draw() -- backdrop, light shafts, caustics, surface, glass -- costs
     // in proportion to the square of this, so it is by far the biggest lever
-    // on frame rate.
+    // on frame rate. The stage caps devicePixelRatio by tier (SPEC §4.8).
     targetRenderScale() {
-        const native = Math.min(window.devicePixelRatio || 1, 2);
-        let scale;
-        switch (this.config.quality) {
-            case 'high': scale = native; break;
-            case 'balanced': scale = Math.min(native, 1.35); break;
-            case 'performance': scale = Math.min(native, 1); break;
-            default: scale = ftClamp(this.autoScale, 0.7, Math.min(native, 1.6));
-        }
+        let scale = Math.min(window.devicePixelRatio || 1, 2);
 
         // Hard ceiling on total pixels: at native ratio a 4K panel would ask
         // for four times the fill rate of a laptop
@@ -445,41 +438,7 @@ class FishTankAnimationManager {
         // These caches are sized in device pixels, so they have to go
         this.glassCanvas = null;
         this.foreCanvas = null;
-    }
-
-    // Auto quality. Frame intervals are compared against the vsync budget
-    // rather than a draw timer, because canvas work finishes on the GPU long
-    // after the draw calls have returned, so a CPU timer sees almost nothing.
-    tuneQuality(frameMs) {
-        if (this.config.quality !== 'auto') return;
-        if (!(frameMs > 0) || frameMs > 120) return;    // tab stall, not a slow frame
-
-        const samples = this.frameSamples;
-        samples.push(frameMs);
-        if (samples.length < 60) return;
-
-        samples.sort((a, b) => a - b);
-        const median = samples[30];
-        samples.length = 0;
-
-        const ceiling = Math.min(window.devicePixelRatio || 1, 2, 1.6);
-        const before = this.autoScale;
-
-        if (median > 20.5 && this.autoScale > 0.7) {
-            this.autoScale = Math.max(0.7, this.autoScale * 0.85);
-            // A step up that had to be undone is a step up worth not retrying
-            if (this.autoPending) this.autoFailures++;
-            this.autoPending = false;
-        } else if (median < 17.2 && this.autoScale < ceiling
-                   && this.autoFailures < 2 && this.autoClimbs < 6) {
-            this.autoScale = Math.min(ceiling, this.autoScale * 1.08);
-            this.autoClimbs++;
-            this.autoPending = true;
-        } else {
-            this.autoPending = false;
-        }
-
-        if (this.autoScale !== before) this.applyRenderScale(this.targetRenderScale());
+        this.blurCanvas = null;
     }
 
     resetTransform(ctx) {
@@ -1043,10 +1002,36 @@ class FishTankAnimationManager {
             };
         }
 
-        for (const key of roster) this.fish.push(this.makeFish(key));
+        // The whole roster is stocked, but only the first `fishShown` of it
+        // swim at a time: the tier's density decides how many (SPEC §4.8),
+        // and a change fades fish in or out rather than restocking.
+        this.fishShown = this.fishTarget();
+        roster.forEach((key, slot) => {
+            const f = this.makeFish(key);
+            f.slot = slot;
+            f.fade = slot < this.fishShown ? 1 : 0;
+            this.fish.push(f);
+        });
         this.fish.sort((a, b) => b.z - a.z);
 
         this.snail = this.config.snail ? this.makeSnail() : null;
+    }
+
+    fishTarget() {
+        return Math.max(1, Math.round(this.config.fishCount * this.host.quality.density));
+    }
+
+    hasEffect(name) {
+        return this.host.quality.effects.includes(name);
+    }
+
+    // The quality changed (SPEC §4.8). Resolution follows from the resize
+    // the stage sends; here, fish fade in or out to the new density, motes
+    // are trimmed or topped up, and effects are read live while drawing.
+    onQuality() {
+        this.fishShown = this.fishTarget();
+        this.seedMotes(true);
+        for (const f of this.fish) f.palette = null;
     }
 
     makeFish(key) {
@@ -1160,11 +1145,14 @@ class FishTankAnimationManager {
         console.log('Fish tank animation stopped');
     }
 
-    seedMotes() {
-        this.motes = [];
+    // Top up (or trim) to the density's count; `keep` keeps the ones
+    // already drifting, so a quality change doesn't reshuffle them.
+    seedMotes(keep = false) {
+        if (!keep) this.motes = [];
         if (!this.config.motes) return;
-        const n = Math.round(this.w * this.h / 22000);
-        for (let i = 0; i < n; i++) {
+        const n = Math.round(this.w * this.h / 22000 * this.host.quality.density);
+        if (this.motes.length > n) this.motes.length = n;
+        for (let i = this.motes.length; i < n; i++) {
             this.motes.push({
                 x: ftRand(0, this.w),
                 y: ftRand(this.surfaceY, this.h),
@@ -1185,6 +1173,7 @@ class FishTankAnimationManager {
         this.teardownInteraction();
 
         const move = (e) => {
+            // A finger dragged across the tank is a cursor too
             const now = performance.now();
             const dt = Math.max(16, now - this.pointer.lastMove) / 1000;
             if (this.pointer.inside) {
@@ -1201,8 +1190,9 @@ class FishTankAnimationManager {
         };
 
         const leave = () => { this.pointer.inside = false; this.pointer.speed = 0; };
-        const down = () => { this.pointer.down = true; };
-        const up = () => { this.pointer.down = false; };
+        const down = (e) => { this.pointer.down = true; if (e.pointerType !== 'mouse') move(e); };
+        // A lifted finger leaves nothing behind for the fish to investigate
+        const up = (e) => { this.pointer.down = false; if (e.pointerType !== 'mouse') leave(); };
 
         const click = (e) => {
             if (!this.config.clickToFeed) return;
@@ -1221,10 +1211,11 @@ class FishTankAnimationManager {
             this.listeners.push([target, type, fn, opts]);
         };
 
-        bind(document, 'mousemove', move, { passive: true });
-        bind(document, 'mouseleave', leave);
-        bind(document, 'mousedown', down, { passive: true });
-        bind(document, 'mouseup', up, { passive: true });
+        bind(document, 'pointermove', move, { passive: true });
+        bind(document.documentElement, 'pointerleave', leave);
+        bind(document, 'pointerdown', down, { passive: true });
+        bind(document, 'pointerup', up, { passive: true });
+        bind(document, 'pointercancel', up, { passive: true });
         bind(document, 'click', click);
         bind(document, 'dblclick', dbl);
     }
@@ -1284,22 +1275,23 @@ class FishTankAnimationManager {
     // Simulation
     // -----------------------------------------------------------------------
 
-    animate() {
+    animate(now = performance.now()) {
         if (!this.isEnabled) return;
 
-        const now = performance.now();
-        const frameMs = now - this.lastTime;
         // A backgrounded tab can hand back a multi-second gap; clamp it so
-        // the fish don't teleport through the glass on return
-        const dt = Math.min(0.05, Math.max(0.001, frameMs / 1000));
+        // the fish don't teleport through the glass on return. Low tiers run
+        // at 10-20 fps, so a long frame is stepped in halves to keep the
+        // steering as stable as it is at 60.
+        const dt = Math.min(0.1, Math.max(0.001, (now - this.lastTime) / 1000));
         this.lastTime = now;
-        this.time += dt;
-        this.tuneQuality(frameMs);
-
-        this.update(dt);
+        const steps = dt > 0.05 ? 2 : 1;
+        for (let i = 0; i < steps; i++) {
+            this.time += dt / steps;
+            this.update(dt / steps);
+        }
         this.draw();
 
-        this.animationId = requestAnimationFrame(() => this.animate());
+        this.animationId = requestAnimationFrame(t => this.animate(t));
     }
 
     update(dt) {
@@ -1318,7 +1310,12 @@ class FishTankAnimationManager {
         for (const p of this.forePlants) this.updatePlant(p, t);
 
         this.updateSchools(dt);
-        for (const f of this.fish) this.updateFish(f, dt);
+        for (const f of this.fish) {
+            // Fish beyond the density's count fade out and then wait,
+            // unsimulated, until a higher tier wants them back
+            f.fade = ftClamp(f.fade + (f.slot < this.fishShown ? dt : -dt) * 0.6, 0, 1);
+            if (f.fade > 0) this.updateFish(f, dt);
+        }
         this.updateFood(dt);
         this.updateBubbles(dt);
         this.updateMotes(dt);
@@ -1386,7 +1383,7 @@ class FishTankAnimationManager {
         if (schoolWeight > 0.05) {
             let cx = 0, cy = 0, ax = 0, ay = 0, sepx = 0, sepy = 0, n = 0;
             for (const o of this.fish) {
-                if (o === f || o.key !== f.key) continue;
+                if (o === f || o.key !== f.key || !o.fade) continue;
                 const dx = o.x - f.x, dy = o.y - f.y;
                 const d2 = dx * dx + dy * dy;
                 if (d2 > 240 * 240) continue;
@@ -1744,10 +1741,55 @@ class FishTankAnimationManager {
     }
 
     drawFishLayer(ctx, zMin, zMax) {
+        const blur = this.config.depthBlur && this.hasEffect('depthBlur');
+        let box = null;
         for (const f of this.fish) {
-            if (f.z < zMin || f.z >= zMax) continue;
+            if (f.z < zMin || f.z >= zMax || !f.fade) continue;
+            if (blur && f.z > 0.65) {
+                box = this.drawBlurredFish(ctx, f, box);
+                continue;
+            }
+            if (box) box = this.flushBlur(ctx, box);
             this.drawFish(ctx, f);
         }
+        if (box) this.flushBlur(ctx, box);
+    }
+
+    // Depth of field: the fish goes into a buffer at half the canvas's
+    // resolution, and is softened when that is stretched back up. Its
+    // shadow on the gravel stays sharp. Returns the dirty box, in CSS px.
+    drawBlurredFish(ctx, f, box) {
+        const k = this.dpr * 0.5;
+        if (!this.blurCanvas) {
+            this.blurCanvas = document.createElement('canvas');
+            this.blurCanvas.width = Math.max(1, Math.round(this.w * k));
+            this.blurCanvas.height = Math.max(1, Math.round(this.h * k));
+            this.blurCtx = this.blurCanvas.getContext('2d');
+        }
+        this.drawFishShadow(ctx, f);
+        this.blurCtx.setTransform(k, 0, 0, k, 0, 0);
+        this.drawFish(this.blurCtx, f, false);
+
+        const r = f.len * 1.1;
+        const x0 = f.x - r, y0 = f.y - r, x1 = f.x + r, y1 = f.y + r;
+        if (!box) return [x0, y0, x1, y1];
+        return [Math.min(box[0], x0), Math.min(box[1], y0), Math.max(box[2], x1), Math.max(box[3], y1)];
+    }
+
+    flushBlur(ctx, box) {
+        const k = this.dpr * 0.5;
+        const c = this.blurCanvas;
+        const sx = Math.max(0, Math.floor(box[0] * k)), sy = Math.max(0, Math.floor(box[1] * k));
+        const sw = Math.min(c.width, Math.ceil(box[2] * k)) - sx, sh = Math.min(c.height, Math.ceil(box[3] * k)) - sy;
+        if (sw > 0 && sh > 0) {
+            ctx.save();
+            ctx.imageSmoothingEnabled = true;
+            ctx.drawImage(c, sx, sy, sw, sh, sx / k, sy / k, sw / k, sh / k);
+            ctx.restore();
+            this.blurCtx.setTransform(1, 0, 0, 1, 0, 0);
+            this.blurCtx.clearRect(sx, sy, sw, sh);
+        }
+        return null;
     }
 
     drawForeground(ctx) {
@@ -1840,29 +1882,30 @@ class FishTankAnimationManager {
 
     // Caustics are evaluated on a small grid and stretched over the tank.
     // Bright filaments form where the summed waves cross zero, which is a
-    // good cheap match for light focused through a rippling surface.
+    // good cheap match for light focused through a rippling surface. The
+    // grid is painted ten times a second, into one of two textures, and the
+    // pair is cross-faded in between, so the drift stays smooth without a
+    // putImageData every frame (SPEC §4.8).
     buildCausticBuffer() {
-        if (!this.causticCanvas) {
-            this.causticCanvas = document.createElement('canvas');
-            this.causticCtx = this.causticCanvas.getContext('2d');
+        if (!this.causticCanvases) {
+            this.causticCanvases = [0, 1].map(() => document.createElement('canvas'));
         }
-        this.causticCanvas.width = this.causticW;
-        this.causticCanvas.height = this.causticH;
-        this.causticData = this.causticCtx.createImageData(this.causticW, this.causticH);
-        // Untouched rows must read as black so the screen blend ignores them
+        for (const c of this.causticCanvases) {
+            c.width = this.causticW;
+            c.height = this.causticH;
+        }
+        this.causticData = this.causticCanvases[0].getContext('2d').createImageData(this.causticW, this.causticH);
+        // Untouched rows must read as black so the additive blend ignores them
         const d = this.causticData.data;
         for (let i = 3; i < d.length; i += 4) d[i] = 255;
-        this.causticTick = 0;
+        this.causticAt = null;
     }
 
     drawCaustics(ctx) {
         const strength = this.config.causticStrength * this.config.lightIntensity;
-        if (strength <= 0.01 || !this.causticData) return;
+        if (strength <= 0.01 || !this.causticData || !this.hasEffect('caustics')) return;
 
         const W = this.causticW, H = this.causticH;
-        const data = this.causticData.data;
-        const t = this.time;
-        const light = ftRgb(this.water.light);
         const surfRow = (this.surfaceY / this.h) * H;
         const floorRow = (this.floorBase / this.h) * H;
 
@@ -1873,23 +1916,35 @@ class FishTankAnimationManager {
         const bandA = [Math.max(0, Math.floor(surfRow)), Math.min(H, Math.ceil(surfRow + H * 0.22))];
         const bandB = [Math.max(0, Math.floor(floorRow - H * 0.20)), H];
 
-        // The pattern drifts slowly; refreshing it every other frame halves
-        // the cost and is not visible
-        this.causticTick = (this.causticTick || 0) + 1;
-        if (this.causticTick % 2 === 1) {
-            this.paintCausticField(data, W, H, t, light, surfRow, floorRow, strength, bandA, bandB);
-            this.causticCtx.putImageData(this.causticData, 0, 0);
+        // Keyframes a tenth of a second apart: [0] is the pattern at
+        // causticAt, [1] the one after it
+        const step = 0.1;
+        const paint = (canvas, t) => {
+            this.paintCausticField(this.causticData.data, W, H, t, ftRgb(this.water.light), surfRow, floorRow, strength, bandA, bandB);
+            canvas.getContext('2d').putImageData(this.causticData, 0, 0);
+        };
+        if (this.causticAt === null || this.time >= this.causticAt + 2 * step) {
+            this.causticAt = this.time;
+            paint(this.causticCanvases[0], this.time);
+            paint(this.causticCanvases[1], this.time + step);
+        } else if (this.time >= this.causticAt + step) {
+            this.causticCanvases.reverse();
+            this.causticAt += step;
+            paint(this.causticCanvases[1], this.causticAt + step);
         }
+        const mix = ftClamp((this.time - this.causticAt) / step, 0, 1);
 
         ctx.save();
-        ctx.globalCompositeOperation = 'screen';
-        ctx.globalAlpha = 0.5;
+        ctx.globalCompositeOperation = 'lighter';
         ctx.imageSmoothingEnabled = true;
-        for (const [j0, j1] of [bandA, bandB]) {
-            if (j1 <= j0) continue;
-            const y = (j0 / H) * this.h;
-            const hh = ((j1 - j0) / H) * this.h;
-            ctx.drawImage(this.causticCanvas, 0, j0, W, j1 - j0, 0, y, this.w, hh);
+        for (const [c, weight] of [[this.causticCanvases[0], 1 - mix], [this.causticCanvases[1], mix]]) {
+            ctx.globalAlpha = 0.5 * weight;
+            for (const [j0, j1] of [bandA, bandB]) {
+                if (j1 <= j0) continue;
+                const y = (j0 / H) * this.h;
+                const hh = ((j1 - j0) / H) * this.h;
+                ctx.drawImage(c, 0, j0, W, j1 - j0, 0, y, this.w, hh);
+            }
         }
         ctx.restore();
     }
@@ -1905,13 +1960,17 @@ class FishTankAnimationManager {
             if (nearFloor > 0) fall += nearFloor * nearFloor * 0.60;
             if (j < surfRow) fall = 0;
 
-            const sj1 = Math.sin(j * 0.76 - t * 0.74);
+            // Grid units of the original 192 x 120 field, so the ripples
+            // keep their size on screen at any resolution of the texture
+            const gj = j * 120 / H;
+            const sj1 = Math.sin(gj * 0.76 - t * 0.74);
             for (let i = 0; i < W; i++) {
+                const gi = i * 192 / W;
                 const s =
-                    Math.sin(i * 0.70 + t * 0.93) +
+                    Math.sin(gi * 0.70 + t * 0.93) +
                     sj1 +
-                    Math.sin((i + j) * 0.45 + t * 1.22) +
-                    Math.sin((i - j) * 0.38 - t * 0.55);
+                    Math.sin((gi + gj) * 0.45 + t * 1.22) +
+                    Math.sin((gi - gj) * 0.38 - t * 0.55);
                 const n = s * 0.25;
                 let c = 1 - Math.abs(n) * 3.4;
                 if (c <= 0) { 
@@ -2089,7 +2148,10 @@ class FishTankAnimationManager {
         const qz = Math.round(f.z * 24) / 24;
         if (f.palette && f.paletteZ === qz) return f.palette;
         const wt = this.water;
-        const k = qz * 0.62;
+        // Without depth of field (Low), distant fish sink further into the
+        // water instead, which reads as depth just as well
+        const dim = this.config.depthBlur && !this.hasEffect('depthBlur') ? Math.max(0, qz - 0.6) * 0.75 : 0;
+        const k = qz * 0.62 + dim;
         const c = f.spec.colors;
         f.palette = {
             top: ftMix(c.top, wt.fog, k),
@@ -2098,7 +2160,7 @@ class FishTankAnimationManager {
             fin: ftMix(c.fin, wt.fog, k),
             accent: ftMix(c.accent, wt.fog, k),
             light: ftMix(wt.light, wt.fog, k * 0.5),
-            alpha: ftLerp(1, 0.72, qz)
+            alpha: ftLerp(1, 0.72, qz) - dim * 0.5
         };
         f.paletteZ = qz;
         return f.palette;
@@ -2157,7 +2219,7 @@ class FishTankAnimationManager {
         };
     }
 
-    drawFish(ctx, f) {
+    drawFish(ctx, f, shadow = true) {
         const spec = f.spec;
         const pal = this.fishPalette(f);
         this.buildFishGeometry(f);
@@ -2167,14 +2229,10 @@ class FishTankAnimationManager {
         f.detail = apparent >= 46 ? 2 : apparent >= 30 ? 1 : 0;
 
         // Soft shadow cast down onto the gravel
-        this.drawFishShadow(ctx, f);
+        if (shadow) this.drawFishShadow(ctx, f);
 
         ctx.save();
-        if (this.config.depthBlur && f.z > 0.65 && f.len > 30) {
-            // Quantised so the canvas filter isn't rebuilt every frame
-            ctx.filter = `blur(${(Math.round(f.z * 3) * 0.55).toFixed(2)}px)`;
-        }
-        ctx.globalAlpha = pal.alpha * (spec.translucent || 1);
+        ctx.globalAlpha = pal.alpha * (spec.translucent || 1) * f.fade;
 
         const S = f.spine.length;
         const upper = [], lower = [];
@@ -2240,7 +2298,7 @@ class FishTankAnimationManager {
         const cx = f.x + drop * 0.10, cy = floor + 2;
 
         ctx.save();
-        ctx.globalAlpha = 0.30 * k * k * (1 - f.z * 0.5);
+        ctx.globalAlpha = 0.30 * k * k * (1 - f.z * 0.5) * f.fade;
         ctx.translate(cx, cy);
         ctx.scale(1, ry / rx);
         const g = ctx.createRadialGradient(0, 0, rx * 0.15, 0, 0, rx);

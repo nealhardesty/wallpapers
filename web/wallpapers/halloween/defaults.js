@@ -1,7 +1,7 @@
 // Default settings for Halloween Night. Saved settings store only what
 // differs from these (SPEC §4.1). Tuned as on the old standalone page.
 WP.defaults('halloween', {
-    configVersion: 4,
+    configVersion: 5,
 
     // Scene
     theme: 'classic',
@@ -61,7 +61,6 @@ WP.defaults('halloween', {
     leafCount: 40,
 
     // Render
-    quality: 'auto',
     bloom: true,
     bloomStrength: 1.0,
     vignette: true,

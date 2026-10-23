@@ -5,7 +5,7 @@
 // warm light sources, drifting ground fog, bats, ghost wisps, sagging webs and
 // distant lightning. Everything static is baked into offscreen canvases at
 // start-up so the per-frame cost is the lit entities plus a few full-screen
-// passes, which the auto quality mode scales down when frames get long.
+// passes, which the stage's quality tier scales down (SPEC §4.8).
 
 const hwClamp = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v);
 const hwLerp = (a, b, t) => a + (b - a) * t;
@@ -168,11 +168,10 @@ class HalloweenAnimationManager {
         this.w = 0;
         this.h = 0;
         this.dpr = 1;
-        this.autoScale = 1;
-        this.frameSamples = [];
-        this.autoClimbs = 0;
-        this.autoFailures = 0;
-        this.autoPending = false;
+        // Effects the tier can take away fade rather than pop: each eases
+        // between 0 and 1 toward whether host.quality keeps it
+        this.fade = { bloom: 1, grain: 1, fog: [1, 1, 1] };
+        this.bloomDivisor = 4;
 
         // Baked art
         this.staticCanvas = null;   // sky, stars, moon, hills, far trees
@@ -260,6 +259,7 @@ class HalloweenAnimationManager {
         this.isRunning = true;
         this.time = 0;
         this.lastTime = performance.now();
+        this.fade = { bloom: this.wants('bloom'), grain: this.wants('grain'), fog: [0, 1, 2].map(b => this.wantsFog(b)) };
         this.animate();
     }
 
@@ -349,16 +349,10 @@ class HalloweenAnimationManager {
 
     // Device pixels per CSS pixel. The full-screen passes -- fog, bloom,
     // vignette, grain, lightning wash -- all cost in proportion to the square
-    // of this, so it is the main lever on frame rate.
+    // of this, so it is the main lever on frame rate. The stage caps
+    // devicePixelRatio by tier (SPEC §4.8).
     targetRenderScale() {
-        const native = Math.min(window.devicePixelRatio || 1, 2);
-        let scale;
-        switch (this.config.quality) {
-            case 'high': scale = native; break;
-            case 'balanced': scale = Math.min(native, 1.35); break;
-            case 'performance': scale = Math.min(native, 1); break;
-            default: scale = hwClamp(this.autoScale, 0.7, Math.min(native, 1.6));
-        }
+        let scale = Math.min(window.devicePixelRatio || 1, 2);
 
         const budget = 3.0e6;
         const cssPixels = Math.max(1, this.w * this.h);
@@ -386,41 +380,48 @@ class HalloweenAnimationManager {
         return changed;
     }
 
-    // Auto quality. Frame intervals are compared against the vsync budget
-    // rather than a draw timer: canvas work finishes on the GPU long after
-    // the draw calls return, so a CPU timer around draw() sees almost nothing.
-    tuneQuality(frameMs) {
-        if (this.config.quality !== 'auto') return;
-        if (!(frameMs > 0) || frameMs > 120) return;   // tab stall, not a slow frame
+    // -----------------------------------------------------------------------
+    // Quality (SPEC §4.8). Bloom, grain and the far and middle fog banks are
+    // effects the tier can drop; density scales the bats, wisps, candy and
+    // leaves. A change fades effects and lets the crowds thin or fill in.
+    // -----------------------------------------------------------------------
 
-        const samples = this.frameSamples;
-        samples.push(frameMs);
-        if (samples.length < 60) return;
+    wants(effect) {
+        return this.host.quality.effects.includes(effect) ? 1 : 0;
+    }
 
-        samples.sort((a, b) => a - b);
-        const median = samples[30];
-        samples.length = 0;
+    // The near bank always stays; Medium drops the far one, Low the middle
+    wantsFog(bank) {
+        return bank === 2 ? 1 : this.wants(bank === 0 ? 'fogFar' : 'fogMid');
+    }
 
-        const ceiling = Math.min(window.devicePixelRatio || 1, 2, 1.6);
-        const before = this.autoScale;
-
-        if (median > 20.5 && this.autoScale > 0.7) {
-            this.autoScale = Math.max(0.7, this.autoScale * 0.85);
-            // A step up that had to be undone is a step up worth not retrying
-            if (this.autoPending) this.autoFailures++;
-            this.autoPending = false;
-        } else if (median < 17.2 && this.autoScale < ceiling
-            && this.autoFailures < 2 && this.autoClimbs < 6) {
-            this.autoScale = Math.min(ceiling, this.autoScale * 1.08);
-            this.autoClimbs++;
-            this.autoPending = true;
-        } else {
-            this.autoPending = false;
+    // How many of each crowd the tier wants
+    target(kind) {
+        const c = this.config;
+        const d = this.host.quality.density;
+        switch (kind) {
+            case 'bats': return c.bats ? Math.max(1, Math.round(c.batCount * d)) : 0;
+            case 'ghosts': return c.ghosts ? Math.max(1, Math.round(c.ghostCount * d)) : 0;
+            case 'candy': return Math.round(c.candyCount * d);
+            case 'leaves': return c.fallingLeaves ? Math.round(c.leafCount * d) : 0;
         }
+        return 0;
+    }
 
-        if (this.autoScale !== before) {
-            if (this.applyRenderScale(this.targetRenderScale())) this.bakeOverlays();
-        }
+    onQuality() {
+        if (!this.isRunning) return;
+        // Bloom is a sixteenth of the pixels at High, a sixty-fourth below
+        const divisor = this.host.quality.tier === 'high' ? 4 : 8;
+        if (divisor !== this.bloomDivisor) this.bakeBloom();
+
+        // Newcomers arrive from off screen; extras leave as they recycle
+        // (candy, leaves, wisps) or fly off the edge (bats)
+        while (this.candy.length < this.target('candy')) this.candy.push(this.createCandy(false));
+        while (this.leaves.length < this.target('leaves')) this.leaves.push(this.createLeaf(false));
+        while (this.ghosts.length < this.target('ghosts')) this.ghosts.push(this.createGhostInward());
+        const bats = this.target('bats');
+        this.bats.forEach((b, i) => { b.leaving = i >= bats; });
+        while (this.bats.length < bats) this.bats.push(this.createBat(false));
     }
 
     scratch(w, h) {
@@ -1141,9 +1142,6 @@ class HalloweenAnimationManager {
     // Vignette and grain, both sized in device pixels so they are baked
     // whenever the render scale changes.
     bakeOverlays() {
-        const dw = Math.max(1, this.canvas.width);
-        const dh = Math.max(1, this.canvas.height);
-
         if (this.config.vignette) {
             this.vignetteCanvas = this.scratch(this.w, this.h);
             const c = this.vignetteCanvas.getContext('2d');
@@ -1177,11 +1175,16 @@ class HalloweenAnimationManager {
             c.putImageData(img, 0, 0);
         }
 
+        this.bakeBloom();
+    }
+
+    bakeBloom() {
         if (this.config.bloom) {
             // Quarter resolution is plenty: the bloom is blurred anyway, and
-            // the cost of the passes drops sixteenfold
-            const bw = Math.max(1, Math.round(dw / 4));
-            const bh = Math.max(1, Math.round(dh / 4));
+            // the cost of the passes drops sixteenfold. Below High, an eighth.
+            const k = this.bloomDivisor = this.host.quality.tier === 'high' ? 4 : 8;
+            const bw = Math.max(1, Math.round(this.canvas.width / k));
+            const bh = Math.max(1, Math.round(this.canvas.height / k));
             this.bloomA = this.scratch(bw, bh);
             this.bloomT = this.scratch(bw, bh);
             this.bloomB = this.scratch(Math.max(1, bw >> 1), Math.max(1, bh >> 1));
@@ -1203,41 +1206,23 @@ class HalloweenAnimationManager {
         this.rebuildWebs();
 
         this.candy = [];
-        for (let i = 0; i < this.config.candyCount; i++) {
+        for (let i = 0; i < this.target('candy'); i++) {
             this.candy.push(this.createCandy(true));
         }
 
         this.leaves = [];
-        if (this.config.fallingLeaves) {
-            for (let i = 0; i < this.config.leafCount; i++) {
-                this.leaves.push(this.createLeaf(true));
-            }
+        for (let i = 0; i < this.target('leaves'); i++) {
+            this.leaves.push(this.createLeaf(true));
         }
 
         this.bats = [];
-        if (this.config.bats) {
-            for (let i = 0; i < this.config.batCount; i++) {
-                this.bats.push({
-                    x: Math.random() * this.w,
-                    y: this.horizonY * (0.1 + Math.random() * 0.6),
-                    vx: (Math.random() - 0.5) * 70,
-                    vy: (Math.random() - 0.5) * 30,
-                    flap: Math.random() * Math.PI * 2,
-                    flapRate: 9 + Math.random() * 7,
-                    size: 5 + Math.random() * 6,
-                    band: 0.4 + Math.random() * 0.6,
-                    wander: Math.random() * Math.PI * 2,
-                    dive: 0,
-                    diveIn: 4 + Math.random() * 14
-                });
-            }
+        for (let i = 0; i < this.target('bats'); i++) {
+            this.bats.push(this.createBat(true));
         }
 
         this.ghosts = [];
-        if (this.config.ghosts) {
-            for (let i = 0; i < this.config.ghostCount; i++) {
-                this.ghosts.push(this.createGhost(true));
-            }
+        for (let i = 0; i < this.target('ghosts'); i++) {
+            this.ghosts.push(this.createGhost(true));
         }
 
         this.spawnZombies(rng);
@@ -1308,6 +1293,25 @@ class HalloweenAnimationManager {
             teeth: 2 + Math.floor(rng() * 4),
             asym: (rng() - 0.5) * 0.3,         // the carver's hand was unsteady
             drop: (rng() - 0.5) * 0.08
+        };
+    }
+
+    // A bat joining later flies in from one side
+    createBat(scatter) {
+        const side = Math.random() < 0.5 ? -1 : 1;
+        return {
+            x: scatter ? Math.random() * this.w : (side < 0 ? -50 : this.w + 50),
+            y: this.horizonY * (0.1 + Math.random() * 0.6),
+            vx: scatter ? (Math.random() - 0.5) * 70 : -side * (50 + Math.random() * 40),
+            vy: (Math.random() - 0.5) * 30,
+            flap: Math.random() * Math.PI * 2,
+            flapRate: 9 + Math.random() * 7,
+            size: 5 + Math.random() * 6,
+            band: 0.4 + Math.random() * 0.6,
+            wander: Math.random() * Math.PI * 2,
+            dive: 0,
+            diveIn: 4 + Math.random() * 14,
+            leaving: false
         };
     }
 
@@ -1518,22 +1522,23 @@ class HalloweenAnimationManager {
     // Simulation
     // -----------------------------------------------------------------------
 
-    animate() {
+    animate(now = performance.now()) {
         if (!this.isRunning) return;
 
-        const now = performance.now();
-        const frameMs = now - this.lastTime;
         // A backgrounded tab hands back a multi-second gap on return; clamp it
-        // so nothing teleports across the frame
-        const dt = Math.min(0.05, Math.max(0.001, frameMs / 1000));
+        // so nothing teleports across the frame. Low tiers run at 10-20 fps,
+        // so a long frame is stepped in halves to keep the flock as steady
+        // as it is at 60.
+        const dt = Math.min(0.1, Math.max(0.001, (now - this.lastTime) / 1000));
         this.lastTime = now;
-        this.time += dt;
-        this.tuneQuality(frameMs);
-
-        this.update(dt);
+        const steps = dt > 0.05 ? 2 : 1;
+        for (let i = 0; i < steps; i++) {
+            this.time += dt / steps;
+            this.update(dt / steps);
+        }
         this.draw();
 
-        this.animationId = requestAnimationFrame(() => this.animate());
+        this.animationId = requestAnimationFrame(t => this.animate(t));
     }
 
     update(dt) {
@@ -1558,6 +1563,11 @@ class HalloweenAnimationManager {
         }
         this.pan.x = hwLerp(this.pan.x, this.pan.tx, 1 - Math.pow(0.08, dt));
         this.pan.y = hwLerp(this.pan.y, this.pan.ty, 1 - Math.pow(0.08, dt));
+
+        const ease = (v, on) => hwClamp(v + (on ? dt : -dt) / 1.5, 0, 1);
+        this.fade.bloom = ease(this.fade.bloom, this.wants('bloom'));
+        this.fade.grain = ease(this.fade.grain, this.wants('grain'));
+        for (let b = 0; b < 3; b++) this.fade.fog[b] = ease(this.fade.fog[b], this.wantsFog(b));
 
         this.updateGusts(dt);
         this.updatePumpkins(dt);
@@ -1621,7 +1631,9 @@ class HalloweenAnimationManager {
     }
 
     updateCandy(dt, wind) {
-        for (const c of this.candy) {
+        const keep = this.target('candy');
+        for (let i = this.candy.length - 1; i >= 0; i--) {
+            const c = this.candy[i];
             c.sway += c.swayRate * dt;
             c.spin += c.spinRate * dt;
             c.flip += c.flipRate * dt;
@@ -1640,14 +1652,17 @@ class HalloweenAnimationManager {
             c.y += c.vy * c.depth * dt;
 
             if (c.y > this.h + 40 || c.x < -60 || c.x > this.w + 60) {
-                Object.assign(c, this.createCandy(false));
+                if (this.candy.length > keep) this.candy.splice(i, 1);
+                else Object.assign(c, this.createCandy(false));
             }
         }
     }
 
     updateLeaves(dt, wind) {
         const ground = this.usableHeight;
-        for (const l of this.leaves) {
+        const keep = this.target('leaves');
+        for (let i = this.leaves.length - 1; i >= 0; i--) {
+            const l = this.leaves[i];
             if (!l.grounded) {
                 l.spin += l.spinRate * dt;
                 l.flip += l.flipRate * dt;
@@ -1681,37 +1696,59 @@ class HalloweenAnimationManager {
             }
 
             if (l.life <= 0 || l.x < -80 || l.x > this.w + 80 || l.y > this.h + 40) {
-                Object.assign(l, this.createLeaf(false));
+                if (this.leaves.length > keep) this.leaves.splice(i, 1);
+                else Object.assign(l, this.createLeaf(false));
             }
         }
     }
 
     // Loose boids: cohesion and separation against near neighbours, a
-    // preferred altitude band, and avoidance of the cursor. At these counts
-    // the naive O(n^2) neighbour pass is cheaper than any index.
+    // preferred altitude band, and avoidance of the cursor. Neighbours come
+    // from a grid of cells as wide as the flocking radius, so a flock of
+    // hundreds costs what a few dozen used to (SPEC §4.8).
     updateBats(dt, wind) {
         const bats = this.bats;
         if (!bats.length) return;
         const horizon = this.horizonY;
 
-        for (let i = 0; i < bats.length; i++) {
+        const CELL = 162;                       // just over sqrt(26000)
+        const cols = Math.ceil((this.w + 240) / CELL) + 1;
+        const rows = Math.ceil((this.h + 240) / CELL) + 1;
+        const cellOf = (x, y) => [
+            hwClamp(Math.floor((x + 120) / CELL), 0, cols - 1),
+            hwClamp(Math.floor((y + 120) / CELL), 0, rows - 1)
+        ];
+        const grid = this.batGrid = this.batGrid || [];
+        for (const bucket of grid) if (bucket) bucket.length = 0;
+        for (const o of bats) {
+            const [gx, gy] = cellOf(o.x, o.y);
+            (grid[gy * cols + gx] = grid[gy * cols + gx] || []).push(o);
+        }
+
+        for (let i = bats.length - 1; i >= 0; i--) {
             const b = bats[i];
             let cx = 0, cy = 0, sx = 0, sy = 0, ax = 0, ay = 0, n = 0;
 
-            for (let j = 0; j < bats.length; j++) {
-                if (i === j) continue;
-                const o = bats[j];
-                const dx = o.x - b.x;
-                const dy = o.y - b.y;
-                const d2 = dx * dx + dy * dy;
-                if (d2 > 26000) continue;
-                cx += o.x; cy += o.y;
-                ax += o.vx; ay += o.vy;
-                n++;
-                if (d2 < 1400 && d2 > 0.01) {
-                    const d = Math.sqrt(d2);
-                    sx -= dx / d * (1 - d / 37);
-                    sy -= dy / d * (1 - d / 37);
+            const [gx, gy] = cellOf(b.x, b.y);
+            for (let y = Math.max(0, gy - 1); y <= Math.min(rows - 1, gy + 1); y++) {
+                for (let x = Math.max(0, gx - 1); x <= Math.min(cols - 1, gx + 1); x++) {
+                    const bucket = grid[y * cols + x];
+                    if (!bucket) continue;
+                    for (const o of bucket) {
+                        if (o === b) continue;
+                        const dx = o.x - b.x;
+                        const dy = o.y - b.y;
+                        const d2 = dx * dx + dy * dy;
+                        if (d2 > 26000) continue;
+                        cx += o.x; cy += o.y;
+                        ax += o.vx; ay += o.vy;
+                        n++;
+                        if (d2 < 1400 && d2 > 0.01) {
+                            const d = Math.sqrt(d2);
+                            sx -= dx / d * (1 - d / 37);
+                            sy -= dy / d * (1 - d / 37);
+                        }
+                    }
                 }
             }
 
@@ -1758,6 +1795,8 @@ class HalloweenAnimationManager {
             b.flapRate = hwLerp(b.flapRate, 9 + b.size * 0.4, 1 - Math.pow(0.4, dt));
 
             b.vx += wind * 0.25 * dt;
+            // A bat the tier no longer wants heads for the nearer edge
+            if (b.leaving) b.vx += (b.x < this.w / 2 ? -1 : 1) * 140 * dt;
 
             // Clamp speed: boids with no speed limit end up as a comet
             const sp = Math.hypot(b.vx, b.vy);
@@ -1770,6 +1809,7 @@ class HalloweenAnimationManager {
             b.flap += b.flapRate * dt;
 
             // Wrap horizontally, bounce off the sky and the treeline
+            if (b.leaving && (b.x < -60 || b.x > this.w + 60)) { bats.splice(i, 1); continue; }
             if (b.x < -60) b.x = this.w + 60;
             if (b.x > this.w + 60) b.x = -60;
             if (b.y < 10) { b.y = 10; b.vy = Math.abs(b.vy); }
@@ -1780,7 +1820,9 @@ class HalloweenAnimationManager {
 
     updateGhosts(dt, wind) {
         const horizon = this.horizonY;
-        for (const g of this.ghosts) {
+        const keep = this.target('ghosts');
+        for (let i = this.ghosts.length - 1; i >= 0; i--) {
+            const g = this.ghosts[i];
             g.life += dt;
             g.bob += g.bobRate * dt;
             g.hem += g.hemRate * dt;
@@ -1818,6 +1860,7 @@ class HalloweenAnimationManager {
                 : f > 0.78 ? hwSmooth(hwClamp((1 - f) / 0.22, 0, 1)) : 1;
 
             if (g.life > g.maxLife || g.x < -160 || g.x > this.w + 160) {
+                if (this.ghosts.length > keep) { this.ghosts.splice(i, 1); continue; }
                 Object.assign(g, this.createGhostInward());
             }
             // Keep them above the ground and below the treetops
@@ -3487,9 +3530,9 @@ class HalloweenAnimationManager {
     }
 
     drawFogBank(bank) {
-        if (!this.fogSprite) return;
+        if (!this.fogSprite || !this.fade.fog[bank]) return;
         const ctx = this.ctx;
-        const density = this.config.fogDensity;
+        const density = this.config.fogDensity * this.fade.fog[bank];
 
         ctx.save();
         ctx.globalCompositeOperation = 'source-over';
@@ -4018,7 +4061,7 @@ class HalloweenAnimationManager {
     // -----------------------------------------------------------------------
 
     post() {
-        if (this.config.bloom && this.bloomA && this.bloomB && this.bloomT) this.applyBloom();
+        if (this.config.bloom && this.fade.bloom && this.bloomA && this.bloomB && this.bloomT) this.applyBloom();
 
         const ctx = this.ctx;
         ctx.save();
@@ -4030,13 +4073,13 @@ class HalloweenAnimationManager {
             ctx.drawImage(this.vignetteCanvas, 0, 0, this.canvas.width, this.canvas.height);
         }
 
-        if (this.config.grain > 0 && this.grainCanvas) {
+        if (this.config.grain > 0 && this.fade.grain && this.grainCanvas) {
             if (!this.grainPattern) {
                 this.grainPattern = ctx.createPattern(this.grainCanvas, 'repeat');
             }
             if (this.grainPattern) {
                 ctx.globalCompositeOperation = 'overlay';
-                ctx.globalAlpha = this.config.grain * 0.5;
+                ctx.globalAlpha = this.config.grain * 0.5 * this.fade.grain;
                 // Scroll the tile each frame so the grain does not sit still
                 ctx.translate(-Math.random() * 128, -Math.random() * 128);
                 ctx.fillStyle = this.grainPattern;
@@ -4090,7 +4133,7 @@ class HalloweenAnimationManager {
         ctx.save();
         ctx.setTransform(1, 0, 0, 1, 0, 0);
         ctx.globalCompositeOperation = 'lighter';
-        ctx.globalAlpha = hwClamp(0.5 * this.config.bloomStrength, 0, 1);
+        ctx.globalAlpha = hwClamp(0.5 * this.config.bloomStrength, 0, 1) * this.fade.bloom;
         ctx.drawImage(b, 0, 0, this.canvas.width, this.canvas.height);
         ctx.restore();
     }
@@ -4116,8 +4159,12 @@ class HalloweenAnimationManager {
         };
 
         const leave = () => { this.pointer.inside = false; };
-        const down = () => { this.pointer.down = true; };
-        const up = () => { this.pointer.down = false; };
+        // A finger counts as a cursor while it is down, and leaves when lifted
+        const down = (e) => {
+            if (e.pointerType !== 'mouse') { this.pointer.x = e.clientX; this.pointer.y = e.clientY; this.pointer.inside = true; }
+            this.pointer.down = true;
+        };
+        const up = (e) => { this.pointer.down = false; if (e.pointerType !== 'mouse') leave(); };
 
         const isUi = (e) => e.target && e.target.closest
             && e.target.closest('a,button,input,select,textarea,label,[role="button"]');
@@ -4161,10 +4208,11 @@ class HalloweenAnimationManager {
             this.listeners.push([target, type, fn, opts]);
         };
 
-        bind(document, 'mousemove', move, { passive: true });
-        bind(document, 'mouseleave', leave);
-        bind(document, 'mousedown', down, { passive: true });
-        bind(document, 'mouseup', up, { passive: true });
+        bind(document, 'pointermove', move, { passive: true });
+        bind(document.documentElement, 'pointerleave', leave);
+        bind(document, 'pointerdown', down, { passive: true });
+        bind(document, 'pointerup', up, { passive: true });
+        bind(document, 'pointercancel', up, { passive: true });
         bind(document, 'click', click);
         bind(document, 'dblclick', dbl);
     }
@@ -4250,14 +4298,6 @@ class HalloweenAnimationManager {
             { key: 'leafCount', label: 'Leaf Count', min: 0, max: 160, step: 10, format: int, rebuild: true },
 
             { section: '🎛️ Rendering' },
-            {
-                key: 'quality', label: 'Quality', type: 'select', options: [
-                    { value: 'auto', label: '🎚️ Auto (match the frame rate)' },
-                    { value: 'high', label: '💎 High (full resolution)' },
-                    { value: 'balanced', label: '⚖️ Balanced' },
-                    { value: 'performance', label: '🚀 Performance' }
-                ]
-            },
             { key: 'bloom', label: 'Bloom around the lit areas', type: 'check', rebuild: true },
             { key: 'bloomStrength', label: 'Bloom Strength', min: 0.1, max: 2, step: 0.1, format: one },
             { key: 'vignette', label: 'Vignette', type: 'check', rebuild: true },
@@ -4271,7 +4311,7 @@ class HalloweenAnimationManager {
 
     // Settings from the panel: only keys that change baked layers rebuild.
     applySettings(next) {
-        const heavy = this.config.quality !== next.quality || this.spec_needsRebuild(this.controlSpec(), next);
+        const heavy = this.spec_needsRebuild(this.controlSpec(), next);
         this.saveConfig(next);
         if (this.isRunning && heavy) this.restart();
     }

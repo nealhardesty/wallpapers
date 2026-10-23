@@ -1,7 +1,7 @@
 // Default settings for Fish Tank. Saved settings store only what
 // differs from these (SPEC §4.1). Tuned as on the old standalone page.
 WP.defaults('fishtank', {
-    configVersion: 1,
+    configVersion: 2,
 
     // Livestock
     fishCount: 26,
@@ -16,9 +16,6 @@ WP.defaults('fishtank', {
     foregroundPlants: true,
     hardscape: 'both',
     snail: true,
-
-    // Rendering
-    quality: 'auto',          // auto | high | balanced | performance
 
     // Light and water
     lightIntensity: 1.05,
