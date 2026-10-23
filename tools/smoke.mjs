@@ -247,6 +247,22 @@ async function stage(id, entry) {
     return { readyMs, drawn, problems: current.problems };
 }
 
+const framesIn = async ms => {
+    const before = await evaluate('WP.host.frames.count');
+    await sleep(ms);
+    return await evaluate('WP.host.frames.count') - before;
+};
+
+// A drag with the mouse, as a finger would: press, move along points, lift.
+async function drag(points, stepMs = 16) {
+    await cdp.send('Input.dispatchMouseEvent', { type: 'mousePressed', x: points[0][0], y: points[0][1], button: 'left', clickCount: 1 });
+    for (const [x, y] of points) {
+        await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x, y, button: 'left', buttons: 1 });
+        await sleep(stepMs);
+    }
+    await cdp.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: points.at(-1)[0], y: points.at(-1)[1], button: 'left', clickCount: 1 });
+}
+
 // Boot a stage with fresh storage, at a viewport if given, and wait for it.
 async function bootStage(query, viewport = null) {
     if (viewport) await cdp.send('Emulation.setDeviceMetricsOverride', { mobile: viewport.width < 600, ...viewport });
@@ -285,6 +301,111 @@ const AVERAGE = `(() => {
 })()`;
 
 const STAGE_CHECKS = {
+    // 8.6: the first frame is a raked garden; a drag leaves grooves; with no
+    // input it idles, between the gardener's strokes too.
+    'zen-garden': [['raked from the first frame; a drag leaves grooves; idle between strokes', async () => {
+        if (!await stageWith('zen-garden')) return record('not ready');
+        // Raked from the start: the garden differs from clean sand over most of it.
+        const raked = await evaluate(`(() => {
+            const m = WP.stage.manager, size = 128, probe = document.createElement('canvas');
+            probe.width = probe.height = size;
+            const ctx = probe.getContext('2d', { willReadFrequently: true });
+            const read = c => { ctx.clearRect(0, 0, size, size); ctx.drawImage(c, 0, 0, size, size); return ctx.getImageData(0, 0, size, size).data; };
+            const sand = read(m.sand), base = read(m.base);
+            let differ = 0;
+            for (let i = 0; i < sand.length; i += 4) if (Math.abs(sand[i] - base[i]) > 6) differ++;
+            return differ / (size * size);
+        })()`);
+        if (!(raked > 0.25)) record(`first frame isn't raked: ${(raked * 100).toFixed(0)}% of the sand differs from clean sand`);
+
+        // Visitors off, so only the rake and the gardener make frames.
+        await evaluate(`WP.stage.manager.applySettings({ ...WP.stage.manager.config, season: 'off' })`);
+        const { w, h } = await evaluate('({ w: innerWidth, h: innerHeight })');
+        const path = [];
+        for (let i = 0; i <= 40; i++) path.push([w * (0.1 + 0.8 * i / 40), h * (0.5 + 0.25 * Math.sin(i / 40 * Math.PI * 2))]);
+        const SAMPLE = `(points => {
+            const c = WP.stage.manager.canvas, ctx = c.getContext('2d'), k = WP.stage.manager.dpr;
+            return points.map(([x, y]) => { const d = ctx.getImageData(Math.round(x * k) - 4, Math.round(y * k) - 4, 9, 9).data; const r = []; for (let i = 0; i < d.length; i += 4) r.push(d[i]); return r; });
+        })`;
+        const before = await evaluate(`${SAMPLE}(${JSON.stringify(path)})`);
+        const strokes = await evaluate('WP.stage.manager.strokes');
+        await drag(path);
+        await sleep(300);
+        const after = await evaluate(`${SAMPLE}(${JSON.stringify(path)})`);
+        // A patch changed if its pixels moved by 8 levels on average.
+        const changed = before.filter((patch, i) => patch.reduce((sum, v, j) => sum + Math.abs(v - after[i][j]), 0) / patch.length > 8).length / path.length;
+        if (changed < 0.5) record(`a drag changed only ${(changed * 100).toFixed(0)}% of the points along its path`);
+        if (await evaluate('WP.stage.manager.strokes') !== strokes + 1) record('the drag didn\'t finish one rake stroke');
+
+        // Nothing to do: no frames at all.
+        await sleep(300);
+        const idle = await framesIn(1200);
+        if (idle > 1) record(`${idle} frames in 1.2 s with nothing to do; expected none`);
+
+        // The gardener: soon after its delay it rakes, with frames; when its
+        // stroke ends it rests between strokes, with none.
+        await evaluate(`WP.stage.manager.applySettings({ ...WP.stage.manager.config, season: 'off', gardenerDelay: 5 })`);
+        await evaluate(`WP.stage.manager.nextGardenerAt = performance.now() + 300`);
+        const started = await waitFor(() => evaluate('!!WP.stage.manager.gardenerStroke'), 3000);
+        if (!started) return record('the gardener never came');
+        const raking = await framesIn(600);
+        if (raking < 8) record(`only ${raking} frames in 0.6 s while the gardener rakes`);
+        await evaluate('WP.stage.manager.gardenerStroke.travel = 1e9');   // finish this stroke now
+        await waitFor(() => evaluate('!WP.stage.manager.gardenerStroke'), 2000);
+        await sleep(200);
+        const resting = await framesIn(1500);
+        if (resting > 1) record(`${resting} frames while the gardener rests between strokes`);
+        return true;
+    }]],
+
+    // 8.7: a tap makes a ripple and the nearest koi turn towards it within
+    // 2 s; the number of koi follows the tier's density.
+    'koi-pond': [['a tap calls the nearest koi within 2 s; koi follow density', async () => {
+        if (!await stageWith('koi-pond')) return record('not ready');
+        // Tap behind a koi, so it has to turn right round to come.
+        const { x, y, nearest } = await evaluate(`(() => {
+            const m = WP.stage.manager, fish = m.koi.filter(k => !k.leaving);
+            for (const k of fish) {
+                const x = Math.round(k.x - Math.cos(k.heading) * k.len * 1.4), y = Math.round(k.y - Math.sin(k.heading) * k.len * 1.4);
+                if (x < 40 || y < 40 || x > innerWidth - 80 || y > innerHeight - 40) continue;
+                const near = [...fish].sort((a, b) => Math.hypot(a.x - x, a.y - y) - Math.hypot(b.x - x, b.y - y))[0];
+                if (near === k) return { x, y, nearest: k.id };
+            }
+            return { x: 200, y: 300, nearest: null };
+        })()`);
+        if (nearest === null) return record('no koi to tap behind');
+        const ripples = await evaluate('WP.stage.manager.ripples.length');
+        await cdp.send('Input.dispatchMouseEvent', { type: 'mousePressed', x, y, button: 'left', clickCount: 1 });
+        await cdp.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x, y, button: 'left', clickCount: 1 });
+        const tapped = Date.now();
+        if (!(await evaluate('WP.stage.manager.ripples.length') > ripples)) record('a tap made no ripple');
+        if (!(await evaluate('WP.stage.manager.attracted')).includes(nearest)) record('the nearest koi wasn\'t called');
+        const turned = await waitFor(() => evaluate(`(() => {
+            const k = WP.stage.manager.koi.find(k => k.id === ${nearest});
+            const want = Math.atan2(${y} - k.y, ${x} - k.x), off = Math.abs(Math.atan2(Math.sin(want - k.heading), Math.cos(want - k.heading)));
+            return off < 0.5 || Math.hypot(k.x - ${x}, k.y - ${y}) < k.len * 0.5;
+        })()`), 2000);
+        if (!turned) record('the nearest koi didn\'t turn towards the tap within 2 s');
+        else console.log(`    koi-pond: nearest koi faced the tap after ${Date.now() - tapped} ms`);
+
+        // Density: live changes thin and refill the pond, without a reset.
+        const counts = [];
+        for (const density of [0.35, 1]) {
+            await evaluate(`WP.stage.manager.onQuality({ ...WP.host.quality, density: ${density} })`);
+            const want = await evaluate('WP.stage.manager.fishTarget()');
+            const settled = await waitFor(() => evaluate(`WP.stage.manager.koi.length === ${want} && WP.stage.manager.koi.every(k => !k.leaving)`), 8000);
+            counts.push(`${density}→${want}`);
+            if (!settled) record(`density ${density}: ${await evaluate('WP.stage.manager.koi.length')} koi, expected ${want}`);
+        }
+        // And a pinned Low tier starts with Low's share.
+        await cdp.send('Page.navigate', { url: `${WEB}/stage.html?w=koi-pond&tier=low` });
+        await waitFor(() => evaluate('WP.stage?.ready'));
+        const low = await evaluate('({ n: WP.stage.manager.koi.length, want: Math.round(WP.stage.manager.config.fishCount * WP.host.quality.density), effects: WP.host.quality.effects })');
+        if (low.n !== low.want) record(`?tier=low started with ${low.n} koi, expected ${low.want}`);
+        if (low.effects.includes('shadows') || low.effects.includes('sparkles')) record('Low kept shadows or sparkles');
+        console.log(`    koi-pond: density ${counts.join(', ')}; Low starts with ${low.n}`);
+        return true;
+    }]],
     // 8.1: idle between strokes on Low, and a new drawing on N.
     harmonograph: [['idles between strokes on Low, and N starts a new drawing', async () => {
         await bootStage('w=harmonograph&tier=low');
