@@ -47,20 +47,11 @@
         return `stage.html?${query}`;
     }
 
-    // renderScale: lay the stage out smaller and scale it up, so every
-    // wallpaper renders fewer pixels without knowing it.
-    // In the Android app the surface itself shrinks (SPEC §4.8): the page
-    // stays full size and tells the app instead.
+    // Render scale: in a browser the stage lowers its own pixel ratio. In
+    // the Android app the surface itself shrinks (SPEC §4.8), so the
+    // player tells the app.
     const app = window.WallpapersApp;
-    function scale(frame, s) {
-        if (app) {
-            app.setRenderScale(s);
-            s = 1;
-        }
-        frame.style.width = `${s * 100}%`;
-        frame.style.height = `${s * 100}%`;
-        frame.style.transform = s === 1 ? '' : `scale(${1 / s})`;
-    }
+    const scale = s => app?.setRenderScale(s);
 
     function mount(id) {
         clearTimeout(rebuildTimer);
@@ -69,14 +60,14 @@
         frame.className = 'stage entering';
         frame.title = WP.entry(id).name;
         frame.src = stageUrl(id);
-        // The stage plans its own quality from the same inputs; laying it
-        // out at that size now saves a resize once it starts.
+        // The stage plans its own quality from the same inputs; sizing the
+        // Android surface now saves a resize once it starts.
         const planned = WP.planQuality({
             entry: WP.entry(id), policy: WP.powerPolicy({ host, reducedMotion: signals.reducedMotion, batteryAware: signals.batteryAware }),
             mode: WP.modeOf({ override: params.tier, saved: WP.store.get('wp:performance') }),
             memory: WP.store.get(`wp:perf:${id}`),
         });
-        scale(frame, planned.quality.renderScale);
+        scale(planned.quality.renderScale);
         document.body.prepend(frame);
         const mounted = stage = { id, frame, ready: false };
         app?.setAccent(WP.entry(id).accent || '#000000');
@@ -286,7 +277,7 @@
         } else if (message.wp === 'key') {
             key(message.key);
         } else if (message.wp === 'quality') {
-            scale(stage.frame, message.quality.renderScale);
+            scale(message.quality.renderScale);
         } else if (message.wp === 'stats') {
             stats = message;
             if (hud) hud.textContent = describe(message);
