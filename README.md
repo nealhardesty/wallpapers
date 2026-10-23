@@ -338,7 +338,10 @@ browser features only work on secure pages.
    app's version), commit, and push a matching tag: `git tag v0.6.0 &&
    git push --tags`.
 3. CI checks everything, builds the signed APK and the extension zip, and
-   publishes both on a GitHub Release.
+   publishes both on a GitHub Release. Until the secrets exist it publishes
+   the debug APK (`wallpapers-<version>-debug.apk`) instead: it sideloads
+   fine, but each one is signed by a throwaway key, so installing the next
+   release means uninstalling first.
 
 ### Adding a wallpaper
 

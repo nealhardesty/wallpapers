@@ -72,9 +72,16 @@ jobs:
           WALLPAPERS_KEY_ALIAS: ${{ secrets.WALLPAPERS_KEY_ALIAS }}
           WALLPAPERS_KEY_PASSWORD: ${{ secrets.WALLPAPERS_KEY_PASSWORD }}
         run: |
-          test -n "$KEYSTORE_BASE64" || { echo "::error::set the WALLPAPERS_KEYSTORE_* secrets (README, Releasing)"; exit 1; }
-          echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
-          WALLPAPERS_KEYSTORE="$RUNNER_TEMP/release.jks" make android-release extension
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            # No key yet (README, Releasing): publish the debug build, which
+            # sideloads but can't update over another build's install.
+            echo "::warning::no WALLPAPERS_KEYSTORE_* secrets: releasing the debug APK"
+            make android-build extension
+            cp android/app/build/outputs/apk/debug/app-debug.apk "dist/wallpapers-${GITHUB_REF_NAME#v}-debug.apk"
+          else
+            echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
+            WALLPAPERS_KEYSTORE="$RUNNER_TEMP/release.jks" make android-release extension
+          fi
       - run: gh release create "$GITHUB_REF_NAME" --generate-notes dist/wallpapers-*.apk dist/wallpapers-extension-*.zip
         env:
           GH_TOKEN: ${{ github.token }}
