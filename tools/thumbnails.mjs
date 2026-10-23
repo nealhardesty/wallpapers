@@ -30,7 +30,8 @@ const OVERRIDES = {
 };
 // URL parameters for a better picture: satellites as its sample station
 // passes overhead before dawn (thumb mode never fetches, so it's the sample).
-const PARAMS = { satellites: '&date=2026-10-14T04:47:15', 'pixel-room': '&date=2026-10-22T18:20' };
+const PARAMS = { satellites: '&date=2026-10-14T04:47:15', 'pixel-room': '&date=2026-10-22T18:20', 'rainy-window': '&date=2026-10-22T21:00' };
+SETTLE_MS.fireworks = 2600;
 
 const { chrome, profile, cdp } = await launch({ width: 1280, height: 800 });
 try {

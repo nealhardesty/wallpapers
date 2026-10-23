@@ -247,6 +247,21 @@ async function stage(id, entry) {
     return { readyMs, drawn, problems: current.problems };
 }
 
+// Rainy Window's and Fireworks' helpers: a stage URL booted with storage; a quick drag.
+const bootWith = async (url, storage = {}) => {
+    await cdp.send('Page.navigate', { url: `${WEB}/stage.html?w=blank` });
+    await waitFor(() => evaluate('WP.stage?.ready'));
+    await evaluate(`localStorage.clear(); for (const [k, v] of Object.entries(${JSON.stringify(storage)})) localStorage.setItem(k, JSON.stringify(v))`);
+    await cdp.send('Page.navigate', { url });
+    if (!await waitFor(() => evaluate('WP.stage?.ready'))) throw new Error(`${url} never got ready`);
+};
+const dragLine = async points => {
+    const [first, ...rest] = points;
+    await cdp.send('Input.dispatchMouseEvent', { type: 'mousePressed', x: first[0], y: first[1], button: 'left', buttons: 1, clickCount: 1 });
+    for (const [x, y] of rest) await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x, y, button: 'left', buttons: 1 });
+    const last = rest.at(-1) || first;
+    await cdp.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: last[0], y: last[1], button: 'left', buttons: 0, clickCount: 1 });
+};
 const framesIn = async ms => {
     const before = await evaluate('WP.host.frames.count');
     await sleep(ms);
@@ -301,6 +316,56 @@ const AVERAGE = `(() => {
 })()`;
 
 const STAGE_CHECKS = {
+    // 8.10: the layers are built once per resize; a finger's line fogs over
+    // within a minute; lit windows follow the hour.
+    'rainy-window': [['layers built once; a finger\'s line fogs over in a minute; lights follow the hour', async () => {
+        await bootWith(`${WEB}/stage.html?w=rainy-window`);
+        const pane = 'WP.stage.manager';
+        await evaluate(`${pane}.patchWindow(${pane}.city.windows[0])`);
+        const frames = await evaluate('WP.host.frames.count');
+        await sleep(1200);
+        const [builds, later, patches] = await evaluate(`[${pane}.builds, WP.host.frames.count, ${pane}.patches]`);
+        if (builds !== 1 || later <= frames || !patches) record(`${builds} layer builds over ${later - frames} frames and ${patches} window repaints (want 1, some, some)`);
+        const line = Array.from({ length: 25 }, (_, i) => [200 + i * 30, 380 + Math.round(10 * Math.sin(i / 3))]);
+        await dragLine(line);
+        await sleep(100);
+        const along = `(${JSON.stringify(line)}).reduce((a, [x, y]) => a + ${pane}.clearness(x, y), 0) / ${line.length}`;
+        const drawnClear = await evaluate(along);
+        const fogged = await evaluate(`(${pane}.advanceFog(60), ${along})`);
+        if (drawnClear < 0.6) record(`a dragged line only cleared the fog to ${drawnClear.toFixed(2)}`);
+        if (fogged > 0.06) record(`a minute later the line is still ${fogged.toFixed(2)} clear`);
+        const lit = {};
+        for (const hour of ['22', '03']) {
+            await bootWith(`${WEB}/stage.html?w=rainy-window&seed=3&date=2026-10-22T${hour}:00`);
+            lit[hour] = await evaluate(`${pane}.litCount()`);
+        }
+        if (!(lit['22'] > lit['03'] * 3)) record(`lit windows at 22:00 ${lit['22']}, at 03:00 ${lit['03']}`);
+        return true;
+    }]],
+    // 8.12: New Year counts down from 23:59:50 and fires the finale at
+    // midnight; tap mode is silent until tapped. (Auto's lull is a unit test.)
+    fireworks: [['New Year counts down and fires at midnight; tap mode waits for a tap', async () => {
+        const show = 'WP.stage.manager';
+        await bootWith(`${WEB}/stage.html?w=fireworks&date=2026-12-31T23:59:50`, { 'wp:fireworks': { configVersion: 1, mode: 'newyear' } });
+        await sleep(2500);
+        const before = await evaluate(`({ count: ${show}.countdown, launched: ${show}.launched, parts: ${show}.parts.length })`);
+        if (before.count < 6 || before.count > 9) record(`countdown shows ${before.count} at 23:59:52`);
+        if (before.launched || before.parts) record(`${before.launched} shells and ${before.parts} stars before midnight`);
+        const finale = await waitFor(() => evaluate(`${show}.launched >= 10 && ${show}.parts.length > 300 && { launched: ${show}.launched, year: ${show}.yearFired }`), 14000);
+        if (!finale) record('no finale after midnight');
+        else if (finale.year !== 2027) record(`the year in stars was ${finale.year}`);
+        await bootWith(`${WEB}/stage.html?w=fireworks`, { 'wp:fireworks': { configVersion: 1, mode: 'tap' } });
+        await sleep(2000);
+        const frames = await evaluate('WP.host.frames.count');
+        await sleep(600);
+        const quiet = await evaluate(`({ launched: ${show}.launched, parts: ${show}.parts.length, shells: ${show}.shells.length, frames: WP.host.frames.count })`);
+        if (quiet.launched || quiet.parts || quiet.shells) record(`tap mode launched ${quiet.launched} shells by itself`);
+        if (quiet.frames !== frames) record(`tap mode drew ${quiet.frames - frames} frames with nothing in the sky`);
+        await dragLine([[640, 300]]);
+        const tapped = await waitFor(() => evaluate(`${show}.tapped && ${show}.parts.length > 20`), 4000);
+        if (!tapped) record('a tap launched nothing');
+        return true;
+    }]],
     // 8.6: the first frame is a raked garden; a drag leaves grooves; with no
     // input it idles, between the gardener's strokes too.
     'zen-garden': [['raked from the first frame; a drag leaves grooves; idle between strokes', async () => {
