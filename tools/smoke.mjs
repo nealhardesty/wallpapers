@@ -185,8 +185,84 @@ async function stage(id, entry) {
     if (drawn < 2 && id !== 'blank') record(entry.network ? 'background photo not shown' : 'nothing drawn');
     if (storage?.diff?.length) record(`fresh run would save: ${storage.diff.join(', ')} (defaults.js out of step)`);
     if (storage?.foreign?.length) record(`wrote storage outside its namespace: ${storage.foreign.join(', ')}`);
+    if (ready && STAGE_CHECKS[id]) await STAGE_CHECKS[id]().catch(error => record(`${id} check: ${error.message}`));
     return { readyMs, drawn, problems: current.problems };
 }
+
+// ---- Wallpapers' own checks (SPEC §9, Phase 8 "→" checks) ---------------------
+
+const framesIn = async ms => {
+    const before = await evaluate('WP.host.frames.count');
+    await sleep(ms);
+    return await evaluate('WP.host.frames.count') - before;
+};
+
+// A drag with the mouse, as a finger would: press, move along points, lift.
+async function drag(points, stepMs = 16) {
+    await cdp.send('Input.dispatchMouseEvent', { type: 'mousePressed', x: points[0][0], y: points[0][1], button: 'left', clickCount: 1 });
+    for (const [x, y] of points) {
+        await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x, y, button: 'left', buttons: 1 });
+        await sleep(stepMs);
+    }
+    await cdp.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: points.at(-1)[0], y: points.at(-1)[1], button: 'left', clickCount: 1 });
+}
+
+const STAGE_CHECKS = {
+    // 8.6: the first frame is a raked garden; a drag leaves grooves; with no
+    // input it idles, between the gardener's strokes too.
+    'zen-garden': async () => {
+        // Raked from the start: the garden differs from clean sand over most of it.
+        const raked = await evaluate(`(() => {
+            const m = WP.stage.manager, size = 128, probe = document.createElement('canvas');
+            probe.width = probe.height = size;
+            const ctx = probe.getContext('2d', { willReadFrequently: true });
+            const read = c => { ctx.clearRect(0, 0, size, size); ctx.drawImage(c, 0, 0, size, size); return ctx.getImageData(0, 0, size, size).data; };
+            const sand = read(m.sand), base = read(m.base);
+            let differ = 0;
+            for (let i = 0; i < sand.length; i += 4) if (Math.abs(sand[i] - base[i]) > 6) differ++;
+            return differ / (size * size);
+        })()`);
+        if (!(raked > 0.25)) record(`first frame isn't raked: ${(raked * 100).toFixed(0)}% of the sand differs from clean sand`);
+
+        // Visitors off, so only the rake and the gardener make frames.
+        await evaluate(`WP.stage.manager.applySettings({ ...WP.stage.manager.config, season: 'off' })`);
+        const { w, h } = await evaluate('({ w: innerWidth, h: innerHeight })');
+        const path = [];
+        for (let i = 0; i <= 40; i++) path.push([w * (0.1 + 0.8 * i / 40), h * (0.5 + 0.25 * Math.sin(i / 40 * Math.PI * 2))]);
+        const SAMPLE = `(points => {
+            const c = WP.stage.manager.canvas, ctx = c.getContext('2d'), k = WP.stage.manager.dpr;
+            return points.map(([x, y]) => { const d = ctx.getImageData(Math.round(x * k) - 4, Math.round(y * k) - 4, 9, 9).data; const r = []; for (let i = 0; i < d.length; i += 4) r.push(d[i]); return r; });
+        })`;
+        const before = await evaluate(`${SAMPLE}(${JSON.stringify(path)})`);
+        const strokes = await evaluate('WP.stage.manager.strokes');
+        await drag(path);
+        await sleep(300);
+        const after = await evaluate(`${SAMPLE}(${JSON.stringify(path)})`);
+        // A patch changed if its pixels moved by 8 levels on average.
+        const changed = before.filter((patch, i) => patch.reduce((sum, v, j) => sum + Math.abs(v - after[i][j]), 0) / patch.length > 8).length / path.length;
+        if (changed < 0.5) record(`a drag changed only ${(changed * 100).toFixed(0)}% of the points along its path`);
+        if (await evaluate('WP.stage.manager.strokes') !== strokes + 1) record('the drag didn\'t finish one rake stroke');
+
+        // Nothing to do: no frames at all.
+        await sleep(300);
+        const idle = await framesIn(1200);
+        if (idle > 1) record(`${idle} frames in 1.2 s with nothing to do; expected none`);
+
+        // The gardener: soon after its delay it rakes, with frames; when its
+        // stroke ends it rests between strokes, with none.
+        await evaluate(`WP.stage.manager.applySettings({ ...WP.stage.manager.config, season: 'off', gardenerDelay: 5 })`);
+        await evaluate(`WP.stage.manager.nextGardenerAt = performance.now() + 300`);
+        const started = await waitFor(() => evaluate('!!WP.stage.manager.gardenerStroke'), 3000);
+        if (!started) return record('the gardener never came');
+        const raking = await framesIn(600);
+        if (raking < 8) record(`only ${raking} frames in 0.6 s while the gardener rakes`);
+        await evaluate('WP.stage.manager.gardenerStroke.travel = 1e9');   // finish this stroke now
+        await waitFor(() => evaluate('!WP.stage.manager.gardenerStroke'), 2000);
+        await sleep(200);
+        const resting = await framesIn(1500);
+        if (resting > 1) record(`${resting} frames while the gardener rests between strokes`);
+    },
+};
 
 async function press(key) {
     const text = key.length === 1 ? key : undefined;

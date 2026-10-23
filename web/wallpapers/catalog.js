@@ -79,6 +79,13 @@
               { keys: ['m'], label: 'Next companion', run: quest => questCycle(quest, 'companion', Object.keys(QuestArt.COMPANIONS), QuestArt.COMPANIONS) },
               { keys: ['p'], label: 'Next palette', run: quest => questCycle(quest, 'palette', Object.keys(QuestEngineData.FILTERS)) },
           ] },
+        { id: 'zen-garden', name: 'Zen Garden', icon: '🪨', accent: '#c9b98f', scripts: ['zen-garden/zen-geometry.js', 'zen-garden/zen-garden.js'],
+          make: host => new ZenGardenAnimationManager(host), cost: 'low', interactive: true, background: '#d8d4ca',
+          keys: [
+              { keys: ['n'], label: 'A new arrangement of stones', run: garden => { garden.newGarden(); return 'A new garden'; } },
+              { keys: ['r'], label: 'Rake the whole garden now', run: garden => { garden.rakeAll(); return 'Freshly raked'; } },
+              { keys: ['e'], label: 'Smooth the sand flat', run: garden => { garden.smooth(); return 'Smooth sand'; } },
+          ] },
         { id: 'bing', name: 'Bing Image of the Day', icon: '🖼️', accent: '#8ab4ff', scripts: ['bing/bing.js'],
           make: host => new BingWallpaperManager(host), cost: 'none', network: ['www.bing.com'] },
     ];
