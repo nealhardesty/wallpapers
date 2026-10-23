@@ -10,6 +10,7 @@ class LeavesAnimationManager {
         this.windSystem = null;
 
         this.lastTime = 0;
+        this.windTime = 0;
 
         // Leaves that have come to rest on the ground
         this.settled = [];
@@ -22,6 +23,7 @@ class LeavesAnimationManager {
         // into separate banks instead of one level carpet: a column's leaves
         // stop being accepted at its own ceiling, not at a single global one.
         this.driftProfile = null;
+        this.pileShare = 1;
 
         // The drift runs to a couple of thousand leaves, far too many to redraw
         // as vector paths every frame, so it is painted once into its own canvas
@@ -262,14 +264,50 @@ class LeavesAnimationManager {
         if (!this.leafSprites) this.buildLeafSprites();
 
         this.buildDriftProfile();
+        this.fitPileToCap();
         this.pileDirty = true;
         this.seedPile();
+    }
+
+    // Lower tiers (SPEC §4.8) cap the drift, whose repaints cost one sprite
+    // per leaf, and thin the falling leaves by host.quality.density. After
+    // a drop in tier the drift keeps what it has and stops taking leaves
+    // until gusts have carried it under the new cap, so nothing vanishes.
+    maxSettled() {
+        const cap = { low: 2000, medium: 6000 }[this.host.quality?.tier] ?? Infinity;
+        return Math.min(this.config.maxSettled, cap);
+    }
+
+    density() {
+        return this.host.quality?.density ?? 1;
+    }
+
+    // A cap below what the banks need (a big screen on a lower tier) would
+    // fill them as one thin, level strip. Lowering the ceiling to what the
+    // cap can fill keeps the banks' shape, just shallower.
+    fitPileToCap() {
+        this.pileShare = 1;
+        const types = this.config.leafTypes.map(type => this.leafShapes[type]).filter(Boolean);
+        if (!types.length || !this.driftProfile) return;
+
+        // The average leaf createLeaf() makes, and the height it adds
+        const size = types.reduce((sum, shape) => sum + shape.size, 0) / types.length *
+                     (0.8 + this.config.leafSizeVariation / 2) * 1.07;
+        const perLeaf = this.pileContribution({ size }) * this.pileSpread[0];
+
+        let room = 0;
+        for (let i = 0; i < this.driftProfile.length; i++) room += this.columnCap(i);
+        this.pileShare = Math.min(1, this.maxSettled() * perLeaf / (room || 1));
+    }
+
+    onQuality() {
+        this.fitPileToCap();
     }
 
     // Deepest the drift is allowed to get, as a share of the viewport
     pileCeiling() {
         if (!this.canvas) return 0;
-        return this.canvas.height * Math.max(0, Math.min(0.5, this.config.pileDepth));
+        return this.canvas.height * Math.max(0, Math.min(0.5, this.config.pileDepth)) * this.pileShare;
     }
 
     columnCap(index) {
@@ -335,7 +373,7 @@ class LeavesAnimationManager {
             let placed = 0;
 
             for (let i = 0; i < this.pileHeights.length; i++) {
-                if (this.settled.length >= this.config.maxSettled) break;
+                if (this.settled.length >= this.maxSettled()) break;
 
                 const leaf = this.createLeaf();
                 if (!this.canAbsorb(i, leaf)) continue;
@@ -345,7 +383,7 @@ class LeavesAnimationManager {
                 placed++;
             }
 
-            if (placed === 0 || this.settled.length >= this.config.maxSettled) break;
+            if (placed === 0 || this.settled.length >= this.maxSettled()) break;
         }
 
         this.pileDirty = true;
@@ -367,7 +405,7 @@ class LeavesAnimationManager {
     // sizes vary, so a column that turns away a large leaf may still take a
     // small one, which finishes the surface off unevenly rather than flat.
     canAbsorb(index, leaf) {
-        if (this.settled.length >= this.config.maxSettled) return false;
+        if (this.settled.length >= this.maxSettled()) return false;
         const add = this.pileContribution(leaf) * this.pileSpread[0];
         return this.pileHeights[index] + add <= this.columnCap(index);
     }
@@ -407,6 +445,7 @@ class LeavesAnimationManager {
         this.canvas.style.display = 'block';
         this.leaves = [];
         this.lastTime = 0;
+        this.windTime = 0;
         this.initPile();
         this.windSystem?.reset();
         this.animate();
@@ -486,7 +525,8 @@ class LeavesAnimationManager {
         const windForce = this.windSystem?.getCurrentWindForce() || { x: 0, y: 0 };
 
         // Spawn new leaves. spawnRate is a per-60fps-frame probability.
-        if (Math.random() < this.config.spawnRate * dt * 60 && this.leaves.length < this.config.maxLeaves) {
+        const density = this.density();
+        if (Math.random() < this.config.spawnRate * density * dt * 60 && this.leaves.length < this.config.maxLeaves * density) {
             this.leaves.push(this.createLeaf());
         }
 
@@ -811,12 +851,18 @@ class LeavesAnimationManager {
         // Clamp the step so the first frame and any backgrounded-tab gap cannot
         // teleport every leaf across the screen at once
         if (!this.lastTime) this.lastTime = currentTime;
-        const dt = Math.min((currentTime - this.lastTime) / 1000, 0.05);
+        const dt = Math.min((currentTime - this.lastTime) / 1000, 0.1);
         this.lastTime = currentTime;
 
         this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 
-        this.windSystem?.update();
+        // The wind counts in 60 fps frames, so it steps at 60 a second
+        // whatever the frame rate
+        this.windTime += dt;
+        while (this.windTime >= 1 / 60) {
+            this.windTime -= 1 / 60;
+            this.windSystem?.update();
+        }
         this.updateLeaves(dt);
 
         // The drift on the ground sits behind everything still in the air

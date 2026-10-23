@@ -1,6 +1,7 @@
 // Fireflies Animation Module
 class FirefliesAnimationManager {
-    constructor() {
+    constructor(host) {
+        this.host = host;
         this.canvas = null;
         this.ctx = null;
         this.fireflies = [];
@@ -8,6 +9,7 @@ class FirefliesAnimationManager {
         this.animationId = null;
 
         this.lastTime = 0;
+        this.clock = 0;
         this.grid = new Map();
         this.glowSprites = [];
 
@@ -53,12 +55,18 @@ class FirefliesAnimationManager {
         };
     }
 
+    // Lower tiers bake them smaller: the halo is soft, so a 32 px sprite
+    // scaled up looks the same and is cheaper to sample.
+    glowSpriteSize() {
+        return { low: 32, medium: 64 }[this.host.quality?.tier] || 128;
+    }
+
     // The glow is baked into one sprite per colour instead of being rebuilt as
     // two radial gradients per firefly per frame, which is both far cheaper and
     // lets the falloff be shaped more carefully than a few colour stops.
     buildGlowSprites() {
         const colors = this.colorSchemes[this.config.colorScheme] || this.colorSchemes.classic;
-        const size = 128;
+        const size = this.glowSpriteSize();
         const radius = size / 2;
 
         this.glowSprites = colors.map(color => {
@@ -132,6 +140,17 @@ class FirefliesAnimationManager {
         }
     }
 
+    // Lower tiers have fewer fireflies (SPEC §4.8): the spawn rate and the
+    // ceiling both follow host.quality.density. A change takes effect as
+    // fireflies are born and die, so the swarm thins or fills gradually.
+    density() {
+        return this.host.quality?.density ?? 1;
+    }
+
+    onQuality() {
+        if (this.glowSprites.length && this.glowSprites[0].width !== this.glowSpriteSize()) this.buildGlowSprites();
+    }
+
     async init() {
         this.createCanvas();
         this.buildGlowSprites();
@@ -171,10 +190,11 @@ class FirefliesAnimationManager {
         this.canvas.style.display = 'block';
         this.fireflies = [];
         this.lastTime = 0;
+        this.clock = 0;
         if (this.glowSprites.length === 0) this.buildGlowSprites();
         // Open mid-evening: seed the population the spawn rate settles at,
         // already faded in, rather than a dark screen for the first seconds.
-        const settled = Math.min(this.config.maxFireflies, Math.round(this.config.spawnRate * this.config.lifespan));
+        const settled = Math.round(Math.min(this.config.maxFireflies, this.config.spawnRate * this.config.lifespan) * this.density());
         for (let i = 0; i < settled; i++) {
             const firefly = this.createFirefly();
             const lit = Math.max(0, firefly.maxAge - this.config.fadeInTime - this.config.fadeOutTime);
@@ -252,8 +272,9 @@ class FirefliesAnimationManager {
     }
 
     updateFireflies(dt) {
-        if (Math.random() < this.config.spawnRate * dt * 60 &&
-            this.fireflies.length < this.config.maxFireflies) {
+        const density = this.density();
+        if (Math.random() < this.config.spawnRate * density * dt * 60 &&
+            this.fireflies.length < this.config.maxFireflies * density) {
             this.fireflies.push(this.createFirefly());
         }
 
@@ -262,6 +283,7 @@ class FirefliesAnimationManager {
         const width = this.canvas.width;
         const height = this.canvas.height;
         const margin = 70;
+        this.clock += dt;
 
         for (let i = this.fireflies.length - 1; i >= 0; i--) {
             const firefly = this.fireflies[i];
@@ -314,15 +336,17 @@ class FirefliesAnimationManager {
 
             // Record where the firefly has been and how brightly it was lit at
             // the time. The trail is laid down by the firefly itself, so it
-            // follows it and only exists where it was actually glowing.
-            const trailPoints = Math.round(this.config.tailLength * 60);
-            if (trailPoints > 1) {
+            // follows it and only exists where it was actually glowing. It
+            // keeps tailLength seconds of points, so it is the same length
+            // at any frame rate (and has fewer points at a lower one).
+            if (Math.round(this.config.tailLength * 60) > 1) {
                 firefly.trail.push({
                     x: firefly.x,
                     y: firefly.y,
+                    t: this.clock,
                     intensity: this.flashIntensity(firefly)
                 });
-                while (firefly.trail.length > trailPoints) firefly.trail.shift();
+                while (this.clock - firefly.trail[0].t > this.config.tailLength) firefly.trail.shift();
             } else if (firefly.trail.length) {
                 firefly.trail.length = 0;
             }
@@ -467,7 +491,7 @@ class FirefliesAnimationManager {
         if (!this.isEnabled) return;
 
         if (!this.lastTime) this.lastTime = currentTime;
-        const dt = Math.min((currentTime - this.lastTime) / 1000, 0.05);
+        const dt = Math.min((currentTime - this.lastTime) / 1000, 0.1);
         this.lastTime = currentTime;
 
         // Always a clean clear. Trails used to be faked by washing the whole
