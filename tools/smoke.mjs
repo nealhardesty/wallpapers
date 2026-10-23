@@ -1032,6 +1032,34 @@ const STAGE_CHECKS = {
             if (await counts('m.video.muted')) record('sound didn\'t carry over to the next item');
             return true;
         }],
+        ['cinema: the curtains part for the show, close on pause and between items', async () => {
+            const mock = jellyfinServer();
+            await fresh(`${WEB}/stage.html?w=jellyfin`, jellyfinSignedIn(mock, { order: 'inOrder', subtitles: 'off', showTitle: false, frame: 'cinema' }));
+            if (!await waitFor(() => counts(`m.state === 'playing' && m.video.currentTime > 0.2`), 10000)) return record('never played');
+            // The overlay's alpha just inside the left of the screen: velvet there means closed.
+            const shut = () => counts(`(s => m.ctx.getImageData(Math.round((s.x + s.w * 0.12) * devicePixelRatio), Math.round((s.y + s.h * 0.6) * devicePixelRatio), 1, 1).data[3] > 230)(m.layout.screen)`);
+            if (!await waitFor(async () => !await shut(), 3000)) record('curtains still closed once playing');
+            await counts('m.togglePause()');
+            if (!await waitFor(shut, 2000)) record('pause didn\'t close the curtains');
+            await counts('m.togglePause()');
+            if (!await waitFor(async () => !await shut(), 2000)) record('play didn\'t open them');
+            await counts('m.skip(1)');
+            if (!await waitFor(shut, 1500)) record('a change didn\'t close them');
+            await shoot('jellyfin-cinema-closing');
+            if (!await waitFor(async () => !await shut(), 3000)) record('they didn\'t reopen after the change');
+            return true;
+        }],
+        ['mantel: the fire flickers at about 12 fps, and holds still on Low', async () => {
+            const mock = jellyfinServer();
+            for (const [tier, low, high] of [['medium', 10, 30], ['low', 0, 1]]) {
+                await fresh(`${WEB}/stage.html?w=jellyfin&tier=${tier}`, jellyfinSignedIn(mock, { order: 'inOrder', subtitles: 'off', showTitle: false, frame: 'mantel' }));
+                if (!await waitFor(() => counts(`m.state === 'playing' && m.video.currentTime > 0.2`), 10000)) return record(`${tier}: never played`);
+                await sleep(4600);   // past the 🔇 badge's fade
+                const drawn = await framesIn(2000);
+                if (drawn < low || drawn > high) record(`${tier}: ${drawn} frames in 2 s`);
+            }
+            return true;
+        }],
     ],
 };
 
