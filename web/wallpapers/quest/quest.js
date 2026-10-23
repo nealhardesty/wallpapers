@@ -458,7 +458,10 @@ class QuestAnimationManager {
 
     sizeCanvases() {
         const L = this.layout;
-        const dpr = Math.min(window.devicePixelRatio || 1, 2);
+        // Never under one pixel per CSS pixel: the game is drawn small and
+        // blown up in a single copy, so a lower ratio (Low's render scale)
+        // saves almost nothing and would make the 8-bit pixels uneven
+        const dpr = Math.max(1, Math.min(window.devicePixelRatio || 1, 2));
         this.dpr = dpr;
         this.canvas.width = Math.round(window.innerWidth * dpr);
         this.canvas.height = Math.round(window.innerHeight * dpr);
