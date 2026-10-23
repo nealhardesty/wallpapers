@@ -72,6 +72,8 @@ SPEC.md §4 has the full contract. The short version:
      slow tier runs at 10 fps). Per-frame logic you can't avoid (games,
      wind) runs on a fixed 60 Hz step from an accumulator.
    - Keep ground lines above `host.insets.bottom`.
+   - Anything that depends on the date or hour reads `host.now()`, never
+     `new Date()`, so `?date=2026-12-31T23:59:50` can test it.
    - Look alive on the first frame: seed the scene, don't fade in from
      black.
 4. **Public-repo rules.**

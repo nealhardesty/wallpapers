@@ -345,6 +345,16 @@ async function playerSuite(catalog) {
         return true;
     });
 
+    await check('?date= reaches the stage\'s clock, and advent opens that day without keeping score', async () => {
+        await fresh(`${WEB}/index.html?w=advent&date=2026-12-24T18:30`);
+        await playerReady();
+        const now = await inStage('(d => [d.getMonth(), d.getDate(), d.getHours()])(WP.host.now())');
+        if (JSON.stringify(now) !== '[11,24,18]') record(`host.now() is ${JSON.stringify(now)}, not 24 Dec 18:xx`);
+        if (await inStage('WP.stage.manager.now().getDate()') !== 24) record('advent isn\'t on the 24th');
+        if (await evaluate(`localStorage.getItem('wp:advent:adventLastSeen')`)) record('time travel saved adventLastSeen');
+        return true;
+    });
+
     await check('the corner gear appears when the pointer comes near', async () => {
         await fresh(`${WEB}/index.html?w=rain`);
         await playerReady();

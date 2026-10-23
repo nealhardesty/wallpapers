@@ -156,7 +156,7 @@ settings).
 |---|---|
 | `?w=fishtank` | Show this wallpaper |
 | `?panel=open` | Open its settings on load |
-| `?w=advent&date=2026-12-25` | Time-travel the advent calendar (`&theme=` picks a theme) |
+| `?date=2026-12-25` or `?date=2026-12-31T23:59:50` | Time-travel any wallpaper that follows the date or hour; the clock ticks on from there. With advent, `&theme=` picks a theme |
 | `?tier=low` | Low, medium or high performance tier (fewer pixels and frames on low) |
 | `?hud=1` | A corner readout: frame rate, frame cost, quality step, power |
 | `?seed=7` | The same random scene every time |

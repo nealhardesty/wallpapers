@@ -41,6 +41,35 @@ test('URL parameters: only known keys, values as given', () => {
 
 const defaults = { configVersion: 2, count: 10, colours: ['red', 'blue'], on: true };
 
+test('clock: with no ?date=, the real time', () => {
+    let t = Date.UTC(2026, 9, 22, 12);
+    const now = WP.clock(undefined, () => t);
+    assert.equal(now().getTime(), t);
+    t += 5000;
+    assert.equal(now().getTime(), t, 'and it ticks');
+    assert.equal(WP.clock('next tuesday', () => t)().getTime(), t, 'nonsense is ignored');
+    assert.equal(WP.clock('2026-02-31', () => t)().getTime(), t, 'so are days that don\'t exist');
+});
+
+test('clock: a date travels there, keeping the time of day, and ticks on', () => {
+    let t = new Date(2026, 9, 22, 15, 4, 5).getTime();
+    const now = WP.clock('2026-12-24', () => t);
+    const at = now();
+    assert.deepEqual([at.getFullYear(), at.getMonth(), at.getDate(), at.getHours(), at.getMinutes()], [2026, 11, 24, 15, 4]);
+    t += 60000;
+    assert.equal(now().getMinutes(), 5);
+});
+
+test('clock: a date and time start at that moment, and tick past midnight', () => {
+    let t = new Date(2026, 9, 22, 9, 0).getTime();
+    const now = WP.clock('2026-12-31T23:59:50', () => t);
+    assert.deepEqual([now().getMonth(), now().getDate(), now().getHours(), now().getMinutes(), now().getSeconds()], [11, 31, 23, 59, 50]);
+    t += 10000;
+    assert.deepEqual([now().getFullYear(), now().getMonth(), now().getDate(), now().getHours()], [2027, 0, 1, 0]);
+    assert.equal(WP.clock('2026-12-31T22:00', () => t)().getHours(), 22, 'seconds are optional');
+    assert.equal(WP.parseDate('2026-12-31T24:00'), null);
+});
+
 test('settings: stored overrides merge over defaults', () => {
     const merged = WP.mergeSettings(defaults, { configVersion: 2, count: 20 });
     assert.deepEqual(plain(merged), { configVersion: 2, count: 20, colours: ['red', 'blue'], on: true });

@@ -108,6 +108,9 @@
             clearTimeout(idleTimer);
             idleTimer = null;
         },
+        // The time for anything that depends on it: real, or ?date= ticking
+        // forward. Wallpapers use this, never new Date(), so ?date= tests them.
+        now: WP.clock(params.date),
         reducedMotion: matchMedia('(prefers-reduced-motion: reduce)').matches,
         // Per-wallpaper state that isn't a setting (advent's last-seen day…).
         storage: {

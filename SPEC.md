@@ -318,6 +318,7 @@ host = {
   quality: { tier, fps, renderScale, dpr, density, slowFps },  // the current tier (§4.8)
   frames: { count, workMs },              // from the frame pacer, for the governor and tests
   reducedMotion: boolean,                 // prefers-reduced-motion
+  now(): Date,                            // the time: real, or ?date= ticking forward (8.0)
   // phase 6: power { charging, level, saver, thermal } and idleUntil(ms) (§4.8)
 }
 ```
@@ -1217,7 +1218,7 @@ in §2 and the README. Each task also has its own check, below. They're
 ordered cheapest and offline first; the network ones come last, because
 each needs fixtures and an audit allowlist entry.
 
-- [ ] 8.0 **A clock for time-aware wallpapers.** `host.now()` returns a `Date`: the real time, or, with `?date=YYYY-MM-DD` or `?date=YYYY-MM-DDTHH:MM`, that moment ticking forward from when the stage started. Advent moves onto it. 8.3, 8.4, 8.10 and 8.12 depend on it. → unit tests: no param, a date, a date and time; advent's time travel still passes the smoke run.
+- [x] 8.0 **A clock for time-aware wallpapers.** `host.now()` returns a `Date`: the real time, or, with `?date=YYYY-MM-DD` or `?date=YYYY-MM-DDTHH:MM`, that moment ticking forward from when the stage started. A date alone keeps the real time of day; seconds are optional. Advent moves onto it. 8.3, 8.4, 8.10 and 8.12 depend on it. → unit tests: no param, a date, a date and time; advent's time travel still passes the smoke run.
 - [ ] 8.1 **Harmonograph** (§10.6). → the same seed draws the same figure at 20 fps and at 120 fps (unit test on the segment generator); idle between strokes on Low.
 - [ ] 8.2 **Girih** (§10.7). → every base tiling renders at every contact angle with no gaps (unit test on the strapwork generator); one full-screen redraw per morph step, none while holding.
 - [ ] 8.3 **Stained Glass** (§10.8). → the glass layer is built once per resize (frame counter in the smoke run); `?date=` noon and midnight give different light.

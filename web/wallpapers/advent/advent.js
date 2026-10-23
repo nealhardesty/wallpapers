@@ -147,8 +147,9 @@ class AdventCalendarAnimationManager {
     // Dates
     // -----------------------------------------------------------------------
 
+    // The host's clock (?date= time travel), plus the arrow keys' offset.
     now() {
-        const d = new Date();
+        const d = this.host.now();
         if (this.dayOffset) d.setDate(d.getDate() + this.dayOffset);
         return d;
     }
@@ -160,12 +161,8 @@ class AdventCalendarAnimationManager {
     // ?date=YYYY-MM-DD time-travels; ?theme=<id> picks this month's theme.
     // Called before init() (catalog prepare hook).
     applyParams(params) {
-        const date = AdventCalendarAnimationManager.parseKey(params.date);
-        if (date) {
-            const today = new Date();
-            today.setHours(0, 0, 0, 0);
-            this.dayOffset = Math.round((date - today) / 86400000);
-        }
+        // The host's clock already follows ?date=; remember not to keep score.
+        this.timeTravel = !!WP.parseDate(params.date);
         if (params.theme && ADVENT_THEMES.some(t => t.id === params.theme)) {
             // For this visit only: kept out of config, so it's never saved.
             this.themeOverride = { month: this.now().getMonth() + 1, id: params.theme };
@@ -184,7 +181,7 @@ class AdventCalendarAnimationManager {
     }
 
     setDate(date) {
-        const today = new Date();
+        const today = this.host.now();
         today.setHours(0, 0, 0, 0);
         const target = new Date(date.getFullYear(), date.getMonth(), date.getDate());
         this.dayOffset = Math.round((target - today) / 86400000);
@@ -301,7 +298,7 @@ class AdventCalendarAnimationManager {
         this.queue = [];
 
         let catchFrom = m.today;
-        if (initial && this.config.catchUp && lastSeen && !this.dayOffset) {
+        if (initial && this.config.catchUp && lastSeen && !this.dayOffset && !this.timeTravel) {
             const ls = lastSeen;
             if (ls.getFullYear() === m.year && ls.getMonth() + 1 === m.month && ls.getDate() < m.today) {
                 catchFrom = ls.getDate() + 1;
@@ -337,7 +334,7 @@ class AdventCalendarAnimationManager {
 
         const todayDoor = m.doors[m.today - 1];
         if (!todayDoor.open && !todayDoor.opening) {
-            const fresh = celebrated !== todayKey || this.dayOffset;
+            const fresh = celebrated !== todayKey || this.dayOffset || this.timeTravel;
             if (ceremony === 'quiet' || (!fresh && ceremony !== 'click')) {
                 todayDoor.open = true;
                 todayDoor.openK = 1;
@@ -349,7 +346,7 @@ class AdventCalendarAnimationManager {
             }
         }
 
-        if (!this.dayOffset) this.storageSet('adventLastSeen', todayKey);
+        if (!this.dayOffset && !this.timeTravel) this.storageSet('adventLastSeen', todayKey);
     }
 
     // -----------------------------------------------------------------------

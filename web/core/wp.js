@@ -29,6 +29,27 @@
         return params;
     };
 
+    // ?date= (SPEC §4.2): YYYY-MM-DD, optionally with THH:MM or THH:MM:SS,
+    // in local time. A date alone keeps the real time of day. The Date, or
+    // null for anything else (including days that don't exist).
+    WP.parseDate = (text, real = new Date()) => {
+        const m = /^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2})(?::(\d{2}))?)?$/.exec(text || '');
+        if (!m || +m[4] > 23 || +m[5] > 59 || +m[6] > 59) return null;
+        const date = m[4] === undefined
+            ? new Date(+m[1], m[2] - 1, +m[3], real.getHours(), real.getMinutes(), real.getSeconds(), real.getMilliseconds())
+            : new Date(+m[1], m[2] - 1, +m[3], +m[4], +m[5], +(m[6] || 0));
+        return date.getMonth() === m[2] - 1 && date.getDate() === +m[3] ? date : null;
+    };
+
+    // host.now() (task 8.0): the real time, or ?date='s moment, ticking
+    // forward from when the clock was made. `now` is injectable for tests.
+    WP.clock = (text, now = () => Date.now()) => {
+        const started = now();
+        const at = WP.parseDate(text, new Date(started));
+        const offset = at ? at.getTime() - started : 0;
+        return () => new Date(now() + offset);
+    };
+
     // Settings are stored as overrides only: the keys that differ from the
     // wallpaper's defaults.js. Stored overrides from another configVersion
     // are dropped, as are keys the defaults no longer have.
