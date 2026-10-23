@@ -79,6 +79,17 @@
               { keys: ['m'], label: 'Next companion', run: quest => questCycle(quest, 'companion', Object.keys(QuestArt.COMPANIONS), QuestArt.COMPANIONS) },
               { keys: ['p'], label: 'Next palette', run: quest => questCycle(quest, 'palette', Object.keys(QuestEngineData.FILTERS)) },
           ] },
+        { id: 'lighthouse', name: 'Lighthouse', icon: '🌊', accent: '#ffd27a', background: '#03050b',
+          scripts: ['lighthouse/lighthouse-light.js', 'lighthouse/lighthouse-sea.js', 'lighthouse/lighthouse.js'],
+          make: host => new LighthouseAnimationManager(host), cost: 'medium', network: ['marine-api.open-meteo.com'],
+          effects: [['spray', 'medium'], ['glints', 'medium']],
+          keys: [
+              { keys: ['l'], label: 'Next light (Fl, Oc, Iso…)', run: lighthouse => lighthouse.cycle('characteristic') },
+              { keys: ['s'], label: 'Next sea state', run: lighthouse => lighthouse.cycle('sea') },
+          ] },
+        { id: 'wiki-pond', name: 'Wiki Pond', icon: '🪷', accent: '#8fd6c8', background: '#02080a',
+          scripts: ['wiki-pond/wiki-pond-events.js', 'wiki-pond/wiki-pond.js'],
+          make: host => new WikiPondAnimationManager(host), cost: 'medium', network: ['stream.wikimedia.org'] },
         { id: 'bing', name: 'Bing Image of the Day', icon: '🖼️', accent: '#8ab4ff', scripts: ['bing/bing.js'],
           make: host => new BingWallpaperManager(host), cost: 'none', network: ['www.bing.com'] },
     ];

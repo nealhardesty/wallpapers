@@ -20,7 +20,7 @@ const SEED = 7;
 
 // How long each wallpaper needs to look like itself, and settings that make
 // a better picture (they apply to this render only: thumb mode never saves).
-const SETTLE_MS = { snow: 7000, leaves: 3000, rain: 4000, fireplace: 4000, halloween: 4000, advent: 4000, quest: 5000, fishtank: 4000 };
+const SETTLE_MS = { 'wiki-pond': 5000, lighthouse: 4500, snow: 7000, leaves: 3000, rain: 4000, fireplace: 4000, halloween: 4000, advent: 4000, quest: 5000, fishtank: 4000 };
 const OVERRIDES = {
     quest: { configVersion: 1, story: false },
     neko: { configVersion: 2, size: 128, coat: 'orange' },
@@ -36,7 +36,9 @@ try {
     const evaluate = async expression => (await cdp.send('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true })).result?.value;
     await cdp.send('Page.navigate', { url: `${WEB}/stage.html?w=blank` });
     await sleep(500);
-    const catalog = await evaluate('WP.catalog.filter(e => !e.pseudo && !e.disabled && !e.network && e.id !== "blank").map(e => e.id)');
+    // Network wallpapers too, from their offline or thumb-mode state (Wiki
+    // Pond plays made-up edits in thumb mode); Bing's tile stays a colour wash.
+    const catalog = await evaluate('WP.catalog.filter(e => !e.pseudo && !e.disabled && e.id !== "blank" && e.id !== "bing").map(e => e.id)');
     const ids = process.argv.slice(2).length ? process.argv.slice(2) : catalog;
 
     for (const id of ids) {

@@ -1,0 +1,33 @@
+// Settings for Lighthouse, as the panel shows them (SPEC §4.4). The values
+// and their defaults live in defaults.js.
+WP.schema('lighthouse', [
+    { group: '🌊 Sea' },
+    { key: 'sea', label: 'Sea', type: 'select', options: [['calm', '🪞 Calm'], ['moderate', '🌊 Moderate'], ['rough', '💨 Rough'], ['gale', '⛈️ Gale']],
+      help: 'How high the waves run. A gale brings rain, scudding cloud and the odd flash of lightning. With live swell on and a connection, the real ocean decides.' },
+    { key: 'liveSwell', label: 'Live Swell', type: 'toggle',
+      help: 'Follow the swell of a real open ocean, from Open-Meteo’s free marine forecast, checked once an hour. Offline, the Sea setting rules.' },
+    { key: 'oceanPoint', label: 'Ocean', type: 'select',
+      options: [['north-atlantic', 'Mid North Atlantic'], ['north-pacific', 'Mid North Pacific'], ['southern-ocean', 'Southern Ocean'], ['trade-winds', 'Tropical Atlantic'], ['indian-ocean', 'Mid Indian Ocean']],
+      help: 'Where the live swell comes from: a point far out at sea' },
+    { key: 'rain', label: 'Rain', type: 'select', options: [['auto', '🌦️ With the sea'], ['off', '☀️ Off'], ['light', '🌧️ Light'], ['heavy', '⛈️ Heavy']] },
+    { group: '🗼 Light' },
+    { key: 'characteristic', label: 'Character', type: 'select',
+      options: [
+          ['Fl(2) 10s', 'Fl(2) 10s · two flashes every 10 s'],
+          ['Fl 5s', 'Fl 5s · a flash every 5 s'],
+          ['Fl(3) 15s', 'Fl(3) 15s · three flashes every 15 s'],
+          ['Fl(4) 20s', 'Fl(4) 20s · four flashes every 20 s'],
+          ['LFl 10s', 'LFl 10s · a long flash every 10 s'],
+          ['Q', 'Q · quick flashing'],
+          ['Q(9) 15s', 'Q(9) 15s · nine quick flashes every 15 s'],
+          ['Iso 4s', 'Iso 4s · equal light and dark'],
+          ['Oc 6s', 'Oc 6s · steady, dark once every 6 s'],
+          ['Oc(2) 10s', 'Oc(2) 10s · steady, dark twice every 10 s'],
+      ],
+      help: 'The light’s rhythm, written as on a nautical chart. Flashing lights turn, and their beams sweep; occulting and isophase lights stand still and blink.' },
+    { key: 'beam', label: 'Beam in the Air', type: 'range', min: 0.2, max: 2, step: 0.1, unit: '%', scale: 100, help: 'How much the beam lights the air (rain makes it brighter still)' },
+    { group: '🌙 Scene' },
+    { key: 'ships', label: 'Ships', type: 'range', min: 0, max: 8, step: 1, help: 'Ships’ lights passing on the horizon: white masthead, and red or green by which way they sail' },
+    { key: 'moon', label: 'Moon', type: 'select', options: [['tonight', '🌔 Tonight’s phase'], ['full', '🌕 Full'], ['none', '🌑 None']] },
+    { key: 'side', label: 'Headland', type: 'select', options: [['right', '➡️ On the right'], ['left', '⬅️ On the left']] },
+]);

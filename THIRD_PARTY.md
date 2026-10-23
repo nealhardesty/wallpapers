@@ -19,12 +19,15 @@ ported from elsewhere. None was found.
 | neko | *Neko* (Naoshi Watanabe, 1989) and *oneko* (Masayuki Koba) | Behaviour only: chase, yawn, scratch, wash, sleep. The cat is our own 16×16 pixel art, drawn in code (`NekoSprites` in `neko.js`), in eight coats. The decades of community sprite packs, including trademarked characters, are **not** included. |
 | quest | Classic top-down 8-bit adventure games | Original sprites, tiles, font and world generator. A few affectionate parody lines and names ("IT'S A SECRET TO EVERYBODY", Lonk, Zelderp). No game assets. |
 | matrix | The "digital rain" from the film *The Matrix* | Rendered from the system monospace font. |
+| wiki-pond | Hatnote's *Listen to Wikipedia* (Stephen LaPorte and Mahmoud Hashemi) | The idea of edits as rings coloured by who made them. Our own pond, lotuses and sounds, drawn and synthesised in code; no Hatnote code, sounds or assets. |
 
 ## Network content
 
 | Source | Used by | Notes |
 |---|---|---|
 | Bing image of the day (`www.bing.com`) | bing | Photos are © their respective owners, as credited in Bing's data, and shown with that credit in the overlay. They are loaded from Bing at view time and never stored or redistributed here. |
+| Open-Meteo marine forecast (`marine-api.open-meteo.com`) | lighthouse | Wave height, period and direction for a point far out at sea, only with "Live Swell" on (off by default). Keyless; Open-Meteo's data is CC BY 4.0. Only numbers are kept, in the wallpaper's own storage. |
+| Wikimedia EventStreams (`stream.wikimedia.org`) | wiki-pond | The public recent-changes stream, read live and never stored. Page titles are shown only with "Page Titles" on (off by default), as plain text. Wikipedia content is CC BY-SA. |
 | `corsproxy.io`, `api.allorigins.win`, `cors-anywhere.herokuapp.com` | bing | Public CORS proxies, used only if the person turns on "Use public proxies when opened from disk" in Bing's settings (off by default; SPEC §4.6). |
 
 ## Fonts and emoji

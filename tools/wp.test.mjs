@@ -281,8 +281,8 @@ test('schema: every default fits its control (range, step grid, options)', () =>
     }
 });
 
-test('thumbnails: every offline wallpaper has a small one', () => {
-    for (const entry of WP.catalog.filter(e => !e.pseudo && !e.disabled && !e.network && e.id !== 'blank')) {
+test('thumbnails: every wallpaper but Blank and Bing has a small one', () => {
+    for (const entry of WP.catalog.filter(e => !e.pseudo && !e.disabled && e.id !== 'blank' && e.id !== 'bing')) {
         const path = join(WEB, 'wallpapers', entry.id, 'thumb.webp');
         assert.ok(existsSync(path), `${entry.id}: run make thumbnails`);
         const bytes = readFileSync(path);
