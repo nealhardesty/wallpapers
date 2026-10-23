@@ -1078,6 +1078,23 @@ each needs fixtures and an audit allowlist entry.
 - [ ] 8.14 **Wiki Pond** (§10.19). Adds `stream.wikimedia.org`. → a synthetic SSE fixture drives ripples in the smoke run; with the network blocked it shows the quiet offline pond, not a blank screen; the stream closes on `stop()` and while paused.
 - [ ] 8.15 **Satellites** (§10.20). Needs the §10.1 `location` capability first. Adds `celestrak.org`. → the propagator stays within 1° of the published SGP4 verification vectors (§10.20) for a LEO case, seen from a test observer, up to 3 days from epoch; elements are fetched at most once per 12 h, and stale ones are labelled.
 
+### Phase 9: Jellyfin player (owner: high priority)
+
+Picked by the owner on 2026-10-22, marked **high priority**: it runs as soon
+as Phase 6's governor and power policy (6.1a–6.1c) are in, ahead of the
+Phase 8 wallpapers. The design is §10.21. It's the first wallpaper whose
+network host is chosen by the user, and the first with a `<video>`, so the
+groundwork comes first. It has the same done-checks as Phase 8, plus its own:
+
+- [ ] 9.0 **Spike:** against a throwaway Jellyfin in Docker (`make jellyfin-dev`, 9.1), confirm the facts §10.21 marks *verify*: the server's default CORS, Quick Connect, direct play vs HLS in Chrome, the extension, `file://` and Android WebView, mixed content and Chrome's Local Network Access prompt from Pages, and muted autoplay inside the stage iframe. Record the answers in §10.21. → a table of host × server (http LAN, https) × result.
+- [ ] 9.1 **Dev and test servers, no real media.** `make jellyfin-media` uses `ffmpeg` to generate a few short clips (test patterns, a tone, English and Spanish `.srt`, one burned-in-only "image subtitle" case) into the gitignored `.jellyfin/`. `make jellyfin-dev` runs `jellyfin/jellyfin` in Docker on that folder. `tools/jellyfin-mock.mjs` is a fixture Jellyfin API (auth, Quick Connect, views, playlists, items, PlaybackInfo, subtitles) for the smoke run, serving one committed, generated VP9/WebM clip of a few KB: headless Chromium has no H.264. → the smoke run plays a fixture playlist with English subtitles on, through the mock server only.
+- [ ] 9.2 **User-chosen network** (§10.21 *Network*): the catalog's `network: 'user'`, the player's per-origin grant, the extension's `optional_host_permissions` requested at sign-in, and the test changes so the catalog, `URL_ALLOW` and `manifest.json` still have to agree. → unit tests; the extension asks for exactly the server's origin and nothing else.
+- [ ] 9.3 **Host media hooks:** `host.onPause(fn)` / `host.onResume(fn)` (the stage's pause stops rAF but would leave a `<video>` playing), `allow="autoplay"` on the stage iframe for wallpapers that declare `media: true`, and settings controls the panel lacks: an action button, a status line, and a select whose options the wallpaper loads (playlists, libraries). → smoke: pausing the stage pauses the fixture video within 100 ms; switching away releases the decoder (`video.src` cleared).
+- [ ] 9.4 **Sign-in and choosing what to play:** Quick Connect first, username and password as the fallback, a token kept only in `wp:jellyfin:auth` and left out of Export, Sign out revokes it. Playlist (shuffled by default), or random from a library. → smoke against the mock: sign in, list, pick, play; Export JSON has no token; the password is never stored.
+- [ ] 9.5 **Playback:** shuffle by default, the order selectable; resume where it left off across new tabs; one tab plays at a time; muted start by default; subtitles chosen automatically (§10.21). → unit tests on stream picking (English full over forced over none; text vs image formats) and the shuffle bag; smoke: a second stage takes over and the first goes quiet.
+- [ ] 9.6 **Frames** (§10.21 *Frames*): None and Old TV first, then the rest one per commit. → each frame has a landscape and a portrait layout, its screen rect keeps the video's aspect ratio, the static art is built once per resize, and on Low only the video moves.
+- [ ] 9.7 **Power** (§10.21 *Energy*): the server-side resolution cap by tier, poster mode on battery saver or under 20%, and a `make bench` entry. → on battery the request asks for ≤ 720p; with battery saver on, no video element exists.
+
 ---
 
 ## 10. Ideas
@@ -1620,11 +1637,268 @@ moving point of light.
 - **Cost:** low; positions are recomputed once a second and interpolated.
   `motion: 'slow'`.
 
+### 10.21 Jellyfin player (`jellyfin`, owner pick, high priority)
+
+Your own Jellyfin server's videos playing behind everything: a playlist
+shuffled by default, or random picks from a library. They play inside a
+frame of your choice, such as an old TV, a fireplace mantel or a drive-in
+screen. Phase 9 builds it. Facts marked *verify* are checked by spike 9.0
+before anything is built on them.
+
+**Signing in**
+- **Server:** the user types its address (`http://…:8096` or an https
+  reverse proxy). The player checks it with `GET /System/Info/Public`,
+  shows the server's name and version, and refuses anything that doesn't
+  answer like Jellyfin.
+- **Quick Connect first:** `POST /QuickConnect/Initiate` returns a
+  six-character code. The panel shows it big, the user approves it from
+  any signed-in Jellyfin app, and the wallpaper polls
+  `GET /QuickConnect/Connect?secret=` and then calls
+  `POST /Users/AuthenticateWithQuickConnect`. <!-- audit-allow: Jellyfin API path --> No password ever touches
+  the wallpaper.
+- **Fallback:** `POST /Users/AuthenticateByName` <!-- audit-allow: Jellyfin API path --> with a username and
+  password. The password is sent once and never stored.
+- **Every request** carries
+  `Authorization: MediaBrowser Client="Wallpapers", Device="<host>",
+  DeviceId="<random, per install>", Version="<manifest version>",
+  Token="…"`. Media URLs can't send headers, so they put the token in
+  `api_key=` instead.
+- **The token** lives in `host.storage` (`wp:jellyfin:auth`). It isn't a
+  setting, so Export, Import and Reset never see it. **Sign out** calls
+  `POST /Sessions/Logout` and forgets it. If the server says 401, the
+  panel offers to sign in again; the wallpaper shows its idle screen.
+
+**Choosing what plays (`source`)**
+- `playlist` (the default): `GET /Users/{user}/Items?IncludeItemTypes=Playlist&Recursive=true`
+  fills the picker, then `GET /Playlists/{id}/Items?UserId=`.
+- `library`, "for the adventurous": `GET /Users/{user}/Views` lists the
+  libraries, then
+  `GET /Users/{user}/Items?ParentId=&IncludeItemTypes=Movie,Episode,MusicVideo,Video&Recursive=true&SortBy=Random&Limit=50`
+  is fetched again whenever the batch runs out. `libraryFilter` narrows
+  it: unwatched only, favourites, or a maximum parental rating.
+- `favorites`: the user's favourite videos, across every library.
+- **Order (`order`):** `shuffle` is the default, `in order` is the
+  alternative. Shuffle uses a shuffle bag: each item plays once before
+  any repeats, the bag is reshuffled each round, and the last item of one
+  round never opens the next. The bag lives in `host.storage`, so a new
+  tab carries on through the same round.
+- **How much of each item (`segment`):**
+  - `whole`: each item plays to the end.
+  - `clips`: 1, 3 or 10 minutes from a random point, skipping the first
+    and last 5% (titles and credits).
+  - `channel surf`: short clips with a "channel change" between them.
+    This suits a wallpaper best, since a two-hour film isn't ambient.
+
+**Playback**
+- **Picking the stream:** `POST /Items/{id}/PlaybackInfo` with a device
+  profile built from `canPlayType` at runtime.
+  - Direct play (`/Videos/{id}/stream?static=true&MediaSourceId=…`) is
+    used whenever the container and codecs fit **and** the source is
+    within the tier's resolution cap.
+  - Otherwise the server transcodes (`TranscodingUrl`, HLS) at the cap.
+    HLS is native in Android WebView, and *verify* in desktop Chrome. If
+    it isn't native there, the fallback is a progressive MP4 transcode or
+    a vendored `hls.js` (Apache-2.0, with a `THIRD_PARTY.md` line); the
+    spike decides.
+- **Resume:** the position per item is saved to `host.storage` every
+  10 s and on `stop()`, so every new tab carries on where the last one
+  left off instead of restarting the film. Items under 2 minutes always
+  start from 0.
+- **One tab at a time:** a `BroadcastChannel('wp:jellyfin')` hands
+  playback to the newest visible stage. The others pause, keep their
+  last frame and release the decoder, so ten new tabs don't mean ten
+  decoders and ten soundtracks.
+- **Audio (`startMuted`, on by default):** every start is muted, and a
+  small 🔇 shows for a few seconds. `m` toggles, as does a tap on the
+  icon. With `startMuted` off, the wallpaper tries to play with sound and
+  falls back to muted if the browser's autoplay policy refuses (it will
+  without a recent user gesture), then offers a "tap for sound" toast.
+  Volume is a setting, and is remembered.
+- **Reporting to Jellyfin** (`reportPlayback`, off by default; see Open
+  questions): `POST /Sessions/Playing`, then `/Playing/Progress` and
+  `/Playing/Stopped`.
+- **Keys:** `Space` pause, `m` mute, `n`/`p` next and previous, `←`/`→`
+  seek 30 s, `s` cycle subtitles, `i` show what's playing, `c` cycle the
+  frame.
+
+**Subtitles** (automatic, as asked)
+- **Defaults:** `subtitleLanguage: 'eng'` (any ISO 639-2 code), and
+  `subtitles: 'always'`. The other choices are `forced only` and `off`.
+- **Picking a track,** from the media source's `MediaStreams` with
+  `Type: 'Subtitle'`, in this order:
+  1. a full (non-forced) track in the chosen language
+  2. a forced track in that language
+  3. one marked `IsDefault`
+  4. none
+
+  SDH or hearing-impaired tracks rank last within each step. Matching
+  also accepts the 2-letter code and the display title, since `en`,
+  `eng` and "English" all occur in real libraries.
+- **Foreign-language audio:** when the audio isn't in the chosen
+  language, `forced only` behaves like `always`.
+- **Text formats** (SRT, ASS, VTT) come as WebVTT from
+  `/Videos/{id}/{source}/Subtitles/{index}/0/Stream.vtt`, loaded as a
+  `<track>` in `hidden` mode.
+  - We draw the cues ourselves on the frame canvas, so they sit inside
+    the TV's screen, above `host.insets.bottom`, in a style that suits
+    the frame: a chunky teletext box on the old TV, a typewriter face on
+    the cinema.
+  - Cues redraw only on `cuechange`, so subtitles cost nothing in
+    between.
+- **Image formats** (PGS, VobSub) can't be drawn as text, so the server
+  burns them in (`SubtitleMethod: Encode`). That forces a transcode, so
+  `burnInImageSubs` (on) can be turned off to keep direct play.
+- `s` cycles through the available tracks and remembers the choice per
+  item.
+
+**Frames** (`frame`)
+
+Each frame is drawn in code. Its static art goes on a cached canvas built
+once per resize: the art with a transparent "screen" hole, laid out
+around the real `<video>` element. Only small bits animate, at the
+`motion: 'slow'` rate. Every frame has a landscape and a portrait layout,
+since a phone held upright gets a TV on a stand rather than a tiny
+letterbox. The screen rect always keeps the video's aspect ratio, and
+`fit` (contain, cover) applies inside it.
+
+- **None:** the video full-bleed, contain or cover. The cheapest frame.
+- **Old TV:** a 1970s wood-grain console.
+  - Rabbit-ear antenna, two chunky dials (the channel dial clicks round on
+    every change), a speaker grille, and a rounded CRT screen.
+  - A static scanline overlay and a glass glare.
+  - Between items, a burst of snow from a few pre-rendered noise tiles
+    (never per-frame random pixels), with a hiss if sound is on.
+  - On `stop()`, the classic collapse to a bright dot.
+- **Mantel:** a cosy room at night, with the video on a framed screen
+  above a fireplace.
+  - A small fire burns below, drawn like the fireplace wallpaper's but
+    much cheaper: a few baked flame sprites, flickering at 12 fps.
+  - It throws warm light that pulses on the walls.
+  - Stockings hang in December and a pumpkin sits there in October, from
+    `host.now()`.
+- **Drive-in:** a big screen under the stars, with car silhouettes and
+  their tail lights at the bottom and a speaker post.
+  - A projector beam with drifting dust motes.
+  - The item's name on the marquee.
+  - A slow car occasionally pulls in.
+- **Cinema:** red velvet curtains that part at the start of each item and
+  close between items, a row of seat silhouettes, and the exit signs'
+  green glow.
+- **Gallery:** an ornate gilt frame on a museum wall, under a picture
+  light, with a brass plaque: "*Title* (Year). Moving pictures on canvas."
+- **Ambilight:** the screen floats on a dark wall, and the video's colours
+  spill onto the wall around it.
+  - A 16×9 `drawImage` of the video, a few times a second, scaled up as
+    the glow. Smooth scaling blurs it for free.
+  - No `getImageData` and no `ctx.filter`, so it stays within §4.8.
+- **Camcorder:** a viewfinder.
+  - `REC ●` blinking, a battery icon, a date stamp (from `host.now()`, in
+    the 1990s orange), corner brackets, and an occasional zoom jitter.
+  - A VHS variant: a `PLAY ▶` on-screen display and tracking lines when
+    items change.
+- **Porthole:** a riveted brass submarine porthole, with bubbles drifting
+  up past the glass and the odd fish silhouette.
+- **Arcade:** a cabinet with the item's title lit on the marquee, side art
+  and a joystick; `INSERT COIN` blinks between items.
+- **Seasonal:** picks the frame by date (Mantel in winter, Drive-in in
+  summer), like the player's Seasonal choice.
+
+Frames are a registry, `{ id, layout(w, h, aspect) → { screen, … },
+paintStatic(ctx), tick(ctx, t), transition(kind), drawCue(ctx, cue) }`,
+so a new one is a single file. Colour treatments that suit a frame
+(sepia for the old TV, green for a handheld) are CSS `filter` on the
+`<video>` element: GPU, not canvas. This is noted as the one exception to
+§4.8, because it can stop the video using a hardware overlay. Each
+treatment is optional, and off on Low.
+
+**Energy**
+
+Video is the most expensive thing this project will ever show, so the
+default is to spend as little as possible.
+- **Let the compositor do it.** The video stays a real `<video>` element,
+  never drawn into a canvas every frame, so decoding stays in hardware
+  and the browser can use an overlay plane. The frame canvas then idles
+  (§4.8 idle frames) except for its few animated bits.
+- **Cap the resolution on the server** by tier. Low asks for 480p, Medium
+  for 720p, High for the source up to 1080p (`maxResolution` overrides
+  it). Decoding cost scales with pixels. The server pays for the
+  transcode, which a home server is for.
+- **Power policy (§4.8):**
+  - On battery: a 720p ceiling.
+  - Battery saver or under 20%: **poster mode.** No video at all. The
+    item's backdrop (`/Items/{id}/Images/Backdrop`) is shown in the same
+    frame with a slow Ken Burns drift and its title, and moves on every
+    few minutes. A setting can force poster mode everywhere.
+- **Pause for real.** `host.onPause` pauses the video; `stop()` also
+  clears `src` and calls `load()` so the decoder is freed. A hidden tab
+  never decodes.
+- **Catalog:** `cost: 'high'`, `effects: [['ambilight', 'medium'],
+  ['videoFilter', 'medium'], ['frameMotion', 'low']]`.
+- **Android:** a video playing behind the home screen all day is the worst
+  case for battery. The default there is `segment: clips` with poster mode
+  on battery, so full video only plays while charging. *Verify*:
+  `<video>` decoding in a WebView inside a live wallpaper (§6.1), under
+  both spike strategies.
+
+**Network** (new groundwork, task 9.2)
+- **The problem:** every other wallpaper's host is fixed and checked in
+  three places (catalog, `URL_ALLOW`, `host_permissions`). Here, the host
+  is whatever the user types.
+- **Catalog:** `network: 'user'` declares "a single origin the user
+  types". The tests accept it in place of a host list, and the audit
+  still forbids any real server address in the repo, docs and fixtures.
+  Fixtures use `jellyfin.invalid`.
+- **Extension:** `optional_host_permissions: ["http://*/*",
+  "https://*/*"]`. The panel's *Connect* button calls
+  `chrome.permissions.request({ origins: [serverOrigin + '/*'] })`, which
+  needs a user gesture, and the player owns the panel, so it has one.
+  The user grants exactly one origin. *Verify* whether a CORS fetch
+  and a `<video>` source from an extension page need the grant at all;
+  if neither does, the spike drops it.
+- **CORS:** Jellyfin answers browser clients on other origins by default
+  (*verify*). If a server or reverse proxy doesn't, the panel says
+  exactly which header is missing.
+- **Mixed content and private networks:** the https Pages copy can't
+  reach an `http://` LAN server, and Chrome prompts before a public page
+  talks to a private address. The panel detects both and explains them
+  (see Open questions). `file://`, `make serve`, the extension and
+  Android don't have these problems.
+- **Offline or server down:** the frame's idle screen, never a blank one.
+  The old TV shows a test card with "NO SIGNAL", the cinema closed
+  curtains, the drive-in "INTERMISSION". Reconnects with backoff.
+
+**Settings** (suggested keys)
+- `server`, `source`, `playlistId`, `libraryId`, `libraryFilter`,
+  `order` (shuffle), `segment`
+- `startMuted` (on), `volume`
+- `subtitles` (always), `subtitleLanguage` (`eng`), `burnInImageSubs`
+- `frame` (Old TV), `fit`, `showTitle`
+- `maxResolution` (auto), `posterMode` (auto), `reportPlayback` (off)
+
+**Privacy:** titles in the panel and on frames come from the user's own
+server and stay on screen only, as `textContent`. Logs never include the
+server address, token or titles. The smoke run's mock server uses
+made-up titles such as "Test Pattern No. 3".
+
 ---
 
 ## Open questions
 
-None open. New questions go here, each with a recommendation.
+New questions go here, each with a recommendation.
+
+- **Jellyfin: does playback report to the server?** Reporting updates
+  "continue watching" and marks items played, which a wallpaper looping a
+  playlist all day would scramble. *Recommendation:* off by default
+  (`reportPlayback: false`); resume positions are kept locally.
+- **Jellyfin: password sign-in at all?** Quick Connect means no password is
+  ever typed into a wallpaper. *Recommendation:* keep the password form as
+  a fallback for servers with Quick Connect turned off, never store the
+  password, and say so beside the field.
+- **Jellyfin on GitHub Pages:** a public https page can't fetch an http LAN
+  server (mixed content), and Chrome asks before a public page reaches a
+  private address. *Recommendation:* support it for https servers, and
+  point everyone else at the extension, `make serve` or the Android app,
+  with that explanation shown in the panel instead of a vague failure.
 
 ---
 
