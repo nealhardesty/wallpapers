@@ -159,3 +159,6 @@ web/bing.json
 
 # Agent worktrees (Claude Code)
 .claude/worktrees/
+
+# Jellyfin dev server and its made-up media (make jellyfin-media, make jellyfin-dev)
+.jellyfin/

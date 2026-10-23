@@ -12,6 +12,7 @@ class Bridge(
     private val onAccent: (String) -> Unit = {},
     private val onSetWallpaper: (() -> Unit)? = null,
     private val onLocate: (() -> Unit)? = null,
+    private val localNetwork: ((ask: Boolean) -> Boolean)? = null,
 ) {
     private val main = Handler(Looper.getMainLooper())
 
@@ -31,5 +32,13 @@ class Bridge(
 
     @JavascriptInterface fun locate() {
         onLocate?.let { main.post(it) }
+    }
+
+    /** Jellyfin (SPEC §10.21): does reaching the home network still need Android 17's permission? */
+    @JavascriptInterface fun needsLocalNetwork(): Boolean = localNetwork?.invoke(false) ?: false
+
+    /** Ask for it; the answer comes back as WP.localNetworkAnswered(granted). */
+    @JavascriptInterface fun askLocalNetwork() {
+        localNetwork?.let { main.post { it(true) } }
     }
 }

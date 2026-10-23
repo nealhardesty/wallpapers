@@ -11,8 +11,17 @@
 //   { key, label, type, help?, get?, set? }                 a setting; label may be a function
 //   type 'range'   min, max, step, unit?, scale?, digits?   shown as value × scale, with unit
 //   type 'select'  options: [[value, text]] or config => [[value, text]]
-//   type 'toggle' | 'multi' (options) | 'colors' | 'number' (min, step) | 'text' | 'color'
+//   type 'toggle' | 'multi' (options) | 'colors' | 'number' (min, step) | 'text' (placeholder?) | 'color'
 // get(config) reads an exotic value; set(config, value) returns the patch.
+//
+// Extras the running wallpaper drives (task 9.3). They have no key and are
+// never saved; what they show comes from the wallpaper's feed (host.panel):
+//   { type: 'action', name, label, primary? }    a button: onAction(name, inputs)
+//   { type: 'status', name }                     a line of text, feed.status[name]:
+//                                                a string, or { text, code } with a big code
+//   { type: 'input', name, label, input? }       a field sent with every action, then cleared
+// Any control may have when(config, feed), shown only while it's true, and
+// a select's options(config, feed) may list what the wallpaper loaded.
 
 (function (WP) {
     'use strict';
@@ -34,7 +43,8 @@
     const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
     const text = label => typeof label === 'function' ? label() : label;
     const read = (control, config) => control.get ? control.get(config) : config[control.key];
-    const optionsOf = (control, config) => typeof control.options === 'function' ? control.options(config) : control.options;
+    const optionsOf = (control, config, feed = null) => typeof control.options === 'function' ? control.options(config, feed) : control.options;
+    const EXTRAS = ['action', 'status', 'input'];
 
     // The value as the panel shows it: 0.7 with scale 100 and unit % is "70%".
     WP.formatSetting = (control, value, config = {}) => {
@@ -49,9 +59,9 @@
         return String(value);
     };
 
-    WP.renderSettings = ({ schema, defaults, config, onChange }) => {
-        let current = config;
-        const rows = [];
+    WP.renderSettings = ({ schema, defaults, config, onChange, onAction = () => {}, feed = null }) => {
+        let current = config, fed = feed;
+        const rows = [], extras = [];
         const root = h('div', { class: 'settings-form' });
         let section = root;
         let group = 0;
@@ -65,6 +75,16 @@
                 root.append(details);
                 section = details;
                 group++;
+                continue;
+            }
+            if (EXTRAS.includes(control.type)) {
+                const extra = buildExtra(control, `extra-${control.name}-${group}`, () => {
+                    const inputs = {};
+                    for (const other of extras) if (other.control.type === 'input') { inputs[other.control.name] = other.value(); other.clear(); }
+                    onAction(control.name, inputs);
+                });
+                section.append(extra.row);
+                extras.push({ control, ...extra });
                 continue;
             }
             const id = `setting-${control.key}-${group}`;
@@ -82,12 +102,19 @@
             rows.push({ control, row, label, reset, readout, input });
         }
 
-        function update(config) {
+        function update(config, feed = fed) {
             current = config;
-            for (const { control, label, reset, readout, input } of rows) {
+            fed = feed;
+            const shown = control => !control.when || !!control.when(config, feed);
+            for (const extra of extras) {
+                extra.row.hidden = !shown(extra.control);
+                extra.set(feed);
+            }
+            for (const { control, row, label, reset, readout, input } of rows) {
+                row.hidden = !shown(control);
                 const value = read(control, config);
                 const fallback = read(control, defaults);
-                input.set(value, config);
+                input.set(value, config, feed);
                 label.textContent = text(control.label);
                 readout.textContent = ['range', 'number'].includes(control.type) ? WP.formatSetting(control, value, config) : '';
                 const changed = !same(value, fallback);
@@ -119,8 +146,8 @@
                 const select = h('select', { id, onchange: () => commit(select.options_[select.selectedIndex][0]) });
                 return {
                     element: select,
-                    set(value, config) {
-                        const options = optionsOf(control, config);
+                    set(value, config, feed) {
+                        const options = optionsOf(control, config, feed);
                         if (!same(options, select.options_)) {
                             select.replaceChildren(...options.map(([, label], i) => h('option', { value: String(i) }, label)));
                             select.options_ = options;
@@ -169,9 +196,40 @@
                 return { element: input, set: value => { input.value = value; } };
             }
             default: {
-                const input = h('input', { id, type: 'text', onchange: () => commit(input.value) });
+                const input = h('input', { id, type: 'text', placeholder: control.placeholder, onchange: () => commit(input.value) });
                 return { element: input, set: value => { if (document.activeElement !== input) input.value = value ?? ''; } };
             }
         }
+    }
+
+    // The wallpaper-driven extras: { row, set(feed), value?, clear? }.
+    function buildExtra(control, id, run) {
+        if (control.type === 'action') {
+            const button = h('button', { id, type: 'button', class: `action${control.primary ? ' primary' : ''}`, onclick: run }, text(control.label));
+            return { row: h('div', { class: 'setting-extra setting-action', 'data-name': control.name }, button), set: () => { button.textContent = text(control.label); } };
+        }
+        if (control.type === 'input') {
+            const input = h('input', { id, type: control.input || 'text', autocomplete: 'off', spellcheck: false,
+                onkeydown: event => { if (event.key === 'Enter') event.target.closest('.settings-form')?.querySelector('.setting-action:not([hidden]) .action.primary')?.click(); } });
+            return {
+                row: h('div', { class: 'setting-extra setting-input', 'data-name': control.name },
+                    h('div', { class: 'setting-head' }, h('label', { for: id }, text(control.label))), input,
+                    control.help ? h('p', { class: 'setting-help' }, control.help) : null),
+                set: () => {},
+                value: () => input.value,
+                clear: () => { if (control.input === 'password') input.value = ''; },
+            };
+        }
+        const line = h('p', { id, class: 'setting-status-text' });
+        const code = h('output', { class: 'setting-code', 'aria-label': 'Code' });
+        return {
+            row: h('div', { class: 'setting-extra setting-status', 'data-name': control.name, 'aria-live': 'polite' }, line, code),
+            set(feed) {
+                const said = feed?.status?.[control.name];
+                line.textContent = typeof said === 'string' ? said : said?.text || '';
+                code.textContent = said?.code || '';
+                code.hidden = !said?.code;
+            },
+        };
     }
 })(globalThis.WP);

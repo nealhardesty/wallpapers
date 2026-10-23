@@ -11,6 +11,7 @@ import android.net.Uri
 import android.view.View
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
+import android.webkit.WebSettings
 import android.webkit.WebView
 import androidx.webkit.WebViewAssetLoader
 import androidx.webkit.WebViewClientCompat
@@ -45,6 +46,14 @@ fun Context.webView(bridge: Bridge, onLoaded: () -> Unit, external: (Uri) -> Uni
         settings.domStorageEnabled = true
         settings.allowFileAccess = false
         settings.allowContentAccess = false
+        // Jellyfin (SPEC §10.21): a home server is usually plain http on the
+        // LAN, and our https origin would block its API as mixed content.
+        // (Its video can't be let through this way; MediaProxy carries it.)
+        // Only the user's own server is ever asked, and the page's CSP still
+        // allows no script from anywhere but here.
+        settings.mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+        // Muted is the default; "start with sound" is the user's choice.
+        settings.mediaPlaybackRequiresUserGesture = false
         addJavascriptInterface(bridge, "WallpapersApp")
         // The page's console, in logcat under "Wallpapers" (make android-logcat).
         webChromeClient = object : WebChromeClient() {
@@ -62,6 +71,7 @@ fun Context.webView(bridge: Bridge, onLoaded: () -> Unit, external: (Uri) -> Uni
             override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
                 val url = request.url
                 if (url.host == HOST && url.path == "/bing.json") return BingJson.response()
+                if (url.host == HOST && MediaProxy.handles(request)) return MediaProxy.response(request)
                 return assets.shouldInterceptRequest(url)
             }
 

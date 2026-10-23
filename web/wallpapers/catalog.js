@@ -10,10 +10,13 @@
 //   keys         declared shortcuts: { keys: [event.key…], label, run(manager, { shift, key }) };
 //                run in the stage, and may return a toast
 //   interactive  wants pointer and/or keys        motion  'slow' gets a lower fps cap
-//   network      talks to these hosts (SPEC §1)   cost    hint for mobile defaults
+//   network      talks to these hosts (SPEC §1), or 'user': the one server the
+//                user types (Jellyfin), never a fixed host      cost    hint for mobile defaults
 //   offline      a network wallpaper that still draws its own scene without
 //                the network: it gets a thumbnail, previews and the pixel checks
 //   needs        host capabilities it asks for: 'location' (SPEC §10.1)
+//   media        plays a <video>: its stage may autoplay with sound (SPEC §10.21)
+//   secrets      host.storage keys never exported or imported (a sign-in token)
 //   disabled     why it can't be shown yet        pseudo  not a real wallpaper
 
 (function () {
@@ -162,6 +165,21 @@
           effects: [['ripples', 'medium']],
           keys: [
               { keys: ['l', ' '], label: 'Release a lantern', run: sky => { sky.releaseAt(sky.width * (0.2 + 0.6 * Math.random()), sky.shore + 4); } },
+          ] },
+        { id: 'jellyfin', name: 'Jellyfin', icon: '📺', accent: '#b07cf0', background: '#000',
+          scripts: ['jellyfin/jellyfin-logic.js', 'jellyfin/jellyfin-api.js', 'jellyfin/jellyfin-frames.js',
+              'jellyfin/frames/none.js', 'jellyfin/frames/old-tv.js', 'jellyfin/jellyfin.js'],
+          make: host => new JellyfinAnimationManager(host), cost: 'high', motion: 'slow', interactive: true,
+          network: 'user', offline: true, media: true, secrets: ['auth'],
+          effects: [['ambilight', 'medium'], ['videoFilter', 'medium'], ['frameMotion', 'medium']],
+          keys: [
+              { keys: [' '], label: 'Pause or play', run: tv => tv.togglePause() },
+              { keys: ['m'], label: 'Sound on or off', run: tv => tv.toggleMute() },
+              { keys: ['n', 'p'], label: 'Next or previous', run: (tv, { key }) => tv.skip(key === 'n' ? 1 : -1) },
+              { keys: ['ArrowLeft', 'ArrowRight'], label: 'Back or forward 30 seconds', run: (tv, { key }) => tv.seek(key === 'ArrowRight' ? 30 : -30) },
+              { keys: ['s'], label: 'Next subtitle track', run: tv => tv.cycleSubtitles() },
+              { keys: ['i'], label: 'What’s playing', run: tv => tv.showInfo() },
+              { keys: ['v'], label: 'Next frame', run: tv => tv.cycleFrame() },
           ] },
         { id: 'bing', name: 'Bing Image of the Day', icon: '🖼️', accent: '#8ab4ff', scripts: ['bing/bing.js'],
           make: host => new BingWallpaperManager(host), cost: 'none', network: ['www.bing.com'] },

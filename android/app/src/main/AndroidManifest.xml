@@ -7,6 +7,10 @@
     <!-- "Use my location" (Satellites), asked for from the settings screen only:
          the last known position, rounded to 0.1° (SPEC §10.1). -->
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <!-- Jellyfin (SPEC §10.21): your own server, usually on the home network,
+         which Android 17 guards with a runtime permission. Asked for from the
+         settings screen when you connect to a server. -->
+    <uses-permission android:name="android.permission.ACCESS_LOCAL_NETWORK" />
     <uses-feature android:name="android.software.live_wallpaper" android:required="true" />
 
     <application
@@ -14,6 +18,7 @@
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:supportsRtl="true"
+        android:networkSecurityConfig="@xml/network_security"
         android:theme="@android:style/Theme.DeviceDefault.NoActionBar">
 
         <!-- The launcher icon opens the panel; it can also set the wallpaper. -->

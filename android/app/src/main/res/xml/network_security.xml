@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Plain http is allowed because a Jellyfin server at home usually speaks
+     it (SPEC §10.21). The wallpapers' fixed hosts are all https anyway, and
+     the page asks no one else: its server is the one the user typed. -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>

@@ -18,6 +18,7 @@ import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { launch, sleep } from './chrome.mjs';
+import { createMock, MOCK_ORIGIN, MOCK_USER } from './jellyfin-mock.mjs';
 
 const ROOT = resolve(import.meta.dirname, '..');
 const WEB = pathToFileURL(join(ROOT, 'web')).href;
@@ -31,6 +32,15 @@ const TIERS = ['low', 'medium', 'high'];
 // ⚡ to ⚡⚡⚡, from the busy share at High: what a wallpaper asks of a phone
 // at full quality, before Auto or a pinned tier holds it back.
 const costOf = busy => busy < 10 ? 1 : busy < 30 ? 2 : 3;
+// Jellyfin plays the fixture server's clip, signed in, in its default frame:
+// the cost of watching, not of the idle test card (task 9.7).
+const jellyfin = createMock();
+function jellyfinStorage() {
+    const { body } = jellyfin.handle({ method: 'POST', url: `${MOCK_ORIGIN}/Users/AuthenticateByName`, headers: { Authorization: 'MediaBrowser DeviceId="bench"' },   // audit-allow: Jellyfin API path
+        body: JSON.stringify({ Username: MOCK_USER.name, Pw: MOCK_USER.password }) });
+    const { AccessToken, User } = JSON.parse(body);
+    return { 'wp:jellyfin': { configVersion: 1, server: MOCK_ORIGIN, order: 'inOrder' }, 'wp:jellyfin:auth': { server: MOCK_ORIGIN, token: AccessToken, userId: User.Id, user: User.Name } };
+}
 
 const { chrome, profile, cdp } = await launch();
 const contexts = new Map();
@@ -57,6 +67,12 @@ try {
     // CelesTrak asks clients not to refetch what hasn't changed, and blocks
     // those who do: satellites benches on its sample orbits, which cost the same.
     await cdp.send('Network.setBlockedURLs', { urls: ['*://celestrak.org/*'] });
+    await cdp.send('Fetch.enable', { patterns: [{ urlPattern: `${MOCK_ORIGIN}/*` }] });
+    cdp.on('Fetch.requestPaused', ({ requestId, request }) => {
+        const answer = jellyfin.handle({ method: request.method, url: request.url, headers: request.headers, body: request.postData || '' });
+        cdp.send('Fetch.fulfillRequest', { requestId, responseCode: answer.status, body: answer.body.toString('base64'),
+            responseHeaders: [{ name: 'Content-Type', value: answer.type }, { name: 'Access-Control-Allow-Origin', value: '*' }, { name: 'Access-Control-Allow-Headers', value: 'authorization, content-type' }] }).catch(() => {});
+    });
     await cdp.send('Emulation.setDeviceMetricsOverride', PHONE);
     await cdp.send('Page.navigate', { url: `${WEB}/stage.html?w=blank` });
     await sleep(500);
@@ -75,6 +91,7 @@ try {
             await cdp.send('Page.navigate', { url: `${WEB}/stage.html?w=blank` });
             await sleep(300);
             await evaluate("localStorage.clear(); localStorage.setItem('wp:hinted', 'true')");
+            if (id === 'jellyfin') for (const [key, value] of Object.entries(jellyfinStorage())) await evaluate(`localStorage.setItem(${JSON.stringify(key)}, ${JSON.stringify(JSON.stringify(value))})`);
             contexts.clear();
             await cdp.send('Page.navigate', { url: `${WEB}/index.html?w=${id}&tier=${tier}&seed=7` });
             for (let i = 0; i < 100 && !(await evaluate('WP.player?.stage?.ready').catch(() => false)); i++) await sleep(100);

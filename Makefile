@@ -13,7 +13,7 @@ AVD ?= $(firstword $(shell $(ANDROID_HOME)/emulator/emulator -list-avds 2>/dev/n
 GRADLE = cd android && ./gradlew --quiet
 APP = com.roadwaffle.wallpapers
 
-.PHONY: help hooks serve serve-https cert bing-json thumbnails icons screenshots extension site android-build android-install android-logcat android-emulator android-release android-keystore android-bench docker-build docker-run lint audit audit-staged audit-history test smoke smoke-live bench ci clean
+.PHONY: help hooks serve serve-https cert bing-json thumbnails icons screenshots extension site android-build android-install android-logcat android-emulator android-release android-keystore android-bench jellyfin-media jellyfin-fixtures jellyfin-dev jellyfin-stop jellyfin-mock docker-build docker-run lint audit audit-staged audit-history test smoke smoke-live bench ci clean
 
 help: ## List every target
 	@awk 'BEGIN {FS = ":.*## "} /^[a-zA-Z0-9_-]+:.*## / {printf "  \033[36m%-17s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -88,6 +88,21 @@ bench: ## Every wallpaper at every tier on a simulated phone (4× slower CPU): b
 
 android-bench: ## Each wallpaper at each tier on the connected device: frame times and battery (SPEC §4.8)
 	@ADB="$(ADB)" node tools/android-bench.mjs
+
+jellyfin-media: ## Generate made-up test videos and subtitles for the dev Jellyfin into .jellyfin/media/ (needs ffmpeg)
+	@node tools/jellyfin-media.mjs
+
+jellyfin-fixtures: ## Regenerate the smoke run's tiny Jellyfin clip and backdrop in tools/fixtures/jellyfin/ (committed)
+	@node tools/jellyfin-media.mjs --fixture
+
+jellyfin-dev: ## Run a throwaway Jellyfin in Docker at http://localhost:8096 on .jellyfin/media/, set up on first start
+	@node tools/jellyfin-dev.mjs up
+
+jellyfin-stop: ## Stop and remove the dev Jellyfin container (.jellyfin/ is kept)
+	@node tools/jellyfin-dev.mjs down
+
+jellyfin-mock: ## Serve the smoke run's fixture Jellyfin API at http://localhost:8097, for working without Docker
+	@node tools/jellyfin-mock.mjs
 
 docker-build: ## Build the container image (wallpapers:latest)
 	docker build -t wallpapers .

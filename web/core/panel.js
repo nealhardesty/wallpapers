@@ -21,6 +21,7 @@
     let liveLine = null, batterySwitch = null;
     let shownFor = null;   // the wallpaper whose settings are on screen
     let place = null;      // the location controls, for wallpapers that need one (core/location.js)
+    let shownForm = null;  // { form, config: () => config }, so the wallpaper's feed can update it
     const loaded = {};     // id → Promise for its defaults.js and settings.js
 
     const script = src => new Promise(resolve => {
@@ -164,6 +165,7 @@
         if (shownFor === id) return place?.update();
         shownFor = id;
         place = null;
+        shownForm = null;
         body.replaceChildren();
         if (!entry.scripts?.length) {
             body.append(h('p', { class: 'settings-note' }, `${entry.name} has nothing to adjust.`));
@@ -178,7 +180,7 @@
         }
         let config = WP.mergeSettings(defaults, WP.store.get(`wp:${id}`));
         const form = WP.renderSettings({
-            schema, defaults, config,
+            schema, defaults, config, feed: WP.player.feed,
             onChange: patch => {
                 config = { ...config, ...patch };
                 WP.store.set(`wp:${id}`, WP.diffSettings(defaults, config));
@@ -186,7 +188,9 @@
                 resetButton.classList.remove('confirm');
                 WP.player.applySettings(id, config);
             },
+            onAction: (name, inputs) => WP.player.action(id, name, inputs),
         });
+        shownForm = { form, config: () => config };
         // Where you are, for wallpapers that need it (SPEC §10.1), above their settings.
         if (entry.needs?.includes('location')) {
             if (!WP.locationControls) await script('core/location.js');
@@ -226,9 +230,13 @@
         refresh();
     }
 
+    // What a wallpaper keeps that must never leave this device (a sign-in
+    // token): its catalog `secrets`, never exported, never imported.
+    const secret = key => WP.catalog.some(entry => entry.secrets?.some(name => key === `wp:${entry.id}:${name}`));
+
     function exportSettings() {
         const settings = {};
-        for (const key of Object.keys(localStorage)) if (key.startsWith('wp:') && key !== 'wp:hinted') settings[key] = WP.store.get(key);
+        for (const key of Object.keys(localStorage)) if (key.startsWith('wp:') && key !== 'wp:hinted' && !secret(key)) settings[key] = WP.store.get(key);
         const file = new Blob([JSON.stringify({ app: 'wallpapers', version: 1, exported: new Date().toISOString(), settings }, null, 2)], { type: 'application/json' });
         const link = h('a', { href: URL.createObjectURL(file), download: 'wallpapers-settings.json' });
         link.click();
@@ -255,7 +263,7 @@
                 entries = imported.entries;
                 message = describeImport(imported.report);
             }
-            for (const [key, value] of Object.entries(entries)) if (key.startsWith('wp:')) WP.store.set(key, value);
+            for (const [key, value] of Object.entries(entries)) if (key.startsWith('wp:') && !secret(key)) WP.store.set(key, value);
             // Said after the reload, which starts everything with the new settings.
             try { sessionStorage.setItem('wp:toast', message); } catch {}
             location.reload();
@@ -292,12 +300,19 @@
         WP.player.focusStage();
     }
 
+    // The running wallpaper's latest feed (host.panel): statuses, loaded
+    // options, what to show.
+    function feed(state) {
+        if (panel && shownForm && shownFor === WP.player.stage?.id) shownForm.form.update(shownForm.config(), state);
+    }
+
     WP.panel = {
         open,
         close,
         toggle: () => (panel && !panel.hidden ? close() : open()),
         refresh,
         stats,
+        feed,
         get isOpen() { return !!panel && !panel.hidden; },
         contains: node => !!panel && panel.contains(node),
     };

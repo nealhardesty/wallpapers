@@ -1885,6 +1885,43 @@ frame of your choice, such as an old TV, a fireplace mantel or a drive-in
 screen. Phase 9 builds it. Facts marked *verify* are checked by spike 9.0
 before anything is built on them.
 
+**Spike 9.0 results** (2026-10-23, against Jellyfin 12.3.0 in Docker,
+`make jellyfin-dev`, with Chrome 155 and Android WebView 145 on an
+Android 17 emulator). Some of these overturn what was planned below; the
+plan has been corrected to match.
+
+| Host | Server over http (localhost, LAN) | Server over https |
+|---|---|---|
+| `file://` (player and stage) | ✓ API and video, no prompt | ✓ (inferred) |
+| `make serve` (https://localhost) | Not tested. By the same rules as Pages, without the prompt (localhost is already local): LAN by IP address | ✓ |
+| Extension | ✓ API and video, **no host permission needed**, no prompt (localhost, and a server Chrome was told is on the LAN) | ✓ (inferred) |
+| GitHub Pages | Blocked until Chrome's **local network** prompt is allowed; then ✓ for `localhost` and for LAN **IP addresses** (Chrome lets an IP-literal http request through as a mixed-content warning, unupgraded). An http *hostname* stays blocked | ✓ after the same prompt (a private address is still local; inferred, not tested) |
+| Android WebView | Blocked three ways, all fixed in the app: mixed content (`MIXED_CONTENT_ALWAYS_ALLOW`, for the API), cleartext (a network security config), and Android 17's runtime **`ACCESS_LOCAL_NETWORK`** permission (without it requests hang, then time out). `<video>` from http stays blocked even then, so the app carries media itself (`MediaProxy`) | ✓ (inferred; the permission still applies to LAN addresses) |
+
+- **The server:** `Access-Control-Allow-Origin: *` on the API and media by
+  default, preflights included, so `Authorization` headers work from any
+  origin. Quick Connect is on by default; its code is six digits.
+- **One token per DeviceId:** signing in again with the same DeviceId
+  revokes that device's earlier token, and `POST /Sessions/Logout`
+  revokes at once. The DeviceId is per install (the player and stage share
+  storage, so they share it too).
+- **Paths:** `/UserViews?userId=` and `/Items?userId=` (the older
+  `/Users/{id}/Views` and `/Users/{id}/Items` still answer). The static
+  stream and `Stream.vtt` answer without a token; the HLS playlist needs
+  one, and `TranscodingUrl` already carries it as `ApiKey=`, so **media
+  URLs are secrets** and are never logged.
+- **Formats:** Chrome 155 plays the server's HLS natively (`canPlayType`
+  says "maybe"), as does WebView 145, so there's no `hls.js`. Matroska
+  with H.264 plays directly. A `CodecProfile` height condition makes the
+  server transcode anything taller than the cap.
+- **Subtitles:** `.en.sdh.srt` sidecars arrive with `IsHearingImpaired`;
+  image tracks (DVD, PGS) arrive with `DeliveryMethod: "Encode"`, and
+  asking for one puts `SubtitleMethod=Encode` in the transcode.
+- **Autoplay:** muted autoplay works in the stage iframe on every host.
+  Unmuted is refused without a gesture (`NotAllowedError`) except in the
+  extension, which may play sound from the start. Android allows it once
+  `mediaPlaybackRequiresUserGesture` is off.
+
 **Signing in**
 - **Server:** the user types its address (`http://…:8096` or an https
   reverse proxy). The player checks it with `GET /System/Info/Public`,

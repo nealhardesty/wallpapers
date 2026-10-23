@@ -32,6 +32,7 @@ import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { launch, sleep } from './chrome.mjs';
+import { createMock, MOCK_ORIGIN, MOCK_USER, QUICK_CODE } from './jellyfin-mock.mjs';
 
 const ROOT = resolve(import.meta.dirname, '..');
 const LIVE = process.env.SMOKE_URL?.replace(/\/$/, '') || null;
@@ -95,7 +96,8 @@ let cdp;
 // Problems for the test in progress, whether it may use Bing's fixtures, and
 // whether they come with CORS headers (the extension mustn't need them).
 // `offline` fails the wallpapers' own hosts quietly (an offline device);
-// `marine` picks Lighthouse's fixture; `hold` keeps Wiki Pond's stream open.
+// `marine` picks Lighthouse's fixture; `hold` keeps Wiki Pond's stream open;
+// `jellyfin` is a fixture server (tools/jellyfin-mock.mjs) at jellyfin.invalid.
 let current = { network: false, cors: true, problems: [], requests: [] };
 // Every wallpaper's declared hosts, from the catalog once it's loaded.
 let NETWORK_HOSTS = ['www.bing.com'];
@@ -114,14 +116,16 @@ function listen() {
         if (context.auxData?.isDefault) contexts.set(context.auxData.frameId, context.id);
     });
     cdp.on('Fetch.requestPaused', ({ requestId, request }) => {
+        // A request can be gone before it's answered (the page moved on); that's fine.
+        const reply = (method, params) => cdp.send(method, params).catch(() => {});
         const url = request.url;
         current.requests?.push(url);
-        if (/^(file|data|blob|chrome-extension):/.test(url) || url === 'about:blank') return cdp.send('Fetch.continueRequest', { requestId });
-        if (LIVE && (url.startsWith(`${LIVE}/`) || declared(url))) return cdp.send('Fetch.continueRequest', { requestId });
-        if (current.offline && declared(url)) return cdp.send('Fetch.failRequest', { requestId, errorReason: 'InternetDisconnected' });
+        if (/^(file|data|blob|chrome-extension):/.test(url) || url === 'about:blank') return reply('Fetch.continueRequest', { requestId });
+        if (LIVE && (url.startsWith(`${LIVE}/`) || declared(url))) return reply('Fetch.continueRequest', { requestId });
+        if (current.offline && declared(url)) return reply('Fetch.failRequest', { requestId, errorReason: 'InternetDisconnected' });
         // The browser asks the host's root for a favicon on its own.
-        if (LIVE && new URL(url).pathname === '/favicon.ico') return cdp.send('Fetch.fulfillRequest', { requestId, responseCode: 204 });
-        const fulfil = (body, type) => cdp.send('Fetch.fulfillRequest', {
+        if (LIVE && new URL(url).pathname === '/favicon.ico') return reply('Fetch.fulfillRequest', { requestId, responseCode: 204 });
+        const fulfil = (body, type) => reply('Fetch.fulfillRequest', {
             requestId, responseCode: 200, body: body.toString('base64'),
             responseHeaders: [{ name: 'Content-Type', value: type },
                 ...(current.cors ? [{ name: 'Access-Control-Allow-Origin', value: '*' }] : [])],
@@ -137,10 +141,18 @@ function listen() {
         if (url.startsWith('https://www.bing.com/th?id=smoke-fixture')) return fulfil(PIXEL, 'image/png');
         if (current.network && url.startsWith('https://celestrak.org/NORAD/elements/gp.php?')) return fulfil(Buffer.from(JSON.stringify(SATELLITE_JSON())), 'application/json');
         if (current.network && url.startsWith('https://geocoding-api.open-meteo.com/v1/search?')) return fulfil(Buffer.from(JSON.stringify(GEOCODE_JSON)), 'application/json');
+        if (current.jellyfin && url.startsWith(`${MOCK_ORIGIN}/`)) {
+            const answer = current.jellyfin.handle({ method: request.method, url, headers: request.headers, body: request.postData || '' });
+            return reply('Fetch.fulfillRequest', {
+                requestId, responseCode: answer.status, body: answer.body.toString('base64'),
+                responseHeaders: [{ name: 'Content-Type', value: answer.type }, { name: 'Access-Control-Allow-Origin', value: '*' },
+                    { name: 'Access-Control-Allow-Headers', value: 'authorization, content-type' }, { name: 'Access-Control-Allow-Methods', value: 'GET, POST, DELETE' }],
+            });
+        }
         // A deliberately offline check: requests fail, quietly.
-        if (current.offline) return cdp.send('Fetch.failRequest', { requestId, errorReason: 'InternetDisconnected' });
+        if (current.offline) return reply('Fetch.failRequest', { requestId, errorReason: 'InternetDisconnected' });
         record(`network blocked: ${url}`);
-        return cdp.send('Fetch.failRequest', { requestId, errorReason: 'BlockedByClient' });
+        return reply('Fetch.failRequest', { requestId, errorReason: 'BlockedByClient' });
     });
 }
 
@@ -307,6 +319,18 @@ async function stageFps(ms = 3000) {
 }
 
 // ---- Wallpapers' own checks (their SPEC §9 "→" checks) ------------------------
+
+// Jellyfin's: a fresh fixture server for this check, storage already signed
+// in to it, and a panel button pressed.
+const jellyfinServer = () => (current.jellyfin = createMock());
+function jellyfinSignedIn(mock, settings = {}) {
+    const answer = mock.handle({ method: 'POST', url: `${MOCK_ORIGIN}/Users/AuthenticateByName`, body: JSON.stringify({ Username: MOCK_USER.name, Pw: MOCK_USER.password }),   // audit-allow: Jellyfin API path
+        headers: { Authorization: 'MediaBrowser Client="smoke", Device="smoke", DeviceId="smoke-setup", Version="1"' } });
+    const { AccessToken, User } = JSON.parse(answer.body);
+    mock.state.log.length = 0;
+    return { 'wp:jellyfin': { configVersion: 1, server: MOCK_ORIGIN, ...settings }, 'wp:jellyfin:auth': { server: MOCK_ORIGIN, token: AccessToken, userId: User.Id, user: User.Name } };
+}
+const panelAction = name => evaluate(`(b => b ? (b.click(), true) : false)(document.querySelector('#panel .setting-action[data-name="${name}"]:not([hidden]) button'))`);
 
 // A stage with these settings stored, booted; true once it's ready.
 async function stageWith(id, settings, query = '') {
@@ -783,11 +807,207 @@ const STAGE_CHECKS = {
             return true;
         }],
     ],
+    // SPEC §9 Phase 9, against the fixture server (tools/jellyfin-mock.mjs).
+    jellyfin: [
+        ['fresh: the idle test card, and nothing asked of any server', async () => {
+            jellyfinServer();
+            await fresh(`${WEB}/stage.html?w=jellyfin`);
+            await stageReady();
+            await sleep(500);
+            const state = await counts('({ state: m.state, paints: m.paints })');
+            if (state.state !== 'setup') record(`state ${state.state}`);
+            if (state.paints !== 1) record(`art painted ${state.paints} times`);
+            if (current.jellyfin.state.log.length) record(`${current.jellyfin.state.log.length} requests before any server was given`);
+            if (await evaluate(DRAWN) < 12) record('test card barely drawn');
+            return true;
+        }],
+        ['Quick Connect in the panel: sign in, list, pick, play with English subtitles', async () => {
+            const mock = jellyfinServer();
+            await fresh(`${WEB}/index.html?w=jellyfin&panel=open`, { 'wp:jellyfin': { configVersion: 1, order: 'inOrder' } });
+            await waitFor(() => evaluate('WP.player?.stage?.ready'));
+            if (!await waitFor(() => evaluate(`!!document.querySelector('#panel [data-key=server] input')`), 4000)) return record('no server field');
+            await evaluate(`(i => { i.value = 'jellyfin.invalid:8096'; i.dispatchEvent(new Event('change', { bubbles: true })); })(document.querySelector('#panel [data-key=server] input'))`);
+            if (!await panelAction('connect')) return record('no Connect button');
+            if (!await waitFor(() => evaluate(`document.querySelector('#panel .setting-status[data-name=server]').textContent.includes('Fixture Server')`), 5000)) return record('never connected');
+            if (!await panelAction('quick')) return record('no Quick Connect button');
+            const code = await waitFor(() => evaluate(`document.querySelector('#panel .setting-code:not([hidden])')?.textContent`), 5000);
+            if (code !== QUICK_CODE) record(`code shown: ${code}`);
+            const playing = await waitFor(() => inStage(`WP.stage.manager.state === 'playing' && WP.stage.manager.video.currentTime > 0.3`), 15000);
+            if (!playing) return record(`never played (state ${await inStage('WP.stage.manager.state')})`);
+            const now = await inStage(`(m => ({ title: m.item.Name, src: m.video.src, sub: m.subtitle, muted: m.video.muted }))(WP.stage.manager)`);
+            if (now.title !== 'Test Pattern No. 3') record(`in order, but first is ${now.title}`);
+            if (!now.src.startsWith(`${MOCK_ORIGIN}/Videos/`) || !now.src.includes('api_key=')) record('not a direct-play URL with its token');
+            if (now.sub?.index !== 3 || now.sub.burn) record(`subtitle track ${JSON.stringify(now.sub)}, not the full English one (3)`);
+            if (!now.muted) record('started with sound');
+            const cue = await waitFor(() => inStage('WP.stage.manager.cue'), 5000);
+            if (!/fixture|Nothing real|stand by/i.test(cue || '')) record(`no English cue on screen (${JSON.stringify(cue)})`);
+            const options = await evaluate(`[...document.querySelectorAll('#panel [data-key=playlistId] option')].map(o => o.textContent)`);
+            if (!options.some(o => o.includes('Fixture Mix'))) record(`playlists offered: ${options.join(' | ')}`);
+            if (!await evaluate(`!!localStorage.getItem('wp:jellyfin:auth')`)) record('no token kept');
+            await evaluate(`window.exported = null; URL.createObjectURL = (real => blob => { blob.text().then(t => { window.exported = t; }); return real.call(URL, blob); })(URL.createObjectURL);
+                [...document.querySelectorAll('#panel .action')].find(b => b.textContent === 'Export').click()`);
+            const exported = await waitFor(() => evaluate('window.exported'), 3000);
+            if (!exported) record('nothing exported');
+            else if (exported.includes('wp:jellyfin:auth') || exported.includes('mocktoken')) record('the token went into the export');
+            await shoot('jellyfin-playing');
+            return true;
+        }],
+        ['password sign-in: sent once, never stored, the field cleared', async () => {
+            const mock = jellyfinServer();
+            await fresh(`${WEB}/index.html?w=jellyfin&panel=open`, { 'wp:jellyfin': { configVersion: 1, server: MOCK_ORIGIN } });
+            await waitFor(() => evaluate('WP.player?.stage?.ready'));
+            await waitFor(() => evaluate(`!!document.querySelector('#panel .setting-action[data-name=connect]')`), 4000);
+            await panelAction('connect');
+            if (!await waitFor(() => evaluate(`!document.querySelector('#panel .setting-input[data-name=password]').hidden`), 5000)) return record('no password field');
+            await evaluate(`for (const [name, value] of [['username', ${JSON.stringify(MOCK_USER.name)}], ['password', ${JSON.stringify(MOCK_USER.password)}]])
+                document.querySelector('#panel .setting-input[data-name=' + name + '] input').value = value`);
+            await panelAction('password');
+            if (!await waitFor(() => inStage(`WP.stage.manager.state === 'playing'`), 10000)) return record(`never played (${await evaluate(`document.querySelector('#panel .setting-status[data-name=account]').textContent`)})`);
+            const stored = await evaluate('JSON.stringify(Object.entries(localStorage))');
+            if (stored.includes(MOCK_USER.password)) record('the password is in storage');
+            if (await evaluate(`document.querySelector('#panel .setting-input[data-name=password] input').value`)) record('the password field kept its text');
+            const sent = mock.state.log.filter(r => r.body.includes(MOCK_USER.password)).length;
+            if (sent !== 1) record(`the password was sent ${sent} times`);
+            if (!await waitFor(() => evaluate(`!document.querySelector('#panel .setting-action[data-name=signout]').hidden`), 3000)) record('no Sign out');
+            await panelAction('signout');
+            if (!await waitFor(() => evaluate(`!localStorage.getItem('wp:jellyfin:auth')`), 3000)) record('token kept after signing out');
+            if (!mock.state.log.some(r => r.path === '/Sessions/Logout')) record('the server wasn\'t told');
+            if (await inStage('WP.stage.manager.state') !== 'setup') record('still playing after signing out');
+            return true;
+        }],
+        ['pausing the stage pauses the video within 100 ms; stop() frees the decoder', async () => {
+            const mock = jellyfinServer();
+            await fresh(`${WEB}/stage.html?w=jellyfin`, jellyfinSignedIn(mock, { order: 'inOrder' }));
+            if (!await waitFor(() => counts(`m.state === 'playing' && m.video.currentTime > 0.2`), 10000)) return record('never played');
+            const ms = await evaluate(`(async () => { const t = performance.now(); WP.stage.pause(); while (!WP.stage.manager.video.paused) await new Promise(r => setTimeout(r, 2)); return performance.now() - t; })()`);
+            if (!(ms < 100)) record(`paused after ${ms.toFixed(0)} ms`);
+            await evaluate('WP.stage.resume()');
+            if (!await waitFor(() => counts('!m.video.paused'), 3000)) record('didn\'t resume');
+            const freed = await evaluate(`(v => { WP.stage.manager.stop(); return { src: v.getAttribute('src'), network: v.networkState, attached: v.isConnected }; })(WP.stage.manager.video)`);
+            // No source: NETWORK_EMPTY or NETWORK_NO_SOURCE, never idle or loading.
+            if (freed.src || ![0, 3].includes(freed.network) || freed.attached) record(`after stop(): ${JSON.stringify(freed)}`);
+            return true;
+        }],
+        ['a second stage takes over; the first goes quiet, keeping its picture', async () => {
+            const mock = jellyfinServer();
+            await fresh(`${WEB}/index.html?w=jellyfin`, jellyfinSignedIn(mock, { order: 'inOrder', subtitles: 'off' }));
+            if (!await waitFor(() => inStage(`WP.stage.manager.state === 'playing' && WP.stage.manager.video.currentTime > 0.2`), 10000)) return record('first never played');
+            const first = await stageContext();
+            await evaluate(`document.body.append(Object.assign(document.createElement('iframe'), { src: 'stage.html?w=jellyfin', style: 'position:fixed;right:0;bottom:0;width:320px;height:200px;border:0' }))`);
+            await sleep(500);
+            if (!await waitFor(() => inStage(`WP.stage.manager?.state === 'playing' && WP.stage.manager.video.currentTime > 0.2`), 10000)) return record('second never played');
+            const quiet = await waitFor(() => evaluate(`(m => m.state === 'away' && { src: m.video?.getAttribute('src'), still: m.still.style.display })(WP.stage.manager)`, first), 3000);
+            if (!quiet) return record(`first stage is ${await evaluate('WP.stage.manager.state', first)}`);
+            if (quiet.src) record('first stage still has its video source');
+            if (quiet.still !== 'block') record('first stage dropped its last picture');
+            await shoot('jellyfin-two-tabs');
+            return true;
+        }],
+        ['every frame: landscape and portrait, the video\'s shape kept, art built once per resize', async () => {
+            jellyfinServer();
+            const frames = [];
+            for (const [name, width, height, mobile] of [['landscape', 1280, 800, false], ['portrait', 412, 915, true]]) {
+                await cdp.send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile });
+                if (!frames.length) {
+                    await fresh(`${WEB}/stage.html?w=jellyfin&thumb=1`);
+                    await stageReady();
+                    frames.push(...await evaluate('JellyfinFrames.list().map(f => f.id)'));
+                }
+                for (const frame of frames) {
+                    await stageAt(`${WEB}/stage.html?w=jellyfin&thumb=1&host=${mobile ? 'android' : 'standalone'}`, { 'wp:jellyfin': { configVersion: 1, frame } });
+                    await sleep(300);
+                    const before = await counts('m.paints');
+                    await evaluate(`dispatchEvent(new Event('resize'))`);
+                    await sleep(200);
+                    const L = await counts(`({ ...m.layout.screen, paints: m.paints, bottom: innerHeight - WP.host.insets.bottom, vw: innerWidth })`);
+                    const where = `${frame} ${name}`;
+                    if (before !== 1 || L.paints !== 2) record(`${where}: painted ${before}, then ${L.paints} after one resize`);
+                    if (L.x < -0.5 || L.y < -0.5 || L.x + L.w > L.vw + 0.5 || (frame !== 'none' && L.y + L.h > L.bottom)) record(`${where}: screen outside the view`);
+                    if (frame !== 'none' && Math.abs(L.w / L.h - 16 / 9) > 0.01) record(`${where}: screen is ${(L.w / L.h).toFixed(3)}, not 16:9`);
+                    if (await evaluate(DRAWN) < 12) record(`${where}: barely drawn`);
+                    await shoot(`jellyfin-${frame}-${name}`);
+                }
+            }
+            await cdp.send('Emulation.clearDeviceMetricsOverride');
+            return frames.length >= 2 || record(`only ${frames.length} frames`);
+        }],
+        ['every frame plays: the video in its screen, subtitles in its style', async () => {
+            const mock = jellyfinServer();
+            await fresh(`${WEB}/stage.html?w=jellyfin&thumb=1`);
+            await stageReady();
+            for (const frame of await evaluate('JellyfinFrames.list().map(f => f.id)')) {
+                await fresh(`${WEB}/stage.html?w=jellyfin`, jellyfinSignedIn(mock, { order: 'inOrder', frame }));
+                if (!await waitFor(() => counts(`m.state === 'playing' && m.video.currentTime > 0.5 && !!m.cue`), 10000)) { record(`${frame}: never played with a cue`); continue; }
+                const fit = await counts(`(r => { const s = m.layout.screen; return Math.max(Math.abs(r.x - s.x), Math.abs(r.y - s.y), Math.abs(r.width - s.w), Math.abs(r.height - s.h)); })(m.box.getBoundingClientRect())`);
+                if (fit > 1) record(`${frame}: the video is ${fit.toFixed(1)} px off its screen`);
+                await sleep(400);
+                await shoot(`jellyfin-${frame}-playing`);
+            }
+            return true;
+        }],
+        ['on Low only the video moves', async () => {
+            const mock = jellyfinServer();
+            await fresh(`${WEB}/stage.html?w=jellyfin&tier=low`, jellyfinSignedIn(mock, { order: 'inOrder', subtitles: 'off', showTitle: false }));
+            if (!await waitFor(() => counts(`m.state === 'playing' && m.video.currentTime > 0.2`), 10000)) return record('never played');
+            if (await evaluate(`WP.host.quality.effects.includes('frameMotion')`)) record('frame motion on at Low');
+            await sleep(4600);   // past the 🔇 badge's fade
+            const before = await evaluate('WP.host.frames.count');
+            const time = await counts('m.video.currentTime');
+            await sleep(3000);
+            const drawn = await evaluate('WP.host.frames.count') - before;
+            if (drawn > 1) record(`${drawn} overlay frames in 3 s`);
+            if (!(await counts('m.video.currentTime') > time + 1)) record('the video stood still');
+            return true;
+        }],
+        ['power: on battery at most 720p; battery saver shows posters, with no video at all', async () => {
+            const mock = jellyfinServer();
+            await fresh(`${WEB}/index.html?w=jellyfin&tier=high`, jellyfinSignedIn(mock, { order: 'inOrder', subtitles: 'off' }));
+            if (!await waitFor(() => inStage(`WP.stage.manager.state === 'playing'`), 10000)) return record('never played');
+            const height = () => {
+                const asked = mock.state.log.filter(r => r.path.endsWith('/PlaybackInfo')).at(-1);
+                return Number(JSON.parse(asked.body).DeviceProfile.CodecProfiles[0].Conditions.find(c => c.Property === 'Height').Value);
+            };
+            if (height() !== 1080) record(`plugged in at High it asked for ${height()}p`);
+            await evaluate(`WP.power({ battery: { charging: false, level: 0.6 } })`);
+            await sleep(300);
+            await inStage('WP.stage.manager.skip(1)');
+            await waitFor(() => inStage(`WP.stage.manager.item.Name !== 'Test Pattern No. 3' && WP.stage.manager.state === 'playing'`), 8000);
+            if (height() > 720) record(`on battery it asked for ${height()}p`);
+            await evaluate(`WP.power({ battery: { charging: false, level: 0.6 }, saver: true })`);
+            const poster = await waitFor(() => inStage(`WP.stage.manager.state === 'poster' && !document.querySelector('video') && (p => p.complete && p.naturalWidth > 0 && p.src)(WP.stage.manager.poster)`), 6000);
+            if (!poster) record(`state ${await inStage('WP.stage.manager.state')}, video ${await inStage('!!document.querySelector("video")')}`);
+            else if (!poster.includes('/Images/Backdrop')) record('poster isn\'t the backdrop');
+            await sleep(1300);
+            await shoot('jellyfin-poster');
+            return true;
+        }],
+        ['keys: M for sound, S steps through subtitles and remembers, N moves on', async () => {
+            const mock = jellyfinServer();
+            await fresh(`${WEB}/stage.html?w=jellyfin`, jellyfinSignedIn(mock, { order: 'inOrder' }));
+            if (!await waitFor(() => counts(`m.state === 'playing' && m.video.currentTime > 0.2`), 10000)) return record('never played');
+            await press('m');   // a real key press: sound needs a user gesture
+            if (await counts('m.video.muted')) record('M left it muted');
+            const subs = await counts('m.cycleSubtitles()');
+            if (!await waitFor(() => counts(`m.state === 'playing' && m.subtitle?.index === 4`), 6000)) record(`S said ${subs}, track ${JSON.stringify(await counts('m.subtitle'))}`);
+            if (JSON.stringify(await evaluate(`JSON.parse(localStorage.getItem('wp:jellyfin:subs'))`)) !== JSON.stringify({ [await counts('m.item.Id')]: 4 })) record('pick not remembered');
+            const before = await counts('m.item.Name');
+            await counts('m.skip(1)');
+            if (!await waitFor(() => counts(`m.state === 'playing' && m.item.Name !== ${JSON.stringify(before)}`), 6000)) record('N didn\'t move on');
+            if (await counts('m.video.muted')) record('sound didn\'t carry over to the next item');
+            return true;
+        }],
+    ],
 };
 
 async function stageChecks(id) {
     const { check, failed } = checker();
     for (const [name, fn] of STAGE_CHECKS[id] || []) await check(`${id}: ${name}`, fn);
+    // Leave while the last check's fixtures still answer, so a request
+    // already in flight (a video's next range) isn't blamed on the next stage.
+    if (STAGE_CHECKS[id]) {
+        await cdp.send('Page.navigate', { url: 'about:blank' });
+        await sleep(300);
+    }
     return failed();
 }
 
@@ -911,6 +1131,7 @@ async function playerSuite(catalog) {
         await fresh(`${WEB}/index.html?w=rain&panel=open`);
         await playerReady();
         await waitFor(() => evaluate(PANEL_OPEN), 3000);
+        await waitFor(() => evaluate(`!!document.querySelector('#panel input[type=range]')`), 4000);
         await evaluate(`(() => { const i = document.querySelector('#panel input[type=range]'); i.value = i.min; i.dispatchEvent(new Event('input', { bubbles: true })); })()`);
         if (!await evaluate(`!!localStorage.getItem('wp:rain')`)) return record('no override to reset');
         const reset = `[...document.querySelectorAll('#panel .action')].find(b => b.textContent.startsWith('Reset')).click()`;
@@ -1265,7 +1486,7 @@ async function main(only) {
         await cdp.send('Page.navigate', { url: `${WEB}/stage.html?w=blank` });
         await waitFor(() => evaluate('WP.stage?.ready'));
         const catalog = await evaluate('WP.catalog.map(e => ({ id: e.id, pseudo: !!e.pseudo, disabled: e.disabled || null, network: !!e.network, offline: !!e.offline }))');
-        NETWORK_HOSTS = await evaluate('[...new Set(WP.catalog.flatMap(e => e.network || []))]');
+        NETWORK_HOSTS = await evaluate('[...new Set(WP.catalog.flatMap(e => Array.isArray(e.network) ? e.network : []))]');
         const ids = only.length ? only : catalog.filter(e => !e.pseudo).map(e => e.id);
 
         let failed = 0;

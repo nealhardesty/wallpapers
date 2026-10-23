@@ -58,10 +58,12 @@
         frame.title = WP.entry(id).name;
         // Geolocation is blocked in a cross-origin frame (every stage, on
         // file://) unless allowed, so only wallpapers that need it get it.
-        if (WP.entry(id).needs?.includes('location')) frame.allow = 'geolocation';
+        // Media wallpapers (Jellyfin) may start with sound, which a
+        // cross-origin frame can't without autoplay delegated to it.
+        frame.allow = [WP.entry(id).needs?.includes('location') && 'geolocation', WP.entry(id).media && 'autoplay'].filter(Boolean).join('; ');
         frame.src = stageUrl(id);
         document.body.prepend(frame);
-        const mounted = stage = { id, frame, ready: false };
+        const mounted = stage = { id, frame, ready: false, feed: null };
         app?.setAccent(WP.entry(id).accent || '#000000');
 
         const reveal = () => {
@@ -114,6 +116,19 @@
     // rebuilds once it settles.
     function applySettings(id, config) {
         if (stage?.id === id) post({ wp: 'apply', config });
+    }
+
+    // A button in the panel that belongs to the wallpaper (settings.js
+    // `action`). On Android, one marked asks: 'localNetwork' first asks
+    // for Android 17's local network permission, from the settings screen.
+    async function action(id, name, inputs) {
+        if (stage?.id !== id) return;
+        const control = WP.schemaOf(id)?.find(c => c.type === 'action' && c.name === name);
+        if (control?.asks === 'localNetwork' && app?.needsLocalNetwork?.()) {
+            await new Promise(resolve => { WP.localNetworkAnswered = resolve; app.askLocalNetwork(); });
+            WP.localNetworkAnswered = null;
+        }
+        post({ wp: 'action', name, inputs });
     }
 
     function rebuild() {
@@ -285,6 +300,9 @@
             rebuild();
         } else if (message.wp === 'corner') {
             document.getElementById('gear').classList.toggle('show', !!message.near);
+        } else if (message.wp === 'panel') {
+            stage.feed = message.feed;
+            WP.panel.feed(message.feed);
         } else if (message.wp === 'toast') {
             toast(message.text, message.ms);
         } else if (message.wp === 'error') {
@@ -332,12 +350,14 @@
         setBatteryAware,
         describe,
         applySettings,
+        action,
         relocate,
         focusStage,
         toast,
         get choice() { return choice; },
         get resolved() { return resolve(choice); },
         get stage() { return stage && { id: stage.id, ready: stage.ready }; },
+        get feed() { return stage?.feed ?? null; },
         get stats() { return stats; },
         get policy() { return policy; },
         get host() { return host; },

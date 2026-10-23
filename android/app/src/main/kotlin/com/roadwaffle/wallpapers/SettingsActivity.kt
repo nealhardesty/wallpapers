@@ -20,7 +20,9 @@ import java.util.Locale
  * page picks up changes through storage events. The panel also offers
  * "Set as wallpaper" here, and "Use my location" for wallpapers that need
  * one: the phone's last known coarse position, which the live wallpaper then
- * reads from the shared storage. Nothing asks from the background.
+ * reads from the shared storage. Connecting to a Jellyfin server asks for
+ * Android 17's local network permission first (SPEC §10.21). Nothing asks
+ * from the background.
  */
 class SettingsActivity : Activity() {
     private lateinit var web: WebView
@@ -28,7 +30,7 @@ class SettingsActivity : Activity() {
     override fun onCreate(state: Bundle?) {
         super.onCreate(state)
         web = webView(
-            Bridge(onSetWallpaper = ::setAsWallpaper, onLocate = ::locate),
+            Bridge(onSetWallpaper = ::setAsWallpaper, onLocate = ::locate, localNetwork = ::localNetwork),
             onLoaded = { web.js("WP.power({ hidden: false })") },
             external = { uri -> runCatching { startActivity(Intent(Intent.ACTION_VIEW, uri)) } },
         )
@@ -46,10 +48,22 @@ class SettingsActivity : Activity() {
         else requestPermissions(arrayOf(Manifest.permission.ACCESS_COARSE_LOCATION), LOCATE)
     }
 
+    /** Asks, unless it's granted already or this Android has no such permission; answers WP.localNetworkAnswered(granted). */
+    private fun localNetwork(ask: Boolean): Boolean {
+        val needed = Build.VERSION.SDK_INT >= 37 && checkSelfPermission(LOCAL_NETWORK) != PackageManager.PERMISSION_GRANTED
+        if (ask) {
+            if (needed) requestPermissions(arrayOf(LOCAL_NETWORK), ASK_LOCAL_NETWORK)
+            else web.js("WP.localNetworkAnswered?.(true)")
+        }
+        return needed
+    }
+
     override fun onRequestPermissionsResult(code: Int, permissions: Array<out String>, results: IntArray) {
         super.onRequestPermissionsResult(code, permissions, results)
+        val granted = results.firstOrNull() == PackageManager.PERMISSION_GRANTED
+        if (code == ASK_LOCAL_NETWORK) return web.js("WP.localNetworkAnswered?.($granted)")
         if (code != LOCATE) return
-        if (results.firstOrNull() == PackageManager.PERMISSION_GRANTED) sendLocation()
+        if (granted) sendLocation()
         else web.js("WP.located?.({ error: 'denied' })")
     }
 
@@ -97,5 +111,7 @@ class SettingsActivity : Activity() {
 
     private companion object {
         const val LOCATE = 1
+        const val ASK_LOCAL_NETWORK = 2
+        const val LOCAL_NETWORK = "android.permission.ACCESS_LOCAL_NETWORK"
     }
 }

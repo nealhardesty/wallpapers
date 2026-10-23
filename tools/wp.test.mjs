@@ -241,7 +241,7 @@ test('defaults: each file registers its own id with plain JSON values', () => {
 });
 
 test('network: every online wallpaper\'s hosts are on the audit allowlist', () => {
-    for (const entry of WP.catalog.filter(e => e.network)) {
+    for (const entry of WP.catalog.filter(e => Array.isArray(e.network))) {
         const allowed = URL_ALLOW[`web/wallpapers/${entry.id}/`] || [];
         for (const host of entry.network) assert.ok(allowed.includes(host), `${entry.id}: ${host} missing from URL_ALLOW`);
     }
@@ -311,9 +311,27 @@ test('thumbnails: every offline wallpaper has a small one', () => {
     }
 });
 
+// network: 'user' (Jellyfin) is the one server the user types: no fixed
+// host anywhere, and (spike 9.0) no extension permission either, since its
+// CORS answers every origin.
+test('network: a user-chosen server is declared as such, with nothing fixed to allow', () => {
+    for (const entry of WP.catalog.filter(e => e.network && !Array.isArray(e.network))) {
+        assert.equal(entry.network, 'user', `${entry.id}: network is a list of hosts or 'user'`);
+        assert.equal(URL_ALLOW[`web/wallpapers/${entry.id}/`], undefined, `${entry.id}: a user's server is never a fixed URL`);
+    }
+    const manifest = JSON.parse(readFileSync(join(WEB, 'manifest.json'), 'utf8'));
+    assert.equal(manifest.optional_host_permissions, undefined, 'no optional hosts: spike 9.0 found none needed');
+});
+
+test('jellyfin: the client version it reports is the manifest\'s', () => {
+    const manifest = JSON.parse(readFileSync(join(WEB, 'manifest.json'), 'utf8'));
+    const source = readFileSync(join(WEB, 'wallpapers/jellyfin/jellyfin.js'), 'utf8');
+    assert.equal(source.match(/static VERSION = '([^']+)'/)?.[1], manifest.version);
+});
+
 test('extension: host_permissions are exactly the catalog\'s network hosts', () => {
     const manifest = JSON.parse(readFileSync(join(WEB, 'manifest.json'), 'utf8'));
-    const hosts = [...new Set(WP.catalog.flatMap(e => e.network || []))].sort();
+    const hosts = [...new Set(WP.catalog.flatMap(e => Array.isArray(e.network) ? e.network : []))].sort();
     assert.deepEqual(manifest.host_permissions.map(p => p.match(/^https:\/\/([^/]+)\/\*$/)?.[1]).sort(), hosts);
     assert.equal(manifest.manifest_version, 3);
     assert.match(manifest.version, /^\d+\.\d+\.\d+$/);

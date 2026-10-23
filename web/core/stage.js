@@ -7,10 +7,10 @@
 // The player talks to the stage only through postMessage, because file://
 // frames can't reach into each other. Messages carry a `wp` field:
 //   stage → player  ready {id}, key {key}, rebuild, corner {near},
-//                   toast {text, ms}, error {message}
+//                   toast {text, ms}, error {message}, panel {feed}
 //                   quality {quality, rung, of}, stats {fps, ms, label, rung, of}
 //   player → stage  apply {config}, key {key, shift}, mode, power {policy},
-//                   scroll {x}, pause, resume
+//                   scroll {x}, pause, resume, action {name, inputs}
 
 (function (WP) {
     'use strict';
@@ -107,6 +107,7 @@
             idleUntil = performance.now() + ms;
             clearTimeout(idleTimer);
             idleTimer = null;
+            schedule();   // a sooner deadline (0: now) takes effect at once
         },
         // The time for anything that depends on it: real, or ?date= ticking
         // forward. Wallpapers use this, never new Date(), so ?date= tests them.
@@ -158,6 +159,15 @@
             return saved;
         },
         reducedMotion: matchMedia('(prefers-reduced-motion: reduce)').matches,
+        // A message over the wallpaper, in the player's toast.
+        toast(text, ms) { tell({ type: 'toast', text, ms }); },
+        // What the panel shows of this wallpaper's own state (settings.js
+        // extras): { status: { name: text }, ...anything its when() and
+        // options() read }. Each call replaces the last.
+        panel(feed) { tell({ type: 'panel', feed }); },
+        // The power policy now ({ ceiling, fpsCap, pause, reasons }); a
+        // change also calls the manager's optional onPower(policy).
+        get power() { return policy; },
         // Per-wallpaper state that isn't a setting (advent's last-seen day…).
         storage: {
             get: key => read(`wp:${id}:${key}`),
@@ -319,9 +329,11 @@
         else if (message.wp === 'resume') WP.stage.resume();
         else if (message.wp === 'mode') plan();
         else if (message.wp === 'scroll') WP.stage.manager?.onScroll?.(message.x);
+        else if (message.wp === 'action') WP.stage.manager?.onAction?.(message.name, message.inputs || {});
         else if (message.wp === 'power') {
             policy = message.policy;
             plan();
+            WP.stage.manager?.onPower?.(policy);
             if (policy.pause) WP.stage.pause();
             else if (!document.hidden) WP.stage.resume();
         }

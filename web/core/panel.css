@@ -143,6 +143,16 @@
 .setting-toggle { display: grid; grid-template-columns: 1fr auto; align-items: center; column-gap: 12px; }
 .setting-toggle .setting-head { margin: 0; }
 .setting-toggle .setting-help { grid-column: 1 / -1; }
+.setting[hidden], .setting-extra[hidden] { display: none; }
+/* The wallpaper's own extras (settings.js): buttons, unsaved fields, status. */
+.setting-extra { padding: 6px 0; }
+.setting-action { display: inline-block; margin-right: 6px; }
+.setting-action .action { padding: 6px 14px; font-size: 13px; }
+.setting-input input { width: 100%; }
+.setting-status-text { margin: 0; color: var(--ink-soft); font-size: 12.5px; line-height: 1.45; }
+.setting-status-text:empty { display: none; }
+.setting-code { display: block; margin: 8px 0 2px; font: 600 34px/1 ui-monospace, 'SF Mono', Menlo, monospace; letter-spacing: 0.22em; color: var(--ink); text-align: center; padding: 10px 0; border-radius: 10px; background: color-mix(in srgb, var(--accent) 16%, transparent); }
+.setting-code[hidden] { display: none; }
 
 .panel input[type='range'] {
     --fill: 50%;
@@ -167,7 +177,7 @@
     background: var(--ink);
     box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
 }
-.panel select, .panel input[type='number'], .panel input[type='text'] {
+.panel select, .panel input[type='number'], .panel input[type='text'], .panel input[type='password'] {
     width: 100%;
     padding: 7px 10px;
     border: 1px solid var(--line);
