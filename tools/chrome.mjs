@@ -34,7 +34,7 @@ export async function launch({ width = 1280, height = 800, extension = null } = 
     if (extension) args.unshift('--remote-debugging-pipe', '--enable-unsafe-extension-debugging');
     const chrome = spawn(findChrome(), args, { stdio: extension ? ['ignore', 'ignore', 'ignore', 'pipe', 'pipe'] : 'ignore' });
     const portFile = join(profile, 'DevToolsActivePort');
-    for (let i = 0; i < 100 && !existsSync(portFile); i++) await sleep(100);
+    for (let i = 0; i < 300 && !existsSync(portFile); i++) await sleep(100);   // CI runners can take 10 s+
     const port = readFileSync(portFile, 'utf8').split('\n')[0];
     const pages = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json();
     const page = pages.find(p => p.type === 'page');

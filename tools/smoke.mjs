@@ -589,8 +589,9 @@ const STAGE_CHECKS = {
     // 2 s; the number of koi follows the tier's density.
     'koi-pond': [['a tap calls the nearest koi within 2 s; koi follow density', async () => {
         if (!await stageWith('koi-pond')) return record('not ready');
-        // Tap behind a koi, so it has to turn right round to come.
-        const { x, y, nearest } = await evaluate(`(() => {
+        // Tap behind a koi, so it has to turn right round to come. They
+        // swim, so if none is clear of the edges and the others yet, wait.
+        const { x, y, nearest } = await waitFor(() => evaluate(`(() => {
             const m = WP.stage.manager, fish = m.koi.filter(k => !k.leaving);
             for (const k of fish) {
                 const x = Math.round(k.x - Math.cos(k.heading) * k.len * 1.4), y = Math.round(k.y - Math.sin(k.heading) * k.len * 1.4);
@@ -598,8 +599,8 @@ const STAGE_CHECKS = {
                 const near = [...fish].sort((a, b) => Math.hypot(a.x - x, a.y - y) - Math.hypot(b.x - x, b.y - y))[0];
                 if (near === k) return { x, y, nearest: k.id };
             }
-            return { x: 200, y: 300, nearest: null };
-        })()`);
+            return null;
+        })()`), 5000) || { nearest: null };
         if (nearest === null) return record('no koi to tap behind');
         const ripples = await evaluate('WP.stage.manager.ripples.length');
         await cdp.send('Input.dispatchMouseEvent', { type: 'mousePressed', x, y, button: 'left', clickCount: 1 });
