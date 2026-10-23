@@ -76,6 +76,10 @@ const FIREPLACE_PALETTES = {
 
 const FIREPLACE_SPRITE_LEVELS = 26;
 const FIREPLACE_SPRITE_SIZE = 48;
+// Coal glows are baked per heat level too, up to the heat where their
+// colour and alpha stop changing
+const FIREPLACE_COAL_LEVELS = 40;
+const FIREPLACE_COAL_MAX_HEAT = 2;
 
 // Three brick-wall tiers, coolest/faintest first. Each is a plain parameter
 // set rather than a distinct code path, so the wall painter stays a single
@@ -130,6 +134,7 @@ class FireplaceAnimationManager {
         // is redrawn each frame
         this.logBuffer = null;
         this.logCtx = null;
+        this.logTop = 0;      // the buffer covers only the band the logs sit in
 
         // Same idea for the brick wall: a static pattern baked once, then just
         // blitted behind everything each frame so the existing 'lighter' room
@@ -152,6 +157,7 @@ class FireplaceAnimationManager {
 
         this.flameSprites = [];
         this.smokeSprite = null;
+        this.coalSprites = [];
 
         this.isEnabled = false;
         this.animationId = null;
@@ -172,6 +178,12 @@ class FireplaceAnimationManager {
         this.noiseSize = 128;
 
         this.config = WP.settings.load();
+
+        // The tier (SPEC §4.8): density thins the sparks and the coal bed,
+        // and smoke is a declared effect. Coals ease toward their count so
+        // Auto's steps never show as a jump.
+        this.quality = host.quality;
+        this.coalsShown = this.config.coalCount * this.quality.density;
     }
 
     saveConfig() {
@@ -300,6 +312,36 @@ class FireplaceAnimationManager {
         smctx.fillStyle = smokeGradient;
         smctx.fillRect(0, 0, FIREPLACE_SPRITE_SIZE, FIREPLACE_SPRITE_SIZE);
         this.smokeSprite = smoke;
+
+        // A coal is a round glow cut off by a flat ellipse; baked at a typical
+        // 2:1 and stretched to each coal's own shape when drawn
+        this.coalSprites = [];
+        const tint = this.palette().ember;
+        for (let i = 0; i < FIREPLACE_COAL_LEVELS; i++) {
+            const heat = (i / (FIREPLACE_COAL_LEVELS - 1)) * FIREPLACE_COAL_MAX_HEAT;
+            const k = Math.min(1, heat * 0.9);
+            const r = Math.round(64 + (tint[0] - 64) * k);
+            const g = Math.round(8 + (tint[1] - 8) * Math.pow(k, 1.5));
+            const b = Math.round(4 + (tint[2] - 4) * Math.pow(k, 2.2));
+
+            const sprite = document.createElement('canvas');
+            sprite.width = FIREPLACE_SPRITE_SIZE;
+            sprite.height = FIREPLACE_SPRITE_SIZE / 2;
+            const cctx = sprite.getContext('2d');
+            const glow = cctx.createRadialGradient(half, half / 2, 0, half, half / 2, half);
+            glow.addColorStop(0, `rgba(${r}, ${g}, ${b}, ${Math.min(0.85, heat * 0.6)})`);
+            glow.addColorStop(0.4, `rgba(${r}, ${Math.round(g * 0.6)}, ${Math.round(b * 0.4)}, ${Math.min(0.4, heat * 0.2)})`);
+            glow.addColorStop(1, 'rgba(0, 0, 0, 0)');
+            cctx.fillStyle = glow;
+            cctx.beginPath();
+            cctx.ellipse(half, half / 2, half, half / 2, 0, 0, Math.PI * 2);
+            cctx.fill();
+            this.coalSprites.push(sprite);
+        }
+    }
+
+    onQuality(quality) {
+        this.quality = quality;
     }
 
     spriteFor(temperature) {
@@ -360,9 +402,6 @@ class FireplaceAnimationManager {
         this.backBuffer.height = Math.max(1, Math.ceil(this.canvas.height / scale));
         this.frontBuffer.width = this.backBuffer.width;
         this.frontBuffer.height = this.backBuffer.height;
-
-        this.logBuffer.width = this.canvas.width;
-        this.logBuffer.height = this.canvas.height;
 
         this.brickBuffer.width = this.canvas.width;
         this.brickBuffer.height = this.canvas.height;
@@ -572,8 +611,15 @@ class FireplaceAnimationManager {
         const ctx = this.logCtx;
         if (!ctx) return;
 
-        ctx.setTransform(1, 0, 0, 1, 0, 0);
-        ctx.clearRect(0, 0, this.logBuffer.width, this.logBuffer.height);
+        // Sized to the band the stack occupies, not the whole screen, so the
+        // per-frame copy only touches pixels that have wood in them
+        this.logTop = this.logs.reduce((top, log) => Math.min(top,
+            log.cy - Math.abs(Math.sin(log.angle)) * log.length / 2 - log.radius - 4), this.canvas.height - 1);
+        this.logTop = Math.max(0, Math.floor(this.logTop));
+        this.logBuffer.width = this.canvas.width;
+        this.logBuffer.height = this.canvas.height - this.logTop;
+
+        ctx.setTransform(1, 0, 0, 1, 0, -this.logTop);
         if (!this.config.showLogs) return;
 
         for (const log of this.logs) {
@@ -1316,7 +1362,7 @@ class FireplaceAnimationManager {
             if (k >= 1) {
                 // Flame does not simply stop; the tips that make it highest are
                 // the ones still carrying enough soot to smoke
-                if (config.smoke && flame.y < smokeStart && Math.random() < 0.012) {
+                if (config.smoke && this.quality.effects.includes('smoke') && flame.y < smokeStart && Math.random() < 0.012) {
                     this.spawnSmoke(flame.x, flame.y);
                 }
                 this.flames.splice(i, 1);
@@ -1361,7 +1407,7 @@ class FireplaceAnimationManager {
         const config = this.config;
 
         if (config.sparks) {
-            const rate = 14 * config.sparkRate * config.intensity * (this.canvas.width / 1400);
+            const rate = 14 * config.sparkRate * config.intensity * (this.canvas.width / 1400) * this.quality.density;
             this.sparkCarry += rate * dt;
             const toSpawn = Math.floor(this.sparkCarry);
             this.sparkCarry -= toSpawn;
@@ -1372,7 +1418,7 @@ class FireplaceAnimationManager {
             }
 
             // A pocket of sap letting go throws a whole handful at once
-            if (Math.random() < 0.25 * config.sparkRate * dt) {
+            if (Math.random() < 0.25 * config.sparkRate * this.quality.density * dt) {
                 const emitter = this.pickEmitter();
                 if (emitter) {
                     const burst = 6 + Math.floor(Math.random() * 14);
@@ -1538,7 +1584,7 @@ class FireplaceAnimationManager {
 
     drawLogs(ctx) {
         if (!this.config.showLogs) return;
-        ctx.drawImage(this.logBuffer, 0, 0);
+        ctx.drawImage(this.logBuffer, 0, this.logTop);
     }
 
     drawEmberGlow(ctx) {
@@ -1716,29 +1762,22 @@ class FireplaceAnimationManager {
         ctx.save();
         ctx.globalCompositeOperation = 'lighter';
 
-        for (const coal of this.coals) {
+        // Coals are in random order, so drawing fewer thins the bed evenly
+        const shown = Math.min(this.coals.length, Math.round(this.coalsShown));
+        for (let i = 0; i < shown; i++) {
+            const coal = this.coals[i];
             const pulse = this.sampleNoise(coal.seed, this.elapsed * coal.speed);
             const heat = coal.heat * (0.25 + pulse * 0.9) * (0.5 + this.fireIntensity * 0.7);
             if (heat <= 0.02) continue;
 
             // Coals glow by blackbody even when the flame above them does not:
             // the salts that turn driftwood green burn off in the gas phase, so
-            // the embers stay red-orange whatever the flame is doing
-            const tint = this.palette().ember;
-            const k = Math.min(1, heat * 0.9);
-            const r = Math.round(64 + (tint[0] - 64) * k);
-            const g = Math.round(8 + (tint[1] - 8) * Math.pow(k, 1.5));
-            const b = Math.round(4 + (tint[2] - 4) * Math.pow(k, 2.2));
-
-            const glow = ctx.createRadialGradient(coal.x, coal.y, 0, coal.x, coal.y, coal.rx * 1.8);
-            glow.addColorStop(0, `rgba(${r}, ${g}, ${b}, ${Math.min(0.85, heat * 0.6)})`);
-            glow.addColorStop(0.4, `rgba(${r}, ${Math.round(g * 0.6)}, ${Math.round(b * 0.4)}, ${Math.min(0.4, heat * 0.2)})`);
-            glow.addColorStop(1, 'rgba(0, 0, 0, 0)');
-
-            ctx.fillStyle = glow;
-            ctx.beginPath();
-            ctx.ellipse(coal.x, coal.y, coal.rx * 1.8, coal.ry * 2.0, 0, 0, Math.PI * 2);
-            ctx.fill();
+            // the embers stay red-orange whatever the flame is doing. The
+            // colour ramp is baked into coalSprites (buildSprites)
+            const level = Math.round(Math.min(1, heat / FIREPLACE_COAL_MAX_HEAT) * (FIREPLACE_COAL_LEVELS - 1));
+            const rx = coal.rx * 1.8;
+            const ry = coal.ry * 2.0;
+            ctx.drawImage(this.coalSprites[level], coal.x - rx, coal.y - ry, rx * 2, ry * 2);
         }
 
         ctx.restore();
@@ -1835,9 +1874,10 @@ class FireplaceAnimationManager {
         // A tab that has been in the background hands back an enormous delta,
         // and letting that through would fire every particle off the screen
         if (!isFinite(dt) || dt < 0) dt = 0;
-        dt = Math.min(dt, 0.05);
+        dt = Math.min(dt, 0.1);
 
         this.elapsed += dt;
+        this.coalsShown += (this.config.coalCount * this.quality.density - this.coalsShown) * Math.min(1, dt * 0.5);
         this.update(dt);
         this.render();
 
