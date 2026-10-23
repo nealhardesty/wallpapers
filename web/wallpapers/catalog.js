@@ -79,7 +79,10 @@
               { keys: ['m'], label: 'Next companion', run: quest => questCycle(quest, 'companion', Object.keys(QuestArt.COMPANIONS), QuestArt.COMPANIONS) },
               { keys: ['p'], label: 'Next palette', run: quest => questCycle(quest, 'palette', Object.keys(QuestEngineData.FILTERS)) },
           ] },
-        { id: 'bing', name: 'Bing Image of the Day', icon: '🖼️', accent: '#8ab4ff', scripts: ['bing/bing.js'],
+        { id: 'synthwave', name: 'Synthwave', icon: '🌇', accent: '#ff4fd8', scripts: ['synthwave/synthwave.js'], background: '#07011a',
+          make: host => new SynthwaveAnimationManager(host), cost: 'low',
+          effects: [['haze', 'medium']] },
+        { id: 'bing', name:'Bing Image of the Day', icon: '🖼️', accent: '#8ab4ff', scripts: ['bing/bing.js'],
           make: host => new BingWallpaperManager(host), cost: 'none', network: ['www.bing.com'] },
     ];
 
