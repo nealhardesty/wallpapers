@@ -49,7 +49,6 @@ WP.schema('halloween', [
     { key: 'fallingLeaves', label: 'Dead Leaves', type: 'toggle' },
     { key: 'leafCount', label: 'Leaf Count', type: 'range', min: 0, max: 160, step: 10 },
     { group: '🎛️ Rendering' },
-    { key: 'quality', label: 'Quality', type: 'select', options: [['auto', '🎚️ Auto (match the frame rate)'], ['high', '💎 High (full resolution)'], ['balanced', '⚖️ Balanced'], ['performance', '🚀 Performance']] },
     { key: 'bloom', label: 'Bloom around the lit areas', type: 'toggle' },
     { key: 'bloomStrength', label: 'Bloom Strength', type: 'range', min: 0.1, max: 2, step: 0.1, digits: 1 },
     { key: 'vignette', label: 'Vignette', type: 'toggle' },
