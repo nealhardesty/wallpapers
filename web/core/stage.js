@@ -236,12 +236,20 @@
     WP.stage = {
         // For a wallpaper's own settings button (Pixel Quest's touch controls).
         openPanel() { tell({ type: 'key', key: ',' }); },
-        pause() { paused = true; },
+        // A wallpaper holding something open (Wiki Pond's stream) hears about
+        // it through optional onPause() / onResume().
+        get paused() { return paused; },
+        pause() {
+            if (paused) return;
+            paused = true;
+            WP.stage.manager?.onPause?.();
+        },
         resume() {
             if (!paused) return;
             paused = false;
             last = -Infinity;
             schedule();
+            WP.stage.manager?.onResume?.();
         },
     };
     document.addEventListener('visibilitychange', () => document.hidden ? WP.stage.pause() : WP.stage.resume());

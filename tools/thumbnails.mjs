@@ -20,7 +20,7 @@ const SEED = 7;
 
 // How long each wallpaper needs to look like itself, and settings that make
 // a better picture (they apply to this render only: thumb mode never saves).
-const SETTLE_MS = { snow: 7000, leaves: 3000, rain: 4000, fireplace: 4000, halloween: 4000, advent: 4000, quest: 5000, fishtank: 4000 };
+const SETTLE_MS = { 'wiki-pond': 5000, lighthouse: 4500, snow: 7000, leaves: 3000, rain: 4000, fireplace: 4000, halloween: 4000, advent: 4000, quest: 5000, fishtank: 4000 };
 const OVERRIDES = {
     quest: { configVersion: 1, story: false },
     neko: { configVersion: 2, size: 128, coat: 'orange' },

@@ -57,12 +57,49 @@ const SATELLITE_JSON = () => {
 };
 const GEOCODE_JSON = { results: [{ name: 'Testville', latitude: 12.34, longitude: -56.78, admin1: 'Fixture County', country: 'Exampleland' }] };
 
+// Lighthouse's marine forecast, made up: two days of hours around now, in
+// Open-Meteo's shape. `calm` is a glassy sea, `swell` a big one.
+function marineJson(sea) {
+    const start = new Date();
+    start.setUTCHours(0, 0, 0, 0);
+    const hours = Array.from({ length: 48 }, (_, i) => new Date(start.getTime() + i * 3600000).toISOString().slice(0, 16));
+    const [height, period] = sea === 'swell' ? [7.5, 14] : [0.3, 6];
+    return { latitude: 0, longitude: 0, timezone: 'GMT', hourly_units: { wave_height: 'm', wave_period: 's', wave_direction: '°' },
+        hourly: { time: hours, wave_height: hours.map(() => height), wave_period: hours.map(() => period), wave_direction: hours.map(() => 290) } };
+}
+
+// Wiki Pond's recent-changes stream, made up: invented titles and users,
+// never a recording of the live stream. Some events are for other wikis, a
+// bot, a canary, a new page and a new account, so the filters get a workout.
+function wikiStream() {
+    const words = ['Velvet', 'Harbour', 'Lantern', 'Orchard', 'Quartz', 'Meadow', 'Cobalt', 'Thistle', 'Ember', 'Willow'];
+    const events = [];
+    for (let i = 0; i < 40; i++) {
+        const type = i % 13 === 5 ? 'new' : i % 17 === 9 ? 'log' : 'edit';
+        const before = 1000 + i * 37, change = (i % 3 === 0 ? -1 : 1) * Math.round(Math.exp((i % 9) + 1));
+        events.push({
+            $schema: '/mediawiki/recentchange/1.0.0', meta: { domain: i === 7 ? 'canary' : 'fixture.example', id: `fixture-${i}` },
+            type, ...(type === 'log' ? { log_type: 'newusers' } : {}), namespace: 0,
+            title: `Fixture ${words[i % words.length]} ${words[(i * 3) % words.length]}`,
+            user: i % 5 === 0 ? `FixtureBot${i}` : i % 4 === 0 ? `~fixture-${i}` : `Fixture User ${i}`,
+            bot: i % 5 === 0, wiki: i % 6 === 3 ? 'xxwiki' : 'enwiki',
+            length: { old: type === 'new' ? null : before, new: before + change },
+        });
+    }
+    return events.map((event, i) => `event: message\nid: fixture-${i}\ndata: ${JSON.stringify(event)}\n\n`).join('');
+}
+
 // ---- Page plumbing ----------------------------------------------------------
 
 let cdp;
 // Problems for the test in progress, whether it may use Bing's fixtures, and
 // whether they come with CORS headers (the extension mustn't need them).
+// `offline` fails the wallpapers' own hosts quietly (an offline device);
+// `marine` picks Lighthouse's fixture; `hold` keeps Wiki Pond's stream open.
 let current = { network: false, cors: true, problems: [], requests: [] };
+// Every wallpaper's declared hosts, from the catalog once it's loaded.
+let NETWORK_HOSTS = ['www.bing.com'];
+const declared = url => NETWORK_HOSTS.some(host => url.startsWith(`https://${host}/`));
 const record = text => current.problems.push(text.split('\n')[0].slice(0, 160));
 // Default execution context of each frame, so the player suite can reach into
 // the stage iframe, which file:// makes cross-origin to the page.
@@ -71,7 +108,8 @@ const contexts = new Map();
 function listen() {
     cdp.on('Runtime.exceptionThrown', ({ exceptionDetails: d }) => record(`exception: ${d.exception?.description || d.text}`));
     cdp.on('Runtime.consoleAPICalled', ({ type, args }) => type === 'error' && record(`console.error: ${args.map(a => a.value ?? a.description).join(' ')}`));
-    cdp.on('Log.entryAdded', ({ entry: e }) => e.level === 'error' && !(current.offline && e.source === 'network') && record(`log: ${e.text} ${e.url || ''}`));
+    // An offline device's failed requests are expected, not errors.
+    cdp.on('Log.entryAdded', ({ entry: e }) => e.level === 'error' && !(current.offline && (e.source === 'network' || declared(e.url || ''))) && record(`log: ${e.text} ${e.url || ''}`));
     cdp.on('Runtime.executionContextCreated', ({ context }) => {
         if (context.auxData?.isDefault) contexts.set(context.auxData.frameId, context.id);
     });
@@ -79,7 +117,8 @@ function listen() {
         const url = request.url;
         current.requests?.push(url);
         if (/^(file|data|blob|chrome-extension):/.test(url) || url === 'about:blank') return cdp.send('Fetch.continueRequest', { requestId });
-        if (LIVE && (url.startsWith(`${LIVE}/`) || url.startsWith('https://www.bing.com/'))) return cdp.send('Fetch.continueRequest', { requestId });
+        if (LIVE && (url.startsWith(`${LIVE}/`) || declared(url))) return cdp.send('Fetch.continueRequest', { requestId });
+        if (current.offline && declared(url)) return cdp.send('Fetch.failRequest', { requestId, errorReason: 'InternetDisconnected' });
         // The browser asks the host's root for a favicon on its own.
         if (LIVE && new URL(url).pathname === '/favicon.ico') return cdp.send('Fetch.fulfillRequest', { requestId, responseCode: 204 });
         const fulfil = (body, type) => cdp.send('Fetch.fulfillRequest', {
@@ -89,6 +128,10 @@ function listen() {
         });
         if (current.network && url.startsWith('https://www.bing.com/HPImageArchive')) return fulfil(Buffer.from(JSON.stringify(BING_JSON)), 'application/json');
         if (current.network && url.startsWith('https://www.bing.com/th')) return fulfil(PIXEL, 'image/png');
+        if (current.network && url.startsWith('https://marine-api.open-meteo.com/v1/marine?')) return fulfil(Buffer.from(JSON.stringify(marineJson(current.marine))), 'application/json');
+        // `hold` leaves the stream hanging open, as a quiet live one would be.
+        if (current.network && current.hold && url === 'https://stream.wikimedia.org/v2/stream/recentchange') return;
+        if (current.network && url === 'https://stream.wikimedia.org/v2/stream/recentchange') return fulfil(Buffer.from(wikiStream()), 'text/event-stream; charset=utf-8');
         // The fixture's photo can arrive after its test has ended; only the
         // fixture names it, so it's never a wallpaper going online.
         if (url.startsWith('https://www.bing.com/th?id=smoke-fixture')) return fulfil(PIXEL, 'image/png');
@@ -127,11 +170,12 @@ async function waitFor(check, ms = READY_MS) {
     return null;
 }
 
-// Navigate with empty storage: clear it from a blank stage first.
-async function fresh(url) {
+// Navigate with empty storage: clear it from a blank stage first. `stored`
+// is any storage to start with instead, as { key: value }.
+async function fresh(url, stored = {}) {
     await cdp.send('Page.navigate', { url: `${WEB}/stage.html?w=blank` });
     await waitFor(() => evaluate('WP.stage?.ready'));
-    await evaluate('localStorage.clear()');
+    await evaluate(`localStorage.clear(); for (const [k, v] of Object.entries(${JSON.stringify(stored)})) localStorage.setItem(k, JSON.stringify(v))`);
     await cdp.send('Page.navigate', { url });
 }
 
@@ -703,6 +747,104 @@ async function extensionSuite(extensionId) {
     return failed();
 }
 
+// ---- Wallpapers' own checks ----------------------------------------------------
+// Run right after that wallpaper's stage, against fixtures (not under SMOKE_URL).
+
+const shoot = async name => {
+    const { data } = await cdp.send('Page.captureScreenshot', { format: 'png' });
+    writeFileSync(join(SHOTS, `${name}.png`), Buffer.from(data, 'base64'));
+};
+const stageReady = () => waitFor(() => evaluate('WP.stage?.ready'));
+
+const EXTRA = {
+    lighthouse: {
+        'no network while live swell is off': async () => {
+            current.network = true;
+            await fresh(`${WEB}/stage.html?w=lighthouse`);
+            await stageReady();
+            await sleep(1500);
+            const asked = current.requests.filter(url => !/^(file|data|blob):/.test(url));
+            if (asked.length) record(`asked: ${asked.join(' ')}`);
+            return true;
+        },
+        'offline with live swell on: a sea all the same, and a note': async () => {
+            current.offline = true;
+            await fresh(`${WEB}/stage.html?w=lighthouse`, { 'wp:lighthouse': { configVersion: 1, liveSwell: true } });
+            await stageReady();
+            if (!await waitFor(() => evaluate(`WP.stage.manager.swellStatus === 'offline'`), 5000)) record('never gave up on the forecast');
+            if (await evaluate(DRAWN) < 2) record('nothing drawn offline');
+            const note = await evaluate('WP.stage.manager.note.textContent');
+            if (!/unavailable/.test(note)) record(`note says: ${note}`);
+            await shoot('lighthouse-offline');
+            return true;
+        },
+        'a high-swell forecast visibly raises the waves': async () => {
+            const sea = {};
+            for (const fixture of ['calm', 'swell']) {
+                Object.assign(current, { network: true, marine: fixture });
+                await fresh(`${WEB}/stage.html?w=lighthouse&seed=7`, { 'wp:lighthouse': { configVersion: 1, liveSwell: true } });
+                await stageReady();
+                if (!await waitFor(() => evaluate(`WP.stage.manager.swellStatus === 'live'`), 5000)) return record(`${fixture}: forecast never arrived`);
+                await sleep(800);
+                sea[fixture] = await evaluate('({ px: WP.stage.manager.seaPixels(), saved: !!localStorage.getItem("wp:lighthouse:swell") })');
+                if (!sea[fixture].saved) record(`${fixture}: forecast not cached in host.storage`);
+                if (await evaluate(DRAWN) < 2) record(`${fixture}: nothing drawn`);
+                await shoot(`lighthouse-${fixture}`);
+            }
+            if (!(sea.swell.px > 4 * sea.calm.px && sea.swell.px > 40)) record(`waves ${sea.calm.px.toFixed(1)} px calm, ${sea.swell.px.toFixed(1)} px in the swell`);
+            return true;
+        },
+    },
+    'wiki-pond': {
+        'the fixture stream drives ripples (titles stay off)': async () => {
+            current.network = true;
+            await fresh(`${WEB}/stage.html?w=wiki-pond`);
+            await stageReady();
+            const shown = await waitFor(() => evaluate('WP.stage.manager.stats.shown >= 12 && WP.stage.manager.stats.shown'), 8000);
+            if (!shown) record(`only ${await evaluate('WP.stage.manager.stats.shown')} edits shown`);
+            const state = await evaluate(`(m => ({ lotuses: m.lotuses.length, titles: m.titles.length, ripples: m.ripples.filter(r => r.colour !== WikiPondAnimationManager.RAIN).length }))(WP.stage.manager)`);
+            if (!state.ripples) record('no edit ripples on the pond');
+            if (!state.lotuses) record('no lotus for the new article');
+            if (state.titles) record('titles shown while off');
+            if (await evaluate(DRAWN) < 2) record('nothing drawn');
+            await shoot('wiki-pond-live');
+            return true;
+        },
+        'network blocked: the quiet offline pond, not a blank screen': async () => {
+            current.offline = true;
+            await fresh(`${WEB}/stage.html?w=wiki-pond`);
+            await stageReady();
+            if (!await waitFor(() => evaluate(`WP.stage.manager.status === 'offline'`), 5000)) record('never went offline');
+            await sleep(1500);
+            const state = await evaluate(`(m => ({ note: m.note.textContent, opacity: m.note.style.opacity, rain: m.ripples.length }))(WP.stage.manager)`);
+            if (!/Waiting for edits/.test(state.note) || state.opacity !== '1') record(`note: ${JSON.stringify(state)}`);
+            if (!state.rain) record('no rain on the offline pond');
+            if (await evaluate(DRAWN) < 2) record('nothing drawn offline');
+            await shoot('wiki-pond-offline');
+            return true;
+        },
+        'the stream closes on pause and on stop, and reopens on resume': async () => {
+            Object.assign(current, { network: true, hold: true });
+            await fresh(`${WEB}/stage.html?w=wiki-pond`);
+            await stageReady();
+            const held = `!!(window.held = WP.stage.manager.source)`;
+            if (!await waitFor(() => evaluate(held), 5000)) return record('no stream to begin with');
+            await evaluate('WP.stage.pause()');
+            if (await evaluate('window.held.readyState !== 2 || WP.stage.manager.source !== null')) record('stream still open while paused');
+            const connects = await evaluate('WP.stage.manager.stats.connects');
+            await sleep(2500);
+            if (await evaluate(`WP.stage.manager.source !== null || WP.stage.manager.stats.connects !== ${connects}`)) record('reconnected while paused');
+            await evaluate('WP.stage.resume()');
+            if (!await waitFor(() => evaluate(`WP.stage.manager.stats.connects > ${connects}`), 3000)) record('no stream after resume');
+            if (!await waitFor(() => evaluate(held), 5000)) return record('no stream to stop');
+            await evaluate('WP.stage.manager.stop()');
+            await sleep(2500);
+            if (await evaluate('window.held.readyState !== 2 || WP.stage.manager.source !== null')) record('stream still open after stop()');
+            return true;
+        },
+    },
+};
+
 async function main(only) {
     mkdirSync(SHOTS, { recursive: true });
     const withExtension = !only.length && !LIVE;
@@ -716,6 +858,7 @@ async function main(only) {
         await cdp.send('Page.navigate', { url: `${WEB}/stage.html?w=blank` });
         await waitFor(() => evaluate('WP.stage?.ready'));
         const catalog = await evaluate('WP.catalog.map(e => ({ id: e.id, pseudo: !!e.pseudo, disabled: e.disabled || null, network: !!e.network, offline: !!e.offline }))');
+        NETWORK_HOSTS = await evaluate('[...new Set(WP.catalog.flatMap(e => e.network || []))]');
         const ids = only.length ? only : catalog.filter(e => !e.pseudo).map(e => e.id);
 
         let failed = 0;
@@ -729,6 +872,11 @@ async function main(only) {
             console.log(`${id.padEnd(18)} ${String(r.readyMs).padStart(5)}ms ${String(r.drawn).padStart(6)}  ${verdict}`);
             if (verdict === '✗') for (const p of [...new Set(r.problems)]) console.log(`    ${p}`);
             failed += await stageChecks(id);
+            if (EXTRA[id] && !LIVE) {
+                const { check, failed: extra } = checker();
+                for (const [name, fn] of Object.entries(EXTRA[id])) await check(`${id}: ${name}`, fn);
+                failed += extra();
+            }
         }
         if (!only.length) {
             console.log('player');

@@ -156,3 +156,6 @@ vite.config.ts.timestamp-*
 
 # Bing's images of the day, fetched by make bing-json (Pages makes its own)
 web/bing.json
+
+# Agent worktrees (Claude Code)
+.claude/worktrees/

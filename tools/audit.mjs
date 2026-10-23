@@ -23,10 +23,12 @@ export const MAX_BYTES = 1024 * 1024;
 // offline. Keys are path prefixes; '' applies everywhere in web/.
 export const URL_ALLOW = {
     '': ['www.w3.org'],
-    'web/manifest.json': ['www.bing.com', 'celestrak.org', 'geocoding-api.open-meteo.com', 'github.com'],   // host_permissions; homepage_url
+    'web/manifest.json': ['www.bing.com', 'celestrak.org', 'geocoding-api.open-meteo.com', 'github.com', 'marine-api.open-meteo.com', 'stream.wikimedia.org'],   // host_permissions; homepage_url
     'web/core/location.js': ['geocoding-api.open-meteo.com'],
     'web/wallpapers/satellites/': ['celestrak.org', 'geocoding-api.open-meteo.com'],
     'web/wallpapers/bing/': ['www.bing.com', 'bing.com', 'corsproxy.io', 'api.allorigins.win', 'cors-anywhere.herokuapp.com'],
+    'web/wallpapers/lighthouse/': ['marine-api.open-meteo.com'],
+    'web/wallpapers/wiki-pond/': ['stream.wikimedia.org'],
 };
 
 const FILE_EXTENSIONS = /^(png|jpe?g|gif|webp|svg|ico|js|mjs|cjs|css|html?|json|md|txt)$/i;
