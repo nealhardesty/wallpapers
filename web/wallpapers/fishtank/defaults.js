@@ -1,7 +1,7 @@
 // Default settings for Fish Tank. Saved settings store only what
 // differs from these (SPEC §4.1). Tuned as on the old standalone page.
 WP.defaults('fishtank', {
-    configVersion: 2,
+    configVersion: 1,
 
     // Livestock
     fishCount: 26,

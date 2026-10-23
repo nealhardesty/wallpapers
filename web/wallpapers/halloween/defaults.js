@@ -1,7 +1,7 @@
 // Default settings for Halloween Night. Saved settings store only what
 // differs from these (SPEC §4.1). Tuned as on the old standalone page.
 WP.defaults('halloween', {
-    configVersion: 5,
+    configVersion: 4,
 
     // Scene
     theme: 'classic',

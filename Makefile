@@ -26,7 +26,7 @@ serve-http: ## Serve web/ at http://localhost:8000 (PORT=, HOST=0.0.0.0 for the 
 	@PORT=$(PORT) node tools/serve.mjs
 
 serve-https: ## Serve web/ over https at https://localhost:8443, making a self-signed cert if needed
-	@PORT=$(or $(HTTPS_PORT),8443) node tools/serve.mjs --https
+	@PORT=$(or $(HTTPS_PORT),8443) HOST=0.0.0.0 node tools/serve.mjs --https
 
 serve: serve-https
 
@@ -63,9 +63,9 @@ android-install: android-build ## Install the debug APK on the connected device 
 android-logcat: ## Follow the app's log, including the page's console
 	$(ADB) logcat -v brief 'Wallpapers:V' 'chromium:W' '*:S'
 
-android-emulator: ## Boot the first Android emulator (AVD= to pick one), in the background
+android-emulator: ## Boot the first Android emulator in the background (AVD= to pick one, EMULATOR_FLAGS=-no-window)
 	@test -n "$(AVD)" || { echo "no emulator: make one in Android Studio's Device Manager"; exit 1; }
-	@$(ANDROID_HOME)/emulator/emulator -avd "$(AVD)" -no-snapshot-save -no-boot-anim >/dev/null 2>&1 &
+	@$(ANDROID_HOME)/emulator/emulator -avd "$(AVD)" -no-snapshot-save -no-boot-anim $(EMULATOR_FLAGS) >/dev/null 2>&1 &
 	@$(ADB) wait-for-device shell 'while [ "$$(getprop sys.boot_completed)" != 1 ]; do sleep 1; done'
 	@echo "android: $(AVD) is up"
 
