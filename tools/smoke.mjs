@@ -191,8 +191,11 @@ async function stage(id, entry) {
 
 // A wallpaper's own checks (its Phase 8 "→" check), run on its stage after
 // the common ones. They record problems like everything else.
-const bootStage = async url => {
-    await fresh(url);
+const bootStage = async (url, storage = {}) => {
+    await cdp.send('Page.navigate', { url: `${WEB}/stage.html?w=blank` });
+    await waitFor(() => evaluate('WP.stage?.ready'));
+    await evaluate(`localStorage.clear(); for (const [k, v] of Object.entries(${JSON.stringify(storage)})) localStorage.setItem(k, JSON.stringify(v))`);
+    await cdp.send('Page.navigate', { url });
     if (!await waitFor(() => evaluate('WP.stage?.ready'))) throw new Error(`${url} never got ready`);
 };
 const drag = async points => {
@@ -226,6 +229,29 @@ const STAGE_CHECKS = {
             lit[hour] = await evaluate(`${pane}.litCount()`);
         }
         if (!(lit['22'] > lit['03'] * 3)) record(`lit windows at 22:00 ${lit['22']}, at 03:00 ${lit['03']}`);
+    },
+    // 8.12: New Year counts down from 23:59:50 and fires the finale at
+    // midnight; tap mode is silent until tapped. (Auto's lull is a unit test.)
+    fireworks: async () => {
+        const show = 'WP.stage.manager';
+        await bootStage(`${WEB}/stage.html?w=fireworks&date=2026-12-31T23:59:50`, { 'wp:fireworks': { configVersion: 1, mode: 'newyear' } });
+        await sleep(2500);
+        const before = await evaluate(`({ count: ${show}.countdown, launched: ${show}.launched, parts: ${show}.parts.length })`);
+        if (before.count < 6 || before.count > 9) record(`countdown shows ${before.count} at 23:59:52`);
+        if (before.launched || before.parts) record(`${before.launched} shells and ${before.parts} stars before midnight`);
+        const finale = await waitFor(() => evaluate(`${show}.launched >= 10 && ${show}.parts.length > 300 && { launched: ${show}.launched, year: ${show}.yearFired }`), 14000);
+        if (!finale) record('no finale after midnight');
+        else if (finale.year !== 2027) record(`the year in stars was ${finale.year}`);
+        await bootStage(`${WEB}/stage.html?w=fireworks`, { 'wp:fireworks': { configVersion: 1, mode: 'tap' } });
+        await sleep(2000);
+        const frames = await evaluate('WP.host.frames.count');
+        await sleep(600);
+        const quiet = await evaluate(`({ launched: ${show}.launched, parts: ${show}.parts.length, shells: ${show}.shells.length, frames: WP.host.frames.count })`);
+        if (quiet.launched || quiet.parts || quiet.shells) record(`tap mode launched ${quiet.launched} shells by itself`);
+        if (quiet.frames !== frames) record(`tap mode drew ${quiet.frames - frames} frames with nothing in the sky`);
+        await drag([[640, 300]]);
+        const tapped = await waitFor(() => evaluate(`${show}.tapped && ${show}.parts.length > 20`), 4000);
+        if (!tapped) record('a tap launched nothing');
     },
 };
 

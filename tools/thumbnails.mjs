@@ -31,6 +31,7 @@ const OVERRIDES = {
 const PARAMS = {
     'rainy-window': '&date=2026-10-22T21:00',
 };
+SETTLE_MS.fireworks = 2600;
 
 const { chrome, profile, cdp } = await launch({ width: 1280, height: 800 });
 try {

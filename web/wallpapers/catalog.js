@@ -84,6 +84,14 @@
           make: host => new RainyWindowAnimationManager(host), cost: 'medium', interactive: true,
           effects: [['fog', 'medium']],
           keys: [{ keys: ['w'], label: 'Wipe the glass', run: pane => { pane.wipe(); return 'Wiped'; } }] },
+        { id: 'fireworks', name: 'Fireworks', icon: '🎆', accent: '#ffb347', background: '#03040c',
+          scripts: ['fireworks/fireworks-show.js', 'fireworks/fireworks.js'],
+          make: host => new FireworksAnimationManager(host), cost: 'medium', interactive: true,
+          effects: [['smoke', 'medium']],
+          keys: [
+              { keys: [' ', 'l'], label: 'Launch a shell', run: show => { show.launchRandom(); } },
+              { keys: ['g'], label: 'Grand finale', run: show => { show.grandFinale(); return '🎆 Grand finale'; } },
+          ] },
         { id: 'bing', name: 'Bing Image of the Day', icon: '🖼️', accent: '#8ab4ff', scripts: ['bing/bing.js'],
           make: host => new BingWallpaperManager(host), cost: 'none', network: ['www.bing.com'] },
     ];
