@@ -15,7 +15,16 @@
     let choice = null;   // what the user picked: a wallpaper id or 'seasonal'
     let stage = null;    // { id, frame, ready }
     let panelOnReady = params.panel === 'open';
-    let tier = WP.resolveTier({ override: params.tier, mode: WP.store.get('wp:performance')?.mode, host });
+    // Power signals, for the policy that caps quality (SPEC §4.8). The
+    // browser gives battery and reduced motion; the Android app adds battery
+    // saver, heat and its preview by calling WP.power({...}).
+    const signals = {
+        host,
+        batteryAware: WP.store.get('wp:performance')?.batteryAware !== false,
+        reducedMotion: matchMedia('(prefers-reduced-motion: reduce)').matches,
+    };
+    let policy = WP.powerPolicy(signals);
+    let stats = null;   // the stage's latest, once a second
     let rebuildTimer = null;
 
     const resolve = id => id === 'seasonal' ? WP.seasonalFor(new Date()) : id;
@@ -40,8 +49,14 @@
 
     // renderScale: lay the stage out smaller and scale it up, so every
     // wallpaper renders fewer pixels without knowing it.
-    function scale(frame) {
-        const s = tier.renderScale;
+    // In the Android app the surface itself shrinks (SPEC §4.8): the page
+    // stays full size and tells the app instead.
+    const app = window.WallpapersApp;
+    function scale(frame, s) {
+        if (app) {
+            app.setRenderScale(s);
+            s = 1;
+        }
         frame.style.width = `${s * 100}%`;
         frame.style.height = `${s * 100}%`;
         frame.style.transform = s === 1 ? '' : `scale(${1 / s})`;
@@ -54,9 +69,17 @@
         frame.className = 'stage entering';
         frame.title = WP.entry(id).name;
         frame.src = stageUrl(id);
-        scale(frame);
+        // The stage plans its own quality from the same inputs; laying it
+        // out at that size now saves a resize once it starts.
+        const planned = WP.planQuality({
+            entry: WP.entry(id), policy: WP.powerPolicy({ host, reducedMotion: signals.reducedMotion, batteryAware: signals.batteryAware }),
+            mode: WP.modeOf({ override: params.tier, saved: WP.store.get('wp:performance') }),
+            memory: WP.store.get(`wp:perf:${id}`),
+        });
+        scale(frame, planned.quality.renderScale);
         document.body.prepend(frame);
         const mounted = stage = { id, frame, ready: false };
+        app?.setAccent(WP.entry(id).accent || '#000000');
 
         const reveal = () => {
             if (mounted.revealed) return;
@@ -115,12 +138,64 @@
         rebuildTimer = setTimeout(() => stage && mount(stage.id), REBUILD_MS);
     }
 
+    // wp:performance holds only what differs from Auto and battery-aware.
+    function savePerformance(patch) {
+        const saved = { mode: 'auto', batteryAware: true, ...WP.store.get('wp:performance'), ...patch };
+        const kept = {};
+        if (saved.mode !== 'auto') kept.mode = saved.mode;
+        if (!saved.batteryAware) kept.batteryAware = false;
+        WP.store.set('wp:performance', Object.keys(kept).length ? kept : null);
+    }
+
     function setMode(mode) {
-        WP.store.set('wp:performance', mode === 'auto' ? null : { mode });
-        tier = WP.resolveTier({ override: params.tier, mode, host });
-        if (!stage) return;
-        scale(stage.frame);
-        post({ wp: 'tier', tier: tier.tier });
+        savePerformance({ mode });
+        post({ wp: 'mode' });
+    }
+
+    function setBatteryAware(on) {
+        savePerformance({ batteryAware: on });
+        power({ batteryAware: on });
+    }
+
+    function power(changes = {}) {
+        Object.assign(signals, changes);
+        policy = WP.powerPolicy(signals);
+        post({ wp: 'power', policy });
+    }
+    WP.power = power;
+    // Android's home-screen pages, 0 to 1, for wallpapers that pan with them.
+    WP.scroll = x => post({ wp: 'scroll', x });
+
+    // Another page changed the settings: another tab, or on Android the
+    // settings screen. Follow it.
+    window.addEventListener('storage', event => {
+        if (!event.key?.startsWith('wp:') || !stage) return;
+        if (event.key === 'wp:current' && !params.w) {
+            const saved = WP.store.get('wp:current');
+            if (saved && saved !== choice && usable(saved)) show(saved);
+        } else if (event.key === `wp:${stage.id}`) {
+            rebuild();
+        } else if (event.key === 'wp:performance') {
+            signals.batteryAware = WP.store.get('wp:performance')?.batteryAware !== false;
+            power();
+            post({ wp: 'mode' });
+        }
+        WP.panel.refresh();
+    });
+
+    navigator.getBattery?.().then(battery => {
+        const read = () => power({ battery: { charging: battery.charging, level: battery.level } });
+        battery.addEventListener('chargingchange', read);
+        battery.addEventListener('levelchange', read);
+        read();
+    }).catch(() => {});
+    matchMedia('(prefers-reduced-motion: reduce)').addEventListener('change', event => power({ reducedMotion: event.matches }));
+
+    // ?hud=1: frame rate, frame cost, rung and power, for tuning.
+    const hud = params.hud ? document.body.appendChild(WP.h('div', { class: 'hud', 'aria-hidden': 'true' })) : null;
+    function describe(s) {
+        const rung = s.rung === null ? 'pinned' : `rung ${s.rung + 1}/${s.of}`;
+        return `${s.label} · ${s.idle ? 'idle' : `${s.fps} fps`} · ${s.ms.toFixed(1)} ms · ${rung} · ${s.reasons.join(', ') || 'no power limits'}`;
     }
 
     function toggleFullscreen() {
@@ -201,6 +276,7 @@
         if (message.wp === 'ready') {
             stage.ready = true;
             stage.reveal();
+            if (policy.reasons.length) post({ wp: 'power', policy });
             if (panelOnReady) {
                 panelOnReady = false;
                 WP.panel.open();
@@ -209,6 +285,12 @@
             }
         } else if (message.wp === 'key') {
             key(message.key);
+        } else if (message.wp === 'quality') {
+            scale(stage.frame, message.quality.renderScale);
+        } else if (message.wp === 'stats') {
+            stats = message;
+            if (hud) hud.textContent = describe(message);
+            WP.panel.stats?.(message);
         } else if (message.wp === 'rebuild') {
             rebuild();
         } else if (message.wp === 'corner') {
@@ -254,13 +336,16 @@
         show: (id, options) => show(id, options),
         cycle,
         setMode,
+        setBatteryAware,
+        describe,
         applySettings,
         focusStage,
         toast,
         get choice() { return choice; },
         get resolved() { return resolve(choice); },
         get stage() { return stage && { id: stage.id, ready: stage.ready }; },
-        get tier() { return tier.tier; },
+        get stats() { return stats; },
+        get policy() { return policy; },
         get host() { return host; },
     };
 

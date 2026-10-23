@@ -9,13 +9,16 @@
     const { h } = WP;
     const MONTH = () => new Date().toLocaleDateString(undefined, { month: 'long' });
     const TIER_NOTES = {
-        auto: 'The best this device can manage.',
+        auto: 'The best this device can manage, adjusted as it goes.',
         low: 'Half resolution, 20 frames a second: easiest on batteries.',
         medium: 'Three-quarter resolution, 30 frames a second.',
         high: 'Full resolution, every frame the display shows.',
     };
 
+    const COST_TITLES = { 1: 'Light on batteries', 2: 'Moderate on batteries', 3: 'Heavy on batteries: try Low on a phone' };
+
     let panel = null, picker = null, title = null, subtitle = null, body = null, tierButtons = null, tierNote = null, resetButton = null;
+    let liveLine = null, batterySwitch = null;
     let shownFor = null;   // the wallpaper whose settings are on screen
     const loaded = {};     // id → Promise for its defaults.js and settings.js
 
@@ -40,6 +43,11 @@
             onclick: () => { WP.player.setMode(mode); renderTier(); },
         }, mode[0].toUpperCase() + mode.slice(1)));
         tierNote = h('p', { class: 'tier-note' });
+        liveLine = h('p', { class: 'tier-live', 'aria-live': 'off' });
+        batterySwitch = h('button', {
+            type: 'button', role: 'switch', class: 'switch', id: 'battery-aware',
+            onclick: () => { WP.player.setBatteryAware(batterySwitch.getAttribute('aria-checked') !== 'true'); renderTier(); },
+        });
 
         resetButton = h('button', { type: 'button', class: 'action', onclick: confirmReset });
         const importInput = h('input', { type: 'file', accept: 'application/json,.json', hidden: true, onchange: importSettings });
@@ -53,8 +61,15 @@
                 h('div', { class: 'tier' },
                     h('span', { class: 'tier-label', id: 'tier-label' }, 'Performance'),
                     h('div', { class: 'segmented', role: 'radiogroup', 'aria-labelledby': 'tier-label' }, tierButtons),
-                    tierNote),
+                    tierNote,
+                    liveLine,
+                    h('label', { class: 'battery', for: 'battery-aware' }, 'Save power on battery'),
+                    batterySwitch),
                 h('div', { class: 'actions' },
+                    // Only in the Android app's settings screen.
+                    window.WallpapersApp?.canSetWallpaper?.()
+                        ? h('button', { type: 'button', class: 'action primary', onclick: () => window.WallpapersApp.setWallpaper() }, 'Set as wallpaper')
+                        : null,
                     resetButton,
                     h('button', { type: 'button', class: 'action', title: 'Save every wallpaper’s settings to a file', onclick: exportSettings }, 'Export'),
                     h('button', { type: 'button', class: 'action', title: 'Load settings from an exported file', onclick: () => importInput.click() }, 'Import'),
@@ -77,7 +92,9 @@
                 onclick: () => WP.player.show(entry.id, { persist: true }),
                 onpointerenter: () => preview(tile, entry.id), onpointerleave: endPreview,
                 onfocus: () => preview(tile, entry.id), onblur: endPreview,
-            }, h('span', { class: 'tile-icon', 'aria-hidden': 'true' }, entry.icon), h('span', { class: 'tile-name' }, entry.name));
+            }, h('span', { class: 'tile-icon', 'aria-hidden': 'true' }, entry.icon), h('span', { class: 'tile-name' }, entry.name),
+            // How hard it works a phone, from make bench (wallpapers/costs.js).
+            WP.costs?.[entry.id] ? h('span', { class: 'tile-cost', title: COST_TITLES[WP.costs[entry.id]] }, '⚡'.repeat(WP.costs[entry.id])) : null);
             picker.append(tile);
             thumb(tile, entry.id === 'seasonal' ? WP.seasonalFor(new Date()) : entry.id);
         }
@@ -177,6 +194,13 @@
         const mode = WP.store.get('wp:performance')?.mode || 'auto';
         for (const button of tierButtons) button.setAttribute('aria-checked', String(button.dataset.mode === mode));
         tierNote.textContent = TIER_NOTES[mode];
+        batterySwitch.setAttribute('aria-checked', String(WP.store.get('wp:performance')?.batteryAware !== false));
+        if (WP.player.stats) stats(WP.player.stats);
+    }
+
+    // What the stage is doing right now, from its once-a-second report.
+    function stats(report) {
+        if (panel && !panel.hidden) liveLine.textContent = `⚡ ${WP.player.describe(report)}`;
     }
 
     // Reset takes two clicks, with no dialog to block the wallpaper.
@@ -237,6 +261,7 @@
         close,
         toggle: () => (panel && !panel.hidden ? close() : open()),
         refresh,
+        stats,
         get isOpen() { return !!panel && !panel.hidden; },
         contains: node => !!panel && panel.contains(node),
     };

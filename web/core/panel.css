@@ -93,6 +93,7 @@
 .tile[aria-pressed='true'] { border-color: var(--tile-accent); box-shadow: inset 0 0 0 1px var(--tile-accent), 0 0 18px color-mix(in srgb, var(--tile-accent) 35%, transparent); }
 .tile-icon { font-size: 24px; line-height: 1; filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.4)); }
 .tile-name { font-size: 12px; font-weight: 600; line-height: 1.2; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.7); }
+.tile-cost { position: absolute; top: 5px; right: 6px; font-size: 9px; letter-spacing: -1px; filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.8)); }
 .tile.has-thumb { background-size: cover; background-position: center; }
 .tile.has-thumb .tile-icon { display: none; }
 .tile.has-thumb .tile-name { margin-top: auto; }
@@ -207,9 +208,13 @@
 .segmented button { padding: 5px 0; border: 0; border-radius: 8px; background: none; cursor: pointer; font-size: 12.5px; color: var(--ink-soft); }
 .segmented button[aria-checked='true'] { background: rgba(255, 255, 255, 0.14); color: var(--ink); }
 .tier-note { grid-column: 1 / -1; margin: 0; color: var(--ink-faint); font-size: 12px; }
+.tier-live { grid-column: 1 / -1; margin: 0; color: var(--ink-faint); font-size: 11.5px; font-variant-numeric: tabular-nums; min-height: 1.3em; }
+.tier .battery { color: var(--ink-soft); font-size: 13px; }
+.tier .switch { justify-self: end; }
 .actions { display: flex; flex-wrap: wrap; gap: 6px; }
 .action { padding: 4px 11px; border: 1px solid var(--line); border-radius: 999px; background: none; cursor: pointer; font-size: 12.5px; color: var(--ink-soft); }
 .action:hover { color: var(--ink); border-color: rgba(255, 255, 255, 0.2); }
+.action.primary { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 22%, transparent); color: var(--ink); }
 .action.confirm { border-color: var(--accent); color: var(--ink); }
 .keys { margin: 0; color: var(--ink-faint); font-size: 12px; display: flex; flex-wrap: wrap; gap: 4px 12px; }
 .panel kbd, .help kbd {

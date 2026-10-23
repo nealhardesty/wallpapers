@@ -144,7 +144,8 @@ const PANEL_OPEN = `(() => { const p = document.getElementById('panel'); return 
 const STORAGE = `(() => {
     const id = WP.host.id;
     const diff = WP.diffSettings(WP.settings.defaults(), WP.stage.manager.config || {});
-    const foreign = Object.keys(localStorage).filter(key => !key.startsWith('wp:' + id + ':'));
+    // The stage's own record of where Auto settled is allowed too.
+    const foreign = Object.keys(localStorage).filter(key => !key.startsWith('wp:' + id + ':') && key !== 'wp:perf:' + id);
     return { diff: diff && Object.keys(diff).filter(k => k !== 'configVersion'), foreign };
 })()`;
 
@@ -367,6 +368,40 @@ async function playerSuite(catalog) {
         const resumed = await inStage('WP.host.frames.count');
         if (still !== paused) record(`${still - paused} frames while paused`);
         if (resumed <= still) record('no frames after resume');
+        return true;
+    });
+
+    await check('Auto steps down from slow frames; the player follows its scale', async () => {
+        await fresh(`${WEB}/index.html?w=rain&hud=1`);
+        await playerReady();
+        // 20 ms of work every frame: over half of any frame interval.
+        await inStage('requestAnimationFrame(function spin() { const t = performance.now(); while (performance.now() - t < 20); requestAnimationFrame(spin); })');
+        const stepped = await waitFor(() => inStage("WP.host.quality.label !== 'High' && WP.host.quality.label"), 4000);
+        if (!stepped) return record('still on High after 4 s of slow frames');
+        const deeper = await waitFor(() => inStage("WP.host.quality.renderScale < 1 && WP.host.quality.renderScale"), 12000);
+        await sleep(300);
+        const layout = await inStage('innerWidth') / await evaluate('innerWidth');
+        if (!deeper) record('never reached a smaller render scale');
+        else if (Math.abs(layout - deeper) > 0.03) record(`stage laid out at ${layout.toFixed(2)}; its quality says ${deeper}`);
+        if (!await inStage("localStorage.getItem('wp:perf:rain')")) record('settled rung not remembered');
+        const hud = await waitFor(() => evaluate("document.querySelector('.hud')?.textContent"));
+        if (!/fps · .* ms · rung \d+\/\d+/.test(hud || '')) record(`hud says: ${hud}`);
+        return true;
+    });
+
+    await check('idleUntil stops frames until input wakes them', async () => {
+        await fresh(`${WEB}/index.html?w=rain`);
+        await playerReady();
+        await inStage('WP.host.idleUntil()');
+        await sleep(200);
+        const idle = await inStage('WP.host.frames.count');
+        await sleep(600);
+        const still = await inStage('WP.host.frames.count');
+        await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 300, y: 300 });
+        await sleep(400);
+        const woken = await inStage('WP.host.frames.count');
+        if (still !== idle) record(`${still - idle} frames while idle`);
+        if (woken <= still) record('input did not wake it');
         return true;
     });
 

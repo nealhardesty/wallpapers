@@ -49,10 +49,24 @@
     pointer-events: none;
     transition: opacity 0.3s, transform 0.3s;
   }
+  .hud {
+    position: fixed;
+    top: 8px;
+    left: 8px;
+    z-index: 10;
+    padding: 4px 8px;
+    border-radius: 6px;
+    background: rgba(0, 0, 0, 0.6);
+    color: #9ef0b0;
+    font: 11px/1.4 ui-monospace, monospace;
+    pointer-events: none;
+  }
   #toast.show { opacity: 1; transform: translate(-50%, 0); }
 </style>
 <script src="core/wp.js" defer></script>
+<script src="core/perf.js" defer></script>
 <script src="wallpapers/catalog.js" defer></script>
+<script src="wallpapers/costs.js" defer></script>
 <script src="core/settings.js" defer></script>
 <script src="core/panel.js" defer></script>
 <script src="core/player.js" defer></script>

@@ -11,6 +11,7 @@ const WEB = resolve(import.meta.dirname, '../web');
 const context = vm.createContext({ URLSearchParams });
 const load = path => vm.runInContext(readFileSync(join(WEB, path), 'utf8'), context, { filename: path });
 load('core/wp.js');
+load('core/perf.js');
 load('wallpapers/catalog.js');
 const WP = context.WP;
 // JSON round trip: vm objects have their own prototypes, which deepEqual minds.
@@ -63,12 +64,94 @@ test('settings: diff then merge round-trips', () => {
     assert.deepEqual(plain(WP.mergeSettings(defaults, WP.diffSettings(defaults, config))), config);
 });
 
-test('tiers: URL override, then saved mode, then the host default', () => {
-    assert.equal(WP.resolveTier({ override: 'low', mode: 'high', host: 'standalone' }).tier, 'low');
-    assert.equal(WP.resolveTier({ mode: 'medium', host: 'standalone' }).tier, 'medium');
-    assert.equal(WP.resolveTier({ mode: 'auto', host: 'standalone' }).tier, 'high');
-    assert.equal(WP.resolveTier({ mode: 'auto', host: 'android' }).tier, 'medium');
-    assert.equal(WP.resolveTier({ override: 'turbo', host: 'standalone' }).tier, 'high', 'unknown values are ignored');
+test('tiers: URL override, then saved mode, then Auto', () => {
+    assert.equal(WP.modeOf({ override: 'low', saved: { mode: 'high' } }), 'low');
+    assert.equal(WP.modeOf({ saved: { mode: 'medium' } }), 'medium');
+    assert.equal(WP.modeOf({ saved: null }), 'auto');
+    assert.equal(WP.modeOf({ override: 'turbo', saved: null }), 'auto', 'unknown values are ignored');
+});
+
+const FISH = { effects: [['depthBlur', 'high'], ['caustics', 'medium'], ['glass', 'low']] };
+const policy = (signals = {}) => WP.powerPolicy({ host: 'standalone', ...signals });
+
+test('quality: a tier keeps the effects declared for it, and slow motion its own fps', () => {
+    assert.deepEqual(plain(WP.qualityFor('high', FISH).effects), ['depthBlur', 'caustics', 'glass']);
+    assert.deepEqual(plain(WP.qualityFor('medium', FISH).effects), ['caustics', 'glass']);
+    assert.deepEqual(plain(WP.qualityFor('low', FISH).effects), ['glass']);
+    assert.equal(WP.qualityFor('low', { motion: 'slow' }).fps, 10);
+    assert.equal(WP.qualityFor('high', {}, 30).fps, 30, 'a power cap applies to the display rate too');
+});
+
+test('ladder: from the ceiling down, every rung cheaper than the last', () => {
+    const rungs = WP.ladder(FISH);
+    assert.equal(rungs[0].label, 'High');
+    assert.ok(rungs.some(r => r.label === 'Medium') && rungs.some(r => r.label === 'Low'));
+    assert.equal(rungs.at(-1).fps, 10);
+    const cost = q => (q.fps || 60) * q.renderScale ** 2 * q.dpr ** 2 * (0.5 + q.density) * (1 + q.effects.length);
+    for (let i = 1; i < rungs.length; i++) assert.ok(cost(rungs[i]) < cost(rungs[i - 1]), `${rungs[i].label} costs more than ${rungs[i - 1].label}`);
+    assert.equal(WP.ladder(FISH, { ceiling: 'medium' })[0].label, 'Medium');
+    assert.deepEqual(plain(WP.ladder({}, { ceiling: 'low' }).map(r => r.label)), ['Low', 'Low, 15 fps', 'Low, 10 fps']);
+});
+
+// A fake clock: frames at the rung's rate, each taking `ms(now)` of work.
+function run(governor, ms, from, to) {
+    const changes = [];
+    for (let now = from; now < to; now += 1000 / (governor.quality.fps || 60)) {
+        if (governor.sample(ms(now), now)) changes.push({ at: Math.round(now), rung: governor.rung });
+    }
+    return changes;
+}
+
+test('governor: slow frames step down within 3 s, and keep stepping', () => {
+    const governor = new WP.Governor({ rungs: WP.ladder(FISH) });
+    const changes = run(governor, () => 15, 0, 10000);
+    assert.ok(changes.length >= 2, 'stepped more than once');
+    assert.ok(changes[0].at <= 3000, `first step at ${changes[0].at} ms`);
+});
+
+test('governor: a calm device stays put, then climbs back after 20 s', () => {
+    const governor = new WP.Governor({ rungs: WP.ladder(FISH), start: 4 });
+    assert.deepEqual(run(governor, () => 1, 0, 19000), []);
+    const changes = run(governor, () => 1, 19000, 45000);
+    assert.equal(changes[0].rung, 3);
+    assert.ok(changes[0].at >= 20000);
+});
+
+test('governor: a step up that fails is locked out, so it never flaps', () => {
+    const rungs = WP.ladder(FISH);
+    const governor = new WP.Governor({ rungs, start: 3 });
+    // Cheap on rung 3, too slow on rung 2: up at 20 s, back down by 22 s,
+    // then no more tries for 5 minutes.
+    const ms = () => governor.rung <= 2 ? 20 : 1;
+    const changes = run(governor, ms, 0, 200000);
+    assert.deepEqual(changes.map(c => c.rung).slice(0, 2), [2, 3]);
+    assert.equal(changes.length, 2, `flapped: ${JSON.stringify(changes)}`);
+});
+
+test('power: battery, saver, heat and reduced motion lower the ceiling; the strictest wins', () => {
+    assert.equal(policy().ceiling, 'high');
+    assert.equal(WP.powerPolicy({ host: 'android' }).ceiling, 'medium');
+    assert.equal(WP.powerPolicy({ host: 'android' }).fpsCap, 30);
+    assert.equal(policy({ battery: { charging: true, level: 0.1 } }).ceiling, 'high');
+    assert.equal(policy({ battery: { charging: false, level: 0.5 } }).ceiling, 'medium');
+    assert.equal(policy({ battery: { charging: false, level: 0.1 } }).ceiling, 'low');
+    assert.equal(policy({ batteryAware: false, battery: { charging: false, level: 0.1 } }).ceiling, 'high');
+    assert.equal(policy({ saver: true }).fpsCap, 15);
+    assert.equal(policy({ thermal: 'moderate' }).ceiling, 'medium');
+    assert.equal(WP.powerPolicy({ host: 'android', thermal: 'moderate' }).ceiling, 'low');
+    assert.deepEqual(plain(policy({ thermal: 'critical' })), { ceiling: 'low', fpsCap: 10, pause: true, reasons: ['hot'] });
+    assert.equal(policy({ reducedMotion: true }).fpsCap, 20);
+    assert.equal(WP.powerPolicy({ host: 'android', hidden: true }).pause, true, 'hidden pauses');
+    assert.equal(WP.powerPolicy({ host: 'android', saver: true, preview: true }).ceiling, 'high', 'the picker preview gets the best');
+});
+
+test('plan: a pinned tier never beats the power ceiling; Auto starts where it settled', () => {
+    const onBattery = policy({ battery: { charging: false, level: 0.5 } });
+    assert.equal(WP.planQuality({ entry: FISH, mode: 'high', policy: onBattery }).quality.tier, 'medium');
+    assert.equal(WP.planQuality({ entry: FISH, mode: 'low', policy: policy() }).quality.tier, 'low');
+    const plan = WP.planQuality({ entry: FISH, policy: policy(), memory: 'Medium' });
+    assert.equal(plan.quality.label, 'Medium');
+    assert.equal(WP.planQuality({ entry: FISH, policy: policy(), memory: 'gone' }).start, 0);
 });
 
 test('frame pacing: caps hold on a 60 Hz display', () => {

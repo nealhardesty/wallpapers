@@ -8,8 +8,9 @@
 // frames can't reach into each other. Messages carry a `wp` field:
 //   stage → player  ready {id}, key {key}, rebuild, corner {near},
 //                   toast {text, ms}, error {message}
-//   player → stage  apply {config}, key {key, shift}, tier {tier},
-//                   pause, resume
+//                   quality {quality, rung, of}, stats {fps, ms, label, rung, of}
+//   player → stage  apply {config}, key {key, shift}, mode, power {policy},
+//                   scroll {x}, pause, resume
 
 (function (WP) {
     'use strict';
@@ -29,13 +30,28 @@
     const nativeFrame = window.requestAnimationFrame.bind(window);
     const queue = new Map();
     let nextId = 1, scheduled = false, last = -Infinity, paused = false, fps = 0;
-    const frames = { count: 0, workMs: 0 };
+    // A wallpaper with nothing to animate can idle until a deadline; input,
+    // a resize or new settings wake it early (host.idleUntil).
+    let idleUntil = 0, idleTimer = null;
+    const frames = { count: 0, workMs: 0, recent: [] };   // recent: the last 240 frames' work, for make bench
+    let governor = null;
 
     function schedule() {
-        if (!scheduled && !paused && queue.size) {
-            scheduled = true;
-            nativeFrame(tick);
+        if (scheduled || paused || !queue.size) return;
+        const wait = idleUntil - performance.now();
+        if (wait > 0) {
+            if (!idleTimer && wait < 2 ** 31) idleTimer = setTimeout(wake, wait);
+            return;
         }
+        scheduled = true;
+        nativeFrame(tick);
+    }
+
+    function wake() {
+        clearTimeout(idleTimer);
+        idleTimer = null;
+        idleUntil = 0;
+        schedule();
     }
 
     function tick(now) {
@@ -49,8 +65,14 @@
         for (const callback of callbacks) {
             try { callback(now); } catch (error) { queueMicrotask(() => { throw error; }); }
         }
+        const work = performance.now() - started;
         frames.count++;
-        frames.workMs += performance.now() - started;
+        frames.workMs += work;
+        frames.recent[frames.count % 240] = work;
+        if (governor && governor.sample(work, now)) {
+            applyQuality(governor.quality);
+            write('wp:perf:' + id, governor.quality.label);
+        }
         schedule();
     }
 
@@ -78,6 +100,14 @@
         insets: { top: 0, right: 0, bottom: kind === 'android' ? 48 : 0, left: 0 },
         quality: null,
         frames,
+        // Nothing to draw for a while: no frames until `ms` from now (or
+        // forever), or until input, a resize or new settings. A still
+        // picture costs nothing, and on Android isn't copied either.
+        idleUntil(ms = Infinity) {
+            idleUntil = performance.now() + ms;
+            clearTimeout(idleTimer);
+            idleTimer = null;
+        },
         reducedMotion: matchMedia('(prefers-reduced-motion: reduce)').matches,
         // Per-wallpaper state that isn't a setting (advent's last-seen day…).
         storage: {
@@ -98,16 +128,48 @@
     };
 
     // ---- Quality ------------------------------------------------------------
-    // fps and the DPR cap apply here; renderScale is the player sizing this
-    // iframe smaller and scaling it up. devicePixelRatio is [Replaceable],
-    // so modules that read it see the cap.
+    // SPEC §4.8. fps and the DPR cap apply here; renderScale is the player
+    // sizing this iframe smaller and scaling it up. devicePixelRatio is
+    // [Replaceable], so modules that read it see the cap. Density and
+    // effects are the wallpaper's to apply, in onQuality(quality) or by
+    // reading host.quality when it builds its scene.
     const nativeDpr = window.devicePixelRatio || 1;
-    function applyQuality(tier) {
-        host.quality = tier;
-        fps = entry.motion === 'slow' ? tier.slowFps : tier.fps;
-        window.devicePixelRatio = Math.min(nativeDpr, tier.dpr);
+    let policy = WP.powerPolicy({ host: kind, reducedMotion: host.reducedMotion, batteryAware: read('wp:performance')?.batteryAware !== false });
+
+    function applyQuality(quality) {
+        const previous = host.quality;
+        host.quality = quality;
+        fps = quality.fps;
+        window.devicePixelRatio = Math.min(nativeDpr, quality.dpr);
+        if (!previous) return;
+        tell({ type: 'quality', quality, rung: governor?.rung ?? null, of: governor?.rungs.length ?? null });
+        if (previous.dpr !== quality.dpr) window.dispatchEvent(new Event('resize'));
+        WP.stage.manager?.onQuality?.(quality);
+        wake();
     }
-    applyQuality(WP.resolveTier({ override: params.tier, mode: read('wp:performance')?.mode, host: kind }));
+
+    // Pinned or Auto, under the power policy's ceiling. Thumbnails and
+    // previews pin what they're told and never touch the memory.
+    function plan() {
+        const mode = WP.modeOf({ override: params.tier, saved: read('wp:performance') });
+        const memory = params.thumb ? null : read('wp:perf:' + id);
+        const next = WP.planQuality({ entry, mode, policy, memory });
+        governor = next.rungs && !params.thumb ? new WP.Governor({ rungs: next.rungs, start: next.start, now: performance.now() }) : null;
+        applyQuality(next.quality);
+    }
+    plan();
+
+    // Once a second, for the panel's readout and ?hud=1.
+    let counted = { count: 0, workMs: 0, at: performance.now() };
+    setInterval(() => {
+        const now = performance.now(), n = frames.count - counted.count;
+        tell({
+            type: 'stats', fps: Math.round(n * 1000 / (now - counted.at)), ms: n ? (frames.workMs - counted.workMs) / n : 0,
+            label: host.quality.label, rung: governor?.rung ?? null, of: governor?.rungs.length ?? null,
+            idle: idleUntil > now, reasons: policy.reasons,
+        });
+        counted = { count: frames.count, workMs: frames.workMs, at: now };
+    }, 1000);
 
     // ---- Pause ----------------------------------------------------------------
     WP.stage = {
@@ -122,6 +184,7 @@
         },
     };
     document.addEventListener('visibilitychange', () => document.hidden ? WP.stage.pause() : WP.stage.resume());
+    for (const type of ['pointerdown', 'pointermove', 'keydown', 'wheel', 'resize']) window.addEventListener(type, wake, { passive: true });
 
     // ---- Boot -------------------------------------------------------------------
     const loadScript = src => new Promise((resolve, reject) => {
@@ -135,6 +198,7 @@
     // Settings changed in the panel. A wallpaper that can take them live
     // implements applySettings(config); any other is rebuilt by the player.
     function apply(config) {
+        wake();
         const manager = WP.stage.manager;
         if (manager?.applySettings) manager.applySettings(config);
         else tell({ type: 'rebuild' });
@@ -184,9 +248,13 @@
         else if (message.wp === 'key') wallpaperKey(message.key, message.shift);
         else if (message.wp === 'pause') WP.stage.pause();
         else if (message.wp === 'resume') WP.stage.resume();
-        else if (message.wp === 'tier' && WP.TIERS[message.tier]) {
-            applyQuality(WP.TIERS[message.tier]);
-            window.dispatchEvent(new Event('resize'));
+        else if (message.wp === 'mode') plan();
+        else if (message.wp === 'scroll') WP.stage.manager?.onScroll?.(message.x);
+        else if (message.wp === 'power') {
+            policy = message.policy;
+            plan();
+            if (policy.pause) WP.stage.pause();
+            else if (!document.hidden) WP.stage.resume();
         }
     });
 

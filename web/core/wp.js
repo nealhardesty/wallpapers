@@ -53,19 +53,12 @@
         return { configVersion: defaults.configVersion ?? 0, ...changed };
     };
 
-    // Performance tiers (SPEC §4.8). fps 0 means the display's own rate.
+    // Performance tiers (SPEC §4.8). fps 0 means the display's own rate;
+    // slowFps is for wallpapers declared motion: 'slow'. core/perf.js uses them.
     WP.TIERS = {
         low:    { tier: 'low',    fps: 20, renderScale: 0.5,  dpr: 1,   density: 0.35, slowFps: 10 },
         medium: { tier: 'medium', fps: 30, renderScale: 0.75, dpr: 1.5, density: 0.65, slowFps: 15 },
         high:   { tier: 'high',   fps: 0,  renderScale: 1,    dpr: 2,   density: 1,    slowFps: 30 },
-    };
-
-    // The pinned tier until the Auto governor exists: Auto means the host's
-    // ceiling (High on desktop, Medium on Android).
-    WP.resolveTier = ({ override, mode, host }) => {
-        if (WP.TIERS[override]) return WP.TIERS[override];
-        if (WP.TIERS[mode]) return WP.TIERS[mode];
-        return host === 'android' ? WP.TIERS.medium : WP.TIERS.high;
     };
 
     // A small seeded random generator (mulberry32), so ?seed= makes any
