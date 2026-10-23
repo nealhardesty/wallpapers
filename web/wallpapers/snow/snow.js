@@ -373,6 +373,8 @@ class SnowAnimationManager {
         // Animation state
         this.animationId = null;
         this.lastFrameTime = 0;
+        this.stepTime = 0;
+        this.excess = 0;
         this.targetFPS = 60;
         this.frameInterval = 1000 / this.targetFPS;
     }
@@ -487,7 +489,8 @@ class SnowAnimationManager {
 
         // Check each snowflake in each layer for ground collision
         this.snowLayers.forEach((layer, layerIndex) => {
-            layer.forEach(snowflake => {
+            for (let i = layer.length - 1; i >= 0; i--) {
+                const snowflake = layer[i];
                 const segmentIndex = Math.floor(snowflake.x / this.accumulationWidth);
 
                 if (segmentIndex >= 0 && segmentIndex < this.snowBankHeights.length) {
@@ -500,10 +503,10 @@ class SnowAnimationManager {
                         this.addSnowWithBellCurve(segmentIndex, config.accumulationRate, config.maxAccumulation);
 
                         // Reset snowflake to top
-                        snowflake.reset();
+                        this.recycle(layer, i);
                     }
                 }
-            });
+            }
         });
 
         // Apply smoothing to create natural curves
@@ -607,11 +610,30 @@ class SnowAnimationManager {
         this.ctx.stroke();
     }
 
+    // Lower tiers snow less (SPEC §4.8): the spawn rate and the ceiling both
+    // follow host.quality.density, so the settings keep their meaning.
+    density() {
+        return this.host.quality?.density ?? 1;
+    }
+
+    // A flake that has landed or left the screen goes back to the top,
+    // unless a lower tier has left more flakes than it wants: then it melts
+    // away, so the snowfall thins gradually.
+    recycle(layer, index) {
+        if (this.excess > 0) {
+            layer.splice(index, 1);
+            this.excess--;
+        } else {
+            layer[index].reset();
+        }
+    }
+
     spawnSnowflakes() {
         const config = this.config;
         const totalSnowflakes = this.getTotalSnowflakeCount();
+        const density = this.density();
 
-        if (totalSnowflakes < config.maxSnowflakes && Math.random() < config.spawnRate) {
+        if (totalSnowflakes < config.maxSnowflakes * density && Math.random() < config.spawnRate * density) {
             // Randomly select a layer to spawn snowflake in
             const layerIndex = Math.floor(Math.random() * this.layerCount);
             const layer = this.snowLayers[layerIndex];
@@ -641,6 +663,7 @@ class SnowAnimationManager {
 
         // Spawn new snowflakes
         this.spawnSnowflakes();
+        this.excess = this.getTotalSnowflakeCount() - this.config.maxSnowflakes * this.density();
 
         // Update snowflakes in each layer
         this.snowLayers.forEach((layer, layerIndex) => {
@@ -652,7 +675,7 @@ class SnowAnimationManager {
 
                 // Remove or reset snowflakes that have fallen off screen
                 if (snowflake.isOffScreen()) {
-                    snowflake.reset();
+                    this.recycle(layer, i);
                 }
             }
         });
@@ -687,11 +710,20 @@ class SnowAnimationManager {
     animate(currentTime) {
         if (!this.isEnabled) return;
         
-        // Throttle to target FPS
-        if (currentTime - this.lastFrameTime >= this.frameInterval) {
-            this.update();
+        // Everything here counts in 60 fps steps, so run as many steps as
+        // the time that has passed (clamped, for a stalled tab) and draw
+        // once: the same speed at any frame rate the tier sets. The slack
+        // keeps a 60 Hz display's jitter from dropping and doubling steps.
+        const elapsed = this.lastFrameTime ? currentTime - this.lastFrameTime : this.frameInterval;
+        this.lastFrameTime = currentTime;
+        this.stepTime += Math.min(elapsed, 100);
+        const due = this.frameInterval - 2;
+        if (this.stepTime >= due) {
+            while (this.stepTime >= due) {
+                this.update();
+                this.stepTime -= this.frameInterval;
+            }
             this.render();
-            this.lastFrameTime = currentTime;
         }
         
         this.animationId = requestAnimationFrame((time) => this.animate(time));
@@ -717,6 +749,7 @@ class SnowAnimationManager {
         
         this.isEnabled = true;
         this.lastFrameTime = 0;
+        this.stepTime = 0;
         
         // Regenerate trees with new random positions every time animation starts
         this.createTrees();
