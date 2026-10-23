@@ -323,12 +323,15 @@ class MatrixAnimationManager {
                         const color = this.getRainbowColor(column.x, frameTime);
                         this.ctx.fillStyle = color.replace('60%', `${Math.floor(60 * alpha)}%`);
                     } else {
-                        this.ctx.fillStyle = theme.textColor.replace(')', `, ${alpha})`).replace('rgb', 'rgba');
+                        // Theme colours are hex: fade the tail with globalAlpha
+                        this.ctx.fillStyle = theme.textColor;
+                        this.ctx.globalAlpha = alpha;
                     }
                 }
 
                 // Draw the character
                 this.ctx.fillText(character.char, column.x, charY);
+                this.ctx.globalAlpha = 1;
             }
         }
     }
@@ -345,9 +348,12 @@ class MatrixAnimationManager {
 
         // Clear canvas or apply fade effect
         if (this.config.fadeTrails) {
-            // Apply fade effect by drawing a semi-transparent overlay
-            this.ctx.fillStyle = theme.backgroundColor.replace(')', ', 0.1)').replace('rgb', 'rgba');
+            // Apply fade effect by drawing a semi-transparent overlay: 30%
+            // per 60 Hz frame, whatever the frame rate
+            this.ctx.fillStyle = theme.backgroundColor;
+            this.ctx.globalAlpha = 1 - Math.pow(0.7, dt * 60);
             this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+            this.ctx.globalAlpha = 1;
         } else {
             // Clear canvas completely
             this.ctx.fillStyle = theme.backgroundColor;
