@@ -297,3 +297,13 @@
 @media (prefers-reduced-motion: reduce) {
     .panel, .tile, .switch, .switch::after, .gear { transition: none; }
 }
+
+/* Location (core/location.js), for wallpapers that need one */
+.location .setting-help { margin: 2px 0 8px; }
+.location-now { margin: 0 0 8px; font-size: 13px; }
+.location-find { display: flex; gap: 6px; margin-bottom: 8px; }
+.location-find .location-input { flex: 1; min-width: 0; }
+.location-results { margin-bottom: 8px; }
+.location-results:empty { display: none; }
+.location .actions { margin-bottom: 4px; }
+.location-status { margin: 4px 0 6px; min-height: 1.2em; color: var(--ink-soft); font-size: 12px; }

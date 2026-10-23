@@ -11,6 +11,7 @@ import android.webkit.JavascriptInterface
 class Bridge(
     private val onAccent: (String) -> Unit = {},
     private val onSetWallpaper: (() -> Unit)? = null,
+    private val onLocate: (() -> Unit)? = null,
 ) {
     private val main = Handler(Looper.getMainLooper())
 
@@ -23,5 +24,12 @@ class Bridge(
 
     @JavascriptInterface fun setWallpaper() {
         onSetWallpaper?.let { main.post(it) }
+    }
+
+    /** "Use my location" (SPEC §10.1): the answer comes back as WP.located({...}). */
+    @JavascriptInterface fun canLocate(): Boolean = onLocate != null
+
+    @JavascriptInterface fun locate() {
+        onLocate?.let { main.post(it) }
     }
 }

@@ -25,7 +25,16 @@ ported from elsewhere. None was found.
 | Source | Used by | Notes |
 |---|---|---|
 | Bing image of the day (`www.bing.com`) | bing | Photos are © their respective owners, as credited in Bing's data, and shown with that credit in the overlay. They are loaded from Bing at view time and never stored or redistributed here. |
+| CelesTrak general-perturbation elements (`celestrak.org`) | satellites | Orbital elements (public US Space Force data, distributed by CelesTrak), fetched at view time at most every 12 hours and cached on the device, never redistributed here. The offline sample orbits in `data.js` are made up. |
+| Open-Meteo geocoding (`geocoding-api.open-meteo.com`) | the location panel (SPEC §10.1) | Keyless; a typed place name is sent once, and only coordinates rounded to 0.1° are kept. |
 | `corsproxy.io`, `api.allorigins.win`, `cors-anywhere.herokuapp.com` | bing | Public CORS proxies, used only if the person turns on "Use public proxies when opened from disk" in Bing's settings (off by default; SPEC §4.6). |
+
+## Algorithms and test data
+
+| Item | Where | Notes |
+|---|---|---|
+| SGP4 | `web/wallpapers/satellites/sgp4.js` | Our own implementation of the published model: Hoots & Roehrich, *Spacetrack Report #3* (1980), as revised in Vallado, Crawford, Hujsak & Kelso, *Revisiting Spacetrack Report #3* (AIAA 2006-6753). No code copied. |
+| SGP4 verification vectors | `tools/satellites.test.mjs` | A few published elements and positions from that paper's verification set, quoted as test data. |
 
 ## Fonts and emoji
 

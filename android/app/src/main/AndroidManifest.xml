@@ -1,8 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- The Bing wallpaper's photo; nothing else goes out (SPEC §1). -->
+    <!-- Online wallpapers' hosts (Bing, CelesTrak, the place-name geocoder);
+         nothing else goes out (SPEC §1). -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- "Use my location" (Satellites), asked for from the settings screen only:
+         the last known position, rounded to 0.1° (SPEC §10.1). -->
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-feature android:name="android.software.live_wallpaper" android:required="true" />
 
     <application
