@@ -945,6 +945,42 @@ const STAGE_CHECKS = {
             }
             return true;
         }],
+        // The Ambilight frame's promises: a few samples a second, the wall
+        // takes the picture's colours, and Low never touches the video.
+        ['Ambilight: at most 5 samples a second, the wall takes the video\'s colours, none at Low', async () => {
+            const mock = jellyfinServer();
+            const settings = { order: 'inOrder', frame: 'ambilight', subtitles: 'off', showTitle: false };
+            // The wall to the left of the panel, from a real screenshot, as
+            // its mean chroma (max - min channel): grey is near 0.
+            const wall = async () => {
+                const clip = await counts(`(L => ({ x: L.panel.x - L.spread * 0.45, y: L.panel.y + L.panel.h * 0.2, width: L.spread * 0.4, height: L.panel.h * 0.6, scale: 1 }))(m.layout)`);
+                const { data } = await cdp.send('Page.captureScreenshot', { format: 'png', clip });
+                return evaluate(`new Promise(done => { const i = new Image(); i.onload = () => {
+                    const c = document.createElement('canvas'); c.width = c.height = 8;
+                    const g = c.getContext('2d', { willReadFrequently: true }); g.drawImage(i, 0, 0, 8, 8);
+                    const d = g.getImageData(0, 0, 8, 8).data; let sum = 0;
+                    for (let k = 0; k < d.length; k += 4) sum += Math.max(d[k], d[k + 1], d[k + 2]) - Math.min(d[k], d[k + 1], d[k + 2]);
+                    done(sum / 64); }; i.src = 'data:image/png;base64,${data}'; })`);
+            };
+            const samples = () => evaluate(`JellyfinFrames.get('ambilight').stats.samples`);
+            const result = {};
+            for (const tier of ['medium', 'low']) {
+                await fresh(`${WEB}/stage.html?w=jellyfin&tier=${tier}`, jellyfinSignedIn(mock, settings));
+                if (!await waitFor(() => counts(`m.state === 'playing' && m.video.currentTime > 0.5`), 10000)) return record(`${tier}: never played`);
+                await sleep(1500);
+                const before = await samples();
+                await sleep(3000);
+                result[tier] = { samples: await samples() - before, total: await samples(), chroma: await wall() };
+                if (tier === 'medium') await shoot('jellyfin-ambilight-glow');
+            }
+            const { medium, low } = result;
+            if (medium.samples > 16) record(`${medium.samples} samples in 3 s at Medium`);
+            if (medium.samples < 6) record(`only ${medium.samples} samples in 3 s at Medium`);
+            if (low.total) record(`${low.total} samples at Low`);
+            if (!(medium.chroma > low.chroma + 10)) record(`the wall isn't coloured: chroma ${medium.chroma.toFixed(1)} at Medium, ${low.chroma.toFixed(1)} at Low`);
+            console.log(`    ambilight: ${medium.samples} samples in 3 s; wall chroma ${medium.chroma.toFixed(1)} at Medium, ${low.chroma.toFixed(1)} at Low`);
+            return true;
+        }],
         ['on Low only the video moves', async () => {
             const mock = jellyfinServer();
             await fresh(`${WEB}/stage.html?w=jellyfin&tier=low`, jellyfinSignedIn(mock, { order: 'inOrder', subtitles: 'off', showTitle: false }));
