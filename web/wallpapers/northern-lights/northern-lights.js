@@ -148,7 +148,8 @@ function nlRandom(seed) {
 }
 
 class NorthernLightsAnimationManager {
-    constructor() {
+    constructor(host) {
+        this.host = host;
         this.canvas = null;
         this.ctx = null;
         this.curtains = [];
@@ -188,6 +189,13 @@ class NorthernLightsAnimationManager {
         this.trees = null;     // near treeline, drawn over the reflection
 
         this.config = WP.settings.load();
+
+        // The tier (SPEC §4.8): bloom and reflection are declared effects,
+        // and fade in or out over a second or two when Auto toggles them, so
+        // a step never shows as a jump. Stars follow density the same way.
+        this.quality = host.quality;
+        this.fx = { bloom: this.effectOn('bloom'), reflection: this.effectOn('reflection') };
+        this.starsShown = this.config.starCount * this.quality.density;
     }
 
     saveConfig() {
@@ -243,13 +251,33 @@ class NorthernLightsAnimationManager {
         // 2.5 screen widths so folds always have off-screen material to pull in.
         this.sampleCount = Math.max(200, Math.min(700, Math.round(w / 3)));
 
+        this.buildBuffers();
+        this.buildSky();
+        this.buildStarSprites();
+        this.buildStars();
+        this.buildCurtains();
+        this.buildTerrain();
+        this.spriteAct = -1;
+    }
+
+    // Bloom and reflection share one downsampled copy of the aurora, so the
+    // full-size aurora buffer exists only while either is on (or fading).
+    // Without them the curtains are drawn straight onto the sky. High blurs
+    // at 1/4 scale; Medium at 1/8, which also halves the reflection.
+    buildBuffers() {
+        const w = this.canvas.width;
+        const h = this.canvas.height;
+        this.auroraCanvas = this.auroraCtx = this.bloomA = this.bloomB = this.reflection = null;
+        if (!this.fx.bloom && !this.fx.reflection) return;
+
         this.auroraCanvas = document.createElement('canvas');
         this.auroraCanvas.width = w;
         this.auroraCanvas.height = h;
         this.auroraCtx = this.auroraCanvas.getContext('2d');
 
-        const bw = Math.max(1, Math.floor(w / 4));
-        const bh = Math.max(1, Math.floor(h / 4));
+        const down = this.quality.tier === 'high' ? 4 : 8;
+        const bw = Math.max(1, Math.floor(w / down));
+        const bh = Math.max(1, Math.floor(h / down));
         this.bloomA = document.createElement('canvas');
         this.bloomA.width = bw;
         this.bloomA.height = bh;
@@ -257,17 +285,26 @@ class NorthernLightsAnimationManager {
         this.bloomB.width = Math.max(1, Math.floor(bw / 4));
         this.bloomB.height = Math.max(1, Math.floor(bh / 4));
 
-        // Quarter-scale scratch for the mirrored reflection.
+        // Scratch for the mirrored reflection, at the bloom's scale.
         const groundH = Math.max(1, h - (h * this.config.horizon + h * 0.035));
         this.reflection = document.createElement('canvas');
         this.reflection.width = bw;
-        this.reflection.height = Math.max(1, Math.ceil(groundH / 4));
+        this.reflection.height = Math.max(1, Math.ceil(groundH / down));
+    }
 
-        this.buildSky();
-        this.buildStars();
-        this.buildCurtains();
-        this.buildTerrain();
-        this.spriteAct = -1;
+    effectOn(name) {
+        if (!this.quality.effects.includes(name)) return 0;
+        return name === 'bloom' ? (this.config.bloom > 0 ? 1 : 0) : (this.config.reflection ? 1 : 0);
+    }
+
+    onQuality(quality) {
+        const rescale = (quality.tier === 'high') !== (this.quality.tier === 'high');
+        const had = !!this.auroraCanvas;
+        this.quality = quality;
+        const want = this.effectOn('bloom') || this.effectOn('reflection');
+        // Switching an effect on needs the buffers now; switching off keeps
+        // them until the fade-out in animate() has finished.
+        if (rescale || (want && !had)) this.buildBuffers();
     }
 
     buildSky() {
@@ -288,6 +325,8 @@ class NorthernLightsAnimationManager {
         this.hazeGradient = haze;
     }
 
+    // Every star the setting asks for; density decides how many are drawn.
+    // The order is random, so a lower tier drops stars evenly.
     buildStars() {
         const rand = nlRandom(this.seed ^ 0x5eed1a);
         const w = this.canvas.width;
@@ -308,15 +347,37 @@ class NorthernLightsAnimationManager {
             }
 
             this.stars.push({
+                sprite: tint.sprite,
                 x: rand() * w,
                 // Placed by elevation above the horizon, so none sit in the ground.
                 elev: rand(),
                 mag: mag,
-                rgb: tint.rgb,
                 size: 0.5 + mag * 1.4,
                 twinklePhase: rand() * TAU,
                 twinkleRate: 0.6 + rand() * 2.4
             });
+        }
+    }
+
+    // Each tint baked once: a disc, and for bright stars the same disc in its
+    // faint halo, so a frame draws stars as images rather than paths.
+    buildStarSprites() {
+        if (NL_STAR_TINTS[0].sprite) return;
+        const disc = (g, c, r, alpha, rgb) => {
+            g.fillStyle = `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, ${alpha})`;
+            g.beginPath();
+            g.arc(c, c, r, 0, TAU);
+            g.fill();
+        };
+        for (const tint of NL_STAR_TINTS) {
+            const core = document.createElement('canvas');
+            core.width = core.height = 12;
+            disc(core.getContext('2d'), 6, 6, 1, tint.rgb);
+            const halo = document.createElement('canvas');
+            halo.width = halo.height = 40;
+            disc(halo.getContext('2d'), 20, 20, 0.12, tint.rgb);
+            disc(halo.getContext('2d'), 20, 20 / 3.4, 1, tint.rgb);
+            tint.sprite = { core, halo };
         }
     }
 
@@ -596,7 +657,9 @@ class NorthernLightsAnimationManager {
         const ctx = this.ctx;
         const span = this.horizonY;
 
-        for (const star of this.stars) {
+        const shown = Math.min(this.stars.length, Math.round(this.starsShown));
+        for (let i = 0; i < shown; i++) {
+            const star = this.stars[i];
             const y = span * (1 - star.elev * star.elev); // crowd them upward
             // Scintillation is strongest near the horizon, where the line of
             // sight passes through the most air.
@@ -606,25 +669,16 @@ class NorthernLightsAnimationManager {
             const alpha = (0.12 + star.mag * 0.88) * twinkle * this.config.starBrightness;
             if (alpha <= 0.01) continue;
 
-            const [r, g, b] = star.rgb;
-            ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${Math.min(1, alpha)})`;
-            ctx.beginPath();
-            ctx.arc(star.x, y, star.size, 0, TAU);
-            ctx.fill();
-
-            if (star.mag > 0.6) {
-                // Cheap halo instead of shadowBlur, which is very slow per star.
-                ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${alpha * 0.12})`;
-                ctx.beginPath();
-                ctx.arc(star.x, y, star.size * 3.4, 0, TAU);
-                ctx.fill();
-            }
+            // Cheap halo instead of shadowBlur, which is very slow per star.
+            const r = star.mag > 0.6 ? star.size * 3.4 : star.size;
+            ctx.globalAlpha = Math.min(1, alpha);
+            ctx.drawImage(star.mag > 0.6 ? star.sprite.halo : star.sprite.core, star.x - r, y - r, r * 2, r * 2);
         }
+        ctx.globalAlpha = 1;
     }
 
     // Project a curtain into screen space and splat it as vertical rays.
-    drawCurtain(curtain, act) {
-        const ctx = this.auroraCtx;
+    drawCurtain(ctx, curtain, act) {
         const N = this.sampleCount;
         const f = this.focal;
         const w = this.canvas.width;
@@ -731,10 +785,20 @@ class NorthernLightsAnimationManager {
     drawAurora(act) {
         const w = this.canvas.width;
         const h = this.canvas.height;
+        const ctx = this.ctx;
+
+        // No bloom or reflection: straight onto the sky, no full-size buffer.
+        if (!this.auroraCanvas) {
+            for (const curtain of this.curtains) this.drawCurtain(ctx, curtain, act);
+            ctx.globalCompositeOperation = 'source-over';
+            ctx.fillStyle = this.hazeGradient;
+            ctx.fillRect(0, this.horizonY - h * 0.32, w, h * 0.32);
+            return;
+        }
 
         this.auroraCtx.clearRect(0, 0, w, h);
         for (const curtain of this.curtains) {
-            this.drawCurtain(curtain, act);
+            this.drawCurtain(this.auroraCtx, curtain, act);
         }
 
         // Two-step downsample is a cheap, good-enough gaussian. The result is
@@ -746,11 +810,10 @@ class NorthernLightsAnimationManager {
         b.globalCompositeOperation = 'copy';
         b.drawImage(this.bloomA, 0, 0, this.bloomB.width, this.bloomB.height);
 
-        const ctx = this.ctx;
         ctx.globalCompositeOperation = 'lighter';
         ctx.drawImage(this.auroraCanvas, 0, 0);
 
-        const bloom = this.config.bloom;
+        const bloom = this.config.bloom * this.fx.bloom;
         if (bloom > 0) {
             ctx.globalAlpha = 0.3 * bloom;
             ctx.drawImage(this.bloomA, 0, 0, w, h);
@@ -794,8 +857,9 @@ class NorthernLightsAnimationManager {
 
         // Fade with distance from the shore.
         const fade = r.createLinearGradient(0, 0, 0, rh);
-        fade.addColorStop(0, 'rgba(0, 0, 0, 0.55)');
-        fade.addColorStop(0.45, 'rgba(0, 0, 0, 0.18)');
+        const k = this.fx.reflection;
+        fade.addColorStop(0, `rgba(0, 0, 0, ${0.55 * k})`);
+        fade.addColorStop(0.45, `rgba(0, 0, 0, ${0.18 * k})`);
         fade.addColorStop(1, 'rgba(0, 0, 0, 0)');
         r.globalCompositeOperation = 'destination-in';
         r.fillStyle = fade;
@@ -812,7 +876,8 @@ class NorthernLightsAnimationManager {
 
         if (!this.lastTime) this.lastTime = currentTime;
         // Clamped so the first frame and backgrounded tabs cannot jump the sky.
-        const dt = Math.min((currentTime - this.lastTime) / 1000, 0.05);
+        // 0.1 s, not less: Low runs this at 10 fps.
+        const dt = Math.min((currentTime - this.lastTime) / 1000, 0.1);
         this.lastTime = currentTime;
 
         this.wall += dt;
@@ -828,6 +893,14 @@ class NorthernLightsAnimationManager {
             this.buildSprite(act);
         }
 
+        // Tier changes ease in: effects over ~1.5 s, stars over a few seconds.
+        for (const name of ['bloom', 'reflection']) {
+            const target = this.effectOn(name);
+            this.fx[name] += Math.sign(target - this.fx[name]) * Math.min(Math.abs(target - this.fx[name]), dt / 1.5);
+        }
+        if (this.auroraCanvas && !this.fx.bloom && !this.fx.reflection) this.buildBuffers();
+        this.starsShown += (this.config.starCount * this.quality.density - this.starsShown) * Math.min(1, dt * 0.5);
+
         const ctx = this.ctx;
         ctx.globalCompositeOperation = 'source-over';
         ctx.fillStyle = this.skyGradient;
@@ -837,7 +910,7 @@ class NorthernLightsAnimationManager {
         this.drawAurora(act);
 
         ctx.drawImage(this.terrain, 0, 0);
-        if (this.config.reflection) this.drawReflection();
+        if (this.fx.reflection && this.reflection) this.drawReflection();
         ctx.drawImage(this.trees, 0, 0);
 
         this.animationId = requestAnimationFrame((time) => this.animate(time));
