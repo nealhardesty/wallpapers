@@ -2464,14 +2464,15 @@ class HalloweenAnimationManager {
         const face = this.buildFacePath(p, rx, ry);
 
         // The hole itself, so an unlit lantern still reads as carved
-        ctx.fillStyle = 'rgba(8,3,0,0.88)';
+        // (black when snuffed, fading out as the candle catches)
+        ctx.fillStyle = `rgba(8,3,0,${0.88 * (1 - hwClamp(glow, 0, 1))})`;
         ctx.fill(face);
 
         if (glow > 0.01) {
             ctx.save();
             ctx.globalCompositeOperation = 'lighter';
-            // Hot interior
-            ctx.fillStyle = hwRgba(hwMixRgb(lightRgb, [255, 228, 150], 0.12), hwClamp(glow * 0.55, 0, 1));
+            // Hot interior: a near-white core, tinted by the flame
+            ctx.fillStyle = hwRgba(hwMixRgb(lightRgb, [255, 250, 230], 0.65), hwClamp(glow * 0.95, 0, 1));
             ctx.fill(face);
             // The cut edge catches the most light, so it is the brightest part
             ctx.strokeStyle = hwRgba(hwMixRgb(lightRgb, [255, 245, 215], 0.5), hwClamp(glow * 0.25, 0, 1));
