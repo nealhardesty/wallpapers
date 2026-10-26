@@ -162,6 +162,7 @@
     appearance: none;
     background: transparent;
     cursor: pointer;
+    touch-action: pan-y;   /* a vertical swipe starting on a slider scrolls the panel; only a sideways drag moves it */
 }
 .panel input[type='range']::-webkit-slider-runnable-track {
     height: 4px;

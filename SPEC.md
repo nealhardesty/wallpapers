@@ -439,6 +439,13 @@ settings directly (storage is shared) and tells the player to apply them:
     (keeps the world unless a world setting changed).
   - Any other wallpaper is rebuilt by the player behind a crossfade,
     debounced 400 ms so a slider drag rebuilds once.
+- **Touch:**
+  - Range sliders are `touch-action: pan-y`: a vertical swipe that starts
+    on a slider scrolls the panel, only a sideways drag moves it.
+  - `refresh()` centres the active tile by scrolling the filmstrip alone
+    (`scrollIntoView` also scrolled the settings back to the top).
+  - On Android the corner gear is always shown (there is no hover or
+    corner-hold), so a closed panel can always be reopened.
 - **Look:**
   - Smoked glass over the live wallpaper.
   - **Its accent follows the wallpaper on screen** (`accent` in the

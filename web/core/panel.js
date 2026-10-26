@@ -154,7 +154,10 @@
         for (const tile of picker.children) {
             const active = tile.dataset.id === choice;
             tile.setAttribute('aria-pressed', String(active));
-            if (active) tile.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'instant' });
+            if (active) {   // centre it in the filmstrip only: scrollIntoView would also drag the settings back to the top
+                const t = tile.getBoundingClientRect(), p = picker.getBoundingClientRect();
+                picker.scrollTo({ left: picker.scrollLeft + (t.left + t.width / 2) - (p.left + p.width / 2), behavior: 'instant' });
+            }
         }
         resetButton.textContent = 'Reset';
         resetButton.title = `Put ${entry.name} back to its defaults`;
