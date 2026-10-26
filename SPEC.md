@@ -457,7 +457,7 @@ settings directly (storage is shared) and tells the player to apply them:
     blocking dialog), Export and Import (all settings as JSON, e.g. to move
     a tuned setup to the phone), and key hints, hidden on touch screens.
 - **Opening it:**
-  - `,` toggles it; `Esc` closes it; `?panel=open` opens it on load.
+  - `,` toggles it; `Esc` closes it; `?panel=open` opens it on load, as soon as the player mounts rather than when the wallpaper is ready, so a slow or failing wallpaper still leaves its settings reachable (the Android settings screen relies on it).
   - On a touch screen, a long press in the top-right corner.
   - With a mouse, a ⚙︎ gear fades in when the pointer nears that corner.
   - While it's open, wallpaper keys are suspended.
