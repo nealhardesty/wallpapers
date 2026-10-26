@@ -9,6 +9,7 @@
     const params = WP.parseParams(location.search);
     const host = params.host === 'android' ? 'android'
         : location.protocol === 'chrome-extension:' ? 'extension' : 'standalone';
+    const settingsScreen = host === 'android' && params.panel === 'open';
     const FADE_MS = 600;
     const REBUILD_MS = 400;
 
@@ -295,7 +296,7 @@
         } else if (message.wp === 'rebuild') {
             rebuild();
         } else if (message.wp === 'corner') {
-            document.getElementById('gear').classList.toggle('show', host === 'android' || !!message.near);
+            document.getElementById('gear').classList.toggle('show', settingsScreen || (host !== 'android' && !!message.near));
         } else if (message.wp === 'panel') {
             stage.feed = message.feed;
             WP.panel.feed(message.feed);
@@ -330,7 +331,9 @@
             }
             const gear = document.getElementById('gear');
             gear.addEventListener('click', () => WP.panel.open());
-            if (host === 'android') gear.classList.add('show');   // no hover or corner-hold to find it by: always there once the panel is closed
+            // Android's settings screen has no hover or corner-hold to find it by, so
+            // the gear is always there once the panel is closed; the wallpaper itself never shows it.
+            if (settingsScreen) gear.classList.add('show', 'android');
             show(initialChoice());
             // Not on the stage's ready: a wallpaper that is slow or fails to
             // start must not leave the settings screen (Android) empty.

@@ -444,8 +444,8 @@ settings directly (storage is shared) and tells the player to apply them:
     on a slider scrolls the panel, only a sideways drag moves it.
   - `refresh()` centres the active tile by scrolling the filmstrip alone
     (`scrollIntoView` also scrolled the settings back to the top).
-  - On Android the corner gear is always shown (there is no hover or
-    corner-hold), so a closed panel can always be reopened.
+  - On Android's settings screen (`panel=open`) the corner gear is always shown (there is no hover or
+    corner-hold), 10% of the height down to clear the status bar, so a closed panel can always be reopened. The live wallpaper itself never shows it.
 - **Look:**
   - Smoked glass over the live wallpaper.
   - **Its accent follows the wallpaper on screen** (`accent` in the
