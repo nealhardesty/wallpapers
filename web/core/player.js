@@ -14,7 +14,6 @@
 
     let choice = null;   // what the user picked: a wallpaper id or 'seasonal'
     let stage = null;    // { id, frame, ready }
-    let panelOnReady = params.panel === 'open';
     // Power signals, for the policy that caps quality (SPEC §4.8). The
     // browser gives battery and reduced motion; the Android app adds battery
     // saver, heat and its preview by calling WP.power({...}).
@@ -284,10 +283,7 @@
             stage.ready = true;
             stage.reveal();
             if (policy.reasons.length) post({ wp: 'power', policy });
-            if (panelOnReady) {
-                panelOnReady = false;
-                WP.panel.open();
-            } else if (!WP.panel.isOpen) {
+            if (!WP.panel.isOpen) {
                 focusStage();
             }
         } else if (message.wp === 'key') {
@@ -334,6 +330,9 @@
             }
             document.getElementById('gear').addEventListener('click', () => WP.panel.open());
             show(initialChoice());
+            // Not on the stage's ready: a wallpaper that is slow or fails to
+            // start must not leave the settings screen (Android) empty.
+            if (params.panel === 'open') WP.panel.open();
             let said = null;
             try { said = sessionStorage.getItem('wp:toast'); sessionStorage.removeItem('wp:toast'); } catch {}
             if (said) toast(said, 7000);
