@@ -466,6 +466,8 @@ settings directly (storage is shared) and tells the player to apply them:
 - **Opening it:**
   - `,` toggles it; `Esc` closes it; `?panel=open` opens it on load, as soon as the player mounts rather than when the wallpaper is ready, so a slow or failing wallpaper still leaves its settings reachable (the Android settings screen relies on it).
   - On a touch screen, a long press in either right-hand corner (the top can sit under Safari's status bar).
+  - iOS Safari turns a long press into a text selection and callout, which would swallow the hold, so `theme.css` switches selection, the callout and the tap highlight off (text inputs excepted). To debug on a phone: Settings → Safari → Advanced → Web Inspector, then Develop → the device in desktop Safari.
+  - iPhone Safari has no fullscreen API for pages (iPad does), so `f` and the left-hand corners toast a pointer to Add to Home Screen instead.
   - With a mouse, a ⚙︎ gear fades in when the pointer nears either of them.
   - The left-hand corners do the same for fullscreen: a ⛶ button for a mouse, a long press on touch (no buttons on Android).
   - While it's open, wallpaper keys are suspended.

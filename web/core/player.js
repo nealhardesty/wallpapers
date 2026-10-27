@@ -206,7 +206,8 @@
 
     function toggleFullscreen() {
         if (document.fullscreenElement) document.exitFullscreen();
-        else document.documentElement.requestFullscreen().catch(() => {});
+        else if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(() => {});
+        else toast('This browser has no fullscreen for pages. Use Share → Add to Home Screen.');   // iPhone Safari
     }
 
     function focusStage() {

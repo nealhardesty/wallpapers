@@ -24,4 +24,8 @@ html, body {
 /* Only the root is painted. Wallpaper canvases sit at z-index -1, which a
    body with a background of its own would cover. */
 html { background: #000; }
+/* iOS Safari turns a long press into a text selection and callout, which
+   swallows the corner holds. Nothing here is meant to be selected. */
+html, body { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
+input, textarea { -webkit-user-select: text; user-select: text; }
 body { background: transparent; }
