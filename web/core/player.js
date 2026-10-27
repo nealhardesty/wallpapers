@@ -239,7 +239,7 @@
                     WP.h('dl', {}, ...entry.keys.map(k => row(k.keys, k.label))),
                 ] : []),
                 WP.h('h3', {}, 'On a touch screen'),
-                WP.h('p', { style: 'margin: 0; color: #c9cede' }, 'Press and hold the top-right corner to open settings.'));
+                WP.h('p', { style: 'margin: 0; color: #c9cede' }, 'Press and hold a right-hand corner to open settings, a left-hand one for fullscreen.'));
         }
         help.hidden = !opening;
     }
@@ -296,7 +296,12 @@
         } else if (message.wp === 'rebuild') {
             rebuild();
         } else if (message.wp === 'corner') {
-            document.getElementById('gear').classList.toggle('show', settingsScreen || (host !== 'android' && !!message.near));
+            const gear = document.getElementById('gear'), full = document.getElementById('fullscreen');
+            const c = host === 'android' ? null : message.near;
+            gear.classList.toggle('bottom', c === 'br');
+            full.classList.toggle('bottom', c === 'bl');
+            gear.classList.toggle('show', settingsScreen || c === 'tr' || c === 'br');
+            full.classList.toggle('show', c === 'tl' || c === 'bl');
         } else if (message.wp === 'panel') {
             stage.feed = message.feed;
             WP.panel.feed(message.feed);
@@ -331,6 +336,7 @@
             }
             const gear = document.getElementById('gear');
             gear.addEventListener('click', () => WP.panel.open());
+            document.getElementById('fullscreen').addEventListener('click', toggleFullscreen);
             // Android's settings screen has no hover or corner-hold to find it by, so
             // the gear is always there once the panel is closed; the wallpaper itself never shows it.
             if (settingsScreen) gear.classList.add('show', 'android');
@@ -344,7 +350,7 @@
             else if (!WP.store.get('wp:hinted') && !params.w) {
                 WP.store.set('wp:hinted', true);
                 const touch = matchMedia('(hover: none)').matches;
-                toast(touch ? 'Hold the top-right corner for wallpapers and settings'
+                toast(touch ? 'Hold a right-hand corner for wallpapers and settings'
                     : 'Press , for wallpapers and settings, or ? for all keys', 5000);
             }
         },

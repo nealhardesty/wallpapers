@@ -12,9 +12,9 @@
 <link rel="apple-touch-icon" href="icons/icon-192.png">
 <meta name="theme-color" content="#000000">
 <!-- The player. Nothing shows but the wallpaper.
-       ,      wallpapers and settings (or hold the top-right corner)
+       ,      wallpapers and settings (or hold a right-hand corner)
        [ ]    previous / next wallpaper
-       f      fullscreen
+       f      fullscreen (or hold a left-hand corner)
        ?      all keys
      URL: ?w=<id> (this load only), ?panel=open, ?tier=low|medium|high.
      See SPEC.md §4. -->
@@ -75,5 +75,6 @@
 <body>
 <div id="toast" role="status" aria-live="polite"></div>
 <button id="gear" class="gear" type="button" aria-label="Wallpapers and settings (,)">⚙︎</button>
+<button id="fullscreen" class="gear fullscreen" type="button" aria-label="Fullscreen (f)">⛶</button>
 </body>
 </html>

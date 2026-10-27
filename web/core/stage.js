@@ -302,21 +302,29 @@
         else if (wallpaperKey(event.key, event.shiftKey)) event.preventDefault();
     });
 
-    // The corner: the player shows its gear while the pointer is near the
-    // top-right corner, and a long press there opens settings on a touch
-    // screen, where there's no keyboard.
+    // The corners: the right-hand ones open settings and the left-hand ones
+    // go fullscreen. A mouse near one gets a button from the player; a long
+    // press there does it on a touch screen, where there's no keyboard.
+    // Both sides come in pairs because Safari's status bar can cover the top.
     const CORNER = 72, HOLD_MS = 600;
-    const inCorner = event => event.clientX > innerWidth - CORNER && event.clientY < CORNER;
-    let near = false, hold = null;
+    const cornerAt = event => {
+        const x = event.clientX < CORNER ? 'l' : event.clientX > innerWidth - CORNER ? 'r' : '';
+        const y = event.clientY < CORNER ? 't' : event.clientY > innerHeight - CORNER ? 'b' : '';
+        return x && y ? y + x : null;
+    };
+    let near = null, hold = null;
+    const setNear = corner => { if (corner !== near) tell({ type: 'corner', near: near = corner }); };
     window.addEventListener('pointermove', event => {
         if (params.thumb) return;
-        if (event.pointerType === 'mouse' && inCorner(event) !== near) tell({ type: 'corner', near: near = !near });
+        if (event.pointerType === 'mouse') setNear(cornerAt(event));
         if (hold && Math.hypot(event.clientX - hold.x, event.clientY - hold.y) > 12) clearTimeout(hold.timer), hold = null;
     }, { passive: true });
-    document.addEventListener('pointerleave', () => { if (near) tell({ type: 'corner', near: near = false }); });
+    document.addEventListener('pointerleave', () => setNear(null));
     window.addEventListener('pointerdown', event => {
-        if (event.pointerType === 'mouse' || !inCorner(event)) return;
-        hold = { x: event.clientX, y: event.clientY, timer: setTimeout(() => { hold = null; tell({ type: 'key', key: ',' }); }, HOLD_MS) };
+        const corner = cornerAt(event);
+        if (event.pointerType === 'mouse' || !corner) return;
+        const key = corner[1] === 'r' ? ',' : 'f';
+        hold = { x: event.clientX, y: event.clientY, timer: setTimeout(() => { hold = null; tell({ type: 'key', key }); }, HOLD_MS) };
     }, { passive: true });
     window.addEventListener('pointerup', () => { if (hold) clearTimeout(hold.timer), hold = null; });
 

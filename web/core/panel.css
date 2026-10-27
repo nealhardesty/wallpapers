@@ -263,6 +263,8 @@
     pointer-events: none;
     transition: opacity 0.3s;
 }
+.gear.bottom { top: auto; bottom: 12px; }
+.gear.fullscreen { right: auto; left: 12px; }
 .gear.android { top: calc(12px + 10vh); }   /* clear of Android's status bar */
 .gear.show, .gear:focus-visible { opacity: 1; pointer-events: auto; }
 

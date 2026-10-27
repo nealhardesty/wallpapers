@@ -465,8 +465,9 @@ settings directly (storage is shared) and tells the player to apply them:
     a tuned setup to the phone), and key hints, hidden on touch screens.
 - **Opening it:**
   - `,` toggles it; `Esc` closes it; `?panel=open` opens it on load, as soon as the player mounts rather than when the wallpaper is ready, so a slow or failing wallpaper still leaves its settings reachable (the Android settings screen relies on it).
-  - On a touch screen, a long press in the top-right corner.
-  - With a mouse, a ⚙︎ gear fades in when the pointer nears that corner.
+  - On a touch screen, a long press in either right-hand corner (the top can sit under Safari's status bar).
+  - With a mouse, a ⚙︎ gear fades in when the pointer nears either of them.
+  - The left-hand corners do the same for fullscreen: a ⛶ button for a mouse, a long press on touch (no buttons on Android).
   - While it's open, wallpaper keys are suspended.
 
 ```

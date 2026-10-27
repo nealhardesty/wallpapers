@@ -115,7 +115,7 @@ most, lower on battery saver or when the phone is warm.
 
 **On any phone,** without installing anything: open the hosted copy and
 choose *Add to Home screen*. It opens full screen, with no browser around
-it. Hold the top-right corner for the panel.
+it. Hold a right-hand corner for the panel.
 
 <img src="docs/phone.webp" width="260" alt="The panel as a bottom sheet on a phone">
 
@@ -135,8 +135,9 @@ December.
 | `?` | All keys, including the current wallpaper's own |
 | `Esc` | Close |
 
-On a touch screen, hold the top-right corner to open the panel. With a
-mouse, a gear appears when you move toward that corner.
+On a touch screen, hold a right-hand corner to open the panel. With a
+mouse, a gear appears when you move toward that corner. The bottom-right
+corner works too, and the two left-hand corners toggle fullscreen.
 
 **The panel:**
 - Every wallpaper, with a thumbnail. Hover one for a moment to see it play.
