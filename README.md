@@ -113,6 +113,37 @@ the cat), and the mountains, clouds and stars pan as you swipe between
 pages. It pauses whenever it's covered, and runs at Medium and 30 fps at
 most, lower on battery saver or when the phone is warm.
 
+**On a Mac, as your desktop background** (macOS 14 or later, experimental). Run
+`make mac-run`, or `make mac-install` to put the app in `~/Applications`. The
+wallpaper sits behind your desktop icons, widgets and windows, on every
+display, and the ✨ menu bar item picks a wallpaper, pauses it, opens
+**Settings** (the same panel) and sets it to open at login. It pauses when a
+full-screen app covers it, when the screen sleeps or locks, and it runs at a
+lower quality on battery, in Low Power Mode and when the Mac is hot. Wallpapers
+that react to the mouse do: fish follow the pointer, and a click on the bare
+desktop is a tap. **Use as Lock Screen Picture…** renders a still and sets it
+as your desktop picture, because a live wallpaper can't show on the lock
+screen. The app isn't notarized (no paid developer account), so building it
+yourself is the easy way in. Or download `wallpapers-mac-<version>.zip` from the
+latest [release](https://github.com/nealhardesty/wallpapers/releases) (a
+universal build for Apple silicon and Intel; check it against the `.sha256`
+beside it), unzip it, and move `Wallpapers.app` to `~/Applications`. macOS
+blocks a downloaded app that isn't notarized the first time: right-click →
+**Open**, or clear the flag with `xattr -dr com.apple.quarantine
+~/Applications/Wallpapers.app`.
+
+**On a Mac, as a screen saver.** The app carries one, and installs it for you:
+✨ → **Screen Saver → Install Screen Saver…**. macOS wants you to choose it
+yourself, once: System Settings → Wallpaper → **Screen Saver**, scroll to the
+bottom (**Other**) and pick **Wallpapers**. From the same menu you choose what it
+shows: the same wallpaper as your desktop, a different one each time (changing
+every 1, 5, 15 or 30 minutes, and a different one on each display), or one in
+particular, and whether to float a quiet clock over it. **Preview Now** runs it
+at once. The saver follows your settings in the app, which keeps them where the
+saver can read them. If macOS's screen saver host ever stalls the page, the
+saver reloads it, and failing that shows a clock on black rather than a broken
+screen. An update of the app updates the saver by itself.
+
 **On any phone,** without installing anything: open the hosted copy and
 choose *Add to Home screen*. It opens full screen, with no browser around
 it. Hold a right-hand corner for the panel.
@@ -297,6 +328,15 @@ Run `make` to list every target.
 | `make android-bench` | On a phone with the debug build set as wallpaper: frame cost, CPU and battery drain per wallpaper per tier |
 | `make android-keystore` | Make the release signing key, outside the repo (once, ever) |
 | `make android-release` | Build the signed release APK into `dist/` |
+| `make mac-build` | Build the macOS app, `dist/mac/Wallpapers.app` (needs Xcode's command line tools; `ARCHS="arm64 x86_64"` for a universal build) |
+| `make mac-run` | Build it and start it: the wallpaper goes behind your desktop icons |
+| `make mac-dev` | Run it straight from this checkout's `web/`, with the web inspector on, so edits show on reload |
+| `make mac-test` | The app's self-test against a throwaway settings store: windows and layering, animation, pause, settings sharing, mouse, Bing, still (about 30 s) |
+| `make mac-release` | Build the universal macOS app and zip it into `dist/wallpapers-mac-<version>.zip` with a `.sha256`; it checks both architectures, the versions and the signatures first |
+| `make mac-saver-test` | Load the built screen saver outside Apple's host and check its settings, choices, displays, clock and watchdog (about a minute; shows a window) |
+| `make mac-saver-live` | Run the installed saver in Apple's real host for a few seconds and read its log (once you've chosen it in System Settings) |
+| `make mac-saver-log` | The screen saver's own log |
+| `make mac-install` / `make mac-uninstall` | Put the app in `~/Applications` / remove it |
 | `make docker-build` | Build the container image `wallpapers` |
 | `make docker-run` | Run it at http://localhost:8000 (read-only, unprivileged) |
 | `make lint` | Syntax-check every script and JSON file |
@@ -338,11 +378,21 @@ browser features only work on secure pages.
 2. Bump `version` in `web/manifest.json` (it's the extension's and the
    app's version), commit, and push a matching tag: `git tag v0.6.0 &&
    git push --tags`.
-3. CI checks everything, builds the signed APK and the extension zip, and
-   publishes both on a GitHub Release. Until the secrets exist it publishes
-   the debug APK (`wallpapers-<version>-debug.apk`) instead: it sideloads
-   fine, but each one is signed by a throwaway key, so installing the next
-   release means uninstalling first.
+3. CI checks everything, builds the signed APK, the extension zip and the
+   universal Mac app (on a macOS runner), and publishes all three on a GitHub
+   Release: `wallpapers-<version>.apk`, `wallpapers-extension-<version>.zip` and
+   `wallpapers-mac-<version>.zip` with its `.sha256`. Until the secrets exist it
+   publishes the debug APK (`wallpapers-<version>-debug.apk`) instead: it
+   sideloads fine, but each one is signed by a throwaway key, so installing the
+   next release means uninstalling first.
+4. The Mac build is the newest part: if it fails, the release still goes out
+   without it and the run shows a warning saying so. The Mac app is ad-hoc
+   signed, not notarized, so there is nothing to set up for it. (A paid Apple
+   Developer account would add a Developer ID certificate, a notarization step
+   in `mac/release.sh` and a few secrets; nothing else changes.)
+5. To try the Mac job before tagging: `gh workflow run ci.yml --ref <branch>`
+   runs CI, the Android build and the Mac build, and uploads the zip as the
+   `wallpapers-mac` artifact, without publishing anything.
 
 ### Adding a wallpaper
 

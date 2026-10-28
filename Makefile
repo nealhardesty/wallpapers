@@ -13,7 +13,7 @@ AVD ?= $(firstword $(shell $(ANDROID_HOME)/emulator/emulator -list-avds 2>/dev/n
 GRADLE = cd android && ./gradlew --quiet
 APP = com.roadwaffle.wallpapers
 
-.PHONY: help hooks serve serve-https cert bing-json thumbnails icons screenshots extension site android-build android-install android-logcat android-emulator android-release android-keystore android-bench jellyfin-media jellyfin-fixtures jellyfin-dev jellyfin-stop jellyfin-mock docker-build docker-run lint audit audit-staged audit-history test smoke smoke-live bench ci clean
+.PHONY: help hooks serve serve-https cert bing-json thumbnails icons screenshots extension site android-build android-install android-logcat android-emulator android-release android-keystore android-bench jellyfin-media jellyfin-fixtures jellyfin-dev jellyfin-stop jellyfin-mock mac-build mac-run mac-dev mac-test mac-install mac-uninstall mac-release mac-saver-test mac-saver-live mac-saver-log docker-build docker-run lint audit audit-staged audit-history test smoke smoke-live bench ci clean
 
 help: ## List every target
 	@awk 'BEGIN {FS = ":.*## "} /^[a-zA-Z0-9_-]+:.*## / {printf "  \033[36m%-17s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -82,6 +82,45 @@ android-keystore: ## Make the release signing key, outside the repo (KEYSTORE=, 
 	"$(JAVA_HOME)/bin/keytool" -genkeypair -v -keystore "$(KEYSTORE)" -alias wallpapers -keyalg RSA -keysize 4096 -validity 36500 -dname "CN=Wallpapers"
 	@echo "\nBack it up somewhere safe: losing it means users must uninstall to update."
 	@echo "For CI: gh secret set WALLPAPERS_KEYSTORE_BASE64 < <(base64 -i \"$(KEYSTORE)\"), and set WALLPAPERS_KEYSTORE_PASSWORD, WALLPAPERS_KEY_ALIAS (wallpapers), WALLPAPERS_KEY_PASSWORD"
+
+mac-build: ## Build the macOS app: dist/mac/Wallpapers.app (ARCHS="arm64 x86_64" for a universal build)
+	@mac/build.sh
+
+mac-run: mac-build ## Build and start the macOS app: the wallpaper goes behind your desktop icons, a menu bar item controls it
+	@pkill -x Wallpapers 2>/dev/null || true
+	@open dist/mac/Wallpapers.app
+
+mac-dev: mac-build ## Run the macOS app straight from this checkout's web/ (edit, then reload from the menu bar item's Settings)
+	@pkill -x Wallpapers 2>/dev/null || true
+	@WP_WEB_ROOT="$(CURDIR)/web" WP_DEBUG=1 dist/mac/Wallpapers.app/Contents/MacOS/Wallpapers
+
+mac-test: mac-build ## Run the macOS app's self-test against a throwaway settings store (about 30 s; shows a wallpaper behind your icons)
+	@pkill -x Wallpapers 2>/dev/null || true
+	@dist/mac/Wallpapers.app/Contents/MacOS/Wallpapers --selftest 2>/dev/null
+
+mac-release: ## Build the universal macOS app and zip it: dist/wallpapers-mac-<version>.zip and .sha256 (ad-hoc signed, not notarized)
+	@mac/release.sh
+
+mac-install: mac-build ## Install the macOS app into ~/Applications
+	@mkdir -p $(HOME)/Applications
+	@rm -rf $(HOME)/Applications/Wallpapers.app
+	@cp -R dist/mac/Wallpapers.app $(HOME)/Applications/
+	@echo "installed ~/Applications/Wallpapers.app"
+
+mac-uninstall: ## Stop and remove the macOS app (its settings stay in ~/Library/WebKit/com.roadwaffle.wallpapers.mac)
+	@pkill -x Wallpapers 2>/dev/null || true
+	@rm -rf $(HOME)/Applications/Wallpapers.app
+	@echo "removed"
+
+mac-saver-test: mac-build ## Load the built screen saver outside Apple's host and check its settings, choices, displays, clock and watchdog (about 1 min; shows a window)
+	@swiftc -O -swift-version 5 mac/SaverHarness/main.swift -framework Cocoa -framework ScreenSaver -o dist/mac/SaverHarness
+	@dist/mac/SaverHarness dist/mac/Wallpapers.saver 2>/dev/null
+
+mac-saver-live: ## Run the installed screen saver in Apple's real host for a few seconds and read its log (needs it chosen in System Settings; shows the saver)
+	@mac/saver-live.sh
+
+mac-saver-log: ## Show the screen saver's own log (it writes inside the host's sandbox)
+	@tail -40 "$(HOME)/Library/Containers/com.apple.ScreenSaver.Engine.legacyScreenSaver/Data/wallpapers-saver.log"
 
 bench: ## Every wallpaper at every tier on a simulated phone (4× slower CPU): budgets, bench/results.json, the ⚡ badges (SPEC §4.8)
 	node tools/bench.mjs

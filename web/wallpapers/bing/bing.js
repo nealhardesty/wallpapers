@@ -89,7 +89,7 @@ class BingWallpaperManager {
     async fetchBingImageUrl(offset = 0) {
         const bingUrl = `https://www.bing.com/HPImageArchive.aspx?format=js&idx=${offset}&n=1&mkt=en-US`;
         const sources = [];
-        if (/^https?:$/.test(location.protocol)) {
+        if (/^(https?|wp):$/.test(location.protocol)) {
             sources.push({ name: 'bing.json', url: 'bing.json', parse: data => ({ images: data.images.slice(offset, offset + 1) }) });
         }
         sources.push({ name: 'Bing', url: bingUrl, parse: data => data });

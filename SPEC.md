@@ -2286,6 +2286,359 @@ console snippet saves the old wallpaper keys (never the links) as
 Tested by unit tests and end to end: the smoke test feeds a dump through
 the panel's real file input.
 
+### 10.21 macOS: live desktop and screen saver (`mac/`, owner idea)
+
+One native Mac app that runs the same `web/` wallpapers as the desktop
+background *and* as a screen saver, the way `android/` does for phones.
+Research (Oct 2026) says: **possible, with one soft spot**. Details below;
+what we haven't tried on a real Mac is marked *unverified*, and Phase M0
+proves it before anything else is built.
+
+#### Verdict
+
+| Goal | Possible? | How | Risk |
+|---|---|---|---|
+| Live desktop background | **Yes** | One borderless `NSWindow` per display at the desktop window level, holding a `WKWebView` | Low. Plash-style apps do this today. |
+| Static fallback and lock screen | **Yes** | `NSWorkspace.setDesktopImageURL(_:for:options:)`, public API | Low |
+| Screen saver | **Yes, but fragile** | A `.saver` bundle (`ScreenSaverView` subclass) run by Apple's `legacyScreenSaver` host | **Medium–high**: Apple's host has open bugs (below) |
+| Real "Set as wallpaper" picker entry like Android | **No** | macOS has no third-party live-wallpaper API | n/a: the app *is* the wallpaper |
+
+#### What the research found
+
+Desktop background:
+- There is no wallpaper plug-in API. Every "live wallpaper" app for macOS
+  puts its own window just above the desktop picture and below the icons:
+  `NSWindow` with `level = CGWindowLevelForKey(.desktopWindow) + 1`
+  (use the function, never a hard-coded number), `styleMask: .borderless`,
+  `ignoresMouseEvents = true`, `collectionBehavior = [.canJoinAllSpaces,
+  .stationary, .ignoresCycle]`, never key or main. One window per
+  `NSScreen`. ([example of the technique](https://dev.to/gruffix/building-ambient-desktop-particles-for-macos-with-caemitterlayer))
+- A window at that level does **not** show on the lock screen or login
+  window; those use the desktop *picture*. So the app also sets a rendered
+  still (the wallpaper's `thumb`-style frame) as the real desktop image:
+  the lock screen, Mission Control and "app not running" all look right.
+- `CGWindowListCreateImage` is going away (a 2026 report has it broken on
+  the macOS 27 beta; [Apple forums](https://developer.apple.com/forums/thread/849969)).
+  We don't need it: `WKWebView.takeSnapshot` renders the still.
+
+Screen saver:
+- `.saver` bundles still load on Tahoe, through `legacyScreenSaver`. An
+  Apple engineer said no new app-extension screen saver API is coming in
+  macOS 26 ([thread](https://developer.apple.com/forums/thread/787444)).
+  Tahoe moved Screen Saver settings into a modal inside the Wallpaper pane,
+  and the old `ScreenSaver-Settings` deep link no longer works.
+- **Known host bugs** (all are Apple's, none has a code fix):
+  - `WKWebView` in a saver: partial rendering and `setInterval` firing
+    about once a second on Sonoma
+    ([thread](https://developer.apple.com/forums/thread/736716)).
+  - A `WKWebView` saver blank on the second display on Tahoe, and third-party
+    savers stopping the second display from showing at all.
+  - macOS 26.4: `WKWebView` content disappears after about 3 seconds
+    (FB22353950, [thread](https://developer.apple.com/forums/thread/820860)).
+  - The saver's **Options** button can do nothing (the
+    [WebViewScreenSaver](https://github.com/liquidx/webviewscreensaver)
+    README says the same), so settings can't live in the saver.
+  - `legacyScreenSaver` is sandboxed: `CFPreferences` and files behave
+    differently ([thread](https://developer.apple.com/forums/thread/119731)),
+    and its `localStorage` isn't the app's.
+- The Aerial saver gave up on `legacyScreenSaver` and uses Apple's private,
+  undocumented app-extension API. We won't: private API means breakage on
+  every OS update and no clean distribution.
+
+#### Architecture
+
+One Swift package, built with `xcodebuild`/`swift` from the Makefile. The
+page code doesn't change: new host `?host=mac` (and `?host=mac-saver`), the
+same way `?host=android` works (§6).
+
+```
+mac/
+  Wallpapers.app        menu-bar agent (LSUIElement), owns everything live
+    DesktopWindow       one per NSScreen: borderless, desktop level, WKWebView
+    SettingsWindow      normal window, index.html?host=mac&panel=open
+    MenuBar             picker with thumb.webp, "Surprise me", pause, quit
+    Power               occlusion, lock, sleep, low-power, thermal, battery
+    AssetScheme         WKURLSchemeHandler for wp://app/ (serves web/ from the bundle)
+    BingJson            native fetch of Bing's archive, like Android's BingJson.kt
+    StillMaker          renders the current scene to a PNG and sets it as the desktop image
+  Wallpapers.saver      thin ScreenSaverView; no settings UI of its own
+```
+
+- **Serving `web/`:** a custom scheme (`wp://app/`), not `file://`, so every
+  `WKWebView` in the app shares one `localStorage` origin and the CSP (§5)
+  holds. No local HTTP server, no open port. `web/` is copied into the
+  bundle at build time like Android's `SyncWeb`.
+- **Settings:** the same panel in a normal window, as Android's
+  `SettingsActivity`. The desktop window ignores the mouse, so the corner
+  hot zones can't open it; the menu bar item and ⌘, do. All desktop windows
+  follow changes through the existing `storage` events.
+- **Saver settings, without an Options dialog:** the app mirrors every
+  `wp:*` key to `~/Library/Application Support/Wallpapers/settings.json`
+  (and a copy inside the saver's container, which is *unverified* to be
+  writable: M0). The saver injects them with a `WKUserScript` at document
+  start that fills `localStorage` before the page runs. No web code change.
+- **Power, reusing §4.8:** the host already takes `WP.power({...})`.
+  - `NSWindow.occlusionState` not visible (a full-screen app covers us) →
+    `hidden`. Free, and the biggest saving.
+  - Screen sleep, lock, fast user switching → `hidden`.
+  - `ProcessInfo.isLowPowerModeEnabled` → `saver`; `thermalState` →
+    `thermal`; IOKit `IOPSCopyPowerSourcesInfo` → `battery`.
+  - Desktop gets Auto with a Medium ceiling at 30 fps on battery, High on
+    power. The saver gets High.
+- **Interactivity:** the window ignores clicks (they belong to Finder and
+  the icons), but a global `NSEvent` mouse-moved monitor needs no
+  permission, so pointer position is forwarded as pointer events.
+  Fish follow the cursor, fireflies flee it. Clicks and keys don't reach
+  the wallpaper, so `interactive` wallpapers (quest, neko's click games)
+  get a "Play" button in the menu that opens them in a window.
+- **Multi-display:** one manager per screen. Settings: *Same on all* (default)
+  or *Different per display*. Hot-plug via `didChangeScreenParameters`.
+- **Spaces and Stage Manager:** `canJoinAllSpaces` + `stationary` covers
+  Spaces; Stage Manager and "Click wallpaper to reveal desktop" must be
+  checked in M0 (*unverified*).
+
+#### Saver strategy, in order of preference
+
+1. **A: `WKWebView` inside the saver.** Simplest and shares all code. Works
+   today on some macOS versions and breaks on others (26.4).
+2. **B: Pre-rendered loop (the safety net, and a good idea anyway).** The
+   app records a short seamless loop of the current wallpaper (HEVC, 10–30 s,
+   per display size) with `WKWebView.takeSnapshot` or ScreenCaptureKit, and
+   the saver just plays it with `AVPlayerLayer`. No `WKWebView` in
+   `legacyScreenSaver` at all, so none of its bugs apply; near-zero CPU. The
+   cost: it isn't truly live (time-of-day, Bing's image, Advent), so the
+   app re-records on a schedule and when settings change. The saver
+   picks B automatically if A's health check fails (frame counter stalls).
+3. **C: Native Metal ports** of a few wallpapers. Last resort, as on Android.
+
+The saver ships A with B as automatic fallback; M0 decides which is the
+default on each macOS version.
+
+#### Distribution (owner: no Apple Developer account)
+
+- **Ad-hoc signed, not notarized.** No paid account, so no Developer ID and
+  no notarization. A downloaded build carries the quarantine flag and
+  Gatekeeper blocks it on first launch. Three ways round that, all in the
+  README: (1) `make mac-install` builds from source on the user's own Mac,
+  which is never quarantined and is the main path; (2) right-click → Open,
+  or `xattr -dr com.apple.quarantine`, for the downloaded zip. (A Homebrew
+  cask installed with `--no-quarantine`, as WebViewScreenSaver does, was
+  considered and left out: a second repo and a token for little gain.)
+- Hardened runtime stays on; the app needs only
+  `com.apple.security.network.client` (Bing), like Android's `INTERNET`.
+- No Mac App Store (a `.saver` can't go there, and it needs the paid account).
+- Release: an ad-hoc signed zip and its checksum on the GitHub Release beside
+  the APK and the extension zip. The app installs the `.saver` into
+  `~/Library/Screen Savers/` with one button (no admin rights).
+- Bundle ID `com.roadwaffle.wallpapers.mac`; saver
+  `com.roadwaffle.wallpapers.mac.saver`.
+- If an account arrives later, notarization is an extra step in
+  `mac-release`; nothing else changes.
+- **Releases are automatic** (built, §6.6 is the Android half). `make
+  mac-release` (`mac/release.sh`) builds both architectures
+  (`ARCHS="arm64 x86_64"`), then checks before it zips: the app and the saver
+  inside it are each universal, both Info.plists carry `web/manifest.json`'s
+  version, `web/` and the icon are in, and the signatures verify, again after
+  unzipping the result elsewhere. Output: `dist/wallpapers-mac-<version>.zip`
+  (made with `ditto`, which keeps the signature) and a `.sha256`.
+  - **CI** (`ci.yml`): a `mac` job on `macos-26` runs `make mac-test` and
+    `make mac-saver-test` (the hosted runner gives a web view a screen: the
+    first run, for v0.8.0, passed all 41 checks), then `make mac-release`, and
+    uploads the zip as the `wallpapers-mac` artifact on every run. The
+    `release` job (a pushed `vX.Y.Z` tag matching the manifest) waits for
+    `mac` but does not need it to succeed: a failed Mac build ships the
+    Android app and extension without it, with a warning. Otherwise it
+    attaches the zip and checksum to the same GitHub Release.
+  - `gh workflow run ci.yml --ref <branch>` exercises the whole Mac job without
+    tagging.
+
+#### Make targets (new)
+
+`mac-build`, `mac-run`, `mac-install` (app + saver, to `~/Applications` and
+`~/Library/Screen Savers`), `mac-uninstall`, `mac-saver-test` (loads the
+saver in a harness window and checks frames advance), `mac-bench`,
+`mac-release` (universal build, checks, zip and checksum), `mac-saver-live`,
+`mac-saver-log`. `make ci` stays Linux-able: the Swift targets run only in the
+CI `mac` job.
+
+#### Roadmap
+
+- **M0 Spikes: prove it (one evening, throwaway code).** Each ends with a
+  written result here, like Spike A0 in §6.1.
+  - [ ] M0.1 Borderless desktop-level window with a `WKWebView` showing
+    `index.html?w=aquarium`, on every display. → it animates behind the
+    icons, survives Space swaps, Stage Manager and "Click wallpaper to
+    reveal desktop", and a full-screen app pauses it.
+  - [ ] M0.2 Minimal `.saver` with a `WKWebView` on the **current** macOS,
+    on one and two displays, after 10 minutes. → record the frame rate, any
+    blank frames, and whether it stops when the saver ends.
+  - [ ] M0.3 Saver reading `settings.json` and bundled `web/`. → it shows the
+    wallpaper picked in the app. Records what the sandbox allows.
+  - [ ] M0.4 Pre-rendered loop played by the saver (strategy B). → a seamless
+    10-second loop, no visible seam.
+  - **Gate:** M0.1 passing is what makes this worth building (it did). The
+    saver is a bonus: if strategy A fails on a macOS version, use B; if B
+    fails too, ship desktop-only and say so in the README.
+- **M1 Desktop app (the core). Built.**
+  - [x] M1.1 `mac/Wallpapers/*.swift`, built by `mac/build.sh` with `swiftc`
+    (no Xcode project, no packages). Menu-bar agent (`LSUIElement`), the
+    `wp://app/` scheme handler (`AssetScheme.swift`), one window per display
+    (`Desktop.swift`), `?host=mac`. → `make mac-run` shows the wallpaper.
+  - [x] M1.2 Settings window = the page with the panel open
+    (`SettingsWindow.swift`); one `WKWebsiteDataStore` shared by every web
+    view. → a setting saved there is seen, and announced as a `storage`
+    event, on the desktop (self-test). The app shows in the Dock only while
+    settings is open.
+  - [x] M1.3 Power (`Power.swift`): per-window occlusion, screen sleep, lock,
+    saver running, the menu's Pause, Low Power Mode, thermal state and the
+    internal battery become `WP.power({ hidden, saver, thermal, battery })`.
+    → hidden freezes the canvas (0 pixels changed) and visible resumes it.
+  - [x] M1.4 `Still.swift`: renders each display's page at native pixels and,
+    on request only (menu, with a confirmation), makes it the desktop
+    picture. Never automatic: it replaces the user's own picture.
+  - [ ] M1.5 Launch at login: the menu item calls `SMAppService.mainApp`;
+    **not yet tried**, since it changes the owner's login items.
+  - [x] Beyond the plan: pointer forwarding (moves, and clicks on the bare
+    desktop, found from the window list), menu bar picker with Surprise Me,
+    Next, Previous, Pause, and `make mac-test`, a 16-check self-test that
+    runs the real app against a throwaway store.
+  - **Web change:** `bing.js` also fetches `bing.json` on `wp:` pages
+    (it was `https?:` only), so the app's native archive is used; Bing's
+    own host can't be fetched from a page.
+  - **Not verified yet (needs a person at the Mac):** pointer forwarding with
+    a real mouse (the self-test injects the events), Spaces and full-screen
+    apps, a second display, Stage Manager, "Click wallpaper to reveal
+    desktop", and Open at Login.
+- **M2 Screen saver. Built** (`mac/Saver/`, `mac/SaverHarness/`).
+  - [x] M2.1 `Wallpapers.saver`, strategy A (a `WKWebView`), built by
+    `mac/build.sh` and carried inside the app (`Contents/Resources`). It shares
+    `AssetScheme.swift` and `Power.swift` with the app, has its own copy of
+    `web/` and a thumbnail for System Settings. `SaverInstall.swift` copies it to
+    `~/Library/Screen Savers` (menu: Screen Saver → Install), and the app
+    replaces an older installed copy at launch (compared by `WPBuild`, a hash
+    of the binary in the saver's Info.plist), then restarts the host.
+  - **Settings reach it as a file, not as storage.** The saver can read
+    `~/Library/Application Support/Wallpapers/saver.json` in the real home
+    (spike M0.3: that folder, the shared-users folder and `~/Library/Screen Savers`
+    are readable; the app's preferences and `localStorage` are not).
+    `SaverSync.swift` mirrors every `wp:` key a page writes (a user script
+    wraps `Storage`, in every frame), a second after it settles, plus the
+    menu's choices and the catalog. Sign-in tokens (`secrets`) and
+    `wp:hinted` are left out. The saver seeds its own throwaway page storage
+    from it before the page's scripts run.
+  - **Choices** (menu, Screen Saver): *Same as the Desktop* (default; the
+    page follows the mirrored `wp:current`, Seasonal included), *A Different
+    One Each Time* (a pool that skips the blank, Jellyfin and Bing, which can't
+    draw without a network; every 1/5/15/30 min; displays avoid each other's
+    wallpaper, since one host process holds every display's view), or *One
+    Wallpaper*; and *Show a Clock* (time and date, drifting to a new spot each
+    minute, centred in fallback).
+  - **Watchdog.** The page's frame counter is checked every 4 s; two stalls
+    in a row reload it, the next rebuild the web view, the next fall back to a
+    clock on black, retried every minute. A dead web-content process takes the
+    same path. `stopAnimation` and the saver's start and stop notifications
+    pause the page (`WP.power({ hidden })`), because macOS 26's host can leave
+    a saver running after it ends.
+  - **Options button:** Tahoe's does nothing; older macOS shows a sheet that
+    points to the menu.
+  - [x] M2.2 The pre-rendered video loop (strategy B) was **not needed**:
+    strategy A works on 26.5.2. The watchdog's clock-on-black is the fallback,
+    and B stays an option if a later macOS breaks A for good.
+  - [x] M2.3 `make mac-saver-test` loads the built bundle outside Apple's host
+    and checks the loading, chosen and followed wallpapers, Random across two
+    displays, the clock, a page that draws, an Options sheet, the watchdog's
+    three steps and stopping. `make mac-test` also covers the mirror (no
+    secrets, the menu's choices) and the installer (install, outdated, replace),
+    in scratch folders. `make mac-saver-live` runs the installed saver in the
+    real host and reads its log.
+  - **A new saver isn't listed until the wallpaper service rescans.** macOS 26
+    reads `~/Library/Screen Savers` only when `WallpaperAgent` starts, so after
+    installing the app restarts it (and `legacyScreenSaver`); launchd brings
+    both back at once. Found by hand: the saver was valid and the agent had
+    even built an entry for it, but System Settings didn't list it until the
+    agent restarted.
+  - **Choosing the saver is still manual.** macOS 26 keeps the choice in the
+    wallpaper store, which has no public way in, and `com.apple.screensaver`
+    `moduleDict` does nothing; the app opens the right System Settings pane.
+  - **Not verified yet:** a long soak in the real host (the 26.4-style "content
+    vanishes" bug did not show on 26.5.2 in a short run), a second display,
+    and macOS 14 and 15.
+- **M3 Polish and fun.**
+  - [ ] M3.1 Pointer forwarding for interactive wallpapers.
+  - [ ] M3.2 Per-display wallpapers; rotation every N minutes; hotkey.
+  - [ ] M3.3 Menu-bar icon in the current wallpaper's accent (the player already
+    reports it for Android's Material You).
+  - [ ] M3.4 *Sleep-aware scenes*: Night Train and Lighthouse use `host.now()`;
+    nothing to do. Check that the saver and desktop agree on the hour.
+- **M4 Release. Built.** `make mac-release`, a CI `mac` job on `macos-26` and the
+  release job attaching the zip and checksum (see Distribution), the README
+  sections, and tests for the settings mirror (M2.3).
+
+#### Fun ideas (only after M2)
+
+- **Dock-to-saver handoff:** when the saver starts, it fades in the *same*
+  wallpaper you were looking at, so the screen saver feels like the desktop
+  "zooming out". (The app writes the current scene's seed with the settings.)
+- **Hot corner as a toy:** with Mission Control's hot corner set to Start
+  Screen Saver, moving to that corner is a free "show me the nice one".
+- **Menu-bar weather glyph:** the icon shows a tiny snowflake or leaf when the
+  wallpaper is Snow or Leaves.
+- **Focus-mode scenes:** map macOS Focus (Do Not Disturb, Work, Sleep) to a
+  wallpaper, using the Focus status API (needs a permission prompt; optional).
+- **Lid-open ceremony:** a one-second flourish on wake.
+- **Screenshot-friendly:** ⌥-click the menu item to copy the current frame
+  to the clipboard, for sharing.
+
+#### Spike results (macOS 26.5.2 Tahoe, Apple silicon, one display, Oct 2026)
+
+**M0.1 desktop window: passes.** (the throwaway spike, since replaced by the app)
+- Window level `CGWindowLevelForKey(.desktopWindow) + 1` (-2147483622) lands
+  exactly between Apple's wallpaper (`Dock Wallpaper`, -2147483624) and
+  Finder's icon window (-2147483603). Read from `CGWindowListCopyWindowInfo`,
+  which needs no permission. Desktop widgets (Notification Center,
+  -2147483601) are above the icons. Owner confirmed by eye: icons in front,
+  fireflies animating.
+- The page draws and animates in a plain `WKWebView` (`loadFileURL`), about
+  60 fps `requestAnimationFrame`, about 1.5% CPU for the app plus the WebKit
+  process on one display. The owner's current wallpaper is an Apple aerial
+  video; our window covers it and Apple's keeps running underneath, so the
+  app should also set a still picture (§Verdict) and not rely on hiding it.
+- Screenshots of the desktop need Screen Recording permission for the
+  terminal; use `WKWebView.takeSnapshot` for self-checks instead.
+
+**M0.2 screen saver: passes, with two workarounds.** (the throwaway spike, since replaced by `mac/Saver`)
+- Tahoe stores the chosen saver in the wallpaper store. Setting
+  `com.apple.screensaver moduleDict` does nothing; the user picks it once in
+  System Settings → Wallpaper → Screen Saver → Other. After that
+  `open -a ScreenSaverEngine` runs it, which is how we test.
+- `legacyScreenSaver` loads the `.saver` (ad-hoc signed, from
+  `~/Library/Screen Savers/`) and the view's window is an
+  `NSServiceViewControllerWindow`. Its sandbox home is
+  `~/Library/Containers/com.apple.ScreenSaver.Engine.legacyScreenSaver/Data/`.
+  Two view instances are created per start.
+- **Gotcha 1:** `Bundle.resourceURL` is a *relative* URL there. `loadFileURL`
+  raises on it and the host swallows the exception (the saver is just
+  black, no log). Build the path from `bundlePath`.
+- **Gotcha 2:** the host window reports `occlusionState` not visible, so
+  WebKit hides the page and `requestAnimationFrame` runs exactly once.
+  Calling `-[WKWebView _setWindowOcclusionDetectionEnabled:NO]` (private
+  SPI, found by `responds(to:)`) fixes it: about 58 fps,
+  `visibilityState` visible. It's one line, guarded by `responds(to:)`, so a
+  missing selector degrades to strategy B.
+- Still to check: a 10-minute soak (the 26.4-style "content vanishes"
+  bug), a second display, and CPU.
+
+#### Decisions (owner)
+
+1. **No Apple Developer account:** ad-hoc signing, build-from-source first
+   (see Distribution).
+2. **Minimum macOS 14 (Sonoma).** `SMAppService` and current `WKWebView` APIs
+   are fine.
+3. **The desktop background is the must-have; the screen saver is a
+   bonus** (owner, revised after M0): the wallpaper must truly sit behind
+   the desktop icons, like the real wallpaper. If the saver can't be made
+   reliable, ship the desktop app without it.
+
 ## Appendix A: legacy standalone pages, to bring back
 
 The old per-wallpaper pages are replaced by deep links (§4.2). Their tuned
