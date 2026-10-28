@@ -21,7 +21,8 @@ wallpapers' only home. They run in three hosts:
 > and all 33 wallpapers run from `web/index.html`, as a Chrome new-tab extension, on
 > GitHub Pages at https://nealhardesty.github.io/wallpapers/, and as an
 > Android live wallpaper. Every wallpaper is tiered and within budget.
-> Next: nothing is planned; §10 holds the ideas.
+> Next: Phase 10, the clock overlay (§4.9, specified 2026-10-28, not built);
+> §10 holds the other ideas.
 
 ---
 
@@ -302,6 +303,7 @@ Phase 4 and 6 take it:
   | `date=YYYY-MM-DD`, `theme=<id>` | Passed to the wallpaper as `host.params`. Advent uses them for time travel and themes, e.g. `?w=advent&date=2026-12-25` |
   | `tier=low\|medium\|high` | Pin a performance tier for this load (§4.8), e.g. to see Low on a desktop |
   | `host=android`, `hud=1`, `thumb=1` | Host simulation (§4.3), performance HUD (§4.8), thumbnail mode (§4.7) |
+| `clock=on\|off\|<motion>` | Planned (§4.9): force the clock overlay on or off for this load, or on with a motion (`static`, `drift`, `bounce`, `teleport`, `follow`). Never persisted |
 
   Picking a wallpaper in the panel while `w=` is active does persist, as
   usual, and drops `w=` from the address bar (`history.replaceState`), so
@@ -498,13 +500,14 @@ settings directly (storage is shared) and tells the player to apply them:
 | `[` / `]` | everywhere | previous or next wallpaper (remembered) |
 | `←` / `→` | panel open | previous or next wallpaper |
 | `F` | everywhere | fullscreen |
+| `K` | everywhere | show or hide the clock overlay (§4.9, planned); a toast says which |
 | `?` | everywhere | key help, listing the current wallpaper's own keys too |
 | wallpaper keys | panel closed | declared in the catalog (`keys`), run inside the stage, and may answer with a toast. Quest: `N` new quest, `H` hero, `V` look, `T` hat, `M` companion, `P` palette. Advent: `←`/`→` a day (with Shift, a week), `↑`/`↓` a month, `0` today, `T` theme, `R` replay |
 
 Keys are ignored when Ctrl, Meta or Alt is held, or when focus is in a form
 field. The player's keys work wherever focus is: the stage forwards `,`
 `c` `[` `]` `f` `?` `Esc` to the player when it has focus. No wallpaper may
-declare `c`.
+declare `c` (or, once §4.9 lands, `k`; a unit test checks both).
 
 ### 4.6 Bing image of the day (built in Phase 4, Pages job in Phase 5)
 
@@ -825,6 +828,407 @@ and the commits.
 - **Frame pacing.** The page's own rAF pacing is enough under strategy 1:
   the system composites the Presentation's window only when it has a new
   frame.
+
+### 4.9 Clock overlay (planned: Phase 10; owner idea, 2026-10-28)
+
+A time and date drawn over whatever wallpaper is showing, with an optional
+smaller second clock for another timezone. **Off by default**, everywhere.
+
+**Decided (owner, 2026-10-28):**
+
+1. **A global overlay owned by the player, not a wallpaper.** It sits over
+   every wallpaper, survives crossfades, and no wallpaper's code changes.
+2. **Every host gets it**, Android included, and it is off by default on
+   all of them.
+3. **System fonts only** for now (§7.3: nothing to ship, no licence line).
+4. **Adaptive colour** is one of the colour modes.
+5. **The macOS saver's own *Show a Clock* stays separate** (the macOS section at the end of §10, M2). This
+   overlay is web code and knows nothing of it; see Open questions for the
+   one place they meet.
+6. **A quiet panel.** One collapsed section, a single row until the clock
+   is ticked on, and everything else behind sub-sections that are collapsed
+   too, plus looks (presets) so most people never open them.
+
+#### Where it lives
+
+- `core/clockface.js` and `core/clockface.css`, plus `core/clockface-settings.js`
+  (the defaults and the schema, registered as `WP.defaults('clock', …)` and
+  `WP.schema('clock', …)`, in the same format as a wallpaper's, so the panel,
+  merge, diff and the schema-agrees-with-defaults test all apply). The
+  namespace is `WP.clockface`: `WP.clock` already means the `host.now()`
+  time source (§8.0), which the overlay reuses: `WP.clock(params.date)`, so
+  `?date=2026-12-31T23:59:50` works here as it does in the stages.
+- One `<div id="clock">` in `index.html`, above the stage iframes and below
+  the panel, its gear and the toast. `pointer-events: none`, never
+  selectable, so it can't get in the way of a click. It is built once and
+  **reused across wallpaper switches**: no remount, no flicker.
+- Pure logic in two functions with no DOM, so Node can test them:
+  `WP.clockface.format(date, config) → { lines }` and
+  `WP.clockface.step(state, dt, bounds, config) → state` (motion).
+- Settings live under **`wp:clock`** (`configVersion: 1`, only what differs
+  from the defaults is stored). Export and Import carry it like every `wp:`
+  key, and the Mac app's `SaverSync` mirrors it, so the live desktop wallpaper
+  shows the same clock.
+- Styles are set through the CSSOM (`style.setProperty`), never `style="…"`
+  attributes or inline `<style>`: the extension's CSP forbids them (§1).
+- No network, no storage outside `wp:clock`, no new permission.
+
+#### The panel
+
+A new section between the wallpaper's settings and Performance. Collapsed
+at first; its summary line shows the state, so you can see what's on
+without opening it.
+
+```
+ off, closed                 off, open                    on, open
+┌───────────────────────┐   ┌───────────────────────┐   ┌─────────────────────────────┐
+│ 🕐 Clock · off      ⌄ │   │ 🕐 Clock · off      ⌃ │   │ 🕐 Clock · 12h · drift   ⌃ │
+└───────────────────────┘   │ Show a clock      [ ] │   │ Show a clock            [✓] │
+                            └───────────────────────┘   │ Look      [Minimal      ▾] │
+                                                        │ Time      [Digital      ▾] │
+                                                        │ Date      [Wed, Oct 28  ▾] │
+                                                        │ Position  [Drift        ▾] │
+                                                        │ Size      ━━━━●━━━━━━    7 │
+                                                        │ Colour    [Adaptive     ▾] │
+                                                        │ 🕰️ Format                 ⌄ │
+                                                        │ 🌍 Second clock           ⌄ │
+                                                        │ 🎨 Style                  ⌄ │
+                                                        │ 🧭 Position               ⌄ │
+                                                        │ ⚙️ Advanced               ⌄ │
+                                                        └─────────────────────────────┘
+```
+
+Rules that keep it small:
+
+- Off means **one row**. Nothing else is in the DOM.
+- The main block is seven rows. Everything else is in a sub-section that is
+  collapsed (`details`, like Advanced) and has a one-line summary of its
+  current values ("Format · 24h · seconds").
+- Each control has `when(config)`, so a control appears only while it
+  matters: the second colour only for Gradient, the shadow colour only when
+  there is a shadow, the plate's opacity only with a plate, Teleport's
+  interval only for Teleport, and the whole *Second clock* body only once
+  *Add a second clock* is ticked.
+- **Looks first.** *Look* is a preset menu: Minimal, Neon, Terminal,
+  Newsprint, Frosted, Retro LCD, Sunset, Blueprint, plus Custom. A look is a
+  patch over the Style settings (font, weight, colour mode, effect, outline,
+  plate); picking it sets them all at once. It is **derived, not stored**:
+  the menu shows whichever look the current values match, else *Custom*, so
+  editing any style control flips it to Custom, and there's no state to
+  drift. The changed-dot and click-to-reset (§4.4) work per control as usual.
+- Two small additions to `core/settings.js`, both tested: a **group** may
+  have `when`, and a `{ type: 'presets', presets: { id: { label, patch } } }`
+  control.
+- A *Reset clock* link inside the section (two clicks, like Reset), so
+  resetting a wallpaper never touches the clock and vice versa.
+- Nothing here appears in a wallpaper's own schema. The smoke test that
+  drives every wallpaper's panel also drives this one.
+
+#### Settings
+
+Keys are flat, like wallpapers'. Defaults are inert: with `enabled: false`
+nothing else matters, and nothing is drawn.
+
+**Main block**
+
+| Key | Control | Default | Notes |
+|---|---|---|---|
+| `enabled` | toggle | `false` | |
+| `preset` | presets | *derived* | not stored (above) |
+| `style` | select | `digital` | how the time is written: see *Time styles* |
+| `date` | select | `medium` | `none`, `weekday` (*Wednesday*), `short` (*Oct 28*), `medium` (*Wed, Oct 28*), `long` (*Wednesday, October 28*), `numeric` (*10/28/2026*, by locale), `iso` (*2026-10-28*) |
+| `motion` | select | `static` | `static`, `drift`, `bounce`, `teleport`, `follow`; see *Position and motion* |
+| `size` | range | `7` | % of the short side (CSS `vmin`), 2–30, step 0.5. Scales with the screen, so the same setting suits a phone and a desktop |
+| `colorMode` | select | `solid` | `solid`, `adaptive`, `gradient`, `daylight`, `drift` (hue), `invert`; see *Colour* |
+| `color` | color | `#ffffff` | when `solid` |
+
+**🕰️ Format**
+
+| Key | Control | Default | Notes |
+|---|---|---|---|
+| `hour12` | select | `auto` | `auto` (the browser's locale), `12`, `24` |
+| `seconds` | toggle | `false` | on battery saver the seconds hide themselves (see *Cost*) |
+| `meridiem` | select | `upper` | `PM`, `pm`, `P`, none; only for 12-hour |
+| `pad` | toggle | `false` | leading zero on the hour |
+| `blink` | toggle | `false` | the colon blinks; never with reduced motion |
+| `extras` | multi | `[]` | chips appended to the date line, joined with ` · `: `zone` (*EST*), `offset` (*UTC−5*), `week` (*W44*), `dayOfYear` (*Day 301*), `quarter` (*Q4*), `daysLeft` (*64 days left*), `moon` (a phase emoji, from the date alone), `epoch` (the Unix time, for the nerds) |
+| `dateCase` | select | `normal` | `normal`, `upper`, `lower` |
+| `zone` | select | `local` | `local`, or any IANA zone from `Intl.supportedValuesOf('timeZone')`. Where that is missing, a short list of common zones |
+
+Month and weekday names follow the browser's language. *Words*, *Roman* and
+the extras' English abbreviations don't, and the panel says so.
+
+**🌍 Second clock** (all `when: secondOn`, which is ticked first)
+
+| Key | Control | Default | Notes |
+|---|---|---|---|
+| `secondOn` | toggle | `false` | "Add a second clock" |
+| `secondZone` | select | `UTC` | same list as `zone` |
+| `secondLabel` | select | `auto` | `auto` (the city from the zone id, *New York*; *UTC* for UTC), `offset` (*UTC+9*), `none` |
+| `secondScale` | range | `0.5` | 0.3–1, step 0.05, × the main clock's size |
+| `secondPlace` | select | `below` | `below` or `beside` the main clock; it always travels with it |
+| `secondDay` | toggle | `true` | adds *+1 day* or *yesterday* when its date differs from the main clock's |
+
+It follows the main clock's 12/24-hour setting and style when that style is
+`digital`, and falls back to `digital` for the others (a second *Roman*
+clock is not useful). No seconds, and at 75% of the main clock's opacity, so
+it reads as secondary. A *world clock* with many zones is still §10.3; this
+is only a second zone.
+
+**🎨 Style**
+
+| Key | Control | Default | Notes |
+|---|---|---|---|
+| `font` | select | `system` | see *Fonts*; the menu shows each option in its own face |
+| `fontCustom` | text | `""` | `when: font = 'custom'`: a font the user has installed. Taken as a family name only: anything but letters, digits, spaces, hyphens, dots and quotes is dropped, 60 characters at most |
+| `weight` | range | `300` | 100–900, step 100; the browser picks the nearest the font has |
+| `spacing` | range | `0` | letter spacing, −0.05 to 0.3 em, step 0.01 |
+| `opacity` | range | `0.9` | 0.2–1, step 0.05, shown as % |
+| `color2` | color | `#7dd3fc` | `when: gradient` |
+| `lightColor`, `darkColor` | color | `#ffffff`, `#111111` | `when: adaptive`: the two colours it chooses between |
+| `effect` | select | `soft` | `none`, `soft` shadow, `hard` shadow, `long` shadow (a stacked 45° tail), `glow` (the text colour, blurred), `neon` (glow + a thin bright core) |
+| `effectColor` | color | `#000000` | `when: effect ∈ {soft, hard, long}`; glow and neon use the text colour |
+| `effectSize` | range | `3` | 0–10, step 0.5, in hundredths of the font size, so it scales |
+| `outline` | range | `0` | stroke width, 0–6, step 0.5, hundredths of the font size |
+| `outlineColor` | color | `#000000` | `when: outline > 0` |
+| `plate` | select | `none` | a backing shape for busy wallpapers: `none`, `tint` (translucent), `glass` (frosted blur), `line` (an outline only) |
+| `plateColor`, `plateOpacity` | color, range | `#000000`, `0.35` | `when: plate ∈ {tint, glass}`; 0–0.8, step 0.05 |
+
+**🧭 Position** (`when` is the mode that uses each control)
+
+| Key | Control | Default | Used by | Notes |
+|---|---|---|---|---|
+| `anchor` | select | `bottom-left` | static | the nine places, plus `custom` |
+| `x`, `y` | number | `0.08`, `0.92` | static, `custom` | where the clock's centre sits, as fractions of the screen. Set by dragging (below), not by typing |
+| `margin` | range | `4` | static | % of the short side, 0–20, step 1 |
+| `speed` | range | `1` | drift, bounce, follow | 0.2–3, step 0.1, × |
+| `path` | select | `wander` | drift | `wander`, `orbit`, `figure8` |
+| `bounceHue` | toggle | `false` | bounce | a new hue on every wall hit |
+| `bounceFlash` | toggle | `true` | bounce | a brief pulse when it hits a corner exactly |
+| `teleportEvery` | select | `minute` | teleport | `10`, `30`, `60`, `300`, `900` seconds, or `minute` (the instant the minute changes) |
+| `teleportFade` | select | `fade` | teleport | `fade` or `instant` |
+
+**⚙️ Advanced**
+
+| Key | Control | Default | Notes |
+|---|---|---|---|
+| `align` | select | `auto` | text alignment of the lines: `auto` (follows the anchor), `left`, `center`, `right` |
+| `shy` | toggle | `false` | fade to 15% while the pointer is near; touch ignores it |
+| `nightMode` | select | `off` | `off`, `dim` (to 30%), `hide`, between `nightFrom` and `nightTo` |
+| `nightFrom`, `nightTo` | text | `22:00`, `06:00` | `HH:MM`, 24-hour, in the main clock's zone; a bad value falls back to the default |
+| `hideOn` | multi | `[]` | wallpapers to stay hidden over (options come from the catalog) |
+
+#### Time styles
+
+All of them come from the time in the chosen zone. None needs a location.
+
+| `style` | Looks like | Notes |
+|---|---|---|
+| `digital` | `10:42 PM` | `Intl.DateTimeFormat`, so locale, 12/24 and DST are right for free; tabular figures, so the width doesn't jitter as digits change |
+| `words` | *quarter to eleven* | five-minute steps, "noon" and "midnight", English only. Updates every 5 min |
+| `roman` | `XXII:XLII` | follows 12/24. A zero is `N` (*nulla*, the medieval way), so midnight is `XII:N` in 12-hour and `N:N` in 24 |
+| `binary` | a grid of ●○ | BCD, one column per digit (H tens and units, M tens and units, with seconds if on), the classic binary clock. Set as text, in the font |
+| `hex` | `7F3A` | the day as a 16-bit number (one tick is 1.32 s). A hexadecimal clock, in the old sense. Zone-aware. Redraws on its own tick |
+| `beats` | `@812` | Swatch Internet Time: 1000 .beats a day, from UTC+1, with no zones. It ignores `zone`, and the panel says so; centibeats (`@812.34`) with seconds on |
+
+Every style also feeds the date line and extras; only the time line changes.
+
+#### Fonts
+
+A curated list of **system stacks**. Each lists a face for macOS and iOS,
+Windows, Android and Linux in turn, so every option draws something sensible
+on every host, and the last entry is a generic family. Nothing is bundled.
+
+| `font` | Stack, roughly | Feel |
+|---|---|---|
+| `system` | `ui-sans-serif`, SF Pro, Segoe UI, Roboto | clean |
+| `rounded` | `ui-rounded`, SF Rounded, then the system sans | friendly |
+| `light` | system sans at weight 200, wide tracking | airy; the usual "lock screen" look |
+| `serif` | `ui-serif`, Iowan Old Style, Georgia, Cambria | editorial |
+| `didone` | Didot, Bodoni 72, then the serif stack | fashion |
+| `slab` | Rockwell, Georgia, then the serif stack | newsprint |
+| `condensed` | Arial Narrow, Avenir Next Condensed, Roboto Condensed | tall |
+| `humanist` | Optima, Candara, Gill Sans, Trebuchet MS | calm |
+| `mono` | `ui-monospace`, SF Mono, Menlo, Consolas, Roboto Mono | terminal |
+| `typewriter` | American Typewriter, Courier New | warm |
+| `lcd` | monospace with tabular figures, weight 700 and wide tracking | clock radio |
+| `hand` | Bradley Hand, Segoe Print, Comic Sans MS, `cursive` | casual |
+| `custom` | the family in `fontCustom`, then the system stack | the user's own |
+
+A stack that no installed font can satisfy falls through to the last
+entry. Weight 200 on a font with one weight is simply the regular weight, and
+the panel's menu shows each option in its own face, so what you see is what
+you'll get on that device. `fontCustom` is a name typed on this device, never
+shipped.
+
+#### Colour
+
+| `colorMode` | Behaviour |
+|---|---|
+| `solid` | `color` |
+| `gradient` | `color` to `color2`, 135°, through `background-clip: text` (shadow and outline are drawn by a `drop-shadow` on the wrapper instead of `text-shadow`, because a shadow under transparent text shows through it) |
+| `adaptive` | `lightColor` over dark scenes, `darkColor` over light ones: see below |
+| `daylight` | follows the clock, with no location: amber at dawn, white by day, orange-rose at dusk, a dim blue at night, blended between them, recomputed once a minute |
+| `drift` | one slow turn round the hue wheel every 10 minutes, at a fixed saturation and lightness chosen to stay readable |
+| `invert` | `mix-blend-mode: difference`: the text is the negative of whatever is behind it, with no sampling. Striking, poor on mid-grey. A Medium-tier effect (see *Cost*) |
+
+**Adaptive** needs to know how bright the wallpaper is *where the clock is*.
+The player can't read the stage's pixels (its frame can be cross-origin, §4.1),
+so the stage does the measuring:
+
+- The player posts `sample { x, y, w, h }` (fractions of the screen: the
+  clock's box) to the stage every 2 s while the mode is `adaptive`, the clock
+  is shown and the page is visible, and once straight after `ready`, after a
+  wallpaper switch and after a teleport.
+- The stage draws its visible canvases (and any same-origin `<img>` or
+  `<video>`) in z-order into an 8×8 offscreen canvas, that rectangle only,
+  reads those 64 pixels, and replies `luma { value }`: the mean relative
+  luminance (WCAG formula), 0 to 1. This is the only readback anywhere, and
+  it is tiny and slow. §4.8 bans a *per-frame* `getImageData`; this is 64
+  pixels every 2 s.
+- A tainted canvas (a cross-origin photo or video) throws; the stage catches
+  it and replies `luma { value: null }`. The clock then keeps its last colour,
+  or `lightColor` with the soft shadow forced on if it has none, and never
+  errors.
+- **Hysteresis:** switch to `darkColor` above 0.62 and to `lightColor` below
+  0.45, so a wallpaper hovering near 0.5 doesn't flicker. The colour
+  eases over 800 ms (a CSS transition, so no per-frame work).
+- The decision is a pure function (`WP.clockface.pick(previous, luma)`), so
+  Node tests it. Moving modes sample the box where the clock *is* now, so it
+  re-evaluates as it crosses a bright and a dark patch.
+- A strong shadow or outline is the other way to stay readable on a busy
+  wallpaper; the *Neon* and *Frosted* looks use them.
+
+#### Position and motion
+
+The overlay lives in the player, whose `requestAnimationFrame` isn't the
+stage's, so the stage's pacer doesn't throttle it. The clock therefore follows
+the same rules itself: movement is applied with `transform` only, never
+`left` or `top`, so nothing is laid out per frame, and where it can it runs
+as a Web Animation on the compositor, with no JS per frame (a bounce is a
+straight line between two wall hits, so each leg is one animation). A mode
+that does need a frame loop (drift, follow) runs it at the tier's fps cap, with
+the elapsed-time and 100 ms `dt` clamp that wallpapers use, so it moves the
+same distance at 10 or 120 fps. The clock stays inside the screen minus
+`insets` (on Android, the 48 px gesture bar).
+
+- **Static.** A nine-place `anchor` and a `margin`. **While the panel is
+  open you can drag the clock to where you want it**; it switches to
+  `custom` and stores `x`, `y`. This is the only time the clock takes the
+  pointer, and a touch drag works too (the panel's own page, where Android's
+  swipes aren't an issue). No loop, and no frames.
+- **Drift.** A slow wander across the whole screen. `wander` is two
+  incommensurate sines (never quite repeats), `orbit` is a lazy ellipse
+  round the centre, `figure8` a Lissajous 1:2. About one screen width a
+  minute at speed 1. The OLED-friendly choice: no pixel stays lit for long.
+- **Bounce.** The classic: a straight line at a random angle (never within
+  15° of an axis, so it doesn't crawl along a wall), reflecting off the edges
+  of the safe area. `bounceHue` shifts the hue on each hit; `bounceFlash`
+  pulses when it clips a corner within a few pixels. About 60 px/s at speed 1.
+- **Teleport.** It stays still, then jumps to somewhere else, on a timer
+  or on the minute. The new spot is chosen from a 3×3 grid of cells **other
+  than the last one**, with some jitter inside the cell, and never partly
+  off-screen. `fade` takes it out in 300 ms, moves it while invisible and
+  brings it back in 300 ms; `instant` just moves it. Its seeding is
+  `Math.random`, since it isn't a scene that must replay.
+- **Follow.** A companion that trails the pointer with a spring, parked off
+  to its lower right so it's never under the cursor, and drifting back to its
+  anchor when the pointer leaves the window. Mouse and pen only; with touch
+  it stays at the anchor. Desktop browsers and the Chrome new tab are what
+  it's for.
+- **Shy** (Advanced, any mode): fades out while the pointer is within about
+  1.5 clock-heights of it, and back after it leaves.
+- **Reduced motion** (`prefers-reduced-motion`): drift, bounce and follow
+  turn into Static at the anchor; teleport becomes *instant* with no fade;
+  the colon stops blinking; colour transitions are immediate.
+- **Hidden** (`document.hidden`, or the power policy's `pause`): all loops
+  and animations stop and the clock stops redrawing; it catches up from
+  `host.now()` on return, so it is never stale.
+
+#### Cost
+
+It's a small piece of DOM text, so it is nearly free, and every part of the
+spec has a stated price:
+
+- **Redraw** only when the text changes, from a `setTimeout` aligned to the
+  next minute (or second, with seconds on, or the 1.32 s tick for `hex`).
+  Nothing is drawn per frame. A static clock without seconds wakes the page
+  once a minute.
+- **Seconds wake the compositor** once a second, even over a wallpaper that
+  is idle (`host.idleUntil`, §4.8). Not free on a phone. So on
+  battery saver, or whenever the power policy's `ceiling` is Low, the
+  clock hides its seconds, and motion modes fall back to Static (the
+  panel says why, as it does for Performance). Restored when the signal
+  clears.
+- **Glass and Invert are blends over a moving picture**: the compositor
+  re-does them every frame the wallpaper draws. They are therefore effects
+  with a Medium floor (§4.8): on Low, `glass` becomes `tint` and `invert`
+  becomes the *adaptive* mode's two colours. `prefers-reduced-transparency`
+  does the same.
+- **Layout** is measured once per text change and per resize, with tabular
+  figures so a change of digit doesn't change the box.
+- **Budget:** a bouncing clock with seconds on adds under 2% busy on Low and
+  under 1% on Medium in `make bench`, and a static one without seconds adds
+  nothing measurable, since the page is idle.
+- **No effect on the stage:** the stage doesn't know the clock exists, except
+  for the 64-pixel adaptive sample.
+
+#### Edge cases
+
+- A stored zone that `Intl` doesn't know (a typo, an old browser) falls back
+  to `local` and the panel notes it. It never throws.
+- Daylight-saving gaps and repeats come from `Intl` and are tested on the
+  actual transition instants.
+- The two clocks' dates can differ (UTC against a zone fourteen hours
+  ahead); `secondDay` says how.
+- A huge `size` is clamped so the whole clock still fits the safe area, and
+  shrinks to fit on a narrow phone, with the second clock stacked below.
+- `?thumb=1` and the thumbnail run never show it; neither does a stage
+  opened directly (`stage.html`), which has no player.
+- Printing, copy and select do nothing: it isn't text anyone can select.
+- With `enabled` false the overlay isn't in the DOM, and the sample message
+  is never posted.
+
+#### Tests (done-checks for Phase 10)
+
+- **Unit** (`tools/clockface.test.mjs`, Node, no browser, injected clock):
+  - every `style` at several instants, with 12 and 24 hour, midnight and
+    noon, and `N` in Roman; `words` across the hour; `binary` at 23:59:58;
+    `hex` and `beats` against hand-computed values
+  - `date` and `extras` for a few instants and zones, including the
+    leap-day and the year's last day (`daysLeft`, `dayOfYear`, `week`)
+  - zones: New York across both DST transitions, Kiritimati (+14), Pago
+    Pago (−11), UTC, an invalid zone, and the second clock's `secondDay`
+  - a font name is sanitised (quotes, semicolons, braces, long text)
+  - motion: `step` never leaves the bounds over ten simulated minutes at
+    10, 30, 60 and 144 fps with jittered `dt`, covers the same distance at
+    every rate, `bounce` reflects and detects a corner hit, `teleport`
+    never picks the same cell twice in a row, `follow` converges, reduced
+    motion gives Static
+  - `pick`: hysteresis around 0.45 and 0.62, and `null` keeps the last colour
+  - the schema agrees with the defaults (each control a default and each
+    default a control, in range, on the step grid, among the options), a
+    look's patch only names style keys, and the `preset` matches back to its
+    own look
+  - no wallpaper declares `k` in the catalog
+- **Smoke**, extending the player suite (`node tools/smoke.mjs`):
+  - a fresh run draws no clock, has no `#clock` content, and writes nothing
+    to storage, and `?clock=off` beats a stored `enabled: true`
+  - `?clock=on&date=2026-12-31T23:59:50` shows `11:59:50 PM` (seconds on),
+    and ten seconds later the date has rolled over
+  - the panel's Clock section is one row when off; every control renders
+    when on, and a change reaches the element
+  - `?clock=bounce`: after 60 s of simulated time the box is entirely
+    on-screen, and moved; `teleport` never overlaps the previous cell
+  - the node survives switching wallpapers (same element, no remount)
+  - a fake `luma` from the stage flips the colour once, not on every sample
+  - pausing the stage stops the motion; `?tier=low` turns glass into tint
+  - `?host=android` keeps the clock above the bottom inset
+  - the screenshots go in `dist/smoke/clock-*.png`, and are looked at
+- **Bench** (`make bench`): a row for "bounce, seconds on".
+- **No new make targets:** `make test`, `make smoke` and `make bench` cover
+  it, and `make ci` runs them. The README's *Use* section gets a short Clock
+  paragraph, and its Development section is unchanged.
 
 ---
 
@@ -1367,6 +1771,22 @@ Built differently from the plan, on the spike's evidence:
   `titled` (the art shows the title and repaints once per item) and `osd`
   (their own on-screen display: no title card, the 🔇 badge top centre).
 
+### Phase 10: Clock overlay (owner, 2026-10-28)
+
+Designed in §4.9; none of it is built. Each task is done only when `make ci`
+passes, and the visible ones have been looked at in `dist/smoke/` and at
+`?tier=low` and `?host=android`. Each is a commit.
+
+- [ ] 10.0 **Groundwork in the core:** `WP.clockface` with the pure `format` and `step`, a group-level `when` and the `presets` control in `core/settings.js`, and `wp:clock` registered through `WP.defaults('clock', …)` and `WP.schema('clock', …)`. No overlay yet. → unit tests for `format` (digital only), the schema-agrees-with-defaults check for `clock`, and the presets control; `make ci` unchanged otherwise.
+- [ ] 10.1 **The overlay, static, digital:** `#clock` in `index.html`, the panel's one-row-when-off section, `enabled`, `date`, `size`, `anchor`, `margin`, `color`, `font`, `weight`, `opacity`, and `?clock=on|off`. Survives a wallpaper switch; hidden when `enabled` is false; honours `host.insets`; `K` toggles it. → smoke: fresh run draws nothing and saves nothing; `?clock=on&date=…` shows the right time and rolls over at midnight; the element survives `]`; `?host=android` clears the bottom inset.
+- [ ] 10.2 **Format and the second clock:** 12/24, seconds, meridiem, `extras`, `zone`, the second zone (UTC by default) with its label, scale, placement and `secondDay`. → unit tests for zones, DST transitions, extremes (+14 and −11) and the extras; smoke: the second clock reads the right time against a fixture instant.
+- [ ] 10.3 **Time styles:** `words`, `roman`, `binary`, `hex`, `beats`. → unit tests against hand-computed values at several instants; every style fits the safe area at the smallest and the largest `size`.
+- [ ] 10.4 **Style:** the font list, `fontCustom` (sanitised), `effect`, `outline`, `plate`, `gradient`, `daylight`, `drift`, and the *Look* presets. Glass and invert gated by the Medium floor. → smoke: every look renders; `?tier=low` turns glass into tint; the font name can't inject CSS (unit test).
+- [ ] 10.5 **Adaptive colour:** the `sample` / `luma` messages, the stage's 8×8 read, hysteresis, and the tainted-canvas fallback. → unit tests for `pick`; smoke: a bright fixture flips the clock to `darkColor` once, a tainted one doesn't throw, and the sample costs no more than 0.3 ms.
+- [ ] 10.6 **Motion:** drift (three paths), bounce (with hue and corner flash), teleport (fade and instant, on the minute), follow, drag-to-place and shy, with reduced motion, the power fallback and pause. → unit tests for `step` (bounds, equal distance at 10–144 fps, corner detection, never the same cell twice); smoke: `?clock=bounce` stays on screen and moves; pausing the stage stops it.
+- [ ] 10.7 **Night mode, `hideOn`, `?clock=<motion>`, Reset clock**, and a `make bench` row. → bounce with seconds under 2% busy on Low and 1% on Medium.
+- [ ] 10.8 **Docs:** the README's *Use* section, SPEC §4.4's panel layout and §4.5's keys (drop "planned"), and this section's *As built* note. → `make ci`.
+
 ---
 
 ## 10. Ideas
@@ -1444,7 +1864,9 @@ or hour.
 
 ### 10.3 World clock (owner)
 
-Several timezones, plus the local one.
+Several timezones, plus the local one. (The clock overlay, §4.9, is a
+different thing: one clock and at most one extra zone, drawn over any
+wallpaper. Its zone list and `format` could feed this later.)
 
 - **No network, and no location permission:** the local zone comes from
   `Intl.DateTimeFormat().resolvedOptions().timeZone`, and DST comes free
@@ -2235,6 +2657,20 @@ New questions go here, each with a recommendation.
   ever typed into a wallpaper. *Recommendation:* keep the password form as
   a fallback for servers with Quick Connect turned off, never store the
   password, and say so beside the field.
+- **Clock overlay on the Mac saver (§4.9):** `SaverSync` mirrors every `wp:`
+  key, so a ticked `wp:clock` shows in the saver's web view as well, next to
+  the saver's own native *Show a Clock*. They stay separate, as decided, but
+  two clocks at once is unlikely to be what anyone wants. *Recommendation:*
+  when the native clock is on, the saver loads the page with `?clock=off`
+  (one parameter; the overlay's code is untouched), and the Mac menu says so.
+- **Clock overlay: should it hide while a Jellyfin frame is playing?**
+  Video wallpapers want the picture clean, and some frames (Camcorder, VHS)
+  draw their own date stamp. *Recommendation:* no automatic rule; the
+  `hideOn` list in Advanced covers it, and the user decides.
+- **Clock overlay on Android's home screen:** the clock stays fixed while the
+  home pages swipe (it doesn't follow `onScroll`). *Recommendation:* keep it
+  fixed; a clock that slides with the pages looks like a widget that
+  has come loose.
 - **Jellyfin on GitHub Pages:** settled by spike 9.0. After Chrome's local
   network prompt, Pages reaches an https server, or an http one addressed
   by IP; only an http *hostname* stays blocked, and the panel says so.
