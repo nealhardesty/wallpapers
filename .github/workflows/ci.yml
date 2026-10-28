@@ -3,7 +3,7 @@ name: ci
 on:
   push:
     branches: [master]
-    tags: ['v*']   # a release: signed APK and extension zip on a GitHub Release
+    tags: ['v*']   # a release: signed APK, extension zip and Mac app on a GitHub Release
   pull_request:
   schedule:
     - cron: '23 9 * * *'   # daily, after Bing's new image: refreshes bing.json on Pages
@@ -46,11 +46,40 @@ jobs:
           name: wallpapers-android-debug
           path: android/app/build/outputs/apk/debug/app-debug.apk
 
+  # The Mac app and its screen saver (SPEC §10.21). The self-tests need a
+  # logged-in screen, which a hosted runner may not give a web view, so they
+  # are an experiment (they never fail the build) until a run shows otherwise;
+  # what always gates the build is mac-release's own checks. mac-release goes
+  # last because the tests build a host-only app into the same folder.
+  mac:
+    if: github.event_name != 'schedule'
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Self-tests (experimental)
+        continue-on-error: true
+        timeout-minutes: 8
+        run: |
+          make mac-test
+          make mac-saver-test
+      - run: make mac-release
+      - uses: actions/upload-artifact@v7
+        with:
+          name: wallpapers-mac
+          path: |
+            dist/wallpapers-mac-*.zip
+            dist/wallpapers-mac-*.zip.sha256
+
   # Tag vX.Y.Z (matching web/manifest.json's version) to publish. The
   # keystore lives only in the repo's secrets (SPEC §6.6).
   release:
-    needs: [ci, android]
-    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [ci, android, mac]
+    # The Mac build is the newest and least proven: if it fails, the Android
+    # app and the extension still ship, and a warning says what's missing.
+    if: ${{ !cancelled() && startsWith(github.ref, 'refs/tags/v') && needs.ci.result == 'success' && needs.android.result == 'success' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -82,9 +111,23 @@ jobs:
             echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
             WALLPAPERS_KEYSTORE="$RUNNER_TEMP/release.jks" make android-release extension
           fi
-      - run: gh release create "$GITHUB_REF_NAME" --generate-notes dist/wallpapers-*.apk dist/wallpapers-extension-*.zip
+      - name: Fetch the Mac app
+        if: needs.mac.result == 'success'
+        uses: actions/download-artifact@v8
+        with:
+          name: wallpapers-mac
+          path: dist
+      - name: Say so if the Mac app is missing
+        if: needs.mac.result != 'success'
+        run: |
+          echo "::warning::the Mac build ${{ needs.mac.result }}; releasing without it"
+      - name: Publish the release
         env:
           GH_TOKEN: ${{ github.token }}
+        run: |
+          shopt -s nullglob
+          files=(dist/wallpapers-*.apk dist/wallpapers-extension-*.zip dist/wallpapers-mac-*.zip dist/wallpapers-mac-*.zip.sha256)
+          gh release create "$GITHUB_REF_NAME" --generate-notes "${files[@]}"
 
   pages:
     needs: ci
