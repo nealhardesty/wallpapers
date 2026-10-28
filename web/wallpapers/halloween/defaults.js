@@ -54,7 +54,7 @@ WP.defaults('halloween', {
     dew: true,
 
     // Falling
-    candyCount: 40,
+    candyCount: 0,
     candyFallSpeed: 2,
     candySize: 1.0,
     fallingLeaves: true,
