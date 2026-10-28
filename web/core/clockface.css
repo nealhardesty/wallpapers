@@ -1,0 +1,99 @@
+/* The clock overlay (SPEC §4.9). One fixed layer over the stages and under
+   the panel, toast and gear; it never takes the pointer, except to be dragged
+   into place while the panel is open. Everything that varies is a custom
+   property set by core/clockface-view.js. */
+
+#clock {
+    position: fixed;
+    inset: 0;
+    z-index: 5;
+    overflow: hidden;
+    pointer-events: none;
+    -webkit-user-select: none;
+    user-select: none;
+}
+#clock[hidden] { display: none; }
+
+.clock-face {
+    position: absolute;
+    top: 0;
+    left: 0;
+    box-sizing: border-box;
+    width: max-content;
+    color: #fff;
+    font-family: var(--clock-font, system-ui, sans-serif);
+    font-size: var(--clock-size, 7vmin);
+    font-weight: var(--clock-weight, 300);
+    letter-spacing: var(--clock-spacing, 0);
+    line-height: 1.05;
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: 'tnum';
+    white-space: nowrap;
+    opacity: calc(var(--clock-opacity, 0.9) * var(--clock-shy, 1) * var(--clock-night, 1) * var(--clock-fade, 1));
+    transition: opacity 0.3s ease, color 0.8s ease;
+    background: var(--clock-plate, transparent);
+    border: 0 solid var(--clock-plate-line, transparent);
+}
+#clock.moving .clock-face { will-change: transform; }
+.clock-face.invert { mix-blend-mode: difference; }
+
+/* The backing: a tint, frosted glass (a blend over a moving picture, so
+   the view drops it to a tint on Low), or an outline. */
+.clock-face[data-plate='tint'], .clock-face[data-plate='glass'], .clock-face[data-plate='line'] { padding: 0.18em 0.32em; border-radius: 0.28em; }
+.clock-face[data-plate='glass'] { -webkit-backdrop-filter: blur(18px) saturate(1.4); backdrop-filter: blur(18px) saturate(1.4); }
+.clock-face[data-plate='line'] { border-width: 0.03em; }
+
+.clock-lines {
+    display: flex;
+    flex-direction: column;
+    align-items: var(--clock-align, center);
+    gap: 0.1em;
+}
+.clock-main { display: flex; flex-direction: column; align-items: var(--clock-align, center); gap: 0.1em; }
+.clock-lines.beside { flex-direction: row; align-items: center; gap: 0.5em; }
+/* Gradient text: the fill is the wrapper's background, clipped to the glyphs
+   of everything inside it. The view uses drop-shadow for its shadows, since
+   a text-shadow would show through the transparent fill. */
+.clock-lines.gradient {
+    background-image: var(--clock-gradient);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+.clock-lines.pop { animation: clock-pop 0.55s ease-out; }
+@keyframes clock-pop { 35% { transform: scale(1.1); filter: brightness(1.6); } }
+
+.clock-time { font-size: calc(var(--clock-time-scale, 1) * 1em); }
+.clock-date { font-size: 0.3em; letter-spacing: 0.08em; opacity: 0.88; }
+.clock-date[hidden], .clock-second[hidden], .clock-second [hidden] { display: none; }
+.clock-second { display: flex; align-items: baseline; gap: 0.35em; font-size: calc(var(--clock-second-scale, 0.5) * 1em); opacity: 0.78; }
+.clock-second-label { font-size: 0.4em; letter-spacing: 0.14em; text-transform: uppercase; }
+.clock-second-day { font-size: 0.34em; opacity: 0.8; }
+
+.clock-time.blink .colon { animation: clock-blink 1s steps(1, end) infinite; }
+@keyframes clock-blink { 50% { opacity: 0; } }
+
+/* Binary: a column of lamps for each digit, drawn as dots in the clock's
+   colour so the font doesn't matter. */
+.clock-bin { display: flex; gap: 0.1em; font-size: 0.55em; }
+.clock-bin-column { display: grid; gap: 0.1em; }
+.clock-bin-column.apart { margin-left: 0.14em; }
+.clock-bin i { width: 0.34em; height: 0.34em; border-radius: 50%; background: currentColor; box-shadow: var(--clock-box-shadow, none); }
+.clock-bin i.off { opacity: 0.22; box-shadow: none; }
+.clock-bin i.none { visibility: hidden; }
+
+/* With the panel open the clock can be dragged. */
+#clock.editing .clock-face { pointer-events: auto; cursor: grab; touch-action: none; outline: 1px dashed rgba(255, 255, 255, 0.55); outline-offset: 0.12em; }
+#clock.dragging .clock-face { cursor: grabbing; }
+
+@media (prefers-reduced-motion: reduce) {
+    .clock-face { transition: none; }
+    .clock-time.blink .colon, .clock-lines.pop { animation: none; }
+}
+
+/* The panel's section. */
+.clock-section { margin: 0 0 4px; }
+.clock-section > .settings-form { padding-top: 2px; }
+.settings-hint { margin-left: auto; padding-right: 10px; color: var(--ink-faint); font-weight: 500; font-size: 12px; }
+.settings-group > summary:has(.settings-hint)::after { margin-left: 0; }
+.clock-actions { padding: 8px 0 2px; }

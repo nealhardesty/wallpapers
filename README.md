@@ -163,6 +163,7 @@ December.
 | `[` / `]` | Previous / next wallpaper (remembered) |
 | `←` / `→` | Switch, while the panel is open |
 | `f` | Fullscreen |
+| `k` | The clock, on or off |
 | `?` | All keys, including the current wallpaper's own |
 | `Esc` | Close |
 
@@ -184,6 +185,31 @@ corner works too, and the two left-hand corners toggle fullscreen.
   Medium or below, and Low under 20%.
 - ⚡ badges on the tiles show how hard each wallpaper works a phone.
 - Reset, plus Export and Import, to move your settings to another browser.
+
+**A clock over any wallpaper** (off by default; `k` or the 🕐 Clock row in the
+panel, just under the wallpapers, turns it on). It's one collapsed row until
+you tick it, then seven, with the rest folded away:
+- **Time:** digital, in words ("quarter to eleven"), Roman numerals, a
+  binary or hexadecimal clock, or Swatch beats. 12 or 24 hour, seconds, a
+  blinking colon, any timezone.
+- **Date:** none, weekday, short, long, numbers or ISO, plus extras you can
+  add: the timezone, UTC offset, week number, day of the year, quarter, days
+  left in the year, the moon's phase, the Unix time.
+- **A second, smaller clock** for another timezone (UTC to begin with), that
+  says "tomorrow" or "yesterday" when its date differs.
+- **Looks** set the style in one go (Minimal, Neon, Terminal, Newsprint,
+  Frosted, Retro LCD, Sunset, Blueprint); or choose the font (system fonts,
+  or the name of one you have installed), weight, size, colour (one colour, a
+  gradient, light or dark to suit the wallpaper under it, the time of day, a
+  slowly shifting hue, or inverted against what's behind it), a shadow, glow
+  or neon, an outline, and a backing plate.
+- **Where it goes:** a corner or edge (drag it anywhere while the panel is
+  open), drifting about the screen, bouncing off the edges, teleporting to a new
+  spot every so often, or following the pointer. Moving costs the page almost
+  nothing; on battery saver or with reduced motion it keeps still.
+- **At night** it can dim or hide itself, and you can keep it off any
+  wallpaper you choose. `?clock=on`, `?clock=off` or `?clock=bounce` (and the
+  other positions) try it for one page load.
 
 **Some wallpapers have their own keys** (press `?` to see them):
 - Pixel Quest: `N` new quest, `H` hero, `V` look, `T` hat, `M` companion,
@@ -315,7 +341,8 @@ Run `make` to list every target.
 | `make screenshots` | Re-render the README's screenshots in `docs/` (committed: review the changes) |
 | `make extension` | Build the Chrome extension: `dist/extension/` to load unpacked, and a zip |
 | `make site` | Build the GitHub Pages copy in `dist/site/`, with a fresh `bing.json` |
-| `make bench` | Every wallpaper at every tier on a simulated phone (4× slower CPU); checks the budgets, writes `bench/results.json` and the ⚡ badges |
+| `make bench` | Every wallpaper at every tier on a simulated phone (4× slower CPU), then the clock overlay's cost; checks the budgets, writes `bench/results.json` and the ⚡ badges |
+| `make bench-clock` | Just the clock overlay's cost: a bouncing clock with seconds against none |
 | `make jellyfin-media` | Generate made-up test videos (patterns, tones, subtitles in several kinds) into `.jellyfin/media/`; needs `ffmpeg` |
 | `make jellyfin-dev` | Run a throwaway Jellyfin in Docker at http://localhost:8096 on that media, set up on first start (user `wallpapers`, password `wallpapers`, a playlist) |
 | `make jellyfin-stop` | Stop and remove that container (`.jellyfin/` stays; delete it to start over) |
@@ -345,6 +372,7 @@ Run `make` to list every target.
 | `make audit-history` | Scan every file version ever committed |
 | `make test` | Run the unit tests |
 | `make smoke` | Build the extension, then boot every wallpaper, the player and the extension in headless Chrome; screenshots go to `dist/smoke/` |
+| `make smoke-clock` | Just the clock overlay's checks in headless Chrome (about a minute); screenshots go to `dist/smoke/clock-*.png` |
 | `make smoke-live` | The same stage and player checks against the deployed site, with real network and Bing (`SMOKE_URL=` for another, e.g. `make serve`'s); CI runs it after every deploy |
 | `make ci` | Everything CI runs: lint, audit, audit-history, test, smoke |
 | `make clean` | Remove build output |

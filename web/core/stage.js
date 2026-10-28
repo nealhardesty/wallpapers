@@ -8,9 +8,11 @@
 // frames can't reach into each other. Messages carry a `wp` field:
 //   stage → player  ready {id}, key {key}, rebuild, corner {near},
 //                   toast {text, ms}, error {message}, panel {feed}
-//                   quality {quality, rung, of}, stats {fps, ms, label, rung, of}
+//                   quality {quality, rung, of}, stats {fps, ms, label, rung, of, tier}
+//                   luma {value}, pointer {x, y}   (for the clock overlay, SPEC §4.9)
 //   player → stage  apply {config}, key {key, shift}, mode, power {policy},
-//                   scroll {x}, pause, resume, action {name, inputs}
+//                   scroll {x}, pause, resume, action {name, inputs},
+//                   sample {x, y, w, h}, track {on}
 
 (function (WP) {
     'use strict';
@@ -237,7 +239,7 @@
         tell({
             type: 'stats', fps: Math.round(n * 1000 / (now - counted.at)), ms: n ? (frames.workMs - counted.workMs) / n : 0,
             label: host.quality.label, rung: governor?.rung ?? null, of: governor?.rungs.length ?? null,
-            idle: idleUntil > now, reasons: policy.reasons,
+            idle: idleUntil > now, reasons: policy.reasons, tier: host.quality.tier,
         });
         counted = { count: frames.count, workMs: frames.workMs, at: now };
     }, 1000);
@@ -295,7 +297,7 @@
 
     // Keys the player owns, wherever focus is. Everything else stays with
     // the wallpaper, including its declared keys.
-    const PLAYER_KEYS = new Set([',', 'c', 'C', '[', ']', 'f', 'F', '?', 'Escape']);
+    const PLAYER_KEYS = new Set([',', 'c', 'C', '[', ']', 'f', 'F', 'k', 'K', '?', 'Escape']);
     window.addEventListener('keydown', event => {
         if (params.thumb || event.ctrlKey || event.metaKey || event.altKey || event.target.closest?.('input, select, textarea')) return;
         if (PLAYER_KEYS.has(event.key)) tell({ type: 'key', key: event.key });
@@ -328,6 +330,51 @@
     }, { passive: true });
     window.addEventListener('pointerup', () => { if (hold) clearTimeout(hold.timer), hold = null; });
 
+    // The clock overlay lives in the player, and can't see in here. It asks
+    // how bright the wallpaper is under it (adaptive colour) and, for Follow
+    // and Shy, where a mouse is (SPEC §4.9).
+    let tracking = false, trackedAt = 0, sampledAt = -Infinity, probe = null;
+    window.addEventListener('pointermove', event => {
+        if (!tracking || event.pointerType === 'touch' || event.timeStamp - trackedAt < 33) return;
+        trackedAt = event.timeStamp;
+        tell({ type: 'pointer', x: event.clientX, y: event.clientY });
+    }, { passive: true });
+    document.addEventListener('pointerleave', () => { if (tracking) tell({ type: 'pointer', x: -1, y: -1 }); });
+
+    // The mean relative luminance (0 to 1) of a rectangle of the screen
+    // (fractions), from every visible canvas, image and video drawn onto an
+    // 8×8 canvas: 64 pixels, read at most twice a second. A cross-origin
+    // picture taints the canvas and the read throws: that's null, not an error.
+    function sampleLuma({ x, y, w, h }) {
+        if (params.thumb || performance.now() - sampledAt < 500) return;
+        sampledAt = performance.now();
+        const N = 8;
+        let value = null;
+        try {
+            probe ??= document.createElement('canvas');
+            probe.width = probe.height = N;
+            const ctx = probe.getContext('2d', { willReadFrequently: true });
+            ctx.fillStyle = getComputedStyle(document.documentElement).backgroundColor || '#000';
+            ctx.fillRect(0, 0, N, N);
+            for (const layer of document.querySelectorAll('canvas, img, video')) {
+                const rect = layer.getBoundingClientRect();
+                if (rect.width < innerWidth * 0.5 || rect.height < innerHeight * 0.5 || layer === probe) continue;
+                const style = getComputedStyle(layer);
+                if (style.display === 'none' || style.visibility === 'hidden' || +style.opacity === 0) continue;
+                const sw = layer.naturalWidth || layer.videoWidth || layer.width, sh = layer.naturalHeight || layer.videoHeight || layer.height;
+                if (!sw || !sh) continue;
+                ctx.globalAlpha = +style.opacity;
+                ctx.drawImage(layer, x * sw, y * sh, Math.max(1, w * sw), Math.max(1, h * sh), 0, 0, N, N);
+            }
+            const data = ctx.getImageData(0, 0, N, N).data;
+            const lin = c => (c /= 255) <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+            let sum = 0;
+            for (let i = 0; i < data.length; i += 4) sum += 0.2126 * lin(data[i]) + 0.7152 * lin(data[i + 1]) + 0.0722 * lin(data[i + 2]);
+            value = sum / (N * N);
+        } catch {}
+        tell({ type: 'luma', value });
+    }
+
     window.addEventListener('message', event => {
         if (event.source !== window.parent || !event.data?.wp) return;
         const message = event.data;
@@ -338,6 +385,8 @@
         else if (message.wp === 'mode') plan();
         else if (message.wp === 'scroll') WP.stage.manager?.onScroll?.(message.x);
         else if (message.wp === 'action') WP.stage.manager?.onAction?.(message.name, message.inputs || {});
+        else if (message.wp === 'sample') sampleLuma(message);
+        else if (message.wp === 'track') tracking = !!message.on;
         else if (message.wp === 'power') {
             policy = message.policy;
             plan();

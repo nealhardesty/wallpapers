@@ -19,6 +19,7 @@
 
     let panel = null, picker = null, title = null, subtitle = null, body = null, tierButtons = null, tierNote = null, resetButton = null;
     let liveLine = null, batterySwitch = null;
+    let clockHost = null, clockSection = null;   // the clock overlay's settings (SPEC §4.9): a collapsed row under the filmstrip, loaded on first open
     let shownFor = null;   // the wallpaper whose settings are on screen
     let place = null;      // the location controls, for wallpapers that need one (core/location.js)
     let shownForm = null;  // { form, config: () => config }, so the wallpaper's feed can update it
@@ -38,6 +39,7 @@
         subtitle = h('p', { class: 'panel-subtitle' });
         picker = h('div', { class: 'picker', role: 'group', 'aria-label': 'Wallpapers' });
         body = h('div', { class: 'settings' });
+        clockHost = h('div', { class: 'clock-host' });
 
         tierButtons = ['auto', 'low', 'medium', 'high'].map(mode => h('button', {
             type: 'button', role: 'radio', 'data-mode': mode,
@@ -57,7 +59,7 @@
             h('header', { class: 'panel-head' },
                 h('div', {}, title, subtitle),
                 h('button', { class: 'panel-close', type: 'button', 'aria-label': 'Close settings (Esc)', onclick: () => close() }, '×')),
-            h('div', { class: 'panel-scroll' }, picker, body),
+            h('div', { class: 'panel-scroll' }, picker, clockHost, body),
             h('footer', { class: 'panel-foot' },
                 h('div', { class: 'tier' },
                     h('span', { class: 'tier-label', id: 'tier-label' }, 'Performance'),
@@ -164,6 +166,7 @@
         resetButton.classList.remove('confirm');
         resetButton.hidden = !entry.scripts?.length;
         renderTier();
+        clockControls();
 
         if (shownFor === id) return place?.update();
         shownFor = id;
@@ -203,6 +206,15 @@
         }
         if (choice === 'seasonal') body.append(h('p', { class: 'settings-note' }, `These are ${entry.name}’s own settings; Seasonal uses them whenever it shows ${entry.name}.`));
         body.append(form.element);
+    }
+
+    // The clock's section: its code comes in the first time the panel opens.
+    async function clockControls() {
+        if (clockSection) return clockSection.update();
+        await WP.loadClock();
+        if (!panel || clockSection) return;
+        clockSection = WP.clockface.section({ onChange: config => WP.clockface.view.apply(config) });
+        clockHost.append(clockSection.element);
     }
 
     function renderTier() {
@@ -291,6 +303,7 @@
     function open() {
         if (!panel) build();
         panel.hidden = false;
+        document.dispatchEvent(new CustomEvent('wp-panel', { detail: { open: true } }));
         shownFor = null;   // keys may have changed settings while it was closed
         refresh();
         (picker.querySelector('[aria-pressed="true"]') || picker.firstChild).focus({ preventScroll: true });
@@ -300,6 +313,7 @@
         if (!panel || panel.hidden) return;
         endPreview();
         panel.hidden = true;
+        document.dispatchEvent(new CustomEvent('wp-panel', { detail: { open: false } }));
         WP.player.focusStage();
     }
 
