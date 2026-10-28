@@ -46,11 +46,10 @@ jobs:
           name: wallpapers-android-debug
           path: android/app/build/outputs/apk/debug/app-debug.apk
 
-  # The Mac app and its screen saver (SPEC §10.21). The self-tests need a
-  # logged-in screen, which a hosted runner may not give a web view, so they
-  # are an experiment (they never fail the build) until a run shows otherwise;
-  # what always gates the build is mac-release's own checks. mac-release goes
-  # last because the tests build a host-only app into the same folder.
+  # The Mac app and its screen saver (SPEC §10.21). The hosted macOS runner
+  # gives a web view a screen (v0.8.0's first run passed all 41 checks), so the
+  # self-tests gate the build. mac-release goes last because the tests build a
+  # host-only app into the same folder.
   mac:
     if: github.event_name != 'schedule'
     runs-on: macos-26
@@ -59,8 +58,7 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 22
-      - name: Self-tests (experimental)
-        continue-on-error: true
+      - name: Self-tests
         timeout-minutes: 8
         run: |
           make mac-test

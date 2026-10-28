@@ -2441,9 +2441,9 @@ default on each macOS version.
   version, `web/` and the icon are in, and the signatures verify, again after
   unzipping the result elsewhere. Output: `dist/wallpapers-mac-<version>.zip`
   (made with `ditto`, which keeps the signature) and a `.sha256`.
-  - **CI** (`ci.yml`): a `mac` job on `macos-26` runs the self-tests as an
-    experiment (`continue-on-error`: a hosted runner may not give a web view a
-    logged-in screen; the first run's log says), then `make mac-release`, and
+  - **CI** (`ci.yml`): a `mac` job on `macos-26` runs `make mac-test` and
+    `make mac-saver-test` (the hosted runner gives a web view a screen: the
+    first run, for v0.8.0, passed all 41 checks), then `make mac-release`, and
     uploads the zip as the `wallpapers-mac` artifact on every run. The
     `release` job (a pushed `vX.Y.Z` tag matching the manifest) waits for
     `mac` but does not need it to succeed: a failed Mac build ships the
