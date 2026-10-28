@@ -5,6 +5,7 @@
 //
 //   node tools/bench.mjs                 everything (about 8 minutes)
 //   node tools/bench.mjs fishtank quest  just these; the rest of the results stay
+//   node tools/bench.mjs clock           just the clock overlay's cost (SPEC §4.9)
 //   BENCH_SECONDS=10 node tools/bench.mjs
 //
 // For each run: frames per second, the p50 and p95 time of a frame's
@@ -28,6 +29,10 @@ const SECONDS = Number(process.env.BENCH_SECONDS) || 6;
 const THROTTLE = 4;
 const PHONE = { width: 412, height: 915, deviceScaleFactor: 2.625, mobile: true };
 const BUDGET = { low: 25, medium: 50 };
+const clockOnly = process.argv.length === 3 && process.argv[2] === 'clock';
+// What the clock overlay adds, in points of busy share, bouncing with seconds
+// on over a blank wallpaper: the worst it can ask (SPEC §4.9, "Cost").
+const CLOCK_BUDGET = { low: 2, medium: 1 };
 const TIERS = ['low', 'medium', 'high'];
 // ⚡ to ⚡⚡⚡, from the busy share at High: what a wallpaper asks of a phone
 // at full quality, before Auto or a pinned tier holds it back.
@@ -60,6 +65,34 @@ async function inStage(expression) {
 const taskSeconds = async () => (await cdp.send('Performance.getMetrics')).metrics.find(m => m.name === 'TaskDuration').value;
 const percentile = (values, p) => { const s = [...values].sort((a, b) => a - b); return s[Math.min(s.length - 1, Math.floor(s.length * p))] ?? 0; };
 
+// The clock overlay: a bouncing clock with seconds, against none, over a blank
+// wallpaper, so what's measured is the clock.
+async function benchClock() {
+    const busyShare = async (clock, tier) => {
+        await cdp.send('Emulation.setCPUThrottlingRate', { rate: 1 });
+        await cdp.send('Page.navigate', { url: `${WEB}/stage.html?w=blank` });
+        await sleep(300);
+        await evaluate(`localStorage.clear(); localStorage.setItem('wp:hinted', 'true'); ${clock ? `localStorage.setItem('wp:clock', ${JSON.stringify(JSON.stringify({ configVersion: 1, enabled: true, motion: 'bounce', seconds: true, secondOn: true }))})` : ''}`);
+        await cdp.send('Page.navigate', { url: `${WEB}/index.html?w=blank&tier=${tier}` });
+        for (let i = 0; i < 100 && !(await evaluate('WP.player?.stage?.ready').catch(() => false)); i++) await sleep(100);
+        await cdp.send('Emulation.setCPUThrottlingRate', { rate: THROTTLE });
+        await sleep(1500);
+        const start = { task: await taskSeconds(), at: Date.now() };
+        await sleep(SECONDS * 1000);
+        return (await taskSeconds() - start.task) / ((Date.now() - start.at) / 1000) * 100;
+    };
+    console.log('\nclock overlay: bouncing, seconds on, second zone, over a blank wallpaper');
+    let over = 0;
+    for (const tier of ['low', 'medium']) {
+        const base = await busyShare(false, tier), withClock = await busyShare(true, tier);
+        const added = Math.max(0, withClock - base);
+        const bad = added > CLOCK_BUDGET[tier];
+        if (bad) over++;
+        console.log(`${'clock'.padEnd(18)} ${tier.padEnd(7)} +${added.toFixed(2)}% busy (${base.toFixed(2)}% → ${withClock.toFixed(2)}%)${bad ? `  ✗ over ${CLOCK_BUDGET[tier]}%` : ''}`);
+    }
+    return over;
+}
+
 let results = existsSync(RESULTS) ? JSON.parse(readFileSync(RESULTS, 'utf8')).wallpapers : {};
 let missed = 0;
 try {
@@ -82,8 +115,8 @@ try {
     if (!wanted.length) results = {};
 
     console.log(`bench: ${PHONE.width}×${PHONE.height} @${PHONE.deviceScaleFactor}x, CPU ${THROTTLE}× slower, ${SECONDS} s each\n`);
-    console.log('wallpaper          tier     fps   p50 ms  p95 ms   busy');
-    for (const { id, network } of ids) {
+    if (!clockOnly) console.log('wallpaper          tier     fps   p50 ms  p95 ms   busy');
+    for (const { id, network } of clockOnly ? [] : ids) {
         results[id] = {};
         for (const tier of TIERS) {
             // Fresh settings, and no Auto memory: a pinned tier, measured as shipped.
@@ -114,6 +147,7 @@ try {
             console.log(`${(network ? `${id}*` : id).padEnd(18)} ${tier.padEnd(7)} ${String(run.fps).padStart(5)} ${run.p50.toFixed(1).padStart(8)} ${run.p95.toFixed(1).padStart(7)} ${`${run.busy.toFixed(1)}%`.padStart(7)}${over ? `  ✗ over ${BUDGET[tier]}%` : ''}`);
         }
     }
+    if (!wanted.length || clockOnly) missed += await benchClock();
 } finally {
     cdp.close();
     chrome.kill();
@@ -121,6 +155,7 @@ try {
     rmSync(profile, { recursive: true, force: true });
 }
 
+if (clockOnly) { process.exitCode = missed ? 1 : 0; console.log(`\n${missed ? `bench ✗ ${missed} over budget` : 'bench ✓ the clock is within budget'}`); process.exit(); }
 const sorted = Object.fromEntries(Object.keys(results).sort().map(id => [id, results[id]]));
 writeFileSync(RESULTS, JSON.stringify({
     device: { ...PHONE, cpuThrottle: THROTTLE, seconds: SECONDS, browser: 'headless Chrome' },

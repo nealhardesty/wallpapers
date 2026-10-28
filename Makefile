@@ -13,7 +13,7 @@ AVD ?= $(firstword $(shell $(ANDROID_HOME)/emulator/emulator -list-avds 2>/dev/n
 GRADLE = cd android && ./gradlew --quiet
 APP = com.roadwaffle.wallpapers
 
-.PHONY: help hooks serve serve-https cert bing-json thumbnails icons screenshots extension site android-build android-install android-logcat android-emulator android-release android-keystore android-bench jellyfin-media jellyfin-fixtures jellyfin-dev jellyfin-stop jellyfin-mock mac-build mac-run mac-dev mac-test mac-install mac-uninstall mac-release mac-saver-test mac-saver-live mac-saver-log docker-build docker-run lint audit audit-staged audit-history test smoke smoke-live bench ci clean
+.PHONY: help hooks serve serve-https cert bing-json thumbnails icons screenshots extension site android-build android-install android-logcat android-emulator android-release android-keystore android-bench jellyfin-media jellyfin-fixtures jellyfin-dev jellyfin-stop jellyfin-mock mac-build mac-run mac-dev mac-test mac-install mac-uninstall mac-release mac-saver-test mac-saver-live mac-saver-log docker-build docker-run lint audit audit-staged audit-history test smoke smoke-clock smoke-live bench bench-clock ci clean
 
 help: ## List every target
 	@awk 'BEGIN {FS = ":.*## "} /^[a-zA-Z0-9_-]+:.*## / {printf "  \033[36m%-17s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -125,6 +125,9 @@ mac-saver-log: ## Show the screen saver's own log (it writes inside the host's s
 bench: ## Every wallpaper at every tier on a simulated phone (4× slower CPU): budgets, bench/results.json, the ⚡ badges (SPEC §4.8)
 	node tools/bench.mjs
 
+bench-clock: ## Just the clock overlay's cost: a bouncing clock with seconds against none (SPEC §4.9)
+	@node tools/bench.mjs clock
+
 android-bench: ## Each wallpaper at each tier on the connected device: frame times and battery (SPEC §4.8)
 	@ADB="$(ADB)" node tools/android-bench.mjs
 
@@ -166,6 +169,9 @@ test: ## Run the unit tests
 
 smoke: extension ## Boot every wallpaper in headless Chrome (needs Chrome; CHROME_PATH to override)
 	@node tools/smoke.mjs
+
+smoke-clock: ## Just the clock overlay's checks in headless Chrome (SPEC §4.9)
+	@node tools/smoke.mjs clock
 
 smoke-live: ## Run the stage and player smoke suites against the deployed site, with real network (SMOKE_URL= to pick another)
 	@SMOKE_URL=$(or $(SMOKE_URL),https://nealhardesty.github.io/wallpapers) node tools/smoke.mjs

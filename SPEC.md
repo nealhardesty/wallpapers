@@ -303,7 +303,7 @@ Phase 4 and 6 take it:
   | `date=YYYY-MM-DD`, `theme=<id>` | Passed to the wallpaper as `host.params`. Advent uses them for time travel and themes, e.g. `?w=advent&date=2026-12-25` |
   | `tier=low\|medium\|high` | Pin a performance tier for this load (§4.8), e.g. to see Low on a desktop |
   | `host=android`, `hud=1`, `thumb=1` | Host simulation (§4.3), performance HUD (§4.8), thumbnail mode (§4.7) |
-| `clock=on\|off\|<motion>` | Planned (§4.9): force the clock overlay on or off for this load, or on with a motion (`static`, `drift`, `bounce`, `teleport`, `follow`). Never persisted |
+| `clock=on\|off\|<motion>` | §4.9: force the clock overlay on or off for this load, or on with a motion (`static`, `drift`, `bounce`, `teleport`, `follow`). Never persisted |
 
   Picking a wallpaper in the panel while `w=` is active does persist, as
   usual, and drops `w=` from the address bar (`history.replaceState`), so
@@ -500,14 +500,14 @@ settings directly (storage is shared) and tells the player to apply them:
 | `[` / `]` | everywhere | previous or next wallpaper (remembered) |
 | `←` / `→` | panel open | previous or next wallpaper |
 | `F` | everywhere | fullscreen |
-| `K` | everywhere | show or hide the clock overlay (§4.9, planned); a toast says which |
+| `K` | everywhere | show or hide the clock overlay (§4.9); a toast says which |
 | `?` | everywhere | key help, listing the current wallpaper's own keys too |
 | wallpaper keys | panel closed | declared in the catalog (`keys`), run inside the stage, and may answer with a toast. Quest: `N` new quest, `H` hero, `V` look, `T` hat, `M` companion, `P` palette. Advent: `←`/`→` a day (with Shift, a week), `↑`/`↓` a month, `0` today, `T` theme, `R` replay |
 
 Keys are ignored when Ctrl, Meta or Alt is held, or when focus is in a form
 field. The player's keys work wherever focus is: the stage forwards `,`
 `c` `[` `]` `f` `?` `Esc` to the player when it has focus. No wallpaper may
-declare `c` (or, once §4.9 lands, `k`; a unit test checks both).
+declare `c` or `k` (§4.9); a unit test checks both.
 
 ### 4.6 Bing image of the day (built in Phase 4, Pages job in Phase 5)
 
@@ -829,7 +829,7 @@ and the commits.
   the system composites the Presentation's window only when it has a new
   frame.
 
-### 4.9 Clock overlay (planned: Phase 10; owner idea, 2026-10-28)
+### 4.9 Clock overlay (Phase 10, built 2026-10-28; owner idea)
 
 A time and date drawn over whatever wallpaper is showing, with an optional
 smaller second clock for another timezone. **Off by default**, everywhere.
@@ -875,9 +875,9 @@ smaller second clock for another timezone. **Off by default**, everywhere.
 
 #### The panel
 
-A new section between the wallpaper's settings and Performance. Collapsed
-at first; its summary line shows the state, so you can see what's on
-without opening it.
+A collapsed row right under the filmstrip, above the wallpaper's own settings
+(so it's found without scrolling past a long list). Its summary line shows the
+state, so you can see what's on without opening it.
 
 ```
  off, closed                 off, open                    on, open
@@ -916,10 +916,13 @@ Rules that keep it small:
   the menu shows whichever look the current values match, else *Custom*, so
   editing any style control flips it to Custom, and there's no state to
   drift. The changed-dot and click-to-reset (§4.4) work per control as usual.
-- Two small additions to `core/settings.js`, both tested: a **group** may
-  have `when`, and a `{ type: 'presets', presets: { id: { label, patch } } }`
-  control.
-- A *Reset clock* link inside the section (two clicks, like Reset), so
+- Small additions to `core/settings.js`, all used by the clock's schema: a
+  **group** may have `collapsed`, `when(config)` and a `summary(config)` hint
+  for its title; a `multi` may be `empty`; a select's options may carry a third
+  item, the font to show them in; and a control may be `derived`, with no
+  default of its own. The look menu is an ordinary `select` with `get` and
+  `set` accessors, so it needed no control type of its own.
+- A *Put the clock back* link inside the section (two clicks, like Reset), so
   resetting a wallpaper never touches the clock and vice versa.
 - Nothing here appears in a wallpaper's own schema. The smoke test that
   drives every wallpaper's panel also drives this one.
@@ -1027,7 +1030,7 @@ All of them come from the time in the chosen zone. None needs a location.
 | `digital` | `10:42 PM` | `Intl.DateTimeFormat`, so locale, 12/24 and DST are right for free; tabular figures, so the width doesn't jitter as digits change |
 | `words` | *quarter to eleven* | five-minute steps, "noon" and "midnight", English only. Updates every 5 min |
 | `roman` | `XXII:XLII` | follows 12/24. A zero is `N` (*nulla*, the medieval way), so midnight is `XII:N` in 12-hour and `N:N` in 24 |
-| `binary` | a grid of ●○ | BCD, one column per digit (H tens and units, M tens and units, with seconds if on), the classic binary clock. Set as text, in the font |
+| `binary` | a grid of lamps | BCD, one column per digit (H tens and units, M tens and units, with seconds if on), the classic binary clock. Drawn as dots in the clock's colour, so the font doesn't matter |
 | `hex` | `7F3A` | the day as a 16-bit number (one tick is 1.32 s). A hexadecimal clock, in the old sense. Zone-aware. Redraws on its own tick |
 | `beats` | `@812` | Swatch Internet Time: 1000 .beats a day, from UTC+1, with no zones. It ignores `zone`, and the panel says so; centibeats (`@812.34`) with seconds on |
 
@@ -1043,7 +1046,6 @@ on every host, and the last entry is a generic family. Nothing is bundled.
 |---|---|---|
 | `system` | `ui-sans-serif`, SF Pro, Segoe UI, Roboto | clean |
 | `rounded` | `ui-rounded`, SF Rounded, then the system sans | friendly |
-| `light` | system sans at weight 200, wide tracking | airy; the usual "lock screen" look |
 | `serif` | `ui-serif`, Iowan Old Style, Georgia, Cambria | editorial |
 | `didone` | Didot, Bodoni 72, then the serif stack | fashion |
 | `slab` | Rockwell, Georgia, then the serif stack | newsprint |
@@ -1051,7 +1053,6 @@ on every host, and the last entry is a generic family. Nothing is bundled.
 | `humanist` | Optima, Candara, Gill Sans, Trebuchet MS | calm |
 | `mono` | `ui-monospace`, SF Mono, Menlo, Consolas, Roboto Mono | terminal |
 | `typewriter` | American Typewriter, Courier New | warm |
-| `lcd` | monospace with tabular figures, weight 700 and wide tracking | clock radio |
 | `hand` | Bradley Hand, Segoe Print, Comic Sans MS, `cursive` | casual |
 | `custom` | the family in `fontCustom`, then the system stack | the user's own |
 
@@ -1102,15 +1103,18 @@ so the stage does the measuring:
 #### Position and motion
 
 The overlay lives in the player, whose `requestAnimationFrame` isn't the
-stage's, so the stage's pacer doesn't throttle it. The clock therefore follows
-the same rules itself: movement is applied with `transform` only, never
-`left` or `top`, so nothing is laid out per frame, and where it can it runs
-as a Web Animation on the compositor, with no JS per frame (a bounce is a
-straight line between two wall hits, so each leg is one animation). A mode
-that does need a frame loop (drift, follow) runs it at the tier's fps cap, with
-the elapsed-time and 100 ms `dt` clamp that wallpapers use, so it moves the
-same distance at 10 or 120 fps. The clock stays inside the screen minus
-`insets` (on Android, the 48 px gesture bar).
+stage's, so the stage's pacer doesn't throttle it, and a frame loop there would
+cost a main-thread frame every time. So **nothing moves by frames**: movement is
+applied with `transform` only, never `left` or `top`, and it runs as Web
+Animations on the compositor. A bounce is a straight line between two wall hits,
+so each leg is one animation (`C.bounceLeg`, pure, finds the next wall exactly);
+a drift is twenty seconds of its path sampled once a second as keyframes. The
+page does nothing between legs: JS runs at a wall hit or every twenty seconds.
+Only Follow needs frames, while it catches up with a mouse, at the tier's fps
+cap with the 100 ms `dt` clamp, and it stops asking once it has arrived. The
+clock stays inside the screen minus `insets` (on Android, the 48 px gesture
+bar); when a text change moves the bounds, a running leg carries on from where
+it is, with the same heading.
 
 - **Static.** A nine-place `anchor` and a `margin`. **While the panel is
   open you can drag the clock to where you want it**; it switches to
@@ -1167,9 +1171,12 @@ spec has a stated price:
   does the same.
 - **Layout** is measured once per text change and per resize, with tabular
   figures so a change of digit doesn't change the box.
-- **Budget:** a bouncing clock with seconds on adds under 2% busy on Low and
-  under 1% on Medium in `make bench`, and a static one without seconds adds
-  nothing measurable, since the page is idle.
+- **Budget:** a bouncing clock with seconds and a second zone adds under 2%
+  busy on Low and under 1% on Medium in `make bench` (`node tools/bench.mjs
+  clock`: about +0.3% on both, at 4× slower CPU), and a static one without
+  seconds adds nothing measurable, since the page is idle. (A first version
+  moved the box from a frame loop and cost about 3%; legs on the compositor
+  cut that by ten.)
 - **No effect on the stage:** the stage doesn't know the clock exists, except
   for the 64-pixel adaptive sample.
 
@@ -1218,17 +1225,43 @@ spec has a stated price:
     and ten seconds later the date has rolled over
   - the panel's Clock section is one row when off; every control renders
     when on, and a change reaches the element
-  - `?clock=bounce`: after 60 s of simulated time the box is entirely
-    on-screen, and moved; `teleport` never overlaps the previous cell
+  - `?clock=bounce` (at speed 3, so it reaches the walls) stays entirely
+    on-screen for six seconds, and moves; `teleport` jumps within the screen
   - the node survives switching wallpapers (same element, no remount)
   - a fake `luma` from the stage flips the colour once, not on every sample
   - pausing the stage stops the motion; `?tier=low` turns glass into tint
   - `?host=android` keeps the clock above the bottom inset
   - the screenshots go in `dist/smoke/clock-*.png`, and are looked at
 - **Bench** (`make bench`): a row for "bounce, seconds on".
-- **No new make targets:** `make test`, `make smoke` and `make bench` cover
-  it, and `make ci` runs them. The README's *Use* section gets a short Clock
-  paragraph, and its Development section is unchanged.
+- **Make targets:** `make test`, `make smoke` and `make ci` cover it;
+  `make smoke-clock` and `make bench-clock` run just its checks. The README's
+  *Use* section has a Clock paragraph and its Development table the targets.
+
+#### As built
+
+- **Files:** `core/clockface.js` (pure: formats, zones, motion, colour,
+  `sanitize`), `clockface-settings.js` (defaults and schema), `clockface-view.js`
+  (the element, motion, sampling, and the panel's section) and `clockface.css`.
+  The scripts are **loaded on demand** (`WP.loadClock()` in the player): when
+  the clock is on or `?clock=` asks for it, when `K` is pressed, and when the
+  panel first opens. A page with the clock off never fetches them (a smoke
+  check proves it).
+- **Stage messages:** `sample` and `track` from the player; `luma` and
+  `pointer` back. `stats` carries the stage's `tier`, which is how the clock
+  knows to give Low a tint instead of glass. The stage forwards `K`.
+- **Position of the section:** under the filmstrip, not above Performance.
+- **Fonts:** ten stacks and *My own font*; a separate `light` and `lcd` were
+  redundant with the weight slider and the *Retro LCD* look.
+- **Second clock:** the date difference reads *tomorrow* and *yesterday*, and
+  *+2 days* or *−2 days* for the one pair of zones (+14 and −11) that can be two
+  days apart. With *beside*, the second clock sits next to the time and date
+  together.
+- **Not stored, as designed:** the *Look* menu; it matches the style settings
+  back to a look, or says *Custom*.
+- **Reduced transparency:** headless Chrome reports it, so the smoke check
+  turns it off to see glass on High.
+- **Not built:** nothing from the plan. Two things the plan left open are in
+  Open questions.
 
 ---
 
@@ -1777,15 +1810,20 @@ Designed in §4.9; none of it is built. Each task is done only when `make ci`
 passes, and the visible ones have been looked at in `dist/smoke/` and at
 `?tier=low` and `?host=android`. Each is a commit.
 
-- [ ] 10.0 **Groundwork in the core:** `WP.clockface` with the pure `format` and `step`, a group-level `when` and the `presets` control in `core/settings.js`, and `wp:clock` registered through `WP.defaults('clock', …)` and `WP.schema('clock', …)`. No overlay yet. → unit tests for `format` (digital only), the schema-agrees-with-defaults check for `clock`, and the presets control; `make ci` unchanged otherwise.
-- [ ] 10.1 **The overlay, static, digital:** `#clock` in `index.html`, the panel's one-row-when-off section, `enabled`, `date`, `size`, `anchor`, `margin`, `color`, `font`, `weight`, `opacity`, and `?clock=on|off`. Survives a wallpaper switch; hidden when `enabled` is false; honours `host.insets`; `K` toggles it. → smoke: fresh run draws nothing and saves nothing; `?clock=on&date=…` shows the right time and rolls over at midnight; the element survives `]`; `?host=android` clears the bottom inset.
-- [ ] 10.2 **Format and the second clock:** 12/24, seconds, meridiem, `extras`, `zone`, the second zone (UTC by default) with its label, scale, placement and `secondDay`. → unit tests for zones, DST transitions, extremes (+14 and −11) and the extras; smoke: the second clock reads the right time against a fixture instant.
-- [ ] 10.3 **Time styles:** `words`, `roman`, `binary`, `hex`, `beats`. → unit tests against hand-computed values at several instants; every style fits the safe area at the smallest and the largest `size`.
-- [ ] 10.4 **Style:** the font list, `fontCustom` (sanitised), `effect`, `outline`, `plate`, `gradient`, `daylight`, `drift`, and the *Look* presets. Glass and invert gated by the Medium floor. → smoke: every look renders; `?tier=low` turns glass into tint; the font name can't inject CSS (unit test).
-- [ ] 10.5 **Adaptive colour:** the `sample` / `luma` messages, the stage's 8×8 read, hysteresis, and the tainted-canvas fallback. → unit tests for `pick`; smoke: a bright fixture flips the clock to `darkColor` once, a tainted one doesn't throw, and the sample costs no more than 0.3 ms.
-- [ ] 10.6 **Motion:** drift (three paths), bounce (with hue and corner flash), teleport (fade and instant, on the minute), follow, drag-to-place and shy, with reduced motion, the power fallback and pause. → unit tests for `step` (bounds, equal distance at 10–144 fps, corner detection, never the same cell twice); smoke: `?clock=bounce` stays on screen and moves; pausing the stage stops it.
-- [ ] 10.7 **Night mode, `hideOn`, `?clock=<motion>`, Reset clock**, and a `make bench` row. → bounce with seconds under 2% busy on Low and 1% on Medium.
-- [ ] 10.8 **Docs:** the README's *Use* section, SPEC §4.4's panel layout and §4.5's keys (drop "planned"), and this section's *As built* note. → `make ci`.
+- [x] 10.0 **Groundwork in the core:** `WP.clockface` with the pure `format` and `step`, a group-level `when` and the `presets` control in `core/settings.js`, and `wp:clock` registered through `WP.defaults('clock', …)` and `WP.schema('clock', …)`. No overlay yet. → unit tests for `format` (digital only), the schema-agrees-with-defaults check for `clock`, and the presets control; `make ci` unchanged otherwise.
+- [x] 10.1 **The overlay, static, digital:** `#clock` in `index.html`, the panel's one-row-when-off section, `enabled`, `date`, `size`, `anchor`, `margin`, `color`, `font`, `weight`, `opacity`, and `?clock=on|off`. Survives a wallpaper switch; hidden when `enabled` is false; honours `host.insets`; `K` toggles it. → smoke: fresh run draws nothing and saves nothing; `?clock=on&date=…` shows the right time and rolls over at midnight; the element survives `]`; `?host=android` clears the bottom inset.
+- [x] 10.2 **Format and the second clock:** 12/24, seconds, meridiem, `extras`, `zone`, the second zone (UTC by default) with its label, scale, placement and `secondDay`. → unit tests for zones, DST transitions, extremes (+14 and −11) and the extras; smoke: the second clock reads the right time against a fixture instant.
+- [x] 10.3 **Time styles:** `words`, `roman`, `binary`, `hex`, `beats`. → unit tests against hand-computed values at several instants; every style fits the safe area at the smallest and the largest `size`.
+- [x] 10.4 **Style:** the font list, `fontCustom` (sanitised), `effect`, `outline`, `plate`, `gradient`, `daylight`, `drift`, and the *Look* presets. Glass and invert gated by the Medium floor. → smoke: every look renders; `?tier=low` turns glass into tint; the font name can't inject CSS (unit test).
+- [x] 10.5 **Adaptive colour:** the `sample` / `luma` messages, the stage's 8×8 read, hysteresis, and the tainted-canvas fallback. → unit tests for `pick`; smoke: the stage answers a sample with a number, fed readings flip the colour only past the thresholds, and a sample costs the stage under 8 ms.
+- [x] 10.6 **Motion:** drift (three paths), bounce (with hue and corner flash), teleport (fade and instant, on the minute), follow, drag-to-place and shy, with reduced motion, the power fallback and pause. → unit tests for `step` (bounds, equal distance at 10–144 fps, corner detection, never the same cell twice); smoke: `?clock=bounce` stays on screen and moves; pausing the stage stops it.
+- [x] 10.7 **Night mode, `hideOn`, `?clock=<motion>`, Put the clock back**, and a `make bench` row. → bounce with seconds under 2% busy on Low and 1% on Medium.
+- [x] 10.8 **Docs:** the README's *Use* section, SPEC §4.4's panel layout and §4.5's keys (drop "planned"), and this section's *As built* note. → `make ci`.
+
+Done 2026-10-28; the "→" checks are `tools/clockface.test.mjs` (38 unit tests)
+and `make smoke-clock` (`node tools/smoke.mjs clock`: 17 checks, also part of
+the player suite, and one more under the extension), plus `make bench-clock`. Built differently from the plan: see the
+*As built* note at the end of §4.9.
 
 ---
 

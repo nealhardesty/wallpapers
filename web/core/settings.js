@@ -7,11 +7,15 @@
 //   form.update(config);            // after the config changes elsewhere
 //
 // Schema entries:
-//   { group, advanced? }                                    a (collapsible) section
+//   { group, advanced?, collapsed?, when?, summary? }       a (collapsible) section: `advanced` and
+//                                                           `collapsed` start it closed, when(config) hides
+//                                                           it, summary(config) adds a hint to its title
 //   { key, label, type, help?, get?, set? }                 a setting; label may be a function
 //   type 'range'   min, max, step, unit?, scale?, digits?   shown as value × scale, with unit
-//   type 'select'  options: [[value, text]] or config => [[value, text]]
-//   type 'toggle' | 'multi' (options) | 'colors' | 'number' (min, step) | 'text' (placeholder?) | 'color'
+//   type 'select'  options: [[value, text, fontFamily?]] or config => [...]; a third item previews the option in that face
+//   type 'toggle' | 'multi' (options, empty?) | 'colors' | 'number' (min, step) | 'text' (placeholder?) | 'color'
+//   `empty: true` lets a multi have nothing chosen; `derived: true` marks a control that shows
+//   something worked out from the others (no default of its own: its get() and set() do it all)
 // get(config) reads an exotic value; set(config, value) returns the patch.
 //
 // Extras the running wallpaper drives (task 9.3). They have no key and are
@@ -61,7 +65,7 @@
 
     WP.renderSettings = ({ schema, defaults, config, onChange, onAction = () => {}, feed = null }) => {
         let current = config, fed = feed;
-        const rows = [], extras = [];
+        const rows = [], extras = [], groups = [];
         const root = h('div', { class: 'settings-form' });
         let section = root;
         let group = 0;
@@ -70,10 +74,12 @@
 
         for (const control of schema) {
             if (control.group) {
-                const details = h('details', { class: `settings-group${control.advanced ? ' advanced' : ''}`, open: !control.advanced },
-                    h('summary', {}, control.group));
+                const closed = control.advanced || control.collapsed;
+                const title = h('summary', {}, control.group);
+                const details = h('details', { class: `settings-group${control.advanced ? ' advanced' : ''}`, open: !closed }, title);
                 root.append(details);
                 section = details;
+                groups.push({ control, details, title });
                 group++;
                 continue;
             }
@@ -106,6 +112,11 @@
             current = config;
             fed = feed;
             const shown = control => !control.when || !!control.when(config, feed);
+            for (const { control, details, title } of groups) {
+                details.hidden = !shown(control);
+                const hint = control.summary?.(config);
+                title.replaceChildren(control.group, ...(hint ? [h('span', { class: 'settings-hint' }, hint)] : []));
+            }
             for (const extra of extras) {
                 extra.row.hidden = !shown(extra.control);
                 extra.set(feed);
@@ -149,7 +160,11 @@
                     set(value, config, feed) {
                         const options = optionsOf(control, config, feed);
                         if (!same(options, select.options_)) {
-                            select.replaceChildren(...options.map(([, label], i) => h('option', { value: String(i) }, label)));
+                            select.replaceChildren(...options.map(([, label, face], i) => {
+                                const option = h('option', { value: String(i) }, label);
+                                if (face) option.style.fontFamily = face;
+                                return option;
+                            }));
                             select.options_ = options;
                         }
                         select.selectedIndex = Math.max(0, options.findIndex(([v]) => same(v, value)));
@@ -167,7 +182,7 @@
                     type: 'button', class: 'chip',
                     onclick: () => {
                         const next = chosen.includes(value) ? chosen.filter(v => v !== value) : [...chosen, value];
-                        if (next.length) commit(control.options.map(([v]) => v).filter(v => next.includes(v)));
+                        if (next.length || control.empty) commit(control.options.map(([v]) => v).filter(v => next.includes(v)));
                     },
                 }, label));
                 return {

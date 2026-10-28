@@ -20,13 +20,22 @@
 
     // URL parameters. They override for this page load only; nothing here
     // is ever persisted (SPEC §4.2).
-    WP.PARAMS = ['w', 'panel', 'date', 'theme', 'host', 'hud', 'thumb', 'tier', 'seed'];
+    WP.PARAMS = ['w', 'panel', 'date', 'theme', 'host', 'hud', 'thumb', 'tier', 'seed', 'clock'];
 
     WP.parseParams = search => {
         const query = new URLSearchParams(search);
         const params = {};
         for (const key of WP.PARAMS) if (query.has(key)) params[key] = query.get(key);
         return params;
+    };
+
+    // ?clock= (SPEC §4.9): on, off, or a motion (which also turns it on), for
+    // this page load only. null for anything else.
+    WP.CLOCK_MOTIONS = ['static', 'drift', 'bounce', 'teleport', 'follow'];
+    WP.clockParam = text => {
+        if (text === 'on') return { enabled: true };
+        if (text === 'off') return { enabled: false };
+        return WP.CLOCK_MOTIONS.includes(text) ? { enabled: true, motion: text } : null;
     };
 
     // ?date= (SPEC §4.2): YYYY-MM-DD, optionally with THH:MM or THH:MM:SS,

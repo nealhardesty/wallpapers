@@ -24,6 +24,10 @@
         reducedMotion: matchMedia('(prefers-reduced-motion: reduce)').matches,
     };
     let policy = WP.powerPolicy(signals);
+    // The time for the clock overlay: real, or ?date= ticking forward.
+    const now = WP.clock(params.date);
+    // ?clock= for this load only (SPEC §4.9); K drops it.
+    let clockOverride = WP.clockParam(params.clock);
     let stats = null;   // the stage's latest, once a second
     let rebuildTimer = null;
 
@@ -77,6 +81,48 @@
         setTimeout(reveal, 4000);
     }
 
+    // ---- Clock overlay (SPEC §4.9) -------------------------------------------
+    // Off by default, so its code isn't loaded until it's on, or asked for
+    // (the panel's section, the K key).
+    let clockLoading = null;
+    WP.loadClock = () => clockLoading ??= (async () => {
+        for (const file of ['clockface.js', 'clockface-settings.js', 'clockface-view.js']) {
+            await new Promise(resolve => {
+                const element = WP.h('script', { src: `core/${file}` });
+                element.onload = element.onerror = resolve;
+                document.head.append(element);
+            });
+        }
+        WP.clockface.view.init({
+            now,
+            insets: { top: 0, right: 0, bottom: host === 'android' ? 48 : 0, left: 0 },
+            override: () => clockOverride,
+            reduced: () => matchMedia('(prefers-reduced-motion: reduce)').matches,
+            wallpaper: () => stage?.id,
+            sample: rect => post({ wp: 'sample', ...rect }),
+            track: on => post({ wp: 'track', on }),
+        });
+        WP.clockface.view.setPolicy(policy);
+    })();
+
+    // Show, hide or restyle it to match what's stored (and ?clock=).
+    async function syncClock() {
+        if (!clockOverride && !WP.store.get('wp:clock')?.enabled && !WP.clockface?.view?.ready()) return;
+        await WP.loadClock();
+        WP.clockface.view.apply(WP.clockface.load());
+    }
+
+    async function toggleClock() {
+        await WP.loadClock();
+        const view = WP.clockface.view;
+        const on = !view.enabled;
+        clockOverride = null;
+        WP.clockface.save({ ...WP.clockface.load(), enabled: on });
+        view.apply(WP.clockface.load());
+        toast(on ? '🕐 Clock on' : 'Clock off');
+        WP.panel.refresh();
+    }
+
     function show(next, { persist = false } = {}) {
         choice = next;
         if (persist) {
@@ -91,7 +137,7 @@
             }
         }
         const id = resolve(next);
-        if (!stage || stage.id !== id) mount(id);
+        if (!stage || stage.id !== id) { mount(id); WP.clockface?.view?.setWallpaper(id); }
         WP.panel.refresh();
     }
 
@@ -165,6 +211,7 @@
         Object.assign(signals, changes);
         policy = WP.powerPolicy(signals);
         post({ wp: 'power', policy });
+        WP.clockface?.view?.setPolicy(policy);
     }
     WP.power = power;
     // Android's home-screen pages, 0 to 1, for wallpapers that pan with them.
@@ -181,6 +228,8 @@
             rebuild();
         } else if (event.key === WP.LOCATION_KEY) {
             relocate();
+        } else if (event.key === 'wp:clock') {
+            syncClock();
         } else if (event.key === 'wp:performance') {
             signals.batteryAware = WP.store.get('wp:performance')?.batteryAware !== false;
             power();
@@ -233,6 +282,7 @@
                     row(['[', ']'], 'Previous or next wallpaper'),
                     row(['←', '→'], 'Switch, while settings are open'),
                     row(['F'], 'Fullscreen'),
+                    row(['K'], 'The clock, on or off'),
                     row(['?'], 'This list'),
                     row(['Esc'], 'Close')),
                 ...(entry.keys?.length ? [
@@ -262,6 +312,7 @@
             event?.preventDefault();
             cycle(name === 'ArrowLeft' ? -1 : 1);
         } else if (name === 'f' || name === 'F') toggleFullscreen();
+        else if (name === 'k' || name === 'K') toggleClock();
         else if (name === '?') toggleHelp();
         else if (!WP.panel.isOpen && WP.entry(resolve(choice)).keys) {
             // A wallpaper key pressed while the player has focus: hand it on.
@@ -284,6 +335,7 @@
         if (message.wp === 'ready') {
             stage.ready = true;
             stage.reveal();
+            WP.clockface?.view?.stageReady();
             if (policy.reasons.length) post({ wp: 'power', policy });
             if (!WP.panel.isOpen) {
                 focusStage();
@@ -292,8 +344,13 @@
             key(message.key);
         } else if (message.wp === 'stats') {
             stats = message;
+            WP.clockface?.view?.setQuality(message.tier);
             if (hud) hud.textContent = describe(message);
             WP.panel.stats?.(message);
+        } else if (message.wp === 'luma') {
+            WP.clockface?.view?.onLuma(message.value);
+        } else if (message.wp === 'pointer') {
+            WP.clockface?.view?.onPointer(message.x, message.y);
         } else if (message.wp === 'rebuild') {
             rebuild();
         } else if (message.wp === 'corner') {
@@ -342,6 +399,7 @@
             // the gear is always there once the panel is closed; the wallpaper itself never shows it.
             if (settingsScreen) gear.classList.add('show', 'android');
             show(initialChoice());
+            syncClock();
             // Not on the stage's ready: a wallpaper that is slow or fails to
             // start must not leave the settings screen (Android) empty.
             if (params.panel === 'open') WP.panel.open();

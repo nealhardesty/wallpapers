@@ -4,6 +4,7 @@
 //
 //   node tools/smoke.mjs                 everything
 //   node tools/smoke.mjs fishtank quest  just these stages (skips the player suite)
+//   node tools/smoke.mjs clock            just the clock overlay's checks (SPEC §4.9)
 //
 // Stage suite, every wallpaper on stage.html?w=<id> with fresh storage: it
 // boots, draws, logs no errors, makes no unexpected network request, saves
@@ -1225,13 +1226,13 @@ async function playerSuite(catalog) {
             current.network = !!entry.network;
             await fresh(`${WEB}/index.html?w=${entry.id}&panel=open`);
             await playerReady();
-            await waitFor(() => evaluate(`document.querySelectorAll('#panel .setting').length`), 4000);
-            const rendered = await evaluate(`document.querySelectorAll('#panel .setting').length`);
+            await waitFor(() => evaluate(`document.querySelectorAll('#panel .settings .setting').length`), 4000);
+            const rendered = await evaluate(`document.querySelectorAll('#panel .settings .setting').length`);
             const expected = await evaluate(`WP.schemaOf('${entry.id}').filter(c => c.key).length`);
             if (rendered !== expected) record(`${rendered} controls rendered; the schema has ${expected}`);
             // Change the first slider (or select) the way a person would.
             const changed = await evaluate(`(() => {
-                const row = document.querySelector('#panel .setting-range') || document.querySelector('#panel .setting-select');
+                const row = document.querySelector('#panel .settings .setting-range') || document.querySelector('#panel .settings .setting-select');
                 const input = row.querySelector('input, select');
                 if (input.type === 'range') {
                     const min = +input.min, max = +input.max, step = +input.step;
@@ -1261,8 +1262,8 @@ async function playerSuite(catalog) {
         await fresh(`${WEB}/index.html?w=rain&panel=open`);
         await playerReady();
         await waitFor(() => evaluate(PANEL_OPEN), 3000);
-        await waitFor(() => evaluate(`!!document.querySelector('#panel input[type=range]')`), 4000);
-        await evaluate(`(() => { const i = document.querySelector('#panel input[type=range]'); i.value = i.min; i.dispatchEvent(new Event('input', { bubbles: true })); })()`);
+        await waitFor(() => evaluate(`!!document.querySelector('#panel .settings input[type=range]')`), 4000);
+        await evaluate(`(() => { const i = document.querySelector('#panel .settings input[type=range]'); i.value = i.min; i.dispatchEvent(new Event('input', { bubbles: true })); })()`);
         if (!await evaluate(`!!localStorage.getItem('wp:rain')`)) return record('no override to reset');
         const reset = `[...document.querySelectorAll('#panel .action')].find(b => b.textContent.startsWith('Reset')).click()`;
         await evaluate(reset);
@@ -1472,6 +1473,314 @@ async function playerSuite(catalog) {
         return true;
     });
 
+
+    await clockChecks(check, playerReady);
+
+    return failed();
+}
+
+// ---- The clock overlay (SPEC §4.9) ------------------------------------------------
+const clockText = () => evaluate(`document.querySelector('#clock .clock-face')?.innerText.replace(/\\s*\\n\\s*/g, ' | ') ?? null`);
+const clockBox = () => evaluate(`WP.clockface?.view?.box ?? null`);
+const clockOn = (url, stored = {}) => fresh(`${WEB}/${url}`, { 'wp:hinted': true, 'wp:clock': { configVersion: 1, enabled: true, ...stored } });
+
+async function clockChecks(check, playerReady) {
+    const visibleRows = () => evaluate(`document.querySelectorAll('#panel .clock-section .setting:not([hidden])').length`);
+    const clockStage = (url, stored) => clockOn(url, stored).then(() => playerReady()).then(() => waitFor(() => evaluate(`!!document.querySelector('#clock .clock-face')`), 4000));
+
+    await check('clock: off by default: nothing drawn, nothing loaded, nothing stored', async () => {
+        await fresh(`${WEB}/index.html?w=rain`, { 'wp:hinted': true });
+        await playerReady();
+        await sleep(600);
+        const state = await evaluate(`({ element: !!document.getElementById('clock'), code: typeof WP.clockface, stored: localStorage.getItem('wp:clock'), scripts: [...document.scripts].some(s => /clockface/.test(s.src)) })`);
+        if (state.element) record('a #clock is in the page');
+        if (state.code !== 'undefined' || state.scripts) record('the clock\'s code was loaded while it\'s off');
+        if (state.stored !== null) record(`wrote wp:clock: ${state.stored}`);
+        return !state.element && state.code === 'undefined';
+    });
+
+    await check('clock: ?clock=off beats a stored "on", and ?clock=on needs no setting', async () => {
+        await clockOn('index.html?w=rain&clock=off');
+        await playerReady();
+        await sleep(500);
+        if (await evaluate(`!!document.getElementById('clock')`)) record('?clock=off still showed it');
+        await fresh(`${WEB}/index.html?w=rain&clock=on`, { 'wp:hinted': true });
+        await playerReady();
+        if (!await waitFor(() => evaluate(`!!document.querySelector('#clock .clock-face')`), 4000)) record('?clock=on showed nothing');
+        if (await evaluate(`localStorage.getItem('wp:clock')`) !== null) record('?clock=on was persisted');
+        return true;
+    });
+
+    await check('clock: a ?date= clock shows the right time and rolls over at midnight', async () => {
+        await clockOn('index.html?w=rain&date=2026-12-31T23:59:50', { seconds: true, hour12: '12', date: 'medium', zone: 'local' });
+        await playerReady();
+        const before = await waitFor(async () => /^11:59:5\d PM \| Thu, Dec 31$/.test(await clockText()) && await clockText(), 4000);
+        if (!before) return record(`before midnight it said ${JSON.stringify(await clockText())}`);
+        const after = await waitFor(async () => /^12:00:0\d AM \| Fri, Jan 1$/.test(await clockText()) && await clockText(), 14000);
+        if (!after) record(`after midnight it said ${JSON.stringify(await clockText())}`);
+        return !!after;
+    });
+
+    await check('clock: a second zone, "tomorrow" and all', async () => {
+        await clockOn('index.html?w=rain&date=2026-10-28T22:42:07', { zone: 'Pacific/Pago_Pago', secondOn: true, secondZone: 'Pacific/Auckland', date: 'none' });
+        await playerReady();
+        const text = await waitFor(async () => /AUCKLAND/i.test(await clockText()) && await clockText(), 4000);
+        if (!text) return record(`it said ${JSON.stringify(await clockText())}`);
+        // The label is set in capitals, and each part is a line of its own.
+        const ok = /^\d+:42 [AP]M \| AUCKLAND \| \d+:42 [AP]M \| TOMORROW$/i.test(text);
+        if (!ok) record(`it said ${JSON.stringify(text)}`);
+        return ok;
+    });
+
+    await check('clock: K turns it on and off, with a toast, and it survives a wallpaper switch', async () => {
+        await fresh(`${WEB}/index.html?w=rain`, { 'wp:hinted': true });
+        await playerReady();
+        await press('k');
+        if (!await waitFor(() => evaluate(`!!document.querySelector('#clock .clock-face')`), 4000)) return record('K showed nothing');
+        if (!/Clock on/.test(await evaluate(`document.getElementById('toast').textContent`))) record('no toast');
+        if (await evaluate(`JSON.parse(localStorage.getItem('wp:clock')).enabled`) !== true) record('not stored');
+        await evaluate(`window.__clock = document.getElementById('clock')`);
+        await press(']');
+        await waitFor(async () => await evaluate('WP.player.stage.ready && WP.player.stage.id') !== 'rain');
+        await sleep(900);
+        if (!await evaluate(`window.__clock === document.getElementById('clock') && __clock.isConnected`)) record('the clock was rebuilt when the wallpaper changed');
+        if (await evaluate(`document.querySelectorAll('iframe').length`) !== 1) record('stages left behind');
+        await press('k');
+        await sleep(300);
+        if (await evaluate(`!!document.getElementById('clock')`)) record('K again left it up');
+        if (await evaluate(`localStorage.getItem('wp:clock')`) !== null) record('off should store nothing but the default');
+        return true;
+    });
+
+    await check('clock: the panel\'s section is one row when off, seven more when on, every control renders', async () => {
+        await fresh(`${WEB}/index.html?w=rain&panel=open`, { 'wp:hinted': true });
+        await playerReady();
+        if (!await waitFor(() => evaluate(`!!document.querySelector('#panel .clock-section')`), 4000)) return record('no Clock section in the panel');
+        // What shows once the section is open: the main block's rows, and the sub-sections that aren't hidden.
+        const shownRows = `[...document.querySelectorAll('#panel .clock-section > .settings-form > .setting')].filter(r => !r.hidden).length`;
+        const off = await evaluate(`({ rows: ${shownRows}, groups: document.querySelectorAll('#panel .clock-section .settings-group:not([hidden])').length, hint: document.querySelector('#panel .clock-section > summary').textContent })`);
+        if (off.rows !== 1) record(`${off.rows} rows while it's off`);
+        if (off.groups !== 0) record(`${off.groups} sub-sections showing while it's off`);
+        if (!/off/.test(off.hint)) record(`the title says ${JSON.stringify(off.hint)}`);
+        const rendered = await evaluate(`document.querySelectorAll('#panel .clock-section .setting').length`);
+        const expected = await evaluate(`WP.schemaOf('clock').filter(c => c.key).length`);
+        if (rendered !== expected) record(`${rendered} controls rendered; the schema has ${expected}`);
+        // Tick it on, the way a person does.
+        await evaluate(`document.querySelector('#panel .clock-section .setting-toggle .switch').click()`);
+        if (!await waitFor(() => evaluate(`!!document.querySelector('#clock .clock-face')`), 3000)) return record('ticking "Show a clock" showed nothing');
+        const on = await evaluate(`({ rows: ${shownRows},
+            groups: [...document.querySelectorAll('#panel .clock-section .settings-group:not([hidden])')].map(g => g.open) })`);
+        if (on.rows !== 8) record(`${on.rows} rows once it's on, not the switch and seven`);
+        if (on.groups.length !== 5 || on.groups.some(Boolean)) record(`sub-sections: ${JSON.stringify(on.groups)} (five, all collapsed)`);
+        // A change reaches the clock: the size, then the style.
+        const size = await evaluate(`getComputedStyle(document.querySelector('.clock-face')).fontSize`);
+        await evaluate(`(() => { const input = document.querySelector('#panel .clock-section [data-key="size"] input'); input.value = 20; input.dispatchEvent(new Event('input', { bubbles: true })); })()`);
+        if (!await waitFor(async () => await evaluate(`getComputedStyle(document.querySelector('.clock-face')).fontSize`) !== size, 2000)) record('the size slider did nothing');
+        await evaluate(`(() => { const select = document.querySelector('#panel .clock-section [data-key="style"] select'); select.selectedIndex = [...select.options].findIndex(o => /Roman/.test(o.textContent)); select.dispatchEvent(new Event('change', { bubbles: true })); })()`);
+        if (!await waitFor(async () => /^[IVXLCDMN:]+ \|/.test(await clockText()), 2000)) record(`the style select did nothing: ${JSON.stringify(await clockText())}`);
+        if (await evaluate(`JSON.parse(localStorage.getItem('wp:clock')).style`) !== 'roman') record('the style was not stored');
+        // Looks set the style together, and flip to Custom when edited.
+        await evaluate(`(() => { const select = document.querySelector('#panel .clock-section [data-key="preset"] select'); select.selectedIndex = [...select.options].findIndex(o => /Neon/.test(o.textContent)); select.dispatchEvent(new Event('change', { bubbles: true })); })()`);
+        const neon = await evaluate(`({ effect: JSON.parse(localStorage.getItem('wp:clock')).effect, color: JSON.parse(localStorage.getItem('wp:clock')).color })`);
+        if (neon.effect !== 'neon') record(`the Neon look stored ${JSON.stringify(neon)}`);
+        await evaluate(`(() => { const input = document.querySelector('#panel .clock-section [data-key="weight"] input'); input.value = 700; input.dispatchEvent(new Event('input', { bubbles: true })); })()`);
+        if (await evaluate(`document.querySelector('#panel .clock-section [data-key="preset"] select').selectedOptions[0].textContent`) !== 'Custom') record('editing a style setting should show Custom');
+        await shoot('clock-panel');
+        // Reset takes two clicks.
+        await evaluate(`document.querySelector('#panel .clock-reset').click()`);
+        if (await evaluate(`localStorage.getItem('wp:clock')`) === null) record('one click reset it');
+        await evaluate(`document.querySelector('#panel .clock-reset').click()`);
+        if (await evaluate(`localStorage.getItem('wp:clock')`) !== null) record('two clicks left settings behind');
+        await sleep(300);
+        if (await evaluate(`!!document.getElementById('clock')`)) record('reset left the clock up');
+        return true;
+    });
+
+    await check('clock: the screenshots, over a few wallpapers', async () => {
+        const looks = [
+            ['clock-default', 'rainy-window', { anchor: 'bottom-left' }],
+            ['clock-two-zones', 'northern-lights', { anchor: 'center', size: 10, secondOn: true, secondZone: 'Asia/Tokyo', extras: ['week', 'zone'], date: 'long' }],
+            ['clock-neon', 'synthwave', { anchor: 'center', size: 10, font: 'rounded', weight: 500, spacing: 0.04, opacity: 1, color: '#ff5fd7', effect: 'neon', effectSize: 4 }],
+            ['clock-binary', 'matrix', { anchor: 'center', size: 12, style: 'binary', seconds: true, font: 'mono', weight: 400, color: '#4dff7a', effect: 'glow', plate: 'tint', plateColor: '#00150a', plateOpacity: 0.6 }],
+        ];
+        for (const [name, wallpaper, stored] of looks) {
+            await clockStage(`index.html?w=${wallpaper}&date=2026-10-28T22:42:07`, stored);
+            await sleep(1500);
+            await shoot(name);
+        }
+        return true;
+    });
+
+    await check('clock: bounce moves and never leaves the screen, drift and follow move too', async () => {
+        await clockStage('index.html?w=rain&clock=bounce', { speed: 3, size: 12 });
+        const first = await clockBox();
+        let off = 0, moved = 0, last = first;
+        for (let i = 0; i < 60; i++) {
+            await sleep(100);
+            const b = await clockBox();
+            if (b.x < -0.5 || b.y < -0.5 || b.x + b.bw > await evaluate('innerWidth') + 0.5 || b.y + b.bh > await evaluate('innerHeight') + 0.5) off++;
+            moved += Math.hypot(b.x - last.x, b.y - last.y);
+            last = b;
+        }
+        if (off) record(`${off} samples off-screen`);
+        if (moved < 300) record(`it only moved ${Math.round(moved)} px in 6 s`);
+        await clockStage('index.html?w=rain&clock=drift', { speed: 3 });
+        const a = await clockBox();
+        await sleep(1500);
+        const b = await clockBox();
+        if (Math.hypot(b.x - a.x, b.y - a.y) < 5) record('drift stood still');
+        return true;
+    });
+
+    await check('clock: follow trails the pointer and parks when it leaves', async () => {
+        await clockStage('index.html?w=rain&clock=follow', { size: 6 });
+        await sleep(800);
+        const parked = await clockBox();
+        for (const [x, y] of [[300, 200], [400, 260], [620, 300], [640, 310]]) { await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x, y }); await sleep(120); }
+        await sleep(1500);
+        const near = await clockBox();
+        if (Math.abs(near.x - 668) > 40 || Math.abs(near.y - 338) > 40) record(`it settled at ${Math.round(near.x)},${Math.round(near.y)}, not by the pointer (668,338)`);
+        if (Math.hypot(near.x - parked.x, near.y - parked.y) < 50) record('it never left its anchor');
+        return true;
+    });
+
+    await check('clock: teleport jumps to somewhere else, inside the screen', async () => {
+        await clockStage('index.html?w=rain&clock=teleport', { teleportEvery: '10', teleportFade: 'instant', size: 6 });
+        const a = await clockBox();
+        const moved = await waitFor(async () => { const b = await clockBox(); return (Math.abs(b.x - a.x) > 20 || Math.abs(b.y - a.y) > 20) && b; }, 13000);
+        if (!moved) return record('it never jumped');
+        const inside = moved.x >= 0 && moved.y >= 0 && moved.x + moved.bw <= await evaluate('innerWidth') && moved.y + moved.bh <= await evaluate('innerHeight');
+        if (!inside) record('it landed off-screen');
+        return inside;
+    });
+
+    await check('clock: reduced motion keeps it still, and pausing stops it', async () => {
+        await cdp.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] });
+        try {
+            await clockStage('index.html?w=rain&clock=bounce', { speed: 3 });
+            const a = await clockBox();
+            await sleep(900);
+            const b = await clockBox();
+            if (Math.hypot(b.x - a.x, b.y - a.y) > 1) record('it moved with reduced motion on');
+        } finally { await cdp.send('Emulation.setEmulatedMedia', { features: [] }); }
+        await clockStage('index.html?w=rain&clock=bounce', { speed: 3 });
+        await sleep(500);
+        await evaluate('WP.power({ hidden: true })');
+        await sleep(200);
+        const c = await clockBox();
+        await sleep(700);
+        const d = await clockBox();
+        if (Math.hypot(d.x - c.x, d.y - c.y) > 0.5) record('it kept moving while paused');
+        await evaluate('WP.power({ hidden: false })');
+        await sleep(600);
+        const e = await clockBox();
+        if (Math.hypot(e.x - d.x, e.y - d.y) < 3) record('it did not start again');
+        return true;
+    });
+
+    await check('clock: on Low frosted glass is a plain tint, on High it is glass', async () => {
+        await clockStage('index.html?w=rain&tier=low', { plate: 'glass', plateOpacity: 0.12 });
+        if (!await waitFor(() => evaluate(`document.querySelector('.clock-face').dataset.plate === 'tint'`), 4000)) record('Low kept the frosted glass');
+        // Headless Chrome reports reduced transparency, which is also a reason for a tint.
+        await clockStage('index.html?w=rain&tier=high', { plate: 'glass', plateOpacity: 0.12 });
+        await sleep(1500);
+        const reduced = await evaluate(`matchMedia('(prefers-reduced-transparency: reduce)').matches`);
+        if (reduced && await evaluate(`document.querySelector('.clock-face').dataset.plate`) !== 'tint') record('reduced transparency kept the glass');
+        await cdp.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-transparency', value: 'no-preference' }] });
+        try {
+            await clockStage('index.html?w=rain&tier=high', { plate: 'glass', plateOpacity: 0.12 });
+            await sleep(1500);
+            if (await evaluate(`document.querySelector('.clock-face').dataset.plate`) !== 'glass') record('High lost the frosted glass');
+        } finally { await cdp.send('Emulation.setEmulatedMedia', { features: [] }); }
+        return true;
+    });
+
+    await check('clock: battery saver drops the seconds and stills the motion', async () => {
+        await clockStage('index.html?w=rain&date=2026-10-28T10:20:30', { seconds: true, motion: 'bounce', speed: 3 });
+        if (!/:30|:31|:32/.test(await clockText())) record(`before: ${JSON.stringify(await clockText())}`);
+        await evaluate('WP.power({ saver: true })');
+        await sleep(500);
+        if (/\d:\d\d:\d\d/.test(await clockText())) record('seconds were still showing');
+        const a = await clockBox();
+        await sleep(600);
+        const b = await clockBox();
+        if (Math.hypot(b.x - a.x, b.y - a.y) > 1) record('it kept bouncing');
+        await evaluate('WP.power({ saver: false })');
+        await sleep(500);
+        if (!/\d:\d\d:\d\d/.test(await clockText())) record('the seconds did not come back');
+        return true;
+    });
+
+    await check('clock: adaptive colour reads the wallpaper, flips once, and keeps its colour with no reading', async () => {
+        await clockStage('index.html?w=rain', { colorMode: 'adaptive' });
+        await evaluate(`window.__lumas = []; const view = WP.clockface.view, original = view.onLuma; view.onLuma = value => { __lumas.push(value); return original(value); }`);
+        const heard = await waitFor(() => evaluate('__lumas.length > 0 && __lumas[0]'), 6000);
+        if (heard === null || heard === false || typeof heard !== 'number' || heard < 0 || heard > 1) record(`the stage answered ${JSON.stringify(heard)}`);
+        const colour = () => evaluate(`document.querySelector('.clock-face').style.color`);
+        const feed = async value => { await evaluate(`WP.clockface.view.onLuma(${JSON.stringify(value)})`); return colour(); };
+        const light = await feed(0.2), stay = await feed(0.55), dark = await feed(0.9), hold = await feed(0.5), back = await feed(0.4), none = await feed(null);
+        if (light !== 'rgb(255, 255, 255)') record(`over a dark scene: ${light}`);
+        if (stay !== light) record(`0.55 flipped it to ${stay}`);
+        if (dark !== 'rgb(17, 17, 17)') record(`over a light scene: ${dark}`);
+        if (hold !== dark) record(`0.5 flipped it back: ${hold}`);
+        if (back !== light) record(`0.4 didn't flip it back: ${back}`);
+        if (none !== back) record(`no reading changed it to ${none}`);
+        // The stage's own read is 64 pixels, cheap, and never throws on a tainted canvas.
+        const cost = await inStage(`(() => { const t = performance.now(); window.dispatchEvent(new MessageEvent('message', { source: window.parent, data: { wp: 'sample', x: 0.4, y: 0.4, w: 0.2, h: 0.1 } })); return performance.now() - t; })()`);
+        if (cost > 8) record(`a sample took ${cost.toFixed(1)} ms`);
+        return true;
+    });
+
+    await check('clock: night mode hides or dims it, and hideOn keeps it off chosen wallpapers', async () => {
+        await clockStage('index.html?w=rain&date=2026-10-28T12:00:00', { nightMode: 'hide', nightFrom: '00:00', nightTo: '23:59' });
+        await sleep(300);
+        if (!await evaluate(`document.getElementById('clock')?.hidden === true`)) record('night mode "hide" left it showing at noon in a window that covers noon');
+        await clockStage('index.html?w=rain&date=2026-10-28T12:00:00', { nightMode: 'dim', nightFrom: '00:00', nightTo: '23:59' });
+        if (await evaluate(`document.querySelector('.clock-face').style.getPropertyValue('--clock-night')`) !== '0.3') record('"dim" did not dim it');
+        await clockOn('index.html?w=rain', { hideOn: ['rain'] });
+        await playerReady();
+        await sleep(600);
+        if (!await evaluate(`document.getElementById('clock')?.hidden === true`)) record('hideOn did not hide it over rain');
+        await evaluate(`WP.player.show('snow', { persist: true })`);
+        await waitFor(() => evaluate(`WP.player.stage.id === 'snow' && WP.player.stage.ready`));
+        await sleep(600);
+        if (await evaluate(`document.getElementById('clock')?.hidden`) !== false) record('it stayed hidden over snow');
+        return true;
+    });
+
+    await check('clock: on Android it keeps clear of the gesture bar', async () => {
+        await clockStage('index.html?w=rain&host=android', { anchor: 'bottom-left', margin: 0 });
+        const b = await clockBox();
+        const room = await evaluate('innerHeight');
+        if (b.y + b.bh > room - 48 + 0.5) record(`its bottom edge is at ${Math.round(b.y + b.bh)} of ${room}, inside the 48 px bar`);
+        return true;
+    });
+
+    await check('clock: with the panel open it can be dragged to a new place', async () => {
+        await clockStage('index.html?w=rain&panel=open', { anchor: 'bottom-left', size: 8 });
+        await sleep(400);
+        const rect = await evaluate(`(() => { const r = document.querySelector('.clock-face').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()`);
+        await cdp.send('Input.dispatchMouseEvent', { type: 'mousePressed', x: rect.x, y: rect.y, button: 'left', clickCount: 1 });
+        for (let i = 1; i <= 8; i++) { await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: rect.x + 40 * i, y: rect.y - 30 * i, button: 'left' }); await sleep(30); }
+        await cdp.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: rect.x + 320, y: rect.y - 240, button: 'left', clickCount: 1 });
+        await sleep(300);
+        const stored = await evaluate(`JSON.parse(localStorage.getItem('wp:clock'))`);
+        if (stored.anchor !== 'custom') record(`anchor is ${stored.anchor}`);
+        const moved = await clockBox();
+        if (moved.x < 250 || moved.y > 500) record(`it ended at ${Math.round(moved.x)},${Math.round(moved.y)}`);
+        const row = await evaluate(`!!document.querySelector('#panel .clock-section [data-key="x"]:not([hidden])')`);
+        if (!row) record('the Across and Down sliders did not appear');
+        // Closed, it takes no pointer: a click goes to the wallpaper.
+        await press('Escape');
+        await sleep(300);
+        return await evaluate(`getComputedStyle(document.querySelector('.clock-face')).pointerEvents`) === 'none';
+    });
+}
+
+// Just the clock's checks: node tools/smoke.mjs clock
+async function clockSuite() {
+    const { check, failed } = checker();
+    await clockChecks(check, () => waitFor(() => evaluate('WP.player?.stage?.ready && WP.player.stage.id')));
     return failed();
 }
 
@@ -1500,6 +1809,14 @@ async function extensionSuite(extensionId) {
         if (asked.some(url => !url.startsWith('https://www.bing.com/'))) record(`asked someone else: ${asked.join(' ')}`);
         if (current.requests.some(url => url.endsWith('/bing.json'))) record('looked for bing.json, which only served pages have');
         return shown;
+    });
+
+    await check('the clock overlay runs under the extension\'s CSP', async () => {
+        await cdp.send('Page.navigate', { url: `${page}?w=rain&clock=on` });
+        await waitFor(() => evaluate('WP.player?.stage?.ready'));
+        if (!await waitFor(() => evaluate(`!!document.querySelector('#clock .clock-face') && document.querySelector('.clock-face').innerText.length > 3`), 4000)) return record('no clock');
+        await evaluate(`document.getElementById('gear').click()`);
+        return !!await waitFor(() => evaluate(`!!document.querySelector('#panel .clock-section .setting')`), 4000);
     });
 
     return failed();
@@ -1617,6 +1934,12 @@ async function main(only) {
         await waitFor(() => evaluate('WP.stage?.ready'));
         const catalog = await evaluate('WP.catalog.map(e => ({ id: e.id, pseudo: !!e.pseudo, disabled: e.disabled || null, network: !!e.network, offline: !!e.offline }))');
         NETWORK_HOSTS = await evaluate('[...new Set(WP.catalog.flatMap(e => Array.isArray(e.network) ? e.network : []))]');
+        if (only.length === 1 && only[0] === 'clock') {
+            console.log('clock');
+            const failed = await clockSuite();
+            console.log(failed ? `smoke ✗ ${failed} failed` : 'smoke ✓ clock · screenshots in dist/smoke/');
+            return failed ? 1 : 0;
+        }
         const ids = only.length ? only : catalog.filter(e => !e.pseudo).map(e => e.id);
 
         let failed = 0;
