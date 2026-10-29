@@ -923,7 +923,8 @@ const HarvestArt = {
     // clustered leaf-clumps in autumn colour, lit from the upper left.
     // Returns the canvas and where the canopy is, in px from the base.
     tree(height, dpr, foliage, random) {
-        const w = height * 0.95, pad = 6;
+        // The edge clumps reach about 0.12 of the height past the canopy, so the sprite pads for them.
+        const w = height * 0.95, pad = 6 + height * 0.14;
         const { c, g } = this.canvas(w + pad * 2, height + pad * 2, dpr);
         const bx = w / 2 + pad, by = height + pad - 2;
         const canopy = { cx: 0, cy: -height * 0.66, rx: w * 0.46, ry: height * 0.34 };
