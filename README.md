@@ -157,10 +157,14 @@ it. Hold a right-hand corner for the panel.
 A calm, cosy autumn valley, built for Thanksgiving, with a switch on every
 part of it. A village with smoking chimneys and a windmill, patchwork
 farmland, corn and a scarecrow with a crow, a pumpkin patch, an apple
-orchard whose apples fall, tumble and get carried off by squirrels to a very
-small door, turkeys and sleepy cats about the meadow, geese in a V overhead
-(the leader drops to the back now and then), leaves on the wind, valley mist
-and slanting sunbeams.
+orchard whose apples and acorns fall, tumble and get carried off the edge of
+the screen by squirrels (who wander back in later), turkeys and sleepy cats
+about the meadow, flocks of small brown-and-black geese overhead, up to a hundred
+strong, sometimes several at once and sometimes with a few stragglers behind
+(a V that ripples wingbeat by wingbeat; the leader drops to the back now and
+then),
+leaves on the wind, valley mist and slanting sunbeams, and an autumn wreath
+on every door.
 
 The sky is real: the sun's path for the date, the moon in tonight's actual
 phase (rising and setting where it would, bright limb towards the sun, and

@@ -2445,19 +2445,36 @@ no village, no orchard, no day (only the moon), and so on.
   for the moment the moon is highest, so "just the moon" has a moon whenever
   one can be had. The moon's phase can be pinned too (full, gibbous, half,
   crescent).
-- **Scene:** far hills and forest dabbed in autumn colour; a quilt of
-  farmland bands; a village (church, cottages with chimneys, window boxes,
-  pumpkins and a pie on a sill, a barn, a windmill whose sails turn with
+- **Scene:** five ranges of hills, each lower, warmer and less grey than the
+  one behind (the farthest a pale lavender-grey with only a rumour of rust),
+  forested in dabs of autumn colour; a quilt of farmland bands; a village (church, cottages with chimneys, window boxes,
+  pumpkins, an autumn wreath on every door and a pie on a sill, a barn, a windmill whose sails turn with
   the wind), bunting that spells *GIVE THANKS* in Thanksgiving week (the
   four days either side of the fourth Thursday of November) and lights every
   window on the day; a road with lamp posts; corn, shocks and bales; the
   pumpkin patch with its sign (*Most Sincere Pumpkin Patch*); three rows of
   apple trees in perspective, kept off the road, the corn and the patch.
-- **Cast:** geese in a V with the lead goose dropping to the back (offsets
-  ease, so it glides round the outside), and the odd glide; squirrels who
-  gather fallen apples in both paws and take them to a very small door at the
-  foot of the den tree, where a light comes on, and who bolt for it if the
-  pointer is fast and near; turkeys that stroll, peck, fan their tails
+  The meadow, corn and patch start below the village's lowest doorstep
+  (never across a building); the horizon defaults to 55% of the height and
+  goes to 70%, the rows of trees thinning to fit below the fields.
+- **Cast:** geese drawn properly, as small Canada geese (a long level neck, black
+  with a white chinstrap, a brown body with a cream belly and a white rump
+  patch, black flight feathers, a wing of arm and hand with fingered primaries, a darker far wing;
+  the downstroke a full sweep, the upstroke with the wrist folded; a
+  near-silhouette against the low sun) in flocks of up to 100: mostly a V
+  with unequal arms, sometimes a slanting line or a ragged cluster, each on
+  its own curving, banking, climbing and sinking path, the wingbeat rippling
+  down the formation a beat behind each goose ahead, spaced a body-length
+  and more apart so they read as birds, swaying in their places, far flocks
+  small and pale; several flocks can be crossing at once (a second often
+  follows the first, up to a cap of 4 + flocks-per-hour/15), a flock of six or
+  more often has one to three stragglers well behind it, wingbeat a little
+  quicker and never quite catching up, and a lone goose crosses now and then; the lead goose drops to the back (offsets ease, so it
+  glides round the outside), and the whole flock glides now and then; squirrels who
+  gather fallen apples and acorns in both paws and carry them off the nearest
+  edge of the screen (never appearing or vanishing in place: they walk out,
+  and walk back in from an edge a few seconds later; some acorns are eaten
+  on the spot), and who bolt for an edge if the pointer is fast and near; turkeys that stroll, peck, fan their tails
   (more in Thanksgiving week) and avoid the pointer; cats (§ below); a
   pumpkin-headed scarecrow with a crow that flies off and comes back; and
   fall-colour leaves, apples that tumble, bounce, roll and fade.
@@ -2476,6 +2493,11 @@ no village, no orchard, no day (only the moon), and so on.
 - **After dark:** windows and lamps glow (a few windows stay dark), a
   bonfire with sparks and people round it, stars and a faint galaxy, a
   shooting star every 25–75 s, the moon's halo.
+- **Sky details:** clouds are hundreds of soft blobs heaped into domes on a
+  flat, softly fading base and shaded underneath and lit on top (cumulus,
+  long low stratus, high cirrus), padded so nothing is cropped and placed
+  wholly inside the sky; valley mist lies on the land only, thickest at dawn
+  and dusk; the moon's seas are soft patches that run together.
 - **Light:** the world is drawn at full daylight colour onto an offscreen
   canvas and washed once per frame with a `source-atop` fill (a horizon haze
   and the hour's tint); the sky, geese, glows and sunbeams are drawn on the

@@ -9,102 +9,168 @@ const harvestEase = (rate, dt) => 1 - Math.exp(-rate * dt);
 
 // ---- Geese --------------------------------------------------------------------------------
 
-// Flocks cross the sky in a V. The lead goose tires and drops to the back
-// every so often, the rest shuffling forward (the offsets ease, so the
-// leader really does glide round the outside), and now and then the whole
-// flock stops flapping and glides.
+// Flocks cross the sky: mostly in a V with arms of unequal length, sometimes
+// in a single slanting line, sometimes loose and ragged. They don't fly a
+// ruler's line: each flock climbs and sinks and banks on its own slow
+// curve, and its geese ripple their wingbeats down the formation, each a
+// beat behind the one ahead, with an easy sway in their places. Now and
+// then the whole flock stops flapping and glides. In a V the lead goose
+// tires and drops to the back (the offsets ease, so it really does glide
+// round the outside). Far flocks are small, and paler with distance.
 class HarvestFlocks {
     constructor(m) {
         this.m = m;
         this.flocks = [];
+        this.pending = [];
         this.due = 0;
-        this.glide = null;
     }
 
     size() {
         const m = this.m, d = m.host.quality?.density ?? 1;
-        return Math.max(3, Math.round(m.config.flock * (0.7 + 0.3 * d) * (0.65 + Math.random() * 0.5)));
+        return harvestClamp(Math.round(m.config.flock * (0.7 + 0.3 * d) * (0.65 + Math.random() * 0.5)), 3, 100);
     }
 
+    // At most this many flocks cross at once.
+    cap() { return 4 + Math.floor(this.m.config.geese / 15); }
+
     // A flock, entering from a side; `at` (0..1) starts it part-way across.
-    spawn(at = 0) {
-        const m = this.m, W = m.W, dir = Math.random() < 0.5 ? -1 : 1, u = m.u;
-        const n = Math.min(25, this.size()), scale = 0.55 + Math.random() * 0.6;
+    // `o` can fix its size, direction, distance, height and type, how far
+    // behind the edge it starts, and how much faster it flaps: for stragglers.
+    spawn(at = 0, o = {}) {
+        const m = this.m, W = m.W, u = m.u, dir = o.dir ?? (Math.random() < 0.5 ? -1 : 1);
+        const n = o.n ?? this.size(), scale = o.scale ?? 0.5 + Math.random() * 0.65, roll = Math.random();
+        const type = o.type ?? (n < 5 || roll < 0.7 ? 'v' : roll < 0.85 ? 'line' : 'ragged'), behind = o.behind || 0;
+        // A really big flock gets tighter, smaller birds, so it still fits the sky.
+        const crowd = n > 40 ? Math.sqrt(40 / n) : 1, len = 28 * u * scale * Math.max(0.55, crowd);
         const f = {
-            dir, scale, n, t: 0,
-            y: m.L.hz * (0.14 + Math.random() * 0.5),
-            speed: (50 + Math.random() * 30) * u * (0.6 + scale * 0.5),
-            climb: (Math.random() - 0.5) * 5 * u,
-            wave: Math.random() * 6,
-            turn: 9 + Math.random() * 12,
-            rhythm: 2.6 + Math.random() * 0.7,
-            birds: [],
+            dir, scale, n, type, len, t: 0, gap: Math.max(0.5, crowd),
+            x: dir > 0 ? -len * 4 + at * (W + len * 8) - behind : W + len * 4 - at * (W + len * 8) + behind,
+            y: o.y ?? m.L.hz * (0.14 + Math.random() * 0.5),
+            speed: (46 + Math.random() * 26) * u * (0.55 + scale * 0.5) * (o.speed ?? 1),
+            climb: (Math.random() - 0.5) * 8 * u, wave: Math.random() * 6, wave2: Math.random() * 6,
+            turn: 10 + Math.random() * 14, rate: (2.7 - 0.7 * scale + (Math.random() - 0.5) * 0.3) * (o.rate ?? 1),
+            glide: 0, nextGlide: 6 + Math.random() * 12, tilt: 0, birds: [], offsets: [], ranks: [],
         };
-        f.x = dir > 0 ? -60 * u + at * (W + 120 * u) : W + 60 * u - at * (W + 120 * u);
-        for (let i = 0; i < n; i++) {
-            const [ox, oy] = this.slot(f, i);
-            f.birds.push({ slot: i, ox, oy, phase: Math.random() * 12, bob: Math.random() * 6 });
+        this.layout(f);
+        for (let k = 0; k < n; k++) {
+            f.birds.push({ slot: k, ox: f.offsets[k][0], oy: f.offsets[k][1], jit: (Math.random() - 0.5) * 0.06, p1: Math.random() * 6, p2: Math.random() * 6 });
         }
         this.flocks.push(f);
         return f;
     }
 
-    // Where slot k sits behind the leader, in px, for a flock flying right
-    // (the x flips with the direction): the V's two arms alternate.
-    slot(f, k) {
-        const rank = Math.ceil(k / 2), side = k % 2 ? 1 : -1, u = this.m.u * f.scale;
-        return [-rank * 17 * u, k ? side * rank * 10.5 * u : 0];
+    // One to three stragglers, well behind a flock: hurrying a little harder
+    // (a quicker wingbeat, a touch faster) and never quite catching up.
+    straggle(main) {
+        const m = this.m, k = 1 + Math.floor(Math.random() * 3);
+        return this.spawn(0, {
+            n: k, dir: main.dir, scale: main.scale * (0.92 + Math.random() * 0.16), type: 'ragged', rate: 1.18, speed: 1.04,
+            y: main.y + (Math.random() - 0.5) * 30 * m.u, behind: main.len * (main.n * 0.6 + 3) + (160 + Math.random() * 360) * m.u,
+        });
+    }
+
+    // Where each slot sits, in the flock's own frame (x forward, y down), and
+    // how far back it is, for the ripple.
+    layout(f) {
+        const n = f.n, dx = f.len * 0.95 * f.gap, dy = f.len * 0.62 * f.gap;
+        f.offsets = [[0, 0]];
+        f.ranks = [0];
+        if (f.type === 'v') {
+            const left = Math.round((n - 1) * (0.4 + Math.random() * 0.2));
+            let l = 0, r = 0;
+            for (let k = 1; k < n; k++) {
+                const useLeft = l < left && (r >= n - 1 - left || l <= r);
+                if (useLeft) { l++; f.offsets.push([-l * dx, -l * dy]); f.ranks.push(l); } else { r++; f.offsets.push([-r * dx, r * dy]); f.ranks.push(r); }
+            }
+        } else if (f.type === 'line') {
+            for (let k = 1; k < n; k++) { f.offsets.push([-k * dx * 0.85, k * dy * 0.7]); f.ranks.push(k); }
+        } else {
+            for (let k = 1; k < n; k++) {
+                const a = k * 2.399963, r = Math.sqrt(k) * f.len * 0.85 * f.gap;
+                f.offsets.push([-Math.abs(Math.cos(a)) * r * 1.5 - f.len * 0.3, Math.sin(a) * r * 0.75]);
+                f.ranks.push(Math.sqrt(k) * 1.3);
+            }
+        }
     }
 
     update(dt) {
         const m = this.m;
         this.due += dt * m.config.geese * (m.host.quality?.density ?? 1) / 3600;
-        while (this.due >= 1) { this.due -= 1; if (this.flocks.length < 4) this.spawn(0); }
+        while (this.due >= 1) {
+            this.due -= 1;
+            if (this.flocks.length >= this.cap()) continue;
+            const main = this.spawn(0);
+            // Often with a few stragglers, and sometimes a second flock close behind.
+            if (main.n >= 6 && Math.random() < 0.45) this.straggle(main);
+            if (Math.random() < 0.3) this.pending.push({ at: m.time + 4 + Math.random() * 14 });
+        }
+        for (let i = this.pending.length - 1; i >= 0; i--) {
+            if (this.pending[i].at > m.time) continue;
+            this.pending.splice(i, 1);
+            if (this.flocks.length < this.cap()) { const second = this.spawn(0); if (second.n >= 6 && Math.random() < 0.3) this.straggle(second); }
+        }
+        // A lone goose now and then, going its own way.
+        if (this.flocks.length < this.cap() && Math.random() < dt / 150) this.spawn(0, { n: 1 + Math.floor(Math.random() * 2), type: 'ragged' });
         for (const f of this.flocks) {
             f.t += dt;
-            f.x += f.dir * f.speed * dt * (0.85 + 0.3 * Math.min(2, m.windPush * f.dir + 1));
-            f.y += (f.climb + Math.sin(f.t * 0.35 + f.wave) * 4 * m.u) * dt;
-            f.y = harvestClamp(f.y, m.L.hz * 0.08, m.L.hz * 0.78);
-            // The leader drops back.
-            f.turn -= dt;
-            if (f.turn <= 0 && f.n > 4) {
-                f.turn = 12 + Math.random() * 14;
-                for (const b of f.birds) b.slot = b.slot === 0 ? f.n - 1 : b.slot - 1;
+            // A curved path: speed swells and eases, and the flock climbs and
+            // sinks, turning its nose up and down as it does.
+            const speed = f.speed * (1 + 0.08 * Math.sin(f.t * 0.3 + f.wave)) * (0.85 + 0.3 * Math.min(2, m.windPush * f.dir + 1));
+            const vy = f.climb + Math.sin(f.t * 0.23 + f.wave2) * 11 * m.u * f.scale + Math.sin(f.t * 0.61 + f.wave) * 3 * m.u;
+            f.x += f.dir * speed * dt;
+            f.y += vy * dt;
+            if (f.y < m.L.hz * 0.1) f.climb = Math.abs(f.climb) + 2;
+            if (f.y > m.L.hz * 0.78) f.climb = -Math.abs(f.climb) - 2;
+            f.tilt += (Math.atan2(vy, speed) - f.tilt) * harvestEase(1.5, dt);
+            if (f.type !== 'ragged' && f.n > 4) {
+                f.turn -= dt;
+                if (f.turn <= 0) {
+                    f.turn = 12 + Math.random() * 14;
+                    for (const b of f.birds) b.slot = b.slot === 0 ? f.n - 1 : b.slot - 1;
+                }
             }
+            // A glide: wings out, still, for a few seconds.
+            if (f.glide > 0) f.glide -= dt;
+            else if ((f.nextGlide -= dt) <= 0) { f.glide = 2 + Math.random() * 2; f.nextGlide = 9 + Math.random() * 16; }
             const k = harvestEase(1.1, dt);
             for (const b of f.birds) {
-                const [tx, ty] = this.slot(f, b.slot);
+                const [tx, ty] = f.offsets[b.slot];
                 b.ox += (tx - b.ox) * k;
                 b.oy += (ty - b.oy) * k;
             }
         }
-        // A glide: 2–3 s with the wings held, a few times a minute.
-        this.glide = this.glide && this.glide.until > m.time ? this.glide : (Math.random() < dt / 9 ? { until: m.time + 2 + Math.random() * 1.5 } : null);
-        this.flocks = this.flocks.filter(f => f.dir > 0 ? f.x - 25 * f.n * m.u < m.W + 80 * m.u : f.x + 25 * f.n * m.u > -80 * m.u);
+        this.flocks = this.flocks.filter(f => f.dir > 0 ? f.x - f.len * f.n * 0.9 < m.W + f.len * 4 : f.x + f.len * f.n * 0.9 > -f.len * 4);
     }
 
     // Far flocks first, so near ones cross in front.
     draw(ctx, dpr, geese) {
-        const m = this.m;
-        const gliding = this.glide && this.glide.until > m.time;
+        const m = this.m, frames = geese.frames, N = frames.length;
         for (const f of this.flocks.slice().sort((a, b) => a.scale - b.scale)) {
-            const s = 40 * m.u * f.scale / 44;
+            const s = f.len / geese.length, cos = Math.cos(f.tilt), sin = Math.sin(f.tilt);
+            ctx.globalAlpha = 0.58 + 0.42 * harvestClamp((f.scale - 0.5) / 0.65, 0, 1);
             for (const b of f.birds) {
-                const px = f.x + (f.dir > 0 ? b.ox : -b.ox), y = f.y + b.oy + Math.sin(f.t * 1.3 + b.bob) * 1.4 * m.u * f.scale;
-                const n = geese.frames.length, frame = gliding ? 2 : Math.floor((f.t * f.rhythm + b.phase) * n / 2) % n;
-                ctx.setTransform(dpr * s * f.dir, 0, 0, dpr * s, px * dpr, y * dpr);
-                ctx.drawImage(geese.frames[frame], -geese.ax, -geese.ay);
+                // The place in the flock, swaying a little, tilted with the flock and mirrored with its direction.
+                const ox = b.ox + Math.sin(f.t * 0.5 + b.p1) * f.len * 0.07, oy = b.oy + Math.sin(f.t * 0.7 + b.p2) * f.len * 0.09;
+                const px = f.x + f.dir * (ox * cos - oy * sin), py = f.y + ox * sin + oy * cos;
+                const cycle = f.t * f.rate - f.ranks[b.slot] * 0.07 + b.jit;
+                const frame = f.glide > 0 ? Math.floor(N * 0.4) : Math.floor((cycle - Math.floor(cycle)) * N) % N;
+                const psi = f.dir * f.tilt, c = Math.cos(psi), sn = Math.sin(psi);
+                ctx.setTransform(dpr * c * f.dir * s, dpr * sn * f.dir * s, -dpr * sn * s, dpr * c * s, px * dpr, py * dpr);
+                ctx.drawImage(frames[frame], -geese.ax, -geese.ay);
             }
         }
+        ctx.globalAlpha = 1;
     }
 }
 
 // ---- Squirrels -------------------------------------------------------------------------
 
-// Squirrels collect the fallen apples and carry them, in both paws, to the
-// very small door at the foot of the den tree; a little later they come out
-// again for more. They freeze and fidget between errands, and run for the
-// door if anything startles them.
+// Squirrels collect the fallen apples and acorns and carry them, in both
+// paws, off the edge of the screen to wherever they keep their stash; a
+// little later they wander back in from an edge for more. Sometimes an
+// acorn is a snack and is nibbled on the spot. They freeze and fidget
+// between errands, and bolt for the nearest edge if anything startles them.
+// They never appear or vanish in place.
 class HarvestSquirrel {
     constructor(m, x, y) {
         this.m = m;
@@ -118,12 +184,17 @@ class HarvestSquirrel {
         this.gait = 0;
         this.tail = Math.random() * 6;
         this.blink = 2 + Math.random() * 3;
-        this.alpha = 1;
         this.eaten = 0;
     }
 
-    door() { return this.m.den ? this.m.denDoor() : null; }
+    // The nearest edge of the screen, at about this height: where food is
+    // taken, and where a startled squirrel runs.
+    edge() {
+        const m = this.m, margin = 50 * m.u;
+        return { x: this.x < m.W / 2 ? -margin : m.W + margin, y: harvestClamp(this.y + (Math.random() - 0.5) * 20 * m.u, m.meadowMin, m.meadowMax) };
+    }
 
+    // The nearest apple or acorn lying about that nobody else wants.
     pickApple() {
         const m = this.m;
         let best = null, d = 1e9;
@@ -141,12 +212,12 @@ class HarvestSquirrel {
         this.dir = x < this.x ? -1 : 1;
     }
 
+    // Startled: drop whatever it carries and run off the nearest edge.
     startle() {
-        const door = this.door();
-        if (this.state === 'hidden' || this.state === 'enter') return;
+        if (this.state === 'away' || this.state === 'flee') return;
         this.drop();
-        if (door) this.go(door.x, door.y, 'flee');
-        else this.go(this.x + this.dir * 200, this.y, 'flee');
+        const e = this.edge();
+        this.go(e.x, e.y, 'flee');
     }
 
     drop() {
@@ -162,10 +233,10 @@ class HarvestSquirrel {
     update(dt) {
         const m = this.m, u = m.u, s = m.depth(this.y);
         this.t += dt;
-        this.tail += dt * (this.state === 'sit' ? 2.2 : 6);
+        this.tail += dt * (this.state === 'sit' || this.state === 'eat' ? 2.2 : 6);
         this.blink -= dt;
         if (this.blink < -0.12) this.blink = 2.5 + Math.random() * 4;
-        // Anything fast near the pointer, or a loud gust, startles a sitting squirrel.
+        // Anything fast near the pointer startles a sitting squirrel.
         if (this.state === 'sit' && m.pointer.active && Math.hypot(m.pointer.x - this.x, (m.pointer.y - this.y) * 1.3) < 70 * u * s && m.pointer.speed > 400) this.startle();
         switch (this.state) {
             case 'sit':
@@ -173,7 +244,7 @@ class HarvestSquirrel {
                 if (this.wait <= 0) {
                     const apple = Math.random() < 0.85 ? this.pickApple() : null;
                     if (apple) { apple.claimed = true; this.apple = null; this.go(apple.x, apple.y, 'fetch'); this.fetching = apple; }
-                    else this.go(m.randomMeadow().x, m.randomMeadow().y, 'wander');
+                    else { const p = m.randomMeadow(); this.go(p.x, p.y, 'wander'); }
                 }
                 break;
             case 'fetch': case 'wander': case 'carry': case 'flee': {
@@ -192,43 +263,49 @@ class HarvestSquirrel {
                 this.wait -= dt;
                 if (this.wait <= 0) {
                     const a = this.fetching;
-                    if (a && a.state === 'rest') {
+                    if (a && a.state === 'rest' && a.type === 'acorn' && Math.random() < 0.3) {
+                        // A snack: sit up and nibble it where it lay.
                         this.apple = a;
                         a.carried = this;
                         a.state = 'carried';
-                        const door = this.door();
-                        if (door) this.go(door.x, door.y, 'carry'); else { this.state = 'sit'; this.wait = 2; this.drop(); }
+                        this.state = 'eat';
+                        this.wait = 3 + Math.random() * 2;
+                    } else if (a && a.state === 'rest') {
+                        // To the stash, which is somewhere off the edge of the screen.
+                        this.apple = a;
+                        a.carried = this;
+                        a.state = 'carried';
+                        const e = this.edge();
+                        this.go(e.x, e.y, 'carry');
                     } else { this.state = 'sit'; this.wait = 1; }
                     this.fetching = null;
                 }
                 break;
-            case 'enter':
-                this.alpha -= dt * 3.2;
-                if (this.alpha <= 0) {
-                    this.alpha = 0;
-                    if (this.apple) { this.apple.state = 'gone'; this.apple = null; this.eaten++; m.stash(); }
-                    this.state = 'hidden';
-                    this.wait = 4 + Math.random() * 10;
-                }
-                break;
-            case 'hidden':
+            case 'eat':
                 this.wait -= dt;
-                if (this.wait <= 0) { this.state = 'exit'; const d = this.door(); if (d) { this.x = d.x; this.y = d.y; } }
+                if (this.wait <= 0) { if (this.apple) { this.apple.state = 'gone'; this.apple = null; } this.state = 'sit'; this.wait = 0.5 + Math.random() * 2; }
                 break;
-            case 'exit':
-                this.alpha += dt * 3;
-                if (this.alpha >= 1) { this.alpha = 1; this.state = 'sit'; this.wait = 0.6 + Math.random() * 2; }
+            case 'away':
+                // Off the screen, stashing; back in a while.
+                this.wait -= dt;
+                if (this.wait <= 0) {
+                    const p = m.randomMeadow(), left = Math.random() < 0.5;
+                    this.x = left ? -50 * u : m.W + 50 * u;
+                    this.y = p.y;
+                    this.go(p.x, p.y, 'wander');
+                }
                 break;
         }
     }
 
     arrive() {
-        const door = this.door();
         if (this.state === 'fetch') { this.state = 'pick'; this.wait = 0.45; return; }
-        if (this.state === 'carry' || this.state === 'flee') {
-            // At the door: in, apple and all. Anywhere else, sit down.
-            if (door && Math.hypot(door.x - this.x, door.y - this.y) < 14 * this.m.u) this.state = 'enter';
-            else { this.drop(); this.state = 'sit'; this.wait = 1.5 + Math.random() * 3; }
+        const off = this.x < -20 * this.m.u || this.x > this.m.W + 20 * this.m.u;
+        if ((this.state === 'carry' || this.state === 'flee') && off) {
+            // Gone over the edge with the food (a startled one, empty-pawed).
+            if (this.apple) { this.apple.state = 'gone'; this.apple = null; this.eaten++; }
+            this.state = 'away';
+            this.wait = 5 + Math.random() * 12;
             return;
         }
         this.state = 'sit';
@@ -237,14 +314,13 @@ class HarvestSquirrel {
 
     // Origin at the feet. `px` is the size of one unit on screen.
     draw(g) {
-        if (this.state === 'hidden' || this.alpha <= 0) return;
+        if (this.state === 'away') return;
         const m = this.m, px = 1.9 * m.u * m.depth(this.y);
         const moving = ['fetch', 'wander', 'carry', 'flee'].includes(this.state);
         const bound = moving ? Math.abs(Math.sin(this.gait)) : 0;
         g.save();
         g.translate(this.x, this.y - bound * 5 * px);
         g.scale(this.dir * px, px);
-        g.globalAlpha = this.alpha;
         const tail = Math.sin(this.tail) * (moving ? 3 : 5);
         const fur = '#a85a2a', dark = '#7a3e1c', belly = '#ecd6ae';
         // The tail: a big fluffy question mark behind, flicking.
@@ -313,12 +389,11 @@ class HarvestSquirrel {
         }
         // The apple, held up in front, or being nibbled.
         if (this.apple) {
-            const sprite = m.sprites.apples[this.apple.kind % m.sprites.apples.length];
-            const as = 9;
+            const acorn = this.apple.type === 'acorn', sprite = acorn ? m.sprites.acorn : m.sprites.apples[this.apple.kind % m.sprites.apples.length];
+            const as = acorn ? 6 : 9;
             g.drawImage(sprite, hx + 1.5 - as * 0.8, hy + 5 - as * 1.05, as * 1.6, as * 1.6);
         }
         g.restore();
-        g.globalAlpha = 1;
     }
 }
 
@@ -529,12 +604,12 @@ class HarvestScarecrow {
 
     perch() {
         const m = this.m, s = m.L.scarecrow;
-        const k = m.depth(s.y) * 1.25 * m.u;
+        const k = m.depth(s.y) * 0.95 * m.u;
         return { x: s.x + 18 * k, y: s.y - 62 * k };
     }
 
     draw(g) {
-        const m = this.m, p = m.L.scarecrow, k = m.depth(p.y) * 1.25 * m.u;
+        const m = this.m, p = m.L.scarecrow, k = m.depth(p.y) * 0.95 * m.u;
         const sway = Math.sin(m.time * 1.4) * 0.03 * (0.4 + m.wind), flutter = Math.sin(m.time * 7) * 1.2 * m.wind;
         g.save();
         g.translate(p.x, p.y);
@@ -607,7 +682,7 @@ class HarvestScarecrow {
     drawCrow(g) {
         const c = this.crow, m = this.m;
         if (c.state === 'gone') return;
-        const k = m.depth(m.L.scarecrow.y) * 1.25 * m.u;
+        const k = m.depth(m.L.scarecrow.y) * 0.95 * m.u;
         g.save();
         g.translate(c.x, c.y);
         const flying = c.state === 'away' || c.state === 'return';
@@ -782,7 +857,7 @@ class HarvestCat {
         this.pose += (upright - this.pose) * harvestEase(3.5, dt);
         // A squirrel in view, or a pointer close by.
         let watched = null;
-        for (const s of m.squirrels) if (s.state !== 'hidden' && Math.hypot(s.x - this.x, (s.y - this.y) * 1.5) < 150 * m.u) watched = s;
+        for (const s of m.squirrels) if (s.state !== 'away' && Math.hypot(s.x - this.x, (s.y - this.y) * 1.5) < 150 * m.u) watched = s;
         const near = m.pointer.active && Math.hypot(m.pointer.x - this.x, (m.pointer.y - this.y) * 1.3) < 55 * m.u;
         if (watched && this.state !== 'walk' && this.state !== 'watch') { this.state = 'watch'; this.wait = 3 + Math.random() * 4; }
         if (watched) { this.dir = watched.x < this.x ? -1 : 1; this.ear = 1; }

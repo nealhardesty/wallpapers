@@ -51,11 +51,6 @@ const HarvestArt = {
             return { x: vx + Math.sin(t * 2.4 + 0.6) * W * 0.06 * t, w: W * 0.012 + (W * (portrait ? 0.2 : 0.11)) * Math.pow(t, 1.35) };
         };
         const L = { W, H, Hu, hz, u, portrait, road, roadTop, vx };
-        L.corn = { x0: W * (portrait ? 0.5 : 0.64), x1: W * 0.99, y0: Hu * 0.58, y1: Hu * 0.69 };
-        L.patch = { x0: W * 0.01, x1: W * (portrait ? 0.46 : 0.31), y0: Hu * 0.625, y1: Hu * 0.72 };
-        L.meadowTop = Hu * 0.625;
-        L.scarecrow = { x: L.corn.x0 + (L.corn.x1 - L.corn.x0) * 0.2, y: L.corn.y1 + Hu * 0.012 };
-        L.sincere = { x: L.patch.x0 + (L.patch.x1 - L.patch.x0) * 0.52, y: L.patch.y1 - Hu * 0.012 };
         // The village: a church, cottages either side of the road, a barn, a mill.
         const slots = [];
         const span = portrait ? [W * 0.03, W * 0.97] : [W * 0.2, W * 0.8];
@@ -74,9 +69,16 @@ const HarvestArt = {
         L.houses.forEach(h => { h.h = h.w * (0.62 + random() * 0.18); });
         // The first slot on the left is the church; the last on the right, the barn.
         if (n >= 4) { L.houses[0].kind = 'church'; L.houses[0].w *= 0.9; L.houses[0].h = L.houses[0].w * 1.05; L.houses[n - 1].kind = 'barn'; L.houses[n - 1].w *= 1.15; L.houses[n - 1].h = L.houses[n - 1].w * 0.75; }
+        // The meadow, and with it the corn and the pumpkins, starts below the
+        // village's lowest doorstep, fences and shocks included, never across it.
+        const lowest = Math.max(...L.houses.map(h => h.base)) + 9 * u;
+        L.meadowTop = Math.max(Hu * 0.625, lowest);
+        L.corn = { x0: W * (portrait ? 0.5 : 0.64), x1: W * 0.99, y0: L.meadowTop + Hu * 0.006, y1: L.meadowTop + Hu * 0.1 };
+        L.patch = { x0: W * 0.01, x1: W * (portrait ? 0.46 : 0.31), y0: L.meadowTop + Hu * 0.006, y1: L.meadowTop + Hu * 0.1 };
+        L.scarecrow = { x: L.corn.x0 + (L.corn.x1 - L.corn.x0) * 0.2, y: L.corn.y1 + Hu * 0.012 };
+        L.sincere = { x: L.patch.x0 + (L.patch.x1 - L.patch.x0) * 0.52, y: L.patch.y1 - Hu * 0.012 };
         L.mill = { x: portrait ? W * 0.84 : Math.min(W * 0.9, span[1] + W * 0.07), base: hz + Hu * 0.04, h: 120 * u * (portrait ? 0.8 : 1) };
-        L.green = { x: vx - (road(hz + Hu * 0.12).x - vx) * 0 + W * (portrait ? -0.0 : 0), y: hz + Hu * 0.115 };
-        L.fire = { x: vx + (portrait ? W * 0.26 : W * 0.075), y: hz + Hu * 0.125 };
+        L.fire = { x: vx + (portrait ? W * 0.26 : W * 0.075), y: Math.min(L.meadowTop - 2 * u, hz + Hu * 0.125) };
         L.lamps = [];
         L.windows = [];
         L.chimneys = [];
@@ -107,14 +109,24 @@ const HarvestArt = {
         return c;
     },
 
-    // Two ranges of hills, forested in autumn colour, and a haze between.
+    // Hills in several ranges, forested in autumn colour. Each range back to
+    // front is a little lower, warmer and less grey: the farthest is a pale
+    // lavender-grey with only a rumour of rust, the nearest an olive-brown
+    // full of colour, with haze lying at the foot of each.
     hills(g, L, foliage, random) {
-        const { W, hz, Hu } = L;
-        const range = (base, height, body, speck, count, haze) => {
-            const p = random() * 6, q = random() * 6, top = x => base - height * (0.55 + 0.3 * Math.sin(x / W * 4 + p) + 0.15 * Math.sin(x / W * 11 + q));
+        const { W, hz, Hu, u } = L, ranges = 5;
+        const far = [158, 156, 178], near = [150, 124, 86];
+        const grey = ([r, gg, b], k) => { const l = r * 0.3 + gg * 0.59 + b * 0.11 + 8; return [r + (l - r) * k, gg + (l - gg) * k, b + (l - b) * k]; };
+        const css = (c, a2 = 1) => `rgba(${c[0] | 0},${c[1] | 0},${c[2] | 0},${a2})`;
+        const hex = h => { const n = parseInt(h.slice(1), 16); return [n >> 16, (n >> 8) & 255, n & 255]; };
+        for (let i = 0; i < ranges; i++) {
+            const t = i / (ranges - 1), base = hz + 2 + i * Hu * 0.004, height = Hu * (0.155 - 0.1 * t);
+            const p = random() * 6, q = random() * 6, r2 = random() * 6, f1 = 3 + i * 0.7, f2 = 8 + i * 3.2, f3 = 19 + i * 7;
+            const top = x => base - height * (0.5 + 0.3 * Math.sin(x / W * f1 + p) + 0.14 * Math.sin(x / W * f2 + q) + (0.04 + 0.03 * t) * Math.sin(x / W * f3 + r2));
+            const body = HarvestSky.mix(far, near, Math.pow(t, 0.9)), foot = HarvestSky.mix(body, [236, 214, 190], 0.28 * (1 - t) + 0.08);
             const grad = g.createLinearGradient(0, base - height, 0, base);
-            grad.addColorStop(0, body[0]);
-            grad.addColorStop(1, body[1]);
+            grad.addColorStop(0, css(HarvestSky.mix(body, [255, 240, 224], 0.1 * (1 - t))));
+            grad.addColorStop(1, css(foot));
             g.fillStyle = grad;
             g.beginPath();
             g.moveTo(0, hz + Hu * 0.2);
@@ -122,26 +134,26 @@ const HarvestArt = {
             g.lineTo(W, hz + Hu * 0.2);
             g.closePath();
             g.fill();
-            // The forest: dabs of autumn along the ridge and down the slope.
-            for (let i = 0; i < count; i++) {
-                const x = random() * W, t = Math.pow(random(), 1.3), y = top(x) + t * (base - top(x)) * 0.95;
-                g.fillStyle = speck[Math.floor(random() * speck.length)];
-                g.globalAlpha = 0.5 + random() * 0.4;
-                const r = (1.5 + random() * 3) * L.u;
+            // The forest: dabs of autumn along the ridge and down the slope,
+            // greyer and fainter the farther the range.
+            const count = W * (0.2 + 0.5 * t) * (1 + t);
+            const veil = 0.75 * (1 - t) * (1 - t);
+            for (let k = 0; k < count; k++) {
+                const x = random() * W, depth = Math.pow(random(), 1.3), y = top(x) + depth * (base - top(x)) * 0.95;
+                const colour = grey(hex(foliage[Math.floor(random() * foliage.length)]), veil);
+                g.fillStyle = css(HarvestSky.mix(colour, body, 0.5 * (1 - t) * (1 - t)), (0.28 + 0.6 * t) * (0.6 + random() * 0.4));
+                const r = (1.2 + random() * 2.6 + t * 1.2) * u;
                 g.beginPath();
                 g.ellipse(x, y, r * 1.5, r, 0, 0, Math.PI * 2);
                 g.fill();
             }
-            g.globalAlpha = 1;
-            const mist = g.createLinearGradient(0, base - height * 0.2, 0, base + 4);
-            mist.addColorStop(0, 'rgba(240,220,196,0)');
-            mist.addColorStop(1, `rgba(240,220,196,${haze})`);
+            // Haze lying along the foot of the range.
+            const mist = g.createLinearGradient(0, base - height * 0.28, 0, base + 4);
+            mist.addColorStop(0, 'rgba(240,222,204,0)');
+            mist.addColorStop(1, `rgba(240,222,204,${0.5 - 0.3 * t})`);
             g.fillStyle = mist;
-            g.fillRect(0, base - height * 0.2, W, height * 0.2 + 6);
-        };
-        // The farthest: blue with a little rust. The nearer: warmer, richer.
-        range(hz + 2, Hu * 0.13, ['#8e8aa8', '#a29aae'], ['#a88a92', '#9a8aa0', '#b09a98', '#8a90a8'], W * 0.9, 0.45);
-        range(hz + 4, Hu * 0.075, ['#8a7258', '#a08a5c'], foliage.concat(['#8a6a3a', '#6e7a3a']), W * 1.6, 0.3);
+            g.fillRect(0, base - height * 0.28, W, height * 0.28 + 6);
+        }
     },
 
     // Fields in the middle distance: a quilt of wheat, plough, stubble and
@@ -295,7 +307,7 @@ const HarvestArt = {
             if (random() < 0.7) this.smallTree(g, h.x + (random() < 0.5 ? -1 : 1) * h.w * (0.75 + random() * 0.3), h.base + 2, (28 + random() * 22) * u, foliage, random);
         }
         for (const h of things) {
-            const out = h.kind === 'barn' ? this.barn(g, h, random) : h.kind === 'church' ? this.church(g, h, random) : this.cottage(g, h, random);
+            const out = h.kind === 'barn' ? this.barn(g, h, random, foliage) : h.kind === 'church' ? this.church(g, h, random, foliage) : this.cottage(g, h, random, foliage);
             for (const w of out.windows) L.windows.push(w);
             if (out.chimney) L.chimneys.push(out.chimney);
             if (random() < 0.8) this.fence(g, h.x - h.w * 0.6, h.x + h.w * 0.6, h.base + 3, u);
@@ -384,7 +396,45 @@ const HarvestArt = {
         out.push({ x, y: y + h / 2, w, h });
     },
 
-    cottage(g, h, random) {
+    // An autumn wreath: a twig ring crowded with leaves in the season's
+    // colours, a few berries, and a ribbon.
+    wreath(g, x, y, r, foliage, random) {
+        g.strokeStyle = '#5a4128';
+        g.lineWidth = Math.max(0.8, r * 0.28);
+        g.beginPath();
+        g.arc(x, y, r, 0, Math.PI * 2);
+        g.stroke();
+        const n = Math.max(10, Math.round(r * 3.4));
+        for (let i = 0; i < n; i++) {
+            const a = i / n * Math.PI * 2 + random() * 0.2, rr = r * (0.9 + random() * 0.25);
+            g.fillStyle = foliage[Math.floor(random() * foliage.length)];
+            g.save();
+            g.translate(x + Math.cos(a) * rr, y + Math.sin(a) * rr);
+            g.rotate(a + Math.PI / 2 + (random() - 0.5) * 0.8);
+            g.beginPath();
+            g.ellipse(0, 0, r * 0.19, r * 0.4, 0, 0, Math.PI * 2);
+            g.fill();
+            g.restore();
+        }
+        g.fillStyle = '#b8302a';
+        for (let i = 0; i < 4; i++) {
+            const a = random() * Math.PI * 2;
+            g.beginPath();
+            g.arc(x + Math.cos(a) * r, y + Math.sin(a) * r, Math.max(0.5, r * 0.13), 0, Math.PI * 2);
+            g.fill();
+        }
+        g.fillStyle = '#a82a2a';
+        g.beginPath();
+        g.moveTo(x, y + r * 1.05);
+        g.lineTo(x - r * 0.55, y + r * 1.55);
+        g.lineTo(x - r * 0.15, y + r * 1.0);
+        g.moveTo(x, y + r * 1.05);
+        g.lineTo(x + r * 0.55, y + r * 1.55);
+        g.lineTo(x + r * 0.15, y + r * 1.0);
+        g.fill();
+    },
+
+    cottage(g, h, random, foliage) {
         const { x, base, w } = h, ht = h.h, u = h.w / 80;
         const out = { windows: [], chimney: null };
         const wall = HARVEST_WALLS[Math.floor(random() * HARVEST_WALLS.length)], roof = HARVEST_ROOFS[Math.floor(random() * HARVEST_ROOFS.length)];
@@ -446,6 +496,7 @@ const HarvestArt = {
         g.fill();
         g.fillStyle = '#e8c860';
         g.fillRect(dx + w * 0.045, base - wallH * 0.28, 1.4 * u, 1.4 * u);
+        this.wreath(g, dx, base - wallH * 0.36, Math.max(2.6, w * 0.052), foliage, random);
         const wx = dx < x ? x + w * 0.27 : x - w * 0.27;
         this.window(g, wx, top + wallH * 0.2, w * 0.2, wallH * 0.36, out.windows);
         if (random() < 0.7) {
@@ -475,7 +526,7 @@ const HarvestArt = {
         return out;
     },
 
-    barn(g, h, random) {
+    barn(g, h, random, foliage) {
         const { x, base, w } = h, ht = h.h, u = w / 100;
         const out = { windows: [], chimney: null };
         const wallH = ht * 0.55, top = base - wallH;
@@ -521,6 +572,7 @@ const HarvestArt = {
         g.fillRect(x - w * 0.07, top - ht * 0.15, w * 0.14, ht * 0.12);
         g.strokeRect(x - w * 0.07, top - ht * 0.15, w * 0.14, ht * 0.12);
         out.windows.push({ x, y: top - ht * 0.09, w: w * 0.14, h: ht * 0.12 });
+        this.wreath(g, x, base - wallH * 0.4, Math.max(3, w * 0.07), foliage, random);
         // Hay bales at the foot.
         for (let i = 0; i < 3; i++) {
             const bx = x + w * 0.58 + (i % 2) * 8 * u, by = base + 1 - Math.floor(i / 2) * 6 * u;
@@ -534,7 +586,7 @@ const HarvestArt = {
         return out;
     },
 
-    church(g, h, random) {
+    church(g, h, random, foliage) {
         const { x, base, w } = h, ht = h.h, u = w / 70;
         const out = { windows: [], chimney: null };
         const wallH = ht * 0.4, top = base - wallH;
@@ -600,6 +652,7 @@ const HarvestArt = {
         g.lineTo(x + 3.4 * u, base);
         g.closePath();
         g.fill();
+        this.wreath(g, x, base - wallH * 0.3, Math.max(2.4, 3.3 * u), foliage, random);
         return out;
     },
 
@@ -926,6 +979,37 @@ const HarvestArt = {
         return c;
     },
 
+    // An acorn: a glossy nut in a scaled cap, with its little stalk.
+    acorn(size, dpr) {
+        const { c, g } = this.canvas(size * 1.6, size * 1.6, dpr);
+        const cx = size * 0.8, cy = size * 0.9, r = size * 0.42;
+        const nut = g.createRadialGradient(cx - r * 0.3, cy - r * 0.1, r * 0.1, cx, cy + r * 0.2, r * 1.3);
+        nut.addColorStop(0, '#d8a45a');
+        nut.addColorStop(0.6, '#a8702e');
+        nut.addColorStop(1, '#6e4418');
+        g.fillStyle = nut;
+        g.beginPath();
+        g.moveTo(cx - r * 0.85, cy - r * 0.2);
+        g.quadraticCurveTo(cx - r * 0.9, cy + r * 1.3, cx, cy + r * 1.45);
+        g.quadraticCurveTo(cx + r * 0.9, cy + r * 1.3, cx + r * 0.85, cy - r * 0.2);
+        g.closePath();
+        g.fill();
+        g.fillStyle = '#6a4a28';
+        g.beginPath();
+        g.ellipse(cx, cy - r * 0.25, r * 0.98, r * 0.62, 0, Math.PI, 0);
+        g.fill();
+        g.strokeStyle = 'rgba(30,18,6,0.4)';
+        g.lineWidth = Math.max(0.4, size * 0.04);
+        for (let i = -2; i <= 2; i++) { g.beginPath(); g.moveTo(cx + i * r * 0.36 - r * 0.3, cy - r * 0.3); g.lineTo(cx + i * r * 0.36, cy - r * 0.62); g.stroke(); }
+        g.strokeStyle = '#4a3218';
+        g.lineWidth = Math.max(0.6, size * 0.08);
+        g.beginPath();
+        g.moveTo(cx, cy - r * 0.85);
+        g.lineTo(cx + r * 0.1, cy - r * 1.15);
+        g.stroke();
+        return c;
+    },
+
     // A leaf: one of three shapes, in one colour, about `size` across.
     leaf(shape, colour, size, dpr) {
         const { c, g } = this.canvas(size * 1.4, size * 1.4, dpr);
@@ -971,8 +1055,8 @@ const HarvestArt = {
         g.save();
         g.scale(1, h / w);
         const grad = g.createRadialGradient(w / 2, w / 2, 0, w / 2, w / 2, w / 2);
-        grad.addColorStop(0, 'rgba(255,248,236,0.5)');
-        grad.addColorStop(0.55, 'rgba(255,248,236,0.18)');
+        grad.addColorStop(0, 'rgba(255,248,236,0.95)');
+        grad.addColorStop(0.5, 'rgba(255,248,236,0.5)');
         grad.addColorStop(1, 'rgba(255,248,236,0)');
         g.fillStyle = grad;
         g.fillRect(0, 0, w, w);
@@ -1020,55 +1104,127 @@ const HarvestArt = {
         return { body: body.c, face: face.c, size: total, cx, cy: cy + r * 0.78 };
     },
 
-    // Goose frames, facing right, `frames` of one wingbeat, in one colour.
-    geese(length, dpr, colour, frames = 12) {
-        const w = length * 1.5, h = length * 1.1, out = [];
+    // A goose in flight, facing right, one sprite per step of a wingbeat.
+    // Seen from a little below and to the side: a long neck held out level, a
+    // heavy body, a short tail, and two broad wings, the far one a little
+    // behind and darker. A wing is an arm and a hand: the downstroke is a
+    // full, straight sweep; on the upstroke the wrist folds and the hand
+    // trails, and the tips are fingered, separate primaries. Mid-stroke the
+    // wing is swept back and foreshortened, so it never looks like a stick.
+    //
+    // `palette` is { body, belly, wing, tip, far, farTip, head, white } in CSS colours:
+    // a Canada goose, brown-bodied with a cream belly, a black head and neck
+    // with a white chinstrap, black flight feathers and a white rump patch.
+    geese(length, dpr, palette, frames = 16) {
+        const L = length, w = L * 1.7, h = L * 1.5, out = [];
+        const cx = w * 0.42, cy = h * 0.55, rad = Math.PI / 180;
         for (let k = 0; k < frames; k++) {
             const { c, g } = this.canvas(w, h, dpr);
-            const sx = w * 0.46, sy = h * 0.5, a = Math.sin(k / frames * Math.PI * 2);
-            g.fillStyle = colour;
-            g.strokeStyle = colour;
-            g.lineCap = 'round';
-            // Wings behind the body, then the body, then the near wing.
-            const wing = (ang, scale, alpha) => {
-                g.globalAlpha = alpha;
-                const len = length * 0.62 * scale, dx = -0.4, dy = -ang;
-                const n = Math.hypot(dx, dy), tx = sx + dx / n * len, ty = sy + dy / n * len;
-                const nx = -dy / n, ny = dx / n;
+            const ph = k / frames, s = Math.cos(ph * Math.PI * 2);     // 1 at the top of the stroke, -1 at the bottom
+            // The wing's angle: up and back, sweeping back through horizontal, down and back.
+            const angle = (100 + (1 - s) / 2 * 160) * rad;
+            const flex = ph > 0.5 ? Math.sin((ph - 0.5) * Math.PI * 2) : 0;     // the wrist folds on the way up
+            const reach = 0.58 + 0.42 * Math.abs(s);                               // foreshortening mid-stroke
+            const wing = (sx, sy, a, scale, fill) => {
+                const dir = [Math.cos(a), -Math.sin(a)];
+                let n = [dir[1], -dir[0]];
+                if (n[0] > 0) n = [-n[0], -n[1]];                                 // the trailing edge faces backward
+                const arm = L * 0.34 * reach * scale, hand = L * 0.44 * reach * scale * (1 - 0.3 * flex);
+                const ah = a + (0.28 + flex * 0.9) * (dir[1] < 0 ? 1 : -1) * (s > 0 ? 1 : 1);
+                const dh = [Math.cos(ah), -Math.sin(ah)];
+                const W1 = [sx + dir[0] * arm, sy + dir[1] * arm];             // the wrist
+                const T = [W1[0] + dh[0] * hand, W1[1] + dh[1] * hand];       // the tip
+                const hn = [dh[1], -dh[0]];
+                const hnb = hn[0] > 0 ? [-hn[0], -hn[1]] : hn;
+                // Brown at the shoulder, darkening to black flight feathers at the tip.
+                const shade = g.createLinearGradient(sx, sy, T[0], T[1]);
+                shade.addColorStop(0, fill[0]);
+                shade.addColorStop(0.5, fill[0]);
+                shade.addColorStop(1, fill[1]);
+                g.fillStyle = shade;
                 g.beginPath();
-                g.moveTo(sx + length * 0.14, sy - 1);
-                g.quadraticCurveTo((sx + tx) / 2 + nx * length * 0.2 + length * 0.06, (sy + ty) / 2 + ny * length * 0.2, tx, ty);
-                g.quadraticCurveTo((sx + tx) / 2 - nx * length * 0.1 - length * 0.1, (sy + ty) / 2 - ny * length * 0.1, sx - length * 0.2, sy + 1);
+                // Leading edge: shoulder, wrist, tip.
+                g.moveTo(sx - n[0] * L * 0.012, sy - n[1] * L * 0.012);
+                g.quadraticCurveTo(W1[0] - n[0] * L * 0.02 * scale, W1[1] - n[1] * L * 0.02 * scale, T[0], T[1]);
+                // Back along the fingered primaries.
+                const fingers = 5;
+                for (let i = fingers; i >= 1; i--) {
+                    const t = i / fingers, bx = W1[0] + (T[0] - W1[0]) * t, by = W1[1] + (T[1] - W1[1]) * t;
+                    const len = L * 0.165 * scale * (1 - 0.4 * t) * reach;
+                    g.lineTo(bx + hnb[0] * len * 0.55 + dh[0] * L * 0.02 * scale, by + hnb[1] * len * 0.55 + dh[1] * L * 0.02 * scale);
+                    g.lineTo(bx + hnb[0] * len + dh[0] * L * 0.045 * scale, by + hnb[1] * len + dh[1] * L * 0.045 * scale);
+                    g.lineTo(bx - dh[0] * L * 0.03 * scale + hnb[0] * len * 0.5, by - dh[1] * L * 0.03 * scale + hnb[1] * len * 0.5);
+                }
+                // The secondaries: a scalloped trailing edge along the arm.
+                const sec = 5;
+                for (let i = 1; i <= sec; i++) {
+                    const t = 1 - i / (sec + 1), bx = sx + (W1[0] - sx) * t, by = sy + (W1[1] - sy) * t;
+                    const out2 = L * (0.2 - 0.05 * Math.abs(t - 0.45)) * scale * reach;
+                    g.quadraticCurveTo(bx + n[0] * out2 * 1.05 + dir[0] * L * 0.02, by + n[1] * out2 * 1.05 + dir[1] * L * 0.02, bx + n[0] * out2 * 0.8, by + n[1] * out2 * 0.8);
+                }
+                g.lineTo(sx + n[0] * L * 0.11 * scale, sy + n[1] * L * 0.11 * scale);
                 g.closePath();
                 g.fill();
             };
-            wing(a * 0.9, 0.88, 0.75);
-            g.globalAlpha = 1;
+            const bob = -s * L * 0.012;                                  // the body rises on the downstroke
+            // The far wing: behind, a little smaller, a touch out of step, darker.
+            wing(cx + L * 0.03, cy - L * 0.05 + bob, angle - 0.16 * Math.sign(Math.sin(ph * Math.PI * 2) + 0.01), 0.86, [palette.far, palette.farTip]);
+            // Feet, tucked up behind.
+            g.strokeStyle = palette.head;
+            g.lineWidth = Math.max(0.6, L * 0.012);
             g.beginPath();
-            g.ellipse(sx, sy + 1, length * 0.26, length * 0.1, 0, 0, Math.PI * 2);
-            g.fill();
-            g.beginPath();                                                      // tail
-            g.moveTo(sx - length * 0.2, sy);
-            g.lineTo(sx - length * 0.36, sy - length * 0.03);
-            g.lineTo(sx - length * 0.2, sy + length * 0.06);
-            g.fill();
-            g.lineWidth = length * 0.06;                                         // neck and head
-            g.beginPath();
-            g.moveTo(sx + length * 0.2, sy);
-            g.quadraticCurveTo(sx + length * 0.34, sy - length * 0.04, sx + length * 0.42, sy - length * 0.03);
+            g.moveTo(cx - L * 0.12, cy + L * 0.06 + bob);
+            g.lineTo(cx - L * 0.3, cy + L * 0.07 + bob);
             g.stroke();
+            // The white rump patch, and the tail.
+            g.fillStyle = palette.white;
             g.beginPath();
-            g.ellipse(sx + length * 0.44, sy - length * 0.03, length * 0.05, length * 0.035, 0, 0, Math.PI * 2);
+            g.ellipse(cx - L * 0.19, cy - L * 0.035 + bob, L * 0.05, L * 0.032, -0.2, 0, Math.PI * 2);
             g.fill();
-            g.beginPath();                                                      // bill
-            g.moveTo(sx + length * 0.47, sy - length * 0.05);
-            g.lineTo(sx + length * 0.54, sy - length * 0.02);
-            g.lineTo(sx + length * 0.47, sy);
+            g.fillStyle = palette.head;
+            g.beginPath();
+            g.moveTo(cx - L * 0.17, cy - L * 0.02 + bob);
+            g.lineTo(cx - L * 0.36, cy - L * 0.025 + bob);
+            g.lineTo(cx - L * 0.35, cy + L * 0.03 + bob);
+            g.lineTo(cx - L * 0.17, cy + L * 0.045 + bob);
+            g.closePath();
             g.fill();
-            wing(a * 0.9 + 0.12, 1, 1);
+            // The body: back and breast, the belly lighter.
+            g.fillStyle = palette.body;
+            g.beginPath();
+            g.ellipse(cx, cy + bob, L * 0.235, L * 0.088, -0.03, 0, Math.PI * 2);
+            g.fill();
+            g.fillStyle = palette.belly;
+            g.beginPath();
+            g.ellipse(cx + L * 0.01, cy + L * 0.03 + bob, L * 0.2, L * 0.052, -0.03, 0, Math.PI);
+            g.fill();
+            // The neck and head, held out level with a slight dip: black, with a pale chinstrap.
+            g.fillStyle = palette.head;
+            g.beginPath();
+            g.moveTo(cx + L * 0.15, cy - L * 0.055 + bob);
+            g.quadraticCurveTo(cx + L * 0.3, cy - L * 0.075 + bob, cx + L * 0.43, cy - L * 0.05 + bob);
+            g.lineTo(cx + L * 0.43, cy - L * 0.005 + bob);
+            g.quadraticCurveTo(cx + L * 0.3, cy + L * 0.015 + bob, cx + L * 0.16, cy + L * 0.045 + bob);
+            g.closePath();
+            g.fill();
+            g.beginPath();
+            g.ellipse(cx + L * 0.45, cy - L * 0.028 + bob, L * 0.04, L * 0.028, 0.1, 0, Math.PI * 2);
+            g.fill();
+            g.beginPath();                                                    // bill
+            g.moveTo(cx + L * 0.48, cy - L * 0.04 + bob);
+            g.lineTo(cx + L * 0.55, cy - L * 0.026 + bob);
+            g.lineTo(cx + L * 0.48, cy - L * 0.012 + bob);
+            g.closePath();
+            g.fill();
+            g.fillStyle = palette.white;
+            g.beginPath();
+            g.ellipse(cx + L * 0.44, cy - L * 0.008 + bob, L * 0.03, L * 0.014, 0.1, 0, Math.PI * 2);
+            g.fill();
+            // The near wing, in front.
+            wing(cx + L * 0.05, cy - L * 0.04 + bob, angle, 1, [palette.wing, palette.tip]);
             out.push(c);
         }
-        return { frames: out, w, h, ax: w * 0.46, ay: h * 0.5 };
+        return { frames: out, w, h, ax: cx, ay: cy, length: L };
     },
 
     // The moon at a phase: dark face (a little earthshine), lit part with
@@ -1080,8 +1236,8 @@ const HarvestArt = {
         const cx = size / 2, cy = size / 2;
         const sign = waning ? -1 : 1;
         const k = Math.cos(2 * Math.PI * phase);
-        const maria = [[-0.28, -0.28, 0.34, 0.22], [0.2, -0.4, 0.22, 0.14], [0.3, 0.1, 0.3, 0.2], [-0.3, 0.3, 0.26, 0.15], [0.0, -0.02, 0.2, 0.14]];
-        const craters = [[0.5, -0.32, 0.06], [-0.58, 0.02, 0.05], [0.22, 0.6, 0.05]];
+        // The seas: soft, overlapping patches that run together, as on the real moon.
+        const maria = [[-0.3, -0.32, 0.36], [-0.05, -0.36, 0.26], [0.18, -0.22, 0.22], [-0.46, 0.0, 0.28], [-0.2, 0.02, 0.26], [0.3, 0.06, 0.3], [0.12, 0.36, 0.2], [-0.3, 0.38, 0.18], [0.5, 0.3, 0.14]];
         const surface = (alpha, tone) => {
             const body = g.createRadialGradient(cx - r * 0.3, cy - r * 0.3, r * 0.1, cx, cy, r);
             body.addColorStop(0, `rgba(${tone[0]},${tone[1]},${tone[2]},${alpha})`);
@@ -1090,18 +1246,15 @@ const HarvestArt = {
             g.beginPath();
             g.arc(cx, cy, r, 0, Math.PI * 2);
             g.fill();
-            g.fillStyle = `rgba(128,120,122,${0.2 * alpha})`;
-            for (const [x, y, rx, ry] of maria) {
+            for (const [x, y, rr] of maria) {
+                const px = cx + x * r * sign, py = cy + y * r, sea = g.createRadialGradient(px, py, 0, px, py, rr * r);
+                sea.addColorStop(0, `rgba(118,112,116,${0.3 * alpha})`);
+                sea.addColorStop(0.6, `rgba(118,112,116,${0.17 * alpha})`);
+                sea.addColorStop(1, 'rgba(118,112,116,0)');
+                g.fillStyle = sea;
                 g.beginPath();
-                g.ellipse(cx + x * r * sign, cy + y * r, rx * r, ry * r, x, 0, Math.PI * 2);
+                g.arc(px, py, rr * r, 0, Math.PI * 2);
                 g.fill();
-            }
-            g.strokeStyle = `rgba(150,140,140,${0.22 * alpha})`;
-            g.lineWidth = Math.max(0.6, r * 0.02);
-            for (const [x, y, rr] of craters) {
-                g.beginPath();
-                g.arc(cx + x * r * sign, cy + y * r, rr * r, 0, Math.PI * 2);
-                g.stroke();
             }
         };
         // Earthshine on the unlit face.
@@ -1124,27 +1277,92 @@ const HarvestArt = {
         return { c, size };
     },
 
-    // Clouds: puffs piled up, lit on top and shaded beneath, in the tones
-    // the manager gives them for the hour. Rebaked when the tone changes.
-    clouds(w, h, dpr, lit, shade, random, count = 4) {
-        const out = [];
-        for (let n = 0; n < count; n++) {
-            const { c, g } = this.canvas(w, h, dpr);
-            const puffs = 9 + Math.floor(random() * 7);
-            for (let i = 0; i < puffs; i++) {
-                const t = (i + random() * 0.6) / puffs, x = w * (0.12 + 0.76 * t), edge = Math.sin(t * Math.PI);
-                const r = h * (0.18 + 0.2 * edge) * (0.8 + random() * 0.5), y = h * (0.62 - 0.18 * edge * random()) - r * 0.2;
-                const grad = g.createRadialGradient(x - r * 0.2, y - r * 0.5, r * 0.1, x, y, r * 1.1);
-                grad.addColorStop(0, this.tint(lit, 1));
-                grad.addColorStop(0.55, this.tint(HarvestSky.mix(lit, shade, 0.45), 0.95));
-                grad.addColorStop(1, this.tint(shade, 0));
-                g.fillStyle = grad;
-                g.beginPath();
-                g.arc(x, y, r * 1.15, 0, Math.PI * 2);
-                g.fill();
+    // A soft round of one colour, falling off smoothly to nothing: the grain
+    // of a cloud.
+    softDisc(colour) {
+        const { c, g } = this.canvas(64, 64, 1);
+        const grad = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+        for (const [t, a2] of [[0, 1], [0.3, 0.86], [0.55, 0.46], [0.8, 0.13], [1, 0]]) grad.addColorStop(t, this.tint(colour, a2));
+        g.fillStyle = grad;
+        g.fillRect(0, 0, 64, 64);
+        return c;
+    },
+
+    // The cloud kinds: three cumulus, a long low stratus, a high wisp of cirrus.
+    CLOUD_KINDS: [
+        { w: 440, h: 170, domes: 3 },
+        { w: 540, h: 190, domes: 4 },
+        { w: 320, h: 130, domes: 2 },
+        { w: 780, h: 74, stratus: true },
+        { w: 600, h: 54, cirrus: true },
+    ],
+
+    // Clouds made of hundreds of soft blobs rather than a few circles, so the
+    // outline is fluffy and there is no seam to read as a balloon: heaped
+    // into domes over a flat, softly fading base, shaded dark underneath and
+    // lit on top and on the sunward side, in the tones the manager gives
+    // them for the hour (rebaked when the tone moves a step). Padded all
+    // round, so nothing is cut off. Returns { c, w, h } sprites, CSS px.
+    clouds(u, dpr, lit, shade, random) {
+        const mid = HarvestSky.mix(lit, shade, 0.5);
+        const discs = [lit, mid, shade].map(col => this.softDisc(col));
+        return this.CLOUD_KINDS.map(kind => {
+            const pad = 34 * u, w = kind.w * u, h = kind.h * u, W = w + pad * 2, H = h + pad * 2;
+            const { c, g } = this.canvas(W, H, dpr);
+            const blob = (img, x, y, r, a2, sx = 1) => {
+                g.globalAlpha = a2;
+                g.save();
+                g.translate(x, y);
+                g.scale(sx, 1);
+                g.drawImage(img, -r, -r, r * 2, r * 2);
+                g.restore();
+            };
+            if (kind.domes) {
+                const base = pad + h * 0.88, blobs = [], domes = [];
+                for (let i = 0; i < kind.domes; i++) {
+                    domes.push({ cx: pad + w * (i + 0.5 + (random() - 0.5) * 0.35) / kind.domes, ht: h * (0.4 + random() * 0.5), wi: w / kind.domes * (0.7 + random() * 0.45) });
+                }
+                const top = x => base - Math.max(...domes.map(d => d.ht * Math.sqrt(Math.max(0, 1 - ((x - d.cx) / d.wi) ** 2))));
+                for (let tries = 0, n = Math.round(w * h / 230); blobs.length < n && tries < n * 6; tries++) {
+                    const x = pad + random() * w, t = top(x);
+                    if (base - t < 5 * u) continue;
+                    const y = t + (base - t) * Math.pow(random(), 1.6), depth = (base - t) / (h * 0.7);
+                    blobs.push({ x, y, r: (10 + random() * 20) * u * (h / 170) * (0.6 + 0.5 * Math.min(1, depth)) * (1.1 - 0.5 * (y - t) / (base - t + 1) * 0) });
+                }
+                // The shaded body, then the sunward side lighter, then the sunlit tops.
+                for (const b of blobs) blob(discs[2], b.x, b.y + 2 * u, b.r, 0.95);
+                g.globalCompositeOperation = 'source-atop';
+                for (const b of blobs) blob(discs[1], b.x - 0.03 * h, b.y - 0.06 * h, b.r * 0.94, 0.85);
+                for (const b of blobs) if (b.y < base - h * 0.22) blob(discs[0], b.x - 0.07 * h, b.y - 0.13 * h, b.r * 0.8, 0.9);
+                // A flat, soft base: the bottom fades away rather than ending in a curve.
+                g.globalCompositeOperation = 'destination-out';
+                g.globalAlpha = 1;
+                const fade = g.createLinearGradient(0, base - h * 0.08, 0, base + h * 0.05);
+                fade.addColorStop(0, 'rgba(0,0,0,0)');
+                fade.addColorStop(1, 'rgba(0,0,0,1)');
+                g.fillStyle = fade;
+                g.fillRect(0, base - h * 0.08, W, H);
+            } else if (kind.stratus) {
+                // Long, low, layered bands: wide flat blobs, shaded below.
+                const cy = pad + h * 0.55, items = [];
+                for (let i = 0; i < 34; i++) items.push({ x: pad + w * (0.08 + random() * 0.84), y: cy + (random() - 0.5) * h * 0.45, r: (12 + random() * 16) * u, sx: 3.5 + random() * 4 });
+                for (const b of items) blob(discs[2], b.x, b.y + 2 * u, b.r, 0.55, b.sx);
+                g.globalCompositeOperation = 'source-atop';
+                for (const b of items) blob(discs[1], b.x, b.y - 0.06 * h, b.r * 0.9, 0.6, b.sx);
+                for (const b of items) if (b.y < cy) blob(discs[0], b.x, b.y - 0.14 * h, b.r * 0.7, 0.7, b.sx);
+            } else {
+                // Cirrus: thin streaks combed along a gentle arc.
+                const cy = pad + h * 0.5;
+                for (let i = 0; i < 20; i++) {
+                    const t = random(), x = pad + w * (0.05 + 0.9 * t), y = cy + Math.sin(t * 3 + 1) * h * 0.25 + (random() - 0.5) * h * 0.35;
+                    blob(discs[0], x, y, (5 + random() * 8) * u, 0.4, 7 + random() * 6);
+                }
+                g.globalCompositeOperation = 'source-atop';
+                for (let i = 0; i < 10; i++) blob(discs[1], pad + w * random(), cy + (random() - 0.2) * h * 0.4, 6 * u, 0.25, 8);
             }
-            out.push(c);
-        }
-        return out;
+            g.globalAlpha = 1;
+            g.globalCompositeOperation = 'source-over';
+            return { c, w: W, h: H };
+        });
     },
 };

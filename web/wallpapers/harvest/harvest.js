@@ -47,8 +47,6 @@ class HarvestAnimationManager {
         this.sun = { alt: 30, x: 0.5 };
         this.moon = { alt: -30, x: 0.5, age: 10, phase: 0.3, illum: 0.5, light: 0 };
         this.holiday = null;
-        this.den = null;
-        this.doorGlow = 0;
         this.stashed = 0;
         this.shooting = null;
         this.shootIn = 20;
@@ -150,7 +148,7 @@ class HarvestAnimationManager {
         const random = WP.seededRandom(Math.round(W * 3 + H * 17));
         const L = this.L = HarvestArt.layout(W, H, bottom, this.config, random);
         this.u = L.u;
-        this.meadowMin = L.Hu * 0.745;
+        this.meadowMin = Math.max(L.Hu * 0.745, L.patch.y1 + L.Hu * 0.025);
         this.meadowMax = L.Hu * 0.975;
         this.land = HarvestArt.land(L, this.config, dpr, random);
         this.bakeSprites(random);
@@ -162,6 +160,7 @@ class HarvestAnimationManager {
         this.flocks = this.flocks || new HarvestFlocks(this);
         this.flocks.m = this;
         this.flocks.flocks = [];
+        this.flocks.pending = [];
         this.great = new HarvestGreatPumpkin(this);
         this.scarecrow = new HarvestScarecrow(this);
         this.toneKey = { cloud: '', geese: '' };
@@ -172,27 +171,29 @@ class HarvestAnimationManager {
         const treeH = L.Hu * 0.26 * this.config.treeSize;
         this.sprites.trees = [0, 1, 2, 3].map(() => HarvestArt.tree(treeH, dpr, foliage, random));
         this.sprites.apples = ['#c8322a', '#d8402e', '#b8302c', '#c8a030'].map(c => HarvestArt.apple(14 * u, dpr, c));
+        this.sprites.acorn = HarvestArt.acorn(10 * u, dpr);
         this.sprites.leaves = [];
         for (const colour of foliage.concat(['#8a4a22'])) for (let shape = 0; shape < 3; shape++) this.sprites.leaves.push(HarvestArt.leaf(shape, colour, 15 * u, dpr));
         this.sprites.smoke = HarvestArt.blob(40 * u, dpr, [214, 208, 200], 0.9);
         this.sprites.warm = HarvestArt.blob(64, dpr, [255, 190, 100], 1, [[0, 1], [0.25, 0.5], [1, 0]]);
         this.sprites.sun = HarvestArt.blob(128, dpr, [255, 220, 150], 1, [[0, 0.9], [0.12, 0.6], [0.4, 0.14], [1, 0]]);
         this.sprites.halo = HarvestArt.blob(128, dpr, [196, 214, 255], 1, [[0, 0.5], [0.2, 0.28], [0.5, 0.07], [1, 0]]);
-        this.sprites.mist = HarvestArt.mistBand(Math.round(400 * u), Math.round(60 * u), dpr);
+        this.sprites.mist = HarvestArt.mistBand(Math.round(520 * u), Math.round(90 * u), dpr);
         this.sprites.great = HarvestArt.greatPumpkin(64 * u, dpr);
         this.sprites.spark = HarvestArt.blob(16, dpr, [255, 200, 110], 1, [[0, 1], [0.3, 0.55], [1, 0]]);
     }
 
     // The orchard: three rows in perspective, kept off the road and out of
-    // the way of the pumpkins and corn; the den tree (with its small door)
-    // is a front-row tree on the left when there is one.
+    // the way of the pumpkins and corn; three rows of trees in perspective.
     buildOrchard(random) {
         const { L, config } = this;
         this.trees = [];
-        this.den = null;
         if (!config.orchard) return;
         const treeH = L.Hu * 0.26 * config.treeSize, found = [];
-        const rows = [{ y: 0.77, s: 0.55, row: 0 }, { y: 0.865, s: 0.78, row: 1 }, { y: 0.96, s: 1, row: 2 }];
+        // Three rows in perspective, as many as fit below the fields.
+        const front = 0.965, room = front * L.Hu - (L.corn.y1 + L.Hu * 0.02);
+        const count = room > L.Hu * 0.2 ? 3 : room > L.Hu * 0.1 ? 2 : 1, gap = Math.min(0.1, room / L.Hu / count);
+        const rows = [{ y: front, s: 1, row: 2 }, { y: front - gap, s: 0.78, row: 1 }, { y: front - 2 * gap, s: 0.55, row: 0 }].slice(0, count);
         for (const r of rows) {
             const w = treeH * 0.95 * r.s, spacing = w * 0.98, baseY = r.y * L.Hu;
             const road = L.road(baseY);
@@ -206,8 +207,6 @@ class HarvestAnimationManager {
         // Keep the nearest rows first, if there are more than the setting.
         found.sort((a, b) => b.row - a.row || random() - 0.5);
         this.trees = found.slice(0, config.trees);
-        const dens = this.trees.filter(t => t.row === 2 && t.x < L.W * 0.5);
-        this.den = dens.length ? dens[0] : this.trees.filter(t => t.row === 2)[0] || this.trees[0] || null;
         this.trees.sort((a, b) => a.y - b.y);
         for (const t of this.trees) {
             const sprite = this.sprites.trees[t.variant], c = sprite.canopy, n = 6 + Math.floor(random() * 6);
@@ -219,15 +218,8 @@ class HarvestAnimationManager {
         this.treeH = treeH;
     }
 
-    denDoor() {
-        const t = this.den;
-        return t ? { x: t.x + this.treeH * 0.05 * t.s, y: t.y + 2 * this.u * t.s } : null;
-    }
-
-    stash() { this.doorGlow = 1; }
-
     depth(y) {
-        return Math.min(1.15, Math.max(0.42, 0.55 + 0.45 * (y - this.L.Hu * 0.76) / (this.L.Hu * 0.19)));
+        return Math.min(1.15, Math.max(0.2, 0.55 + 0.45 * (y - this.L.Hu * 0.76) / (this.L.Hu * 0.19)));
     }
 
     randomMeadow() {
@@ -264,19 +256,22 @@ class HarvestAnimationManager {
 
     buildMist(random) {
         const { L, u } = this;
-        this.mist = Array.from({ length: 6 }, (_, i) => ({
-            x: random() * L.W, y: L.hz + L.Hu * (0.01 + 0.15 * i / 5 + 0.03 * random()),
-            scale: 0.8 + random() * 1.6, speed: (3 + random() * 6) * u * (i % 2 ? 1 : -1), a: 0.5 + random() * 0.5,
+        this.mist = Array.from({ length: 11 }, (_, i) => ({
+            x: random() * L.W, y: L.hz + L.Hu * (0.005 + 0.2 * i / 10 + 0.02 * random()),
+            scale: 0.9 + random() * 1.4, speed: (3 + random() * 6) * u * (i % 2 ? 1 : -1), a: 0.6 + random() * 0.4,
         }));
     }
 
     buildClouds() {
         const random = WP.seededRandom(Math.round(this.W * 11 + 5)), n = Math.round(this.config.clouds * (0.45 + 0.55 * this.density()));
-        this.clouds = Array.from({ length: n }, () => ({
-            x: random() * (this.W + 400 * this.u) - 200 * this.u,
-            y: this.L.hz * (0.06 + random() * 0.5),
-            scale: 0.5 + random() * 0.9, speed: (3 + random() * 7) * this.u, kind: Math.floor(random() * 4),
-        }));
+        const { L, u } = this, mix = [0, 1, 2, 3, 0, 4, 1, 2, 3, 4, 0, 1];
+        this.clouds = Array.from({ length: n }, (_, i) => {
+            const kind = mix[i % mix.length], spec = HarvestArt.CLOUD_KINDS[kind], scale = 0.55 + random() * 0.45;
+            // Whole cloud inside the sky: its padded sprite is never cut by the top of the screen.
+            const half = (spec.h * 0.5 + 34) * u * scale, lo = L.hz * 0.02 + half;
+            const range = kind === 3 ? [L.hz * 0.5, L.hz * 0.78] : kind === 4 ? [lo, L.hz * 0.34] : [lo, Math.max(lo + 10, L.hz * 0.58)];
+            return { x: random() * (this.W + 600 * u) - 300 * u, y: range[0] + random() * Math.max(0, range[1] - range[0]), scale, speed: (2.5 + random() * 6) * u * (kind === 4 ? 1.4 : kind === 3 ? 0.8 : 1), kind };
+        });
         this.toneKey.cloud = '';
     }
 
@@ -291,9 +286,12 @@ class HarvestAnimationManager {
         const turkeys = Math.round(config.turkeys * (0.6 + 0.4 * d));
         for (let i = 0; i < turkeys; i++) { const p = this.randomMeadow(); this.turkeys.push(new HarvestTurkey(this, p.x, p.y)); }
         this.buildCatSpots();
-        const spots = this.catSpots.slice().sort(() => Math.random() - 0.5);
+        const spots = this.catSpots.slice().sort(() => Math.random() - 0.5), ground = this.catSpots.filter(s => !s.fixed);
         for (let i = 0; i < config.cats && spots.length; i++) {
-            const spot = spots[i % spots.length], coat = HARVEST_COATS[Math.floor(Math.random() * HARVEST_COATS.length)];
+            // More cats than perches: the rest share the ground, a little apart.
+            let spot = spots[i];
+            if (!spot) { const g = ground.length ? ground[Math.floor(Math.random() * ground.length)] : spots[0]; spot = { ...g, x: g.x + (Math.random() - 0.5) * 60 * this.u, y: g.y + (Math.random() - 0.5) * 12 * this.u, fixed: false, roof: false }; }
+            const coat = HARVEST_COATS[Math.floor(Math.random() * HARVEST_COATS.length)];
             const cat = new HarvestCat(this, spot, coat, 0.55 + Math.random() * 0.4);
             if (spot.roof || spot.fixed) { cat.state = Math.random() < 0.8 ? 'sleep' : 'loaf'; cat.fixedSpot = true; }
             this.cats.push(cat);
@@ -306,15 +304,15 @@ class HarvestAnimationManager {
             for (const h of L.houses) {
                 if (h.kind !== 'cottage') continue;
                 const ru = h.w / 80, top = h.base - h.h * 0.58, rise = h.h * 0.5, f = 0.5 + Math.random() * 0.2;
-                spots.push({ x: h.x + h.w * 0.6 * f, y: top - rise + (rise + 2 * ru) * f, s: 0.5, roof: true, fixed: true });
-                spots.push({ x: h.x + (Math.random() < 0.5 ? -1 : 1) * h.w * 0.62, y: h.base + 4 * ru, s: 0.55 });
+                spots.push({ x: h.x + h.w * 0.6 * f, y: top - rise + (rise + 2 * ru) * f, roof: true, fixed: true });
+                spots.push({ x: h.x + (Math.random() < 0.5 ? -1 : 1) * h.w * 0.62, y: h.base + 4 * ru });
             }
-            spots.push({ x: L.fire.x + 26 * u, y: L.fire.y + 6 * u, s: 0.6, fire: true });
+            spots.push({ x: L.fire.x + 26 * u, y: L.fire.y + 6 * u, fire: true });
         }
-        if (config.fields) spots.push({ x: L.corn.x1 - 30 * u, y: L.corn.y1 + 9 * u - 15 * u, s: 0.7, fixed: true });
-        if (config.pumpkinPatch) spots.push({ x: L.patch.x0 + (L.patch.x1 - L.patch.x0) * 0.2, y: L.patch.y1 - 4 * u, s: 0.7 }, { x: L.sincere.x + 22 * u, y: L.sincere.y + 6 * u, s: 0.75 });
-        for (const t of this.trees) spots.push({ x: t.x + (Math.random() - 0.5) * this.treeH * 0.4 * t.s, y: t.y + this.L.Hu * 0.016, s: this.depth(t.y) });
-        if (!spots.length) spots.push({ x: L.W * 0.4, y: L.Hu * 0.9, s: 0.9 });
+        if (config.fields) spots.push({ x: L.corn.x1 - 30 * u, y: L.corn.y1 + 9 * u - 15 * u, fixed: true });
+        if (config.pumpkinPatch) spots.push({ x: L.patch.x0 + (L.patch.x1 - L.patch.x0) * 0.2, y: L.patch.y1 - 4 * u }, { x: L.sincere.x + 22 * u, y: L.sincere.y + 6 * u });
+        for (const t of this.trees) spots.push({ x: t.x + (Math.random() - 0.5) * this.treeH * 0.4 * t.s, y: t.y + this.L.Hu * 0.016 });
+        if (!spots.length) spots.push({ x: L.W * 0.4, y: L.Hu * 0.9 });
         this.catSpots = spots;
     }
 
@@ -327,12 +325,15 @@ class HarvestAnimationManager {
         for (const t of this.trees) for (const h of t.hang) h.ripe = 0.6 + Math.random() * 0.4;
         for (let i = 0; i < Math.round(this.trees.length * 1.2); i++) {
             const t = this.trees[Math.floor(Math.random() * this.trees.length)];
-            if (t) this.dropApple(t, null, true);
+            if (t) { this.dropApple(t, null, true); if (Math.random() < 0.8) this.dropAcorn(t, true); }
         }
         const n = this.leafCap() * 0.8;
         for (let i = 0; i < n; i++) this.spawnLeaf(true);
         for (let i = 0; i < 70; i++) this.update(0.1, true);
-        if (this.config.geese > 0) this.flocks.spawn(0.15 + Math.random() * 0.5);
+        if (this.config.geese > 0) {
+            const main = this.flocks.spawn(0.15 + Math.random() * 0.5);
+            if (main.n >= 6 && Math.random() < 0.6) this.flocks.straggle(main).x += main.dir * main.len * 4;
+        }
         this.time = 0;
     }
 
@@ -388,7 +389,6 @@ class HarvestAnimationManager {
         const k = harvestEase(0.9, dt);
         for (const name of ['mist', 'beams']) this.fx[name] += (this.fxTarget[name] - this.fx[name]) * k;
         this.millAngle += (0.25 + this.wind * 0.9) * dt;
-        this.doorGlow = Math.max(0, this.doorGlow - dt * 0.4);
 
         for (const c of this.clouds) {
             c.x += c.speed * (0.4 + this.wind * 0.7) * dt * (this.windPush >= 0 ? 1 : -0.5);
@@ -437,6 +437,7 @@ class HarvestAnimationManager {
         // Apples shaken loose by the breeze and the gusts.
         const rate = this.config.apples * this.density() / 60 * (1 + this.gust * 2);
         if (this.trees.length && Math.random() < rate * dt) this.dropApple(this.trees[Math.floor(Math.random() * this.trees.length)]);
+        if (this.trees.length && Math.random() < this.config.acorns * this.density() / 60 * (1 + this.gust * 2) * dt) this.dropAcorn(this.trees[Math.floor(Math.random() * this.trees.length)]);
         for (let i = this.drops.length - 1; i >= 0; i--) {
             if (this.drops[i].at <= this.time) { this.dropApple(this.drops[i].tree); this.drops.splice(i, 1); }
         }
@@ -451,10 +452,20 @@ class HarvestAnimationManager {
         const s = tree.s, up = -h.ly * s, groundY = tree.y + this.L.Hu * (0.006 + Math.random() * 0.03);
         h.ripe = 0.001;
         h.regrow = 15 + Math.random() * 40;
-        const a = { x: tree.x + h.lx * s, y: groundY, h: landed ? 0 : up, vh: 0, vx: (Math.random() - 0.5) * 20 * this.u, kind: h.kind, state: landed ? 'rest' : 'fall', age: 0, bounces: 0, claimed: false, carried: null, spin: Math.random() * 6, fade: 1 };
+        const a = { x: tree.x + h.lx * s, y: groundY, h: landed ? 0 : up, vh: 0, vx: (Math.random() - 0.5) * 20 * this.u, type: 'apple', kind: h.kind, state: landed ? 'rest' : 'fall', age: 0, bounces: 0, claimed: false, carried: null, spin: Math.random() * 6, fade: 1 };
         if (landed) { a.x += (Math.random() - 0.5) * 60 * this.u; a.age = Math.random() * 30; }
         this.apples.push(a);
         if (!landed) for (let i = 0; i < 2; i++) this.spawnLeaf(false, tree);
+    }
+
+    // An acorn from a tree's crown, to tumble like an apple, only smaller.
+    dropAcorn(tree, landed) {
+        if (this.apples.length > 150 || !tree) return;
+        const c = this.sprites.trees[tree.variant].canopy, s = tree.s;
+        const lx = c.cx + (Math.random() - 0.5) * c.rx * 1.5, ly = c.cy + (Math.random() - 0.2) * c.ry;
+        const a = { x: tree.x + lx * s, y: tree.y + this.L.Hu * (0.004 + Math.random() * 0.035), h: landed ? 0 : -ly * s, vh: 0, vx: (Math.random() - 0.5) * 24 * this.u, type: 'acorn', kind: 0, state: landed ? 'rest' : 'fall', age: 0, bounces: 0, claimed: false, carried: null, spin: 0, fade: 1 };
+        if (landed) { a.x += (Math.random() - 0.5) * 70 * this.u; a.age = Math.random() * 30; }
+        this.apples.push(a);
     }
 
     updateApples(dt) {
@@ -758,42 +769,54 @@ class HarvestAnimationManager {
     drawClouds(ctx) {
         const { light, u } = this;
         if (!this.clouds.length) return;
-        const key = [light.cloudLit.map(v => Math.round(v / 12)), light.cloudShade.map(v => Math.round(v / 12))].join();
+        const key = [light.cloudLit.map(v => Math.round(v / 14)), light.cloudShade.map(v => Math.round(v / 14))].join();
         if (this.toneKey.cloud !== key) {
             this.toneKey.cloud = key;
-            this.cloudSprites = HarvestArt.clouds(Math.round(360 * u), Math.round(120 * u), this.dpr, light.cloudLit, light.cloudShade, WP.seededRandom(31), 4);
+            this.cloudSprites = HarvestArt.clouds(u, this.dpr, light.cloudLit, light.cloudShade, WP.seededRandom(31));
         }
         const day = HarvestSky.smooth(-12, 0, this.sun.alt);
-        ctx.globalAlpha = 0.55 + 0.35 * day;
+        ctx.globalAlpha = 0.72 + 0.26 * day;
         for (const c of this.clouds) {
-            const w = 360 * u * c.scale, h = 120 * u * c.scale;
-            ctx.drawImage(this.cloudSprites[c.kind], c.x - w / 2, c.y - h / 2, w, h);
+            const sp = this.cloudSprites[c.kind], w = sp.w * c.scale, h = sp.h * c.scale;
+            ctx.drawImage(sp.c, c.x - w / 2, c.y - h / 2, w, h);
         }
         ctx.globalAlpha = 1;
     }
 
-    // Geese in the colour of the hour: dark against the sunset, a moonlit
-    // slate at night. Re-baked only when the colour moves a step.
+    // Geese in the colour of the hour: brown-grey with a pale belly by day, a
+    // near-silhouette against the low sun, a moonlit slate at night. Re-baked
+    // only when the colour moves a step.
     syncGeese() {
-        const { light } = this;
-        const day = [52, 44, 50], night = [78, 90, 128];
-        const c = HarvestSky.mix(day, night, light.dark), key = c.map(v => Math.round(v / 8)).join();
-        if (this.toneKey.geese !== key) {
-            this.toneKey.geese = key;
-            this.geeseSprites = HarvestArt.geese(44, this.dpr, HarvestArt.tint(c), 12);
-        }
+        const { light } = this, k = HarvestSky.smooth(34, 6, this.sun.alt) * 0.85, dark = light.dark;
+        const key = `${Math.round(k * 5)}|${Math.round(dark * 5)}`;
+        if (this.toneKey.geese === key) return;
+        this.toneKey.geese = key;
+        const sil = [34, 26, 28], night = [74, 86, 124];
+        const tone = (c, light2 = false) => {
+            let out = HarvestSky.mix(c, sil, k * (light2 ? 0.7 : 1));
+            out = HarvestSky.mix(out, light2 ? [120, 132, 168] : night, dark * (light2 ? 0.7 : 0.85));
+            return HarvestArt.tint(out);
+        };
+        this.geeseSprites = HarvestArt.geese(64, this.dpr, {
+            body: tone([124, 90, 56]), belly: tone([230, 218, 194], true), wing: tone([108, 78, 50]), tip: tone([46, 34, 26]),
+            far: tone([80, 58, 38]), farTip: tone([34, 26, 22]), head: tone([16, 14, 16]), white: tone([248, 244, 236], true),
+        }, 16);
     }
 
+    // Mist lying in the valley, thickest at dawn and dusk and after dark,
+    // thin at noon. Drawn only onto the land (so it never floats in the sky),
+    // behind the trees and creatures that come after.
     drawMist(g) {
-        const level = this.config.mist * this.fx.mist * (0.4 + 0.6 * this.light.twilight + 0.25 * this.light.dark);
+        const level = Math.min(1, this.config.mist * 1.7 * this.fx.mist * (0.4 + 0.6 * this.light.twilight + 0.2 * this.light.dark));
         if (level < 0.01) return;
         const { u } = this;
-        g.globalAlpha = Math.min(1, level);
+        g.globalCompositeOperation = 'source-atop';
         for (const m of this.mist) {
-            const w = 400 * u * m.scale, h = 60 * u * m.scale;
-            g.globalAlpha = Math.min(1, level * m.a);
+            const w = 520 * u * m.scale, h = 90 * u * m.scale * (1 + 0.1 * Math.sin(this.time * 0.15 + m.x));
+            g.globalAlpha = Math.min(1, level * m.a * 0.85);
             g.drawImage(this.sprites.mist, m.x - w / 2, m.y - h / 2, w, h);
         }
+        g.globalCompositeOperation = 'source-over';
         g.globalAlpha = 1;
     }
 
@@ -913,24 +936,10 @@ class HarvestAnimationManager {
             g.drawImage(this.sprites.apples[h.kind], h.lx * s - size * 0.8, h.ly * s - size * 0.86, size * 1.6, size * 1.6);
         }
         g.restore();
-        // The den tree's very small door.
-        if (t === this.den && this.config.squirrels > 0) {
-            const d = this.denDoor(), k = u * s;
-            g.fillStyle = '#6a3a22';
-            g.beginPath();
-            g.moveTo(d.x - 4.4 * k, d.y);
-            g.lineTo(d.x - 4.4 * k, d.y - 6 * k);
-            g.arc(d.x, d.y - 6 * k, 4.4 * k, Math.PI, 0);
-            g.lineTo(d.x + 4.4 * k, d.y);
-            g.closePath();
-            g.fill();
-            g.fillStyle = '#e8c860';
-            g.fillRect(d.x + 1.8 * k, d.y - 4 * k, 1.1 * k, 1.1 * k);
-        }
     }
 
     drawApple(g, a) {
-        const s = this.depth(a.y), size = 14 * this.u * s;
+        const s = this.depth(a.y), size = (a.type === 'acorn' ? 9 : 14) * this.u * s;
         if (a.state === 'fall' || a.h > 0) {
             g.fillStyle = `rgba(20,25,5,${0.28 * Math.max(0.2, 1 - a.h / (120 * this.u))})`;
             g.beginPath();
@@ -943,7 +952,7 @@ class HarvestAnimationManager {
             g.fill();
         }
         g.globalAlpha = Math.max(0, Math.min(1, a.fade));
-        g.drawImage(this.sprites.apples[a.kind % this.sprites.apples.length], a.x - size * 0.8, a.y - a.h - size * 1.05, size * 1.6, size * 1.6);
+        g.drawImage(a.type === 'acorn' ? this.sprites.acorn : this.sprites.apples[a.kind % this.sprites.apples.length], a.x - size * 0.8, a.y - a.h - size * 1.05, size * 1.6, size * 1.6);
         g.globalAlpha = 1;
     }
 
@@ -988,7 +997,7 @@ class HarvestAnimationManager {
         ctx.globalAlpha = 1;
     }
 
-    // Everything that glows after dark: windows, lamps, the bonfire, the den door.
+    // Everything that glows after dark: windows, lamps and the bonfire.
     drawLights(ctx) {
         const { config, L, light, u } = this, dark = light.dark;
         const festive = this.holiday === 'day' ? 1 : 0;
@@ -1018,23 +1027,6 @@ class HarvestAnimationManager {
         }
         // The bonfire and the people round it.
         if (dark > 0.05 && config.village && config.bonfire) this.drawFire(ctx, dark);
-        // The squirrels' door lights up when someone's home with an apple.
-        if (this.den && config.squirrels > 0 && (dark > 0.1 || this.doorGlow > 0.02)) {
-            const d = this.denDoor(), k = u * this.den.s, a = Math.max(dark * 0.8, this.doorGlow);
-            ctx.globalCompositeOperation = 'lighter';
-            ctx.globalAlpha = a;
-            ctx.drawImage(this.sprites.warm, d.x - 12 * k, d.y - 14 * k, 24 * k, 24 * k);
-            ctx.globalCompositeOperation = 'source-over';
-            ctx.fillStyle = '#ffd27a';
-            ctx.globalAlpha = a * 0.9;
-            ctx.beginPath();
-            ctx.moveTo(d.x - 3.4 * k, d.y);
-            ctx.lineTo(d.x - 3.4 * k, d.y - 5.4 * k);
-            ctx.arc(d.x, d.y - 5.4 * k, 3.4 * k, Math.PI, 0);
-            ctx.lineTo(d.x + 3.4 * k, d.y);
-            ctx.fill();
-            ctx.globalAlpha = 1;
-        }
         ctx.globalAlpha = 1;
     }
 
@@ -1052,15 +1044,15 @@ class HarvestAnimationManager {
             ctx.beginPath();
             ctx.arc(x, y - 10.4 * k, 2.2 * k, 0, Math.PI * 2);
             ctx.fill();
-            ctx.fillStyle = `rgba(255,170,80,${0.55 * a})`;
+            ctx.fillStyle = `rgba(255,170,80,${0.4 * a})`;
             ctx.beginPath();
             ctx.arc(x + (dx < 0 ? 2.2 : -2.2) * k, y - 10.4 * k, 1.1 * k, 0, Math.PI * 2);
             ctx.fill();
             ctx.fillStyle = '#1a1214';
         }
         ctx.globalCompositeOperation = 'lighter';
-        const glow = 150 * u * (0.9 + 0.1 * Math.sin(t * 8) * Math.sin(t * 3.1));
-        ctx.globalAlpha = a * 0.65;
+        const glow = 78 * u * (0.92 + 0.08 * Math.sin(t * 8) * Math.sin(t * 3.1));
+        ctx.globalAlpha = a * 0.26;
         ctx.drawImage(this.sprites.warm, f.x - glow / 2, f.y - glow * 0.5, glow, glow);
         // Flames: three tongues, each licking in its own time.
         for (let i = 0; i < 4; i++) {
@@ -1070,7 +1062,7 @@ class HarvestAnimationManager {
             g.addColorStop(0.6, 'rgba(255,120,30,0.7)');
             g.addColorStop(1, 'rgba(255,60,20,0)');
             ctx.fillStyle = g;
-            ctx.globalAlpha = a;
+            ctx.globalAlpha = a * 0.8;
             ctx.beginPath();
             ctx.moveTo(x - w, f.y);
             ctx.quadraticCurveTo(x - w * 0.6, f.y - h * 0.6, x + Math.sin(ph) * u, f.y - h);

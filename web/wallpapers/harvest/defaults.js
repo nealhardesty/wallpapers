@@ -29,6 +29,7 @@ WP.defaults('harvest', {
     trees: 10,              // apple trees, at most
     treeSize: 1,            // × the usual size
     apples: 14,             // apples shaken loose each minute, at High
+    acorns: 10,             // acorns dropped each minute, at High
     squirrels: 3,           // at High
     turkeys: 2,
     cats: 2,                // mostly asleep
@@ -39,12 +40,12 @@ WP.defaults('harvest', {
     wind: 1,                // × the usual breeze
     // Geese
     geese: 20,              // flocks crossing each hour, at High
-    flock: 11,              // geese in a flock, at most
+    flock: 30,              // geese in a flock, at most
     // Air
     mist: 0.5,              // valley mist, thickest at dawn and dusk
     beams: true,            // low sun slanting through the trees
     callouts: true,         // toasts: the moon's name, the holiday, the Great Pumpkin
     touch: true,            // a tap shakes the nearest tree (off: touch is ignored)
     // Advanced
-    horizon: 0.5,           // where the far hills sit, as a share of the height
+    horizon: 0.55,          // where the far hills sit, as a share of the height
 });

@@ -439,25 +439,52 @@ const STAGE_CHECKS = {
         if (after <= before) record(`no apples fell: ${before} before, ${after} after`);
         console.log(`    harvest: ${first.leaves} leaves, ${first.resting} apples down, ${first.flocks} flock, ${first.squirrels} squirrels, ${first.turkeys} turkeys, ${first.cats} cats on frame ${first.frames}; a tap: ${before} → ${after} apples`);
         return true;
-    }], ['a squirrel carries an apple to its door', async () => {
-        await cdp.send('Page.navigate', { url: `${WEB}/stage.html?w=harvest&seed=8&date=2026-11-24T15:00` });
+    }], ['several flocks can cross at once, with a few stragglers behind', async () => {
+        await cdp.send('Page.navigate', { url: `${WEB}/stage.html?w=harvest&seed=9&date=2026-11-24T14:00` });
         await waitFor(() => evaluate('WP.stage?.ready === true'));
+        const r = await evaluate(`(f => {
+            const a = f.spawn(0.3, { n: 24 }), b = f.spawn(0.1, { n: 18 }), tail = f.straggle(a);
+            return { flocks: f.flocks.length, cap: f.cap(), n: tail.n, dir: a.dir, behind: a.dir * (a.x - tail.x), sameWay: tail.dir === a.dir, big: a.n, other: b.n };
+        })(WP.stage.manager.flocks)`);
+        if (r.flocks < 3) record(`only ${r.flocks} flocks at once`);
+        if (r.n < 1 || r.n > 3 || !r.sameWay) record(`stragglers: ${JSON.stringify(r)}`);
+        if (r.behind <= 0) record(`the stragglers aren't behind their flock (${Math.round(r.behind)} px)`);
+        return true;
+    }], ['a squirrel carries an apple off the edge of the screen, and never jumps', async () => {
+        // No apples or acorns of their own falling meanwhile, so the squirrel has only the one.
+        if (!await stageWith('harvest', { configVersion: 1, apples: 0, acorns: 0 }, '&seed=8&date=2026-11-24T15:00')) return record('no boot');
         await evaluate(`(m => {
-            const door = m.denDoor(), s = m.squirrels[0];
-            window.__apple = { x: door.x + 70, y: door.y + 8, h: 0, vh: 0, vx: 0, kind: 0, state: 'rest', age: 0, bounces: 3, claimed: false, carried: null, spin: 0, fade: 1 };
+            const s = m.squirrels[0], y = (m.meadowMin + m.meadowMax) / 2;
+            window.__apple = { x: m.W - 110, y, h: 0, vh: 0, vx: 0, type: 'apple', kind: 0, state: 'rest', age: 0, bounces: 3, claimed: false, carried: null, spin: 0, fade: 1 };
             m.apples = [window.__apple];
-            m.squirrels.forEach((q, i) => { q.state = 'sit'; q.wait = i ? 1e6 : 0; });
-            s.x = door.x + 45; s.y = door.y + 6;
+            m.squirrels.forEach((q, i) => { q.state = 'sit'; q.apple = null; q.wait = i ? 1e6 : 0; });
+            s.x = m.W - 150; s.y = y;
+            window.__eaten = s.eaten;     // the warm-up may already have had it carry something
         })(WP.stage.manager)`);
         const seen = new Set();
+        let last = null, jump = 0;
         const done = await waitFor(async () => {
-            seen.add(await evaluate('window.__apple.state'));
-            return await evaluate('window.__apple.state') === 'gone';
+            const now = await evaluate(`(m => ({ x: m.squirrels[0].x, y: m.squirrels[0].y, state: m.squirrels[0].state, apple: window.__apple.state, w: m.W }))(WP.stage.manager)`);
+            seen.add(now.state); seen.add(now.apple);
+            // Continuous on screen: it never leaps while it can be seen.
+            if (last && last.x > 0 && last.x < now.w && now.x > 0 && now.x < now.w) jump = Math.max(jump, Math.hypot(now.x - last.x, now.y - last.y));
+            last = now;
+            return now.apple === 'gone';
         }, 20000);
-        if (!done) return record(`the apple never reached the door (states: ${[...seen]})`);
-        if (!seen.has('carried')) record(`the apple was never carried (states: ${[...seen]})`);
-        if (await evaluate('WP.stage.manager.squirrels[0].eaten') !== 1) record('the squirrel kept no count');
-        if (await evaluate('WP.stage.manager.doorGlow') <= 0) record('the door didn\'t light');
+        if (!done) return record(`the apple never left (states: ${[...seen]})`);
+        if (!seen.has('carried') || !seen.has('carry')) record(`it wasn't carried (states: ${[...seen]})`);
+        if (jump > 90) record(`the squirrel jumped ${Math.round(jump)} px on screen`);
+        if (await evaluate('WP.stage.manager.squirrels[0].eaten - window.__eaten') !== 1) record('the squirrel kept no count');
+        // It comes back in from an edge, not out of thin air.
+        let returned = false, edgeEntry = false, prev = null;
+        await waitFor(async () => {
+            const q = await evaluate(`(m => ({ x: m.squirrels[0].x, state: m.squirrels[0].state, w: m.W }))(WP.stage.manager)`);
+            if (prev && prev.state === 'away' && q.state !== 'away') { returned = true; edgeEntry = q.x < 0 || q.x > q.w; }
+            prev = q;
+            return returned;
+        }, 25000);
+        if (!returned) record('it never came back');
+        else if (!edgeEntry) record('it came back from somewhere other than offscreen');
         return true;
     }], ['the Great Pumpkin rises at night, and never by day', async () => {
         await cdp.send('Page.navigate', { url: `${WEB}/stage.html?w=harvest&seed=7&date=2026-11-24T14:00` });
