@@ -16,7 +16,7 @@
 // wp:jellyfin:auth, a catalog secret: never exported, never logged.
 
 class JellyfinAnimationManager {
-    static VERSION = '0.9.0';             // the Version Jellyfin sees; tests keep it equal to manifest.json's
+    static VERSION = '0.10.0';            // the Version Jellyfin sees; tests keep it equal to manifest.json's
     static SAVE_EVERY = 10000;            // ms between saved positions
     static POSTER_MS = 180000;            // poster mode moves on every 3 minutes
     static QUICK_POLL = 3000;
