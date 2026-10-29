@@ -103,6 +103,7 @@ const HarvestArt = {
         this.meadow(g, L, random);
         if (config.village) this.village(g, L, config, foliage, random);
         this.road(g, L, config, random);
+        if (config.village) this.villageFront(g, L);
         if (config.fields) this.corn(g, L, random);
         if (config.pumpkinPatch) this.patch(g, L, random);
         this.litter(g, L, foliage, random);
@@ -297,22 +298,45 @@ const HarvestArt = {
 
     // ---- The village --------------------------------------------------------------------------
 
+    // The village, drawn in one depth order: windmill and hills behind, then
+    // every cottage, fence and small tree from the farthest base to the
+    // nearest, so nothing is ever sliced by something that should be behind
+    // it. Trees are only planted clear of every building, the mill and the
+    // road, so a tree is never cut by a house's edge either.
     village(g, L, config, foliage, random) {
         const { u } = L;
-        // Back to front, so a lower cottage stands in front of a higher one.
-        const things = L.houses.slice().sort((a, b) => a.base - b.base);
         if (config.windmill) this.windmillTower(g, L);
-        // A few small round trees between the buildings.
-        for (const h of things) {
-            if (random() < 0.7) this.smallTree(g, h.x + (random() < 0.5 ? -1 : 1) * h.w * (0.75 + random() * 0.3), h.base + 2, (28 + random() * 22) * u, foliage, random);
+        const items = [];
+        const clear = (x, r) => !L.houses.some(h => Math.abs(x - h.x) < h.w * 0.6 + r + 3 * u)
+            && !(config.windmill && Math.abs(x - L.mill.x) < L.mill.h * 0.34 + r)
+            && !(L.roadTop && Math.abs(x - L.road(L.roadTop).x) < L.road(L.roadTop).w / 2 + r + 10 * u);
+        for (const h of L.houses) {
+            for (const side of [-1, 1]) {
+                if (random() > 0.45) continue;
+                const height = (28 + random() * 22) * u, x = h.x + side * h.w * (0.85 + random() * 0.35);
+                if (!clear(x, height * 0.3)) continue;
+                items.push({ base: h.base + 2, draw: () => this.smallTree(g, x, h.base + 2, height, foliage, random) });
+            }
         }
-        for (const h of things) {
-            const out = h.kind === 'barn' ? this.barn(g, h, random, foliage) : h.kind === 'church' ? this.church(g, h, random, foliage) : this.cottage(g, h, random, foliage);
-            for (const w of out.windows) L.windows.push(w);
-            if (out.chimney) L.chimneys.push(out.chimney);
-            if (random() < 0.8) this.fence(g, h.x - h.w * 0.6, h.x + h.w * 0.6, h.base + 3, u);
+        for (const h of L.houses) {
+            items.push({ base: h.base, draw: () => {
+                const out = h.kind === 'barn' ? this.barn(g, h, random, foliage) : h.kind === 'church' ? this.church(g, h, random, foliage) : this.cottage(g, h, random, foliage);
+                for (const w of out.windows) L.windows.push(w);
+                if (out.chimney) L.chimneys.push(out.chimney);
+                if (random() < 0.8) this.fence(g, h.x - h.w * 0.6, h.x + h.w * 0.6, h.base + 3, u);
+            } });
         }
-        // Lamp posts down the road into the village.
+        items.sort((p, q) => p.base - q.base);
+        for (const item of items) item.draw();
+        // Bunting between two roofs, if there are two to string it between.
+        const a = L.houses.find(h => h.kind === 'cottage' && h.x < L.vx), b = L.houses.find(h => h.kind === 'cottage' && h.x > L.vx);
+        if (a && b) L.bunting.push({ x0: a.x, y0: a.base - a.h * 0.9, x1: b.x, y1: b.base - b.h * 0.9 });
+    },
+
+    // What stands on the road, so it's drawn after it: the lamp posts and the
+    // bonfire's ring of stones.
+    villageFront(g, L) {
+        const { u } = L;
         for (const t of [0.06, 0.2, 0.42]) {
             const y = L.roadTop + (L.H - L.roadTop) * t, r = L.road(y);
             for (const side of [-1, 1]) {
@@ -322,7 +346,6 @@ const HarvestArt = {
                 L.lamps.push({ x, y: y - 34 * s, s });
             }
         }
-        // The green, a bonfire's ring of stones.
         g.fillStyle = 'rgba(90,80,70,0.8)';
         for (let i = 0; i < 9; i++) {
             const a = i / 9 * Math.PI * 2;
@@ -330,9 +353,6 @@ const HarvestArt = {
             g.ellipse(L.fire.x + Math.cos(a) * 9 * u, L.fire.y + Math.sin(a) * 3.4 * u, 2.6 * u, 1.9 * u, 0, 0, Math.PI * 2);
             g.fill();
         }
-        // Bunting between two roofs, if there are two to string it between.
-        const a = things.find(h => h.kind === 'cottage' && h.x < L.vx), b = things.find(h => h.kind === 'cottage' && h.x > L.vx);
-        if (a && b) L.bunting.push({ x0: a.x, y0: a.base - a.h * 0.9, x1: b.x, y1: b.base - b.h * 0.9 });
     },
 
     smallTree(g, x, base, h, foliage, random) {
@@ -1323,11 +1343,11 @@ const HarvestArt = {
                     domes.push({ cx: pad + w * (i + 0.5 + (random() - 0.5) * 0.35) / kind.domes, ht: h * (0.4 + random() * 0.5), wi: w / kind.domes * (0.7 + random() * 0.45) });
                 }
                 const top = x => base - Math.max(...domes.map(d => d.ht * Math.sqrt(Math.max(0, 1 - ((x - d.cx) / d.wi) ** 2))));
-                for (let tries = 0, n = Math.round(w * h / 230); blobs.length < n && tries < n * 6; tries++) {
+                for (let tries = 0, n = Math.round(w * h / 120); blobs.length < n && tries < n * 6; tries++) {
                     const x = pad + random() * w, t = top(x);
                     if (base - t < 5 * u) continue;
                     const y = t + (base - t) * Math.pow(random(), 1.6), depth = (base - t) / (h * 0.7);
-                    blobs.push({ x, y, r: (10 + random() * 20) * u * (h / 170) * (0.6 + 0.5 * Math.min(1, depth)) * (1.1 - 0.5 * (y - t) / (base - t + 1) * 0) });
+                    blobs.push({ x, y, r: (12 + random() * 24) * u * (kind.h / 170) * (0.6 + 0.5 * Math.min(1, depth)) });
                 }
                 // The shaded body, then the sunward side lighter, then the sunlit tops.
                 for (const b of blobs) blob(discs[2], b.x, b.y + 2 * u, b.r, 0.95);

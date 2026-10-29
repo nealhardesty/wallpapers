@@ -2498,10 +2498,24 @@ no village, no orchard, no day (only the moon), and so on.
   long low stratus, high cirrus), padded so nothing is cropped and placed
   wholly inside the sky; valley mist lies on the land only, thickest at dawn
   and dusk; the moon's seas are soft patches that run together.
-- **Light:** the world is drawn at full daylight colour onto an offscreen
-  canvas and washed once per frame with a `source-atop` fill (a horizon haze
-  and the hour's tint); the sky, geese, glows and sunbeams are drawn on the
-  main canvas around it. One set of art serves every hour.
+- **Light and depth:** everything is drawn at full daylight colour and washed
+  with the hour's light (a horizon haze, then the hour's tint, by
+  `source-atop` so only what's drawn is touched). There are two offscreen
+  layers. The *land* (hills, fields, village, mist, smoke, bunting, mill) is
+  washed first, and only then the things that glow on it (lit windows, lamp
+  heads and halos, the bonfire, its sparks and the people round it) are put
+  on at full brightness. In front of that is a *fore* layer of everything
+  that stands on the ground (trees, apples, animals, the scarecrow, the
+  pumpkin, leaves), sorted far to near and washed the same way, so a tree in
+  front of a lit window hides it and nothing glows through anything. The sky,
+  geese, sunbeams and the Great Pumpkin's glow are on the main canvas around
+  them. Clipping is a bug: village trees are planted clear of every building,
+  the mill and the road, and drawn in the same depth order as the houses;
+  lamp posts and the fire's ring are drawn after the road; a flock's band is
+  fitted so its lowest goose, tilt and sway included, stays above the
+  highest ridge (a huge flock is flattened to fit); and the front row of
+  trees is cut down when a high horizon leaves little room below the
+  fields.
 - **Autumn colours (owner request):** seven presets (mixed, golden, crimson,
   russet, ember, burgundy, early autumn) or a custom palette of up to eight
   colours, which colours the trees, the leaves, the forested hills and the

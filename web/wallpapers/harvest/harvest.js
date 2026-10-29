@@ -65,8 +65,11 @@ class HarvestAnimationManager {
         Object.assign(canvas.style, { position: 'fixed', inset: '0', width: '100%', height: '100%', zIndex: '-1', pointerEvents: 'none' });
         document.body.appendChild(canvas);
         this.ctx = canvas.getContext('2d');
+        // Two offscreen layers, each washed with the hour's light: the land and what glows on it, and, in front of that, everything that stands on the ground.
         this.world = document.createElement('canvas');
         this.wg = this.world.getContext('2d');
+        this.fore = document.createElement('canvas');
+        this.fg = this.fore.getContext('2d');
         this.cycleBase = this.host.now().getTime();
         this.holiday = HarvestSky.holiday(this.host.now());
         this.syncEffects(true);
@@ -84,7 +87,7 @@ class HarvestAnimationManager {
         for (const off of this.listeners) off();
         this.listeners = [];
         this.canvas.remove();
-        this.canvas = this.ctx = this.world = this.wg = null;
+        this.canvas = this.ctx = this.world = this.wg = this.fore = this.fg = null;
     }
 
     listen() {
@@ -117,6 +120,7 @@ class HarvestAnimationManager {
         const changed = keys => keys.some(k => old[k] !== config[k]);
         if (changed(['village', 'houses', 'windmill', 'fields', 'pumpkinPatch', 'horizon', 'foliage', 'autumnColors', 'orchard', 'trees', 'treeSize'])) {
             this.resize();
+            this.buildCast();
             this.seed();
         } else {
             if (changed(['squirrels', 'turkeys', 'cats', 'wind'])) this.buildCast();
@@ -141,9 +145,10 @@ class HarvestAnimationManager {
 
     resize() {
         if (!this.canvas) return;
+        const prev = this.L ? { W: this.W, Hu: this.L.Hu } : null;     // a resize keeps the cast; only the first layout builds it
         const dpr = this.dpr = window.devicePixelRatio || 1;
         const W = this.W = window.innerWidth, H = this.H = window.innerHeight;
-        for (const c of [this.canvas, this.world]) { c.width = Math.round(W * dpr); c.height = Math.round(H * dpr); }
+        for (const c of [this.canvas, this.world, this.fore]) { c.width = Math.round(W * dpr); c.height = Math.round(H * dpr); }
         const bottom = this.host.insets?.bottom || 0;
         const random = WP.seededRandom(Math.round(W * 3 + H * 17));
         const L = this.L = HarvestArt.layout(W, H, bottom, this.config, random);
@@ -156,19 +161,20 @@ class HarvestAnimationManager {
         this.buildStars();
         this.buildMist(random);
         this.buildClouds();
-        this.buildCast();
+        if (prev) this.reflowCast(prev.W, prev.Hu); else this.buildCast();
         this.flocks = this.flocks || new HarvestFlocks(this);
         this.flocks.m = this;
         this.flocks.flocks = [];
         this.flocks.pending = [];
-        this.great = new HarvestGreatPumpkin(this);
-        this.scarecrow = new HarvestScarecrow(this);
+        // These live through a resize: a window that settles after the first frame must not put the Great Pumpkin back to sleep.
+        this.great = this.great || new HarvestGreatPumpkin(this);
+        this.scarecrow = this.scarecrow || new HarvestScarecrow(this);
         this.toneKey = { cloud: '', geese: '' };
     }
 
     bakeSprites(random) {
         const { dpr, u, L } = this, foliage = HarvestArt.palette(this.config);
-        const treeH = L.Hu * 0.26 * this.config.treeSize;
+        const treeH = this.treeHeight();
         this.sprites.trees = [0, 1, 2, 3].map(() => HarvestArt.tree(treeH, dpr, foliage, random));
         this.sprites.apples = ['#c8322a', '#d8402e', '#b8302c', '#c8a030'].map(c => HarvestArt.apple(14 * u, dpr, c));
         this.sprites.acorn = HarvestArt.acorn(10 * u, dpr);
@@ -189,7 +195,7 @@ class HarvestAnimationManager {
         const { L, config } = this;
         this.trees = [];
         if (!config.orchard) return;
-        const treeH = L.Hu * 0.26 * config.treeSize, found = [];
+        const treeH = this.treeHeight(), found = [];
         // Three rows in perspective, as many as fit below the fields.
         const front = 0.965, room = front * L.Hu - (L.corn.y1 + L.Hu * 0.02);
         const count = room > L.Hu * 0.2 ? 3 : room > L.Hu * 0.1 ? 2 : 1, gap = Math.min(0.1, room / L.Hu / count);
@@ -216,6 +222,14 @@ class HarvestAnimationManager {
             }
         }
         this.treeH = treeH;
+    }
+
+    // How tall an apple tree stands: the setting's size, but never so tall that
+    // the front row would stand up in front of the village (a high horizon
+    // leaves less room below the fields).
+    treeHeight() {
+        const { L, config } = this;
+        return Math.min(L.Hu * 0.26 * config.treeSize, Math.max(L.Hu * 0.1, L.Hu * 0.965 - (L.meadowTop + L.Hu * 0.025)));
     }
 
     depth(y) {
@@ -295,6 +309,31 @@ class HarvestAnimationManager {
             const cat = new HarvestCat(this, spot, coat, 0.55 + Math.random() * 0.4);
             if (spot.roof || spot.fixed) { cat.state = Math.random() < 0.8 ? 'sleep' : 'loaf'; cat.fixedSpot = true; }
             this.cats.push(cat);
+        }
+    }
+
+    // The window changed size: the animals stay, and so do their errands.
+    // Everything on the ground is carried to the same place in the new
+    // layout, and each cat takes the nearest perch of its kind.
+    reflowCast(prevW, prevHu) {
+        const sx = this.W / prevW, sy = this.L.Hu / prevHu;
+        for (const o of [...this.squirrels, ...this.turkeys, ...this.cats, ...this.apples]) {
+            o.x *= sx; o.y *= sy;
+            if (o.target) o.target = { x: o.target.x * sx, y: o.target.y * sy };
+        }
+        for (const l of this.leafPool) { l.x *= sx; l.y *= sy; l.ground *= sy; }
+        this.puffs = [];
+        this.sparks = [];
+        this.buildCatSpots();
+        for (const cat of this.cats) {
+            let pool = this.catSpots.filter(s => !!s.fixed === !!cat.fixedSpot);
+            if (!pool.length) { cat.fixedSpot = false; pool = this.catSpots.filter(s => !s.fixed); }
+            let best = null, d = 1e9;
+            for (const s of pool) { const dd = Math.hypot(s.x - cat.x, (s.y - cat.y) * 2); if (dd < d) { d = dd; best = s; } }
+            if (!best) continue;
+            cat.spot = best;
+            if (cat.fixedSpot) { cat.x = best.x; cat.y = best.y; }
+            if (cat.target) cat.target = { x: best.x, y: best.y };
         }
     }
 
@@ -631,7 +670,9 @@ class HarvestAnimationManager {
         this.drawSky(ctx);
         if (config.geese > 0) { this.syncGeese(); this.flocks.draw(ctx, dpr, this.geeseSprites); ctx.setTransform(dpr, 0, 0, dpr, 0, 0); }
 
-        // The world, at daylight colour, then washed with the hour's light.
+        // The land, at daylight colour: hills, fields, village, mist, smoke. Washed
+        // with the hour's light, and only then the things that glow (lit windows,
+        // lamps, the bonfire) are put on it at full brightness.
         wg.setTransform(1, 0, 0, 1, 0, 0);
         wg.globalCompositeOperation = 'source-over';
         wg.globalAlpha = 1;
@@ -642,28 +683,46 @@ class HarvestAnimationManager {
         this.drawMill(wg);
         if (config.village && config.bunting) this.drawBunting(wg);
         this.drawSmoke(wg);
-        this.drawActors(wg);
-        this.drawLeaves(wg);
-        // The wash.
-        wg.globalCompositeOperation = 'source-atop';
-        const h = light.horizon, hazeA = 0.26 * (1 - 0.5 * light.dark) + 0.1 * light.twilight;
-        const haze = wg.createLinearGradient(0, L.hz - L.Hu * 0.12, 0, L.hz + L.Hu * 0.24);
+        this.wash(wg);
+        this.drawLights(wg);
+        // Everything standing on the ground, far to near, on a layer of its own
+        // in front of the land (and its lights), so a tree in front of a window
+        // hides it, and a squirrel in front of the fire hides that. Washed the same way.
+        const fg = this.fg;
+        fg.setTransform(dpr, 0, 0, dpr, 0, 0);
+        fg.globalCompositeOperation = 'source-over';
+        fg.globalAlpha = 1;
+        fg.clearRect(0, 0, W, H);
+        this.drawActors(fg);
+        this.drawLeaves(fg);
+        this.wash(fg);
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.drawImage(this.world, 0, 0);
+        ctx.drawImage(this.fore, 0, 0);
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+        this.drawGreat(ctx);
+        if (config.beams) this.drawBeams(ctx);
+    }
+
+    // Wash what's on a layer with the light of the hour: a haze towards the
+    // sky's colour at the horizon, then the hour's tint (source-atop: only
+    // where something's already drawn).
+    wash(g) {
+        const { W, H, L, light } = this, h = light.horizon, hazeA = 0.26 * (1 - 0.5 * light.dark) + 0.1 * light.twilight, dpr = this.dpr;
+        g.save();
+        g.setTransform(dpr, 0, 0, dpr, 0, 0);
+        g.globalCompositeOperation = 'source-atop';
+        const haze = g.createLinearGradient(0, L.hz - L.Hu * 0.12, 0, L.hz + L.Hu * 0.24);
         haze.addColorStop(0, `rgba(${h[0] | 0},${h[1] | 0},${h[2] | 0},0)`);
         haze.addColorStop(0.4, `rgba(${h[0] | 0},${h[1] | 0},${h[2] | 0},${hazeA})`);
         haze.addColorStop(1, `rgba(${h[0] | 0},${h[1] | 0},${h[2] | 0},0)`);
-        wg.fillStyle = haze;
-        wg.fillRect(0, 0, W, H);
+        g.fillStyle = haze;
+        g.fillRect(0, 0, W, H);
         const w = light.wash;
-        wg.fillStyle = `rgba(${w[0] | 0},${w[1] | 0},${w[2] | 0},${w[3]})`;
-        wg.fillRect(0, 0, W, H);
-        wg.globalCompositeOperation = 'source-over';
-        ctx.setTransform(1, 0, 0, 1, 0, 0);
-        ctx.drawImage(this.world, 0, 0);
-        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-
-        this.drawLights(ctx);
-        this.drawGreat(ctx);
-        if (config.beams) this.drawBeams(ctx);
+        g.fillStyle = `rgba(${w[0] | 0},${w[1] | 0},${w[2] | 0},${w[3]})`;
+        g.fillRect(0, 0, W, H);
+        g.restore();
     }
 
     drawSky(ctx) {
