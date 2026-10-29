@@ -19,7 +19,7 @@ const WP = context.WP;
 const plain = value => JSON.parse(JSON.stringify(value));
 
 test('seasons: the agreed wallpaper for every month', () => {
-    const expected = ['snow', 'snow', 'snow', 'snow', 'fishtank', 'fireflies', 'fireflies', 'fireflies', 'leaves', 'halloween', 'fishtank', 'advent'];
+    const expected = ['snow', 'snow', 'snow', 'snow', 'fishtank', 'fireflies', 'fireflies', 'fireflies', 'leaves', 'halloween', 'harvest', 'advent'];
     expected.forEach((id, month) => assert.equal(WP.seasonalFor(new Date(2026, month, 15)), id, `month ${month + 1}`));
 });
 

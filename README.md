@@ -4,7 +4,7 @@ Toy animated wallpapers: snow, rain, falling leaves, fireflies, a fireplace,
 northern lights, a fish tank, a Halloween night, an advent calendar, a
 self-playing 8-bit adventure, koi, a zen garden, a night train, fireworks,
 the real satellites overhead, your own Jellyfin videos playing in an old
-TV, and more: 33 in all. Each one is a full-screen canvas
+TV, a harvest valley for Thanksgiving, and more: 34 in all. Each one is a full-screen canvas
 animation with no page around it. Most just play; some also respond to you.
 Click to feed the fish, light the jack-o'-lanterns, rake the sand, or take
 over Pixel Quest's hero with the arrow keys.
@@ -34,6 +34,7 @@ Click one to see it live.
 | [<img src="web/wallpapers/synthwave/thumb.webp" width="200" alt="Synthwave">](https://nealhardesty.github.io/wallpapers/?w=synthwave)<br>🌇 Synthwave | [<img src="web/wallpapers/zen-garden/thumb.webp" width="200" alt="Zen Garden">](https://nealhardesty.github.io/wallpapers/?w=zen-garden)<br>🪨 Zen Garden | [<img src="web/wallpapers/koi-pond/thumb.webp" width="200" alt="Koi Pond">](https://nealhardesty.github.io/wallpapers/?w=koi-pond)<br>🎏 Koi Pond | [<img src="web/wallpapers/murmuration/thumb.webp" width="200" alt="Murmuration">](https://nealhardesty.github.io/wallpapers/?w=murmuration)<br>🐦 Murmuration |
 | [<img src="web/wallpapers/lanterns/thumb.webp" width="200" alt="Lantern Festival">](https://nealhardesty.github.io/wallpapers/?w=lanterns)<br>🏮 Lantern Festival | [<img src="web/wallpapers/rainy-window/thumb.webp" width="200" alt="Rainy Window">](https://nealhardesty.github.io/wallpapers/?w=rainy-window)<br>🪟 Rainy Window | [<img src="web/wallpapers/night-train/thumb.webp" width="200" alt="Night Train">](https://nealhardesty.github.io/wallpapers/?w=night-train)<br>🚆 Night Train | [<img src="web/wallpapers/fireworks/thumb.webp" width="200" alt="Fireworks">](https://nealhardesty.github.io/wallpapers/?w=fireworks)<br>🎆 Fireworks |
 | [<img src="web/wallpapers/lighthouse/thumb.webp" width="200" alt="Lighthouse">](https://nealhardesty.github.io/wallpapers/?w=lighthouse)<br>🌊 Lighthouse | [<img src="web/wallpapers/wiki-pond/thumb.webp" width="200" alt="Wiki Pond">](https://nealhardesty.github.io/wallpapers/?w=wiki-pond)<br>🪷 Wiki Pond | [<img src="web/wallpapers/satellites/thumb.webp" width="200" alt="Satellites">](https://nealhardesty.github.io/wallpapers/?w=satellites)<br>🛰️ Satellites | [<img src="web/wallpapers/jellyfin/thumb.webp" width="200" alt="Jellyfin">](https://nealhardesty.github.io/wallpapers/?w=jellyfin)<br>📺 Jellyfin |
+| [<img src="web/wallpapers/harvest/thumb.webp" width="200" alt="Harvest Valley">](https://nealhardesty.github.io/wallpapers/?w=harvest)<br>🌾 Harvest Valley | | | |
 
 The second half is new: a harmonograph inking its figures, a pixel-art room
 with a cat that keeps the real hours, Islamic star patterns that breathe, a
@@ -43,7 +44,7 @@ falcon, sky lanterns to release, a rainy window to draw on, the view from a
 night train, fireworks (with a New Year's countdown), a lighthouse that
 keeps a real light's rhythm, every Wikipedia edit as a ripple on a pond, and
 the real satellites crossing your sky. Last, **Jellyfin** 📺 plays your own
-server's videos in a frame of your choice (see below).
+server's videos in a frame of your choice (see below). And for Thanksgiving, **Harvest Valley** 🌾: see below.
 
 Also: **Seasonal** 📅 picks by month (the default), **Blank** ⬛ is just
 black, and the **Bing Image of the Day** 🖼️ shows Bing's photo with its
@@ -150,12 +151,45 @@ it. Hold a right-hand corner for the panel.
 
 <img src="docs/phone.webp" width="260" alt="The panel as a bottom sheet on a phone">
 
+
+## Harvest Valley
+
+A calm, cosy autumn valley, built for Thanksgiving, with a switch on every
+part of it. A village with smoking chimneys and a windmill, patchwork
+farmland, corn and a scarecrow with a crow, a pumpkin patch, an apple
+orchard whose apples and acorns fall, tumble and get carried off the edge of
+the screen by squirrels (who wander back in later), turkeys and sleepy cats
+about the meadow, flocks of small brown-and-black geese overhead, up to a hundred
+strong, sometimes several at once and sometimes with a few stragglers behind
+(a V that ripples wingbeat by wingbeat; the leader drops to the back now and
+then),
+leaves on the wind, valley mist and slanting sunbeams, and an autumn wreath
+on every door.
+
+The sky is real: the sun's path for the date, the moon in tonight's actual
+phase (rising and setting where it would, bright limb towards the sun, and
+named: the Harvest Moon, the Hunter's, the Beaver), a shooting star now and
+then. After dark the windows light, the lamps come on and there's a bonfire
+on the green. In Thanksgiving week the bunting spells *give thanks*.
+
+And it has a secret. On a dark night, now and then, the most sincere pumpkin
+in the patch has been known to rise. (Press `G` to wait for it.)
+
+Everything is in the panel: time of day (live, a whole day in a few minutes,
+or pinned to day, golden hour or night), the sun, the moon, its phase and
+size, stars, clouds, geese, the village and each part of it, fields, the
+scarecrow, the patch, the orchard (trees, apples, squirrels, turkeys, cats),
+leaves, wind, mist, sunbeams, and the autumn colours: seven presets, or your
+own palette of up to eight. Leave out the village and the orchard for a
+bare moon over a dark field, or turn off the day for a night with only the
+moon. `?date=2026-11-26T17:00` shows any date and hour.
+
 ## Use
 
 You see only the wallpaper. On first run it's **Seasonal**: snow from January to
-April, the fish tank in May and November, fireflies in summer, falling
-leaves in September, Halloween in October and the advent calendar in
-December.
+April, the fish tank in May, fireflies in summer, falling leaves in
+September, Halloween in October, Harvest Valley in November and the advent
+calendar in December.
 
 | Key | Action |
 |---|---|
@@ -220,11 +254,14 @@ you tick it, then seven, with the rest folded away:
   Zen Garden `N` new stones, `R` rake, `E` smooth · Murmuration `D` falcon
   dive, `R` roost, `N` new evening · Lantern Festival `L` or Space release
   one · Rainy Window `W` wipe · Fireworks Space or `L` launch, `G` finale ·
-  Lighthouse `L` next light, `S` sea state · Satellites `N` next station pass.
+  Lighthouse `L` next light, `S` sea state · Satellites `N` next station pass ·
+  Harvest Valley `G` wait for the Great Pumpkin, `H` call the geese, `W` a gust,
+  `M` what the moon is doing.
 
 **Touch and drag:** tap or drag on Zen Garden (rake), Koi Pond (ripples;
 feed them in settings), Murmuration (you're the falcon), Lantern Festival,
-Rainy Window (draw in the fog), Fireworks, Pixel Room (the cat and the lamp)
+Rainy Window (draw in the fog), Fireworks, Pixel Room (the cat and the lamp),
+Harvest Valley (shake an apple tree; tap the scarecrow, or the sky for geese)
 and Satellites (what's that one?). Each has a setting to ignore touch. On
 Android, a quick sideways swipe changes home screens and never counts.
 
@@ -341,6 +378,7 @@ Run `make` to list every target.
 | `make screenshots` | Re-render the README's screenshots in `docs/` (committed: review the changes) |
 | `make extension` | Build the Chrome extension: `dist/extension/` to load unpacked, and a zip |
 | `make site` | Build the GitHub Pages copy in `dist/site/`, with a fresh `bing.json` |
+| `make open` | Open `web/index.html` in your default browser (from `file://`, no server needed), or bring its tab forward if it's already open (macOS, Chrome and Safari). `make open PAGE='?w=harvest'` opens a particular wallpaper |
 | `make bench` | Every wallpaper at every tier on a simulated phone (4× slower CPU), then the clock overlay's cost; checks the budgets, writes `bench/results.json` and the ⚡ badges |
 | `make bench-clock` | Just the clock overlay's cost: a bouncing clock with seconds against none |
 | `make jellyfin-media` | Generate made-up test videos (patterns, tones, subtitles in several kinds) into `.jellyfin/media/`; needs `ffmpeg` |

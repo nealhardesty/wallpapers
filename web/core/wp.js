@@ -12,7 +12,7 @@
         'fireflies', 'fireflies', 'fireflies',   // Jun–Aug
         'leaves',                                // Sep
         'halloween',                             // Oct
-        'fishtank',                              // Nov
+        'harvest',                               // Nov
         'advent',                                // Dec (wins over snow)
     ];
 
