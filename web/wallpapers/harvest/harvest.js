@@ -200,14 +200,19 @@ class HarvestAnimationManager {
         const front = 0.965, room = front * L.Hu - (L.corn.y1 + L.Hu * 0.02);
         const count = room > L.Hu * 0.2 ? 3 : room > L.Hu * 0.1 ? 2 : 1, gap = Math.min(0.1, room / L.Hu / count);
         const rows = [{ y: front, s: 1, row: 2 }, { y: front - gap, s: 0.78, row: 1 }, { y: front - 2 * gap, s: 0.55, row: 0 }].slice(0, count);
-        for (const r of rows) {
-            const w = treeH * 0.95 * r.s, spacing = w * 0.98, baseY = r.y * L.Hu;
-            const road = L.road(baseY);
-            for (let x = -w * 0.2 + random() * spacing * 0.5; x < L.W + w * 0.2; x += spacing * (0.92 + random() * 0.3)) {
-                if (Math.abs(x - road.x) < road.w / 2 + w * 0.36) continue;
-                if (config.pumpkinPatch && r.row === 2 && Math.abs(x - L.sincere.x) < w * 0.62) continue;
-                if (r.row < 2 && ((x > L.patch.x0 - w * 0.3 && x < L.patch.x1 + w * 0.3) || (x > L.corn.x0 - w * 0.3 && x < L.corn.x1 + w * 0.3))) continue;
-                found.push({ x, y: baseY + (random() - 0.5) * L.Hu * 0.02, s: r.s, row: r.row, variant: Math.floor(random() * this.sprites.trees.length), phase: random() * 6, shake: 0, hang: [] });
+        // Trees stand shoulder to shoulder at first; when the setting asks for more
+        // than that holds, they close up (overlapping, sorted by depth) until they fit.
+        for (let pack = 1; pack > 0.3 && found.length < config.trees; pack -= 0.1) {
+            found.length = 0;
+            for (const r of rows) {
+                const w = treeH * 0.95 * r.s, spacing = w * 0.98 * pack, baseY = r.y * L.Hu;
+                const road = L.road(baseY);
+                for (let x = -w * 0.2 + random() * spacing * 0.5; x < L.W + w * 0.2; x += spacing * (0.92 + random() * 0.3)) {
+                    if (Math.abs(x - road.x) < road.w / 2 + w * 0.36) continue;
+                    if (config.pumpkinPatch && r.row === 2 && Math.abs(x - L.sincere.x) < w * 0.62) continue;
+                    if (r.row < 2 && ((x > L.patch.x0 - w * 0.3 && x < L.patch.x1 + w * 0.3) || (x > L.corn.x0 - w * 0.3 && x < L.corn.x1 + w * 0.3))) continue;
+                    found.push({ x, y: baseY + (random() - 0.5) * L.Hu * 0.02, s: r.s, row: r.row, variant: Math.floor(random() * this.sprites.trees.length), phase: random() * 6, shake: 0, hang: [] });
+                }
             }
         }
         // Keep the nearest rows first, if there are more than the setting.
