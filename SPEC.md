@@ -62,7 +62,7 @@ Imported from the private homepage repo, as a **fresh copy with no git history**
 | `rain` | rain.js | 33 KB | |
 | `leaves` | leaves.js (+ leaves.html inline fork) | 55 KB | Full-screen pile buffer, up to 14k leaves. |
 | `fireflies` | fireflies.js | 39 KB | |
-| `fireplace` | fireplace.js, fireplace.html | 115 KB | 4 full-screen offscreen buffers. |
+| `fireplace` | fireplace.js, fireplace.html | 115 KB | 4 full-screen offscreen buffers. Its wood, coal bed and grate are now fireplace-wood.js (§10.23). |
 | `northern-lights` | northern-lights.js | 50 KB | Full-resolution bloom; heavy on mobile. |
 | `parallax-clouds` | parallax-clouds.js | 25 KB | Advances one fixed step per frame, so it runs faster on 120 Hz screens. |
 | `mountains` | mountains.js | 27 KB | Same per-frame stepping. |
@@ -744,7 +744,7 @@ and the commits.
 | fishtank | `depthBlur`, `caustics` (medium) | Whole roster stocked, `fishCount × density` swim, the rest fade out; motes. Low: distant fish sink into the water colour instead of blurring |
 | northern-lights | `bloom`, `reflection` (medium) | Low draws the curtains straight onto the sky (no aurora buffer); blur 1/8 on Medium; stars × density, from baked sprites |
 | halloween | `bloom` (medium), `grain` (high), `fogMid` (medium), `fogFar` (high) | Bats, wisps, candy, leaves × density; bats on a grid; the near fog bank is never shed; a lit jack-o'-lantern's carving glows near-white, black only when snuffed |
-| fireplace | `smoke` (medium) | Coal glows baked per heat level; log buffer cropped to the log band; sparks and coals × density |
+| fireplace | `smoke` (medium) | Coal glows baked per heat level; each log, the coal bed and the grate baked once per resize, only their glow zones' alpha changing per frame (§10.23); sparks and coals × density |
 | quest | `crt` (high) | Palette proxy every tier; light map half size on Low; idles while paused; fixed 60 Hz steps (up to 20 catch-up) |
 | advent | — | Doors-at-rest layer, baked glow; treat refreshes, particles and confetti × density; idles between its own capped frames (never fully still: today's treat plays) |
 | leaves | — | Drift capped at 6k (Medium) and 2k (Low), shallower banks of the same shape; falling × density |
@@ -2536,6 +2536,57 @@ no village, no orchard, no day (only the moon), and so on.
   at 4× throttle). Effects `mist` and `beams` shed on Low. Leaves, apples,
   smoke, sparks and flocks scale with `density`.
 - **Why seasonal November:** the fish tank was a placeholder there.
+
+### 10.23 Fireplace: realistic wood (owner request, 2026-10-29)
+
+The flames were good; the logs were cartoon pipes (rounded rectangles with
+stripes and an end cap at each end). `fireplace-wood.js` (`FireplaceWood`,
+geometry unit-tested in `tools/fireplace.test.mjs`) replaces them:
+
+- **Shape.** Each log is an outline sampled along its length: taper, bow,
+  knots that swell one edge, and branch stubs. One cut in three is split
+  (`half`: flat side up; `quarter`: a wedge, apex up), showing a band of
+  fibrous split face. Species follow the flame palette: oak (furrowed),
+  birch (papery, lenticels, peeling curls), pine (plates), driftwood
+  (bleached, no bark).
+- **One end.** Perspective shows only the end turned toward the screen's
+  middle: growth rings around an off-centre pith (arcs around the apex for
+  split wood), heartwood, drying checks, faint saw kerfs, the bark rim and
+  char creeping in from it. The far end is a ragged back outline. Body and
+  both ends wind the same way, so one `Path2D` unions them.
+- **Alligator char.** Blocks laid out around the circumference (s) and
+  projected, so they crowd toward the silhouette. The circumference is cut
+  into bands with their own columns, so no crack runs the whole way round,
+  and cracks across the grain are wider than those along it. A soft char map
+  (5 px grid, `putImageData` at bake time only) masks the blocks and the glow,
+  so the char's edge follows the burn, not the blocks.
+- **Light from below.** Painted in daylight colours, then multiplied by a
+  firelight grade (dark top, warm underside). Logs over another shade it
+  (a bake-time `shadowBlur`). Contacts with other logs and the bed are found
+  by sampling edges; they char deepest and glow hottest.
+- **Breathing glow.** Each log's glow (a warm bloom, a thin hot core only on
+  the hottest cracks, the underside's coal light, the flame-lit rim) is cut
+  into feathered zones along its length whose weights sum to one, so zones
+  pulsing apart never show a seam. Neighbouring zones read nearby noise, so a
+  brightening rolls along a log. The rim follows the flame root behind it.
+  Pops flash their zone.
+- **Coal bed and iron.** A lumpy heap of chunks (live, char, ash), glowing in
+  the gaps, in feathered tiles that breathe and burn harder under strong
+  flame; settings Coal Bed (depth) and Ironwork (grate, andirons, none).
+  Below the ground line is hearth stone, hiding the logs' buried undersides.
+
+Costs: a 60–70 ms bake per resize on a desktop, about 3.5 MP of layers at
+10 logs; per frame, one blit per log plus about three per zone. Bench
+unchanged (4.7 / 9.0 / 18.7% busy).
+
+Hard-won:
+- `destination-in` scales by the fill's alpha. A mask fill that inherits a
+  translucent `fillStyle` silently dims the whole layer (it took the warm
+  glow to 5%). Set an opaque fill first.
+- A dim yellow ember reads as olive. Dim must be deep red; only the hottest
+  cracks get the orange-yellow core, and it doesn't accumulate.
+- Two round knots side by side read as eyes. Knots are lenses along the
+  grain, birch scars long bands around the trunk, one at a time.
 
 ### 10.21 Jellyfin player (`jellyfin`, owner pick, high priority)
 

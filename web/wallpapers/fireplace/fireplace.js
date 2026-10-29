@@ -7,6 +7,9 @@
 // rather than one so part of the fire can be drawn behind the logs and part in
 // front, which is what makes the flames look like they wrap around the wood
 // instead of sitting flat behind it.
+//
+// The wood, the coal bed and the iron grate are fireplace-wood.js: painted
+// once per resize, then blitted, with only their glow breathing per frame.
 
 // Flame colour is mostly blackbody emission from glowing soot, so each palette
 // is a heating curve read coolest-first: dull red at the cooling tips, through
@@ -129,12 +132,12 @@ class FireplaceAnimationManager {
         this.frontBuffer = null;
         this.frontCtx = null;
 
-        // The log art is expensive to draw and never changes, so it is painted
-        // once into a full-resolution buffer; only the ember glow on top of it
-        // is redrawn each frame
-        this.logBuffer = null;
-        this.logCtx = null;
-        this.logTop = 0;      // the buffer covers only the band the logs sit in
+        // The log art is expensive to draw and never changes, so each log is
+        // baked once (log.art) and only its glow zones are redrawn each frame.
+        // The coal bed and the grate are baked the same way.
+        this.bed = null;
+        this.bedArt = null;
+        this.iron = null;
 
         // Same idea for the brick wall: a static pattern baked once, then just
         // blitted behind everything each frame so the existing 'lighter' room
@@ -377,8 +380,6 @@ class FireplaceAnimationManager {
         this.backCtx = this.backBuffer.getContext('2d');
         this.frontBuffer = document.createElement('canvas');
         this.frontCtx = this.frontBuffer.getContext('2d');
-        this.logBuffer = document.createElement('canvas');
-        this.logCtx = this.logBuffer.getContext('2d');
         this.brickBuffer = document.createElement('canvas');
         this.brickCtx = this.brickBuffer.getContext('2d');
 
@@ -407,15 +408,16 @@ class FireplaceAnimationManager {
         this.brickBuffer.height = this.canvas.height;
     }
 
-    // Everything that depends on the canvas size or on log settings: the log
-    // stack, the coal bed, the flame roots along it
+    // Everything that depends on the canvas size or on log settings: the coal
+    // bed, the log stack on it, the flame roots along it
     rebuildScene() {
         if (!this.canvas) return;
 
+        this.buildBed();
         this.buildLogs();
         this.buildCoals();
         this.buildEmitters();
-        this.renderLogBuffer();
+        this.bakeWood();
         this.renderBrickWall();
         this.buildCompanion();
         this.buildDecorations();
@@ -489,6 +491,7 @@ class FireplaceAnimationManager {
                 length,
                 radius,
                 angle: (random() - 0.5) * 0.1,
+                row: 0,
                 random
             }));
         }
@@ -506,6 +509,7 @@ class FireplaceAnimationManager {
                 length,
                 radius,
                 angle: (random() - 0.5) * 0.28,
+                row: 1,
                 random
             }));
         }
@@ -522,219 +526,63 @@ class FireplaceAnimationManager {
                     length: capSpan * (0.55 + random() * 0.35),
                     radius,
                     angle: (random() - 0.5) * 0.5,
+                    row: 2,
                     random
                 }));
             }
         }
 
         this.bedTop = this.logs.reduce((top, log) => Math.min(top, log.cy - log.radius), ground);
+
+        // Where logs touch each other or sink into the coals decides where
+        // they char deepest and glow brightest
+        const bed = this.bed;
+        FireplaceWood.findContacts(this.logs, bed ? x => ground - FireplaceWood.bedHeight(bed, x) : null);
+        const charring = this.charring();
+        for (const log of this.logs) FireplaceWood.dress(log, charring);
     }
 
-    makeLog({ cx, cy, length, radius, angle, random }) {
-        const log = {
-            cx,
-            cy,
-            length,
-            radius,
-            angle,
-            seed: random() * 1000,
-            bark: [],
-            char: [],
-            ash: [],
-            cracks: []
-        };
-
-        // Bark runs as long striations down the length of the log
-        const barkCount = Math.round(14 + radius * 0.5);
-        for (let i = 0; i < barkCount; i++) {
-            log.bark.push({
-                y: (random() * 2 - 1) * radius * 0.88,
-                x0: -length / 2 + random() * length * 0.3,
-                x1: length / 2 - random() * length * 0.3,
-                width: 0.6 + random() * 2.2,
-                dark: random() < 0.7,
-                alpha: 0.12 + random() * 0.3
-            });
-        }
-
-        // Charring sits on the upper surfaces where the flame actually licks
-        const charCount = Math.round(14 + length / 26);
-        for (let i = 0; i < charCount; i++) {
-            log.char.push({
-                x: (random() * 2 - 1) * length * 0.46,
-                y: -radius * (0.15 + random() * 0.75),
-                rx: length * (0.04 + random() * 0.1),
-                ry: radius * (0.15 + random() * 0.35),
-                alpha: 0.25 + random() * 0.45
-            });
-        }
-
-        // Wood that has burned a while wears patches of pale ash over the char,
-        // and without them the surface reads as a smooth painted cylinder
-        const ashCount = Math.round(6 + length / 70);
-        for (let i = 0; i < ashCount; i++) {
-            log.ash.push({
-                x: (random() * 2 - 1) * length * 0.48,
-                y: (random() * 2 - 1) * radius * 0.8,
-                rx: length * (0.006 + random() * 0.018),
-                ry: radius * (0.03 + random() * 0.09),
-                rot: (random() - 0.5) * 0.6,
-                alpha: 0.02 + random() * 0.05
-            });
-        }
-
-        // Cracks are the glowing part: char splits open and the coal shows
-        const crackCount = 4 + Math.round(random() * 4);
-        for (let i = 0; i < crackCount; i++) {
-            const points = [];
-            const steps = 2 + Math.round(random() * 2);
-            let x = (random() * 2 - 1) * length * 0.4;
-            let y = -radius * (0.1 + random() * 0.6);
-            for (let s = 0; s < steps; s++) {
-                points.push({ x, y });
-                x += (random() * 2 - 1) * length * 0.05 + length * 0.06;
-                y += (random() * 2 - 1) * radius * 0.13;
-                y = Math.max(-radius * 0.9, Math.min(radius * 0.7, y));
-            }
-            log.cracks.push({
-                points,
-                width: 0.7 + random() * 1.5,
-                seed: random() * 1000,
-                strength: 0.4 + random() * 0.6
-            });
-        }
-
-        return log;
+    makeLog(shape) {
+        return FireplaceWood.makeLog(shape, shape.random, {
+            palette: this.config.palette,
+            centre: this.canvas.width / 2
+        });
     }
 
-    renderLogBuffer() {
-        const ctx = this.logCtx;
-        if (!ctx) return;
-
-        // Sized to the band the stack occupies, not the whole screen, so the
-        // per-frame copy only touches pixels that have wood in them
-        this.logTop = this.logs.reduce((top, log) => Math.min(top,
-            log.cy - Math.abs(Math.sin(log.angle)) * log.length / 2 - log.radius - 4), this.canvas.height - 1);
-        this.logTop = Math.max(0, Math.floor(this.logTop));
-        this.logBuffer.width = this.canvas.width;
-        this.logBuffer.height = this.canvas.height - this.logTop;
-
-        ctx.setTransform(1, 0, 0, 1, 0, -this.logTop);
-        if (!this.config.showLogs) return;
-
-        for (const log of this.logs) {
-            this.drawLogBody(ctx, log);
-        }
+    // A burned-down fire's wood is deep in char whatever the slider says
+    charring() {
+        return Math.min(1, this.config.charring + (this.config.palette === 'ember' ? 0.3 : 0));
     }
 
-    logPath(ctx, log) {
-        const halfLength = log.length / 2;
-        ctx.beginPath();
-        ctx.roundRect(-halfLength, -log.radius, log.length, log.radius * 2, log.radius);
+    woodScale() {
+        return Math.min(1.4, Math.max(0.6, this.canvas.width / 1400));
     }
 
-    drawLogBody(ctx, log) {
-        ctx.save();
-        ctx.translate(log.cx, log.cy);
-        ctx.rotate(log.angle);
-
-        this.logPath(ctx, log);
-        ctx.clip();
-
-        // Light comes from the fire above, so the top of the log is warm and
-        // the underside falls away into the ash
-        const body = ctx.createLinearGradient(0, -log.radius, 0, log.radius);
-        body.addColorStop(0, '#4a2c17');
-        body.addColorStop(0.16, '#2b1d14');
-        body.addColorStop(0.45, '#171110');
-        body.addColorStop(1, '#070505');
-        ctx.fillStyle = body;
-        ctx.fillRect(-log.length / 2, -log.radius, log.length, log.radius * 2);
-
-        for (const stripe of log.bark) {
-            ctx.beginPath();
-            ctx.moveTo(stripe.x0, stripe.y);
-            ctx.lineTo(stripe.x1, stripe.y + (stripe.y > 0 ? 1.5 : -1.5));
-            ctx.lineWidth = stripe.width;
-            ctx.strokeStyle = stripe.dark
-                ? `rgba(0, 0, 0, ${stripe.alpha})`
-                : `rgba(150, 104, 62, ${stripe.alpha * 0.5})`;
-            ctx.stroke();
-        }
-
-        for (const blotch of log.char) {
-            ctx.beginPath();
-            ctx.ellipse(blotch.x, blotch.y, blotch.rx, blotch.ry, 0, 0, Math.PI * 2);
-            ctx.fillStyle = `rgba(10, 8, 8, ${blotch.alpha})`;
-            ctx.fill();
-        }
-
-        for (const patch of log.ash) {
-            ctx.beginPath();
-            ctx.ellipse(patch.x, patch.y, patch.rx, patch.ry, patch.rot, 0, Math.PI * 2);
-            ctx.fillStyle = `rgba(146, 130, 116, ${patch.alpha})`;
-            ctx.fill();
-        }
-
-        // The flame sits above the wood, so the top of every log carries a warm
-        // rim. Without it the cylinders read as flat pipes.
-        const rim = ctx.createLinearGradient(0, -log.radius, 0, -log.radius * 0.25);
-        rim.addColorStop(0, 'rgba(184, 106, 48, 0.42)');
-        rim.addColorStop(0.5, 'rgba(150, 84, 40, 0.14)');
-        rim.addColorStop(1, 'rgba(150, 84, 40, 0)');
-        ctx.fillStyle = rim;
-        ctx.fillRect(-log.length / 2, -log.radius, log.length, log.radius);
-
-        ctx.restore();
-
-        // End grain is drawn outside the clip so the rings sit flush on the caps
-        ctx.save();
-        ctx.translate(log.cx, log.cy);
-        ctx.rotate(log.angle);
-        this.drawEndGrain(ctx, log, -log.length / 2 + log.radius * 0.28);
-        this.drawEndGrain(ctx, log, log.length / 2 - log.radius * 0.28);
-        ctx.restore();
+    // The heap of coals and ash the logs lie in. Built before the logs,
+    // since where a log sinks into it is where it burns hottest.
+    buildBed() {
+        this.bed = null;
+        if (this.config.bedDepth <= 0) return;
+        this.bed = FireplaceWood.makeBed(this.seededRandom(5150 + Math.round(this.canvas.width)), {
+            width: this.canvas.width,
+            ground: this.groundLevel(),
+            scale: this.woodScale(),
+            depth: this.config.bedDepth
+        });
     }
 
-    drawEndGrain(ctx, log, x) {
-        const rx = log.radius * 0.22;
-        const ry = log.radius * 0.9;
-
-        ctx.save();
-        ctx.beginPath();
-        ctx.ellipse(x, 0, rx, ry, 0, 0, Math.PI * 2);
-        ctx.clip();
-
-        const grain = ctx.createLinearGradient(0, -ry, 0, ry);
-        grain.addColorStop(0, '#3f2a16');
-        grain.addColorStop(0.5, '#251910');
-        grain.addColorStop(1, '#0e0a07');
-        ctx.fillStyle = grain;
-        ctx.fillRect(x - rx, -ry, rx * 2, ry * 2);
-
-        for (let i = 1; i <= 4; i++) {
-            const k = i / 5;
-            ctx.beginPath();
-            ctx.ellipse(x, 0, rx * k, ry * k, 0, 0, Math.PI * 2);
-            ctx.strokeStyle = `rgba(20, 12, 6, ${0.22 - k * 0.08})`;
-            ctx.lineWidth = 1;
-            ctx.stroke();
-        }
-
-        ctx.beginPath();
-        ctx.moveTo(x, -ry);
-        ctx.lineTo(x + rx * 0.3, ry);
-        ctx.strokeStyle = 'rgba(14, 9, 5, 0.5)';
-        ctx.lineWidth = 1.4;
-        ctx.stroke();
-
-        ctx.restore();
-
-        ctx.beginPath();
-        ctx.ellipse(x, 0, rx, ry, 0, 0, Math.PI * 2);
-        ctx.strokeStyle = 'rgba(0, 0, 0, 0.5)';
-        ctx.lineWidth = 1.2;
-        ctx.stroke();
+    bakeWood() {
+        const palette = this.palette();
+        this.logs.forEach((log, i) => {
+            log.art = FireplaceWood.bakeLog(log, this.logs.slice(i + 1), palette);
+        });
+        this.bedArt = this.bed ? FireplaceWood.bakeBed(this.bed, palette) : null;
+        this.iron = FireplaceWood.bakeIron(this.config.grate, {
+            width: this.canvas.width,
+            ground: this.groundLevel(),
+            scale: this.woodScale(),
+            palette
+        });
     }
 
     // --------------------------------------------------------------- bricks
@@ -1177,11 +1025,13 @@ class FireplaceAnimationManager {
 
         for (let i = 0; i < count; i++) {
             const size = 3 + random() * 11;
+            const x = random() * width;
+            // Hot spots down in the heap, or along the ash line without one,
+            // so the logs never bury them completely
+            const depth = this.bed ? FireplaceWood.bedHeight(this.bed, x) * (0.1 + random() * 0.7) : random() * random() * 14;
             this.coals.push({
-                x: random() * width,
-                // The coal bed is a shallow band right at the ash line, so the
-                // logs never bury it completely
-                y: ground - random() * random() * 14,
+                x,
+                y: ground - depth,
                 rx: size * (1 + random() * 0.8),
                 ry: size * (0.4 + random() * 0.4),
                 seed: random() * 1000,
@@ -1582,85 +1432,134 @@ class FireplaceAnimationManager {
         ctx.restore();
     }
 
-    drawLogs(ctx) {
-        if (!this.config.showLogs) return;
-        ctx.drawImage(this.logBuffer, 0, this.logTop);
+    // Strength of the flame roots over screen x, 0..~1
+    flameAt(x) {
+        const emitters = this.emitters;
+        if (emitters.length === 0) return 0.5;
+        const i = Math.floor(x / this.canvas.width * emitters.length);
+        return emitters[Math.max(0, Math.min(emitters.length - 1, i))].strength;
     }
 
-    drawEmberGlow(ctx) {
-        if (!this.config.showLogs || this.config.emberGlow <= 0) return;
+    // Each log in turn, back to front, so a log lying over another hides its
+    // glow too: the baked body, the coal light on its underside, then its
+    // zones. A zone's warm bleed swings gently and its hot crack cores swing
+    // hard, so a brightening ember also shifts toward yellow, as real ones do.
+    drawLogs(ctx) {
+        if (!this.config.showLogs) return;
 
-        const [r, g, b] = this.palette().ember;
-        const strength = this.config.emberGlow * (0.55 + this.fireIntensity * 0.75);
-
-        ctx.save();
-        ctx.globalCompositeOperation = 'lighter';
+        const glow = this.config.emberGlow;
+        const breath = 0.7 + this.fireIntensity * 0.4;
+        const t = this.elapsed * this.config.flickerSpeed;
+        const flames = this.config.flameOpacity * Math.min(1.4, this.config.intensity);
 
         for (const log of this.logs) {
+            const art = log.art;
+            if (!art) continue;
+            ctx.drawImage(art.body, art.x, art.y);
+
+            const box = art.box;
+            const height = box.y1 - box.y0;
             ctx.save();
             ctx.translate(log.cx, log.cy);
             ctx.rotate(log.angle);
+            ctx.globalCompositeOperation = 'lighter';
 
-            // Cracks are clipped to the log so the glow cannot leak past its edge
-            this.logPath(ctx, log);
-            ctx.save();
-            ctx.clip();
-
-            for (const crack of log.cracks) {
-                const pulse = this.sampleNoise(crack.seed, this.elapsed * 0.9);
-                const pop = crack.popPower || 0;
-                const heat = crack.strength * strength * (0.3 + pulse * 0.9) + pop;
-                if (heat <= 0.02) continue;
-
-                ctx.beginPath();
-                ctx.moveTo(crack.points[0].x, crack.points[0].y);
-                for (let i = 1; i < crack.points.length; i++) {
-                    ctx.lineTo(crack.points[i].x, crack.points[i].y);
-                }
-
-                ctx.lineCap = 'round';
-                ctx.lineJoin = 'round';
-
-                // Two passes stand in for a blur: a wide dull halo and a thin
-                // near-white centre, which is what a split coal actually looks like
-                ctx.lineWidth = crack.width * 3.5;
-                ctx.strokeStyle = `rgba(${r}, ${Math.round(g * 0.45)}, ${Math.round(b * 0.3)}, ${Math.min(0.4, heat * 0.2)})`;
-                ctx.stroke();
-
-                ctx.lineWidth = crack.width;
-                ctx.strokeStyle = `rgba(${Math.min(255, r + 30)}, ${Math.round(110 + g * 0.3)}, ${Math.round(40 + b * 0.3)}, ${Math.min(0.7, heat * 0.5)})`;
-                ctx.stroke();
-
-                // A pop event blows the char open, and the fresh coal beneath
-                // it flashes near-white before settling back to ember colour
-                if (pop > 0.03) {
-                    ctx.lineWidth = crack.width * 1.5;
-                    ctx.strokeStyle = `rgba(255, 240, 205, ${Math.min(0.9, pop)})`;
-                    ctx.stroke();
-                }
+            if (glow > 0) {
+                ctx.globalAlpha = Math.min(1, glow * (0.3 + this.fireIntensity * 0.6) * (log.row === 0 ? 1 : 0.75));
+                ctx.drawImage(art.under, box.x0, box.y0, box.x1 - box.x0, height);
             }
 
-            ctx.restore();
-
-            // Where the wood meets the coals below it, light spills upward
-            const contact = ctx.createLinearGradient(0, log.radius, 0, -log.radius * 0.2);
-            contact.addColorStop(0, `rgba(${r}, ${Math.round(g * 0.5)}, ${Math.round(b * 0.3)}, ${Math.min(0.4, 0.2 * strength)})`);
-            contact.addColorStop(1, 'rgba(0, 0, 0, 0)');
-            this.logPath(ctx, log);
-            ctx.fillStyle = contact;
-            ctx.fill();
-
+            for (const z of art.zones) {
+                const zone = z.zone;
+                if (glow > 0 || zone.pop > 0) {
+                    // Neighbouring zones read nearby noise, so a brightening
+                    // rolls along the log instead of flashing in blocks
+                    const p = this.sampleNoise(zone.index * 0.55 - t * 0.12, t * 0.35 + zone.seed);
+                    const warm = glow * breath * (0.4 + p * 0.7) + zone.pop * 0.6;
+                    const hot = glow * breath * Math.max(0, p * 1.5 - 0.45) + zone.pop;
+                    if (warm > 0.01) {
+                        ctx.globalAlpha = Math.min(1, warm);
+                        ctx.drawImage(z.warm, z.x, box.y0, z.w, height);
+                    }
+                    if (hot > 0.01) {
+                        ctx.globalAlpha = Math.min(1, hot);
+                        ctx.drawImage(z.hot, z.x, box.y0, z.w, height);
+                    }
+                }
+                // The rim is lit by whatever flame is burning behind it
+                const rim = flames * (0.2 + this.flameAt(z.screenX) * 0.9);
+                if (rim > 0.01) {
+                    ctx.globalAlpha = Math.min(1, rim);
+                    ctx.drawImage(z.rim, z.x, art.rimY0, z.w, art.rimH);
+                }
+            }
             ctx.restore();
         }
+    }
 
+    // The coal heap, then its glow, tile by tile: each tile breathes on its
+    // own and burns harder under strong flame
+    drawBed(ctx) {
+        this.drawHearth(ctx);
+        const art = this.bedArt;
+        if (!art) return;
+        ctx.drawImage(art.body, 0, art.y);
+
+        const glow = this.config.emberGlow;
+        if (glow <= 0) return;
+        const breath = 0.55 + this.fireIntensity * 0.55;
+        const t = this.elapsed * this.config.flickerSpeed;
+
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+        for (const tile of art.tiles) {
+            const p = this.sampleNoise(tile.seed + tile.mid * 0.004, t * 0.4);
+            const feed = glow * breath * (0.7 + this.flameAt(tile.mid) * 0.6);
+            ctx.globalAlpha = Math.min(1, feed * (0.5 + p * 0.6));
+            ctx.drawImage(tile.warm, tile.x, art.y, tile.w, art.height);
+            const hot = feed * Math.max(0, p * 1.4 - 0.3);
+            if (hot > 0.01) {
+                ctx.globalAlpha = Math.min(1, hot);
+                ctx.drawImage(tile.hot, tile.x, art.y, tile.w, art.height);
+            }
+        }
+        ctx.restore();
+    }
+
+    // Below the ground line (Android's navigation bar) is the stone of the
+    // hearth, not more log: it hides the logs' buried undersides and catches
+    // a little of the coals' light along its edge
+    drawHearth(ctx) {
+        const ground = this.groundLevel();
+        const below = this.canvas.height - ground;
+        if (below <= 0) return;
+        ctx.fillStyle = '#0d0a09';
+        ctx.fillRect(0, ground, this.canvas.width, below);
+        const [r, g, b] = this.palette().ember;
+        const lit = ctx.createLinearGradient(0, ground, 0, ground + Math.min(below, 40));
+        lit.addColorStop(0, `rgba(${r}, ${Math.round(g * 0.42)}, ${Math.round(b * 0.25)}, ${0.22 * (0.5 + this.fireIntensity * 0.5)})`);
+        lit.addColorStop(1, 'rgba(0, 0, 0, 0)');
+        ctx.fillStyle = lit;
+        ctx.fillRect(0, ground, this.canvas.width, Math.min(below, 40));
+    }
+
+    // Black iron in front of everything, its edges catching the fire
+    drawIron(ctx) {
+        const iron = this.iron;
+        if (!iron) return;
+        ctx.drawImage(iron.body, 0, iron.y);
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+        ctx.globalAlpha = Math.min(1, 0.2 + this.fireIntensity * 0.6);
+        ctx.drawImage(iron.rim, 0, iron.y);
         ctx.restore();
     }
 
     // ----------------------------------------------------------- pop events
 
-    // A big pop: a random crack on a random log flashes white-hot for a
+    // A big pop: a hot crack on a random log flashes white-hot for a
     // moment, throws a burst of sparks, and flares the nearest flame root.
-    // Everything it touches (crack.popPower, emitter.flareBoost) is state
+    // Everything it touches (zone.pop, emitter.flareBoost) is state
     // that already drives other systems, so this needs almost no drawing
     // code of its own beyond the shockwave puff.
     updatePopEvents(dt) {
@@ -1677,33 +1576,32 @@ class FireplaceAnimationManager {
             burst.life += dt;
 
             if (burst.life >= burst.maxLife) {
-                burst.crack.popPower = 0;
+                burst.zone.pop = 0;
                 this.popBursts.splice(i, 1);
                 continue;
             }
 
             const k = burst.life / burst.maxLife;
-            burst.crack.popPower = burst.power * Math.max(0, 1 - k * k);
+            burst.zone.pop = burst.power * Math.max(0, 1 - k * k);
         }
     }
 
     triggerPop() {
         if (!this.config.showLogs || this.logs.length === 0) return;
 
-        const candidates = this.logs.filter(log => log.cracks.length > 0);
+        const candidates = this.logs.filter(log => log.hotPoints.length > 0 && log.art);
         if (candidates.length === 0) return;
 
         const log = candidates[Math.floor(Math.random() * candidates.length)];
-        const crack = log.cracks[Math.floor(Math.random() * log.cracks.length)];
-        const point = crack.points[Math.floor(Math.random() * crack.points.length)];
+        const point = log.hotPoints[Math.floor(Math.random() * log.hotPoints.length)];
+        // The glow zone the crack sits in flashes with it
+        const zone = log.zones.reduce((best, z) =>
+            FireplaceWood.zoneWeight(z, point.u) > FireplaceWood.zoneWeight(best, point.u) ? z : best);
 
-        // Cracks are stored in the log's own rotated local space
-        const cos = Math.cos(log.angle);
-        const sin = Math.sin(log.angle);
-        const x = log.cx + point.x * cos - point.y * sin;
-        const y = log.cy + point.x * sin + point.y * cos;
+        // Hot points are stored in the log's own rotated local space
+        const [x, y] = FireplaceWood.toScreen(log, point.u, point.y);
 
-        this.popBursts.push({ crack, x, y, life: 0, maxLife: 0.5, power: 0.85 + Math.random() * 0.5 });
+        this.popBursts.push({ zone, x, y, life: 0, maxLife: 0.5, power: 0.85 + Math.random() * 0.5 });
 
         if (this.config.sparks) {
             const count = 10 + Math.floor(Math.random() * 10);
@@ -1762,12 +1660,16 @@ class FireplaceAnimationManager {
         ctx.save();
         ctx.globalCompositeOperation = 'lighter';
 
-        // Coals are in random order, so drawing fewer thins the bed evenly
+        // Coals are in random order, so drawing fewer thins the bed evenly.
+        // In a heap that already glows they are just the flickering hot
+        // spots, so they're smaller and dimmer than on bare ash.
         const shown = Math.min(this.coals.length, Math.round(this.coalsShown));
+        const inHeap = this.bedArt ? 0.5 : 1;
+        const size = this.bedArt ? 0.7 : 1;
         for (let i = 0; i < shown; i++) {
             const coal = this.coals[i];
             const pulse = this.sampleNoise(coal.seed, this.elapsed * coal.speed);
-            const heat = coal.heat * (0.25 + pulse * 0.9) * (0.5 + this.fireIntensity * 0.7);
+            const heat = coal.heat * (0.25 + pulse * 0.9) * (0.5 + this.fireIntensity * 0.7) * inHeap;
             if (heat <= 0.02) continue;
 
             // Coals glow by blackbody even when the flame above them does not:
@@ -1775,8 +1677,8 @@ class FireplaceAnimationManager {
             // the embers stay red-orange whatever the flame is doing. The
             // colour ramp is baked into coalSprites (buildSprites)
             const level = Math.round(Math.min(1, heat / FIREPLACE_COAL_MAX_HEAT) * (FIREPLACE_COAL_LEVELS - 1));
-            const rx = coal.rx * 1.8;
-            const ry = coal.ry * 2.0;
+            const rx = coal.rx * 1.8 * size;
+            const ry = coal.ry * 2.0 * size;
             ctx.drawImage(this.coalSprites[level], coal.x - rx, coal.y - ry, rx * 2, ry * 2);
         }
 
@@ -1852,12 +1754,13 @@ class FireplaceAnimationManager {
         this.blitFlameBuffer(ctx, this.backBuffer);
 
         this.drawLogs(ctx);
-        this.drawEmberGlow(ctx);
+        this.drawBed(ctx);
         this.drawCoals(ctx);
         this.drawPopBursts(ctx);
 
         this.renderFlameBuffer(this.frontCtx, this.frontBuffer, true);
         this.blitFlameBuffer(ctx, this.frontBuffer);
+        this.drawIron(ctx);
 
         this.drawSparks(ctx);
         this.drawSmoke(ctx);

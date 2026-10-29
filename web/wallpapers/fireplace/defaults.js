@@ -24,6 +24,9 @@ WP.defaults('fireplace', {
     logScale: 1.0,
     logThickness: 2.5,
     emberGlow: 1.0,
+    charring: 0.6,
+    bedDepth: 1.0,
+    grate: 'grate',           // 'grate' | 'andirons' | 'none'
     coalCount: 660,
     popEvents: true,
     popRate: 1.0,

@@ -33,7 +33,7 @@
           make: host => new LeavesAnimationManager(host), cost: 'medium' },
         { id: 'fireflies', name: 'Fireflies', icon: '✨', accent: '#ead35c', scripts: ['fireflies/fireflies.js'],
           make: host => new FirefliesAnimationManager(host), cost: 'low' },
-        { id: 'fireplace', name: 'Fireplace', icon: '🔥', accent: '#ff8a3d', scripts: ['fireplace/fireplace.js'],
+        { id: 'fireplace', name: 'Fireplace', icon: '🔥', accent: '#ff8a3d', scripts: ['fireplace/fireplace-wood.js', 'fireplace/fireplace.js'],
           make: host => new FireplaceAnimationManager(host), cost: 'high',
           effects: [['smoke', 'medium']] },
         { id: 'northern-lights', name: 'Northern Lights', icon: '🌌', accent: '#55eeb0', scripts: ['northern-lights/northern-lights.js'],

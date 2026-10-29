@@ -417,6 +417,39 @@ const STAGE_CHECKS = {
         console.log(`    lanterns: ${first.sky} in the sky on frame ${first.frames}; pool ${cap}, at most ${most} after 200 taps`);
         return true;
     }]],
+    // Fireplace: the wood is baked before the first frame, with char that
+    // glows in zones, a coal bed and the grate; a pop flashes the zone it
+    // bursts from and then lets it go; and the glow breathes on its own.
+    fireplace: [['wood, coals and iron baked by frame one; a pop flashes its zone; the glow breathes', async () => {
+        await cdp.send('Page.navigate', { url: `${WEB}/stage.html?w=fireplace&seed=7` });
+        await waitFor(() => evaluate('WP.stage?.ready === true'));
+        const first = await evaluate(`(m => ({ frames: WP.host.frames.count, logs: m.logs.length,
+            baked: m.logs.filter(l => l.art && l.art.zones.length >= 2).length,
+            hot: m.logs.filter(l => l.hotPoints.length > 0).length,
+            species: [...new Set(m.logs.map(l => l.species))], cuts: [...new Set(m.logs.map(l => l.cut))],
+            tiles: m.bedArt ? m.bedArt.tiles.length : 0, chunks: m.bed ? m.bed.chunks.length : 0, iron: !!m.iron }))(WP.stage.manager)`);
+        if (first.frames > 10) record(`the first frame came at ${first.frames}`);
+        if (first.baked !== first.logs || first.logs < 4) record(`not every log baked: ${JSON.stringify(first)}`);
+        if (first.hot < first.logs / 2) record(`hardly any log glows: ${first.hot} of ${first.logs}`);
+        if (first.tiles < 6 || first.chunks < 100 || !first.iron) record(`no coal bed or grate: ${JSON.stringify(first)}`);
+        const popped = await evaluate(`(m => { m.triggerPop(); const b = m.popBursts[m.popBursts.length - 1]; return b ? b.zone.index : -1; })(WP.stage.manager)`);
+        await sleep(120);
+        const flash = await evaluate('Math.max(...WP.stage.manager.logs.flatMap(l => l.zones.map(z => z.pop)))');
+        await sleep(900);
+        const after = await evaluate('Math.max(...WP.stage.manager.logs.flatMap(l => l.zones.map(z => z.pop)))');
+        if (popped < 0 || flash < 0.2) record(`a pop didn't flash its zone: zone ${popped}, pop ${flash}`);
+        if (after !== 0) record(`a pop's flash never settled: ${after}`);
+        // The glow breathes: a zone's warmth over two seconds isn't constant
+        const pulse = 'WP.stage.manager.sampleNoise(1.1 - WP.stage.manager.elapsed * 0.12, WP.stage.manager.elapsed * 0.35 + WP.stage.manager.logs[0].zones[1].seed)';
+        const samples = [];
+        for (let i = 0; i < 8; i++) {
+            samples.push(await evaluate(pulse));
+            await sleep(250);
+        }
+        if (Math.max(...samples) - Math.min(...samples) < 0.02) record(`the glow didn't breathe: ${samples.map(s => s.toFixed(2))}`);
+        console.log(`    fireplace: ${first.logs} logs (${first.species.join(', ')}; ${first.cuts.join(', ')}), ${first.chunks} coals in ${first.tiles} tiles; a pop flashed zone ${popped} to ${flash.toFixed(2)}`);
+        return true;
+    }]],
     // Harvest Valley: alive on the first frame; a tap shakes a tree and
     // apples fall; a squirrel carries one to its door; the Great Pumpkin
     // rises only at night; and every part can be left out.

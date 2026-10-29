@@ -36,6 +36,13 @@ Click one to see it live.
 | [<img src="web/wallpapers/lighthouse/thumb.webp" width="200" alt="Lighthouse">](https://nealhardesty.github.io/wallpapers/?w=lighthouse)<br>🌊 Lighthouse | [<img src="web/wallpapers/wiki-pond/thumb.webp" width="200" alt="Wiki Pond">](https://nealhardesty.github.io/wallpapers/?w=wiki-pond)<br>🪷 Wiki Pond | [<img src="web/wallpapers/satellites/thumb.webp" width="200" alt="Satellites">](https://nealhardesty.github.io/wallpapers/?w=satellites)<br>🛰️ Satellites | [<img src="web/wallpapers/jellyfin/thumb.webp" width="200" alt="Jellyfin">](https://nealhardesty.github.io/wallpapers/?w=jellyfin)<br>📺 Jellyfin |
 | [<img src="web/wallpapers/harvest/thumb.webp" width="200" alt="Harvest Valley">](https://nealhardesty.github.io/wallpapers/?w=harvest)<br>🌾 Harvest Valley | | | |
 
+The **Fireplace** 🔥 burns wood you'd recognise: furrowed oak, papery birch,
+scaly pine or bleached driftwood (following its Wood Type), round or split,
+each showing the rings of its sawn end and charring into alligator cracks
+whose glow breathes as the air moves. It lies in a heap of coals behind an
+iron grate or a pair of andirons; the panel's Char, Coal Bed and Ironwork
+controls set them.
+
 The second half is new: a harmonograph inking its figures, a pixel-art room
 with a cat that keeps the real hours, Islamic star patterns that breathe, a
 stained-glass window lit by the time of day, the synthwave drive, a zen
