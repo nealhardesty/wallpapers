@@ -374,6 +374,7 @@ Run `make` to list every target.
 | `make screenshots` | Re-render the README's screenshots in `docs/` (committed: review the changes) |
 | `make extension` | Build the Chrome extension: `dist/extension/` to load unpacked, and a zip |
 | `make site` | Build the GitHub Pages copy in `dist/site/`, with a fresh `bing.json` |
+| `make open` | Open `web/index.html` in your default browser (from `file://`, no server needed), or bring its tab forward if it's already open (macOS, Chrome and Safari). `make open PAGE='?w=harvest'` opens a particular wallpaper |
 | `make bench` | Every wallpaper at every tier on a simulated phone (4× slower CPU), then the clock overlay's cost; checks the budgets, writes `bench/results.json` and the ⚡ badges |
 | `make bench-clock` | Just the clock overlay's cost: a bouncing clock with seconds against none |
 | `make jellyfin-media` | Generate made-up test videos (patterns, tones, subtitles in several kinds) into `.jellyfin/media/`; needs `ffmpeg` |
