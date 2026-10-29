@@ -59,7 +59,7 @@
               { keys: ['w'], label: 'A gust of wind', run: valley => valley.blow() },
               { keys: ['m'], label: 'What is the moon doing?', run: valley => valley.moonReport() },
           ] },
-        { id: 'neko', name: 'Neko', icon: '🐈', accent: '#f2c38b', scripts: ['neko/neko.js'],
+        { id: 'neko', name: 'Neko', icon: '🐈', accent: '#f2c38b', scripts: ['neko/sprites.js', 'neko/hats.js', 'neko/neko.js'],
           make: host => new NekoAnimationManager(host), cost: 'low', interactive: true, background: '#1b1f2e' },
         { id: 'matrix', name: 'Matrix', icon: '🟩', accent: '#4dff7c', scripts: ['matrix/matrix.js'],
           make: host => new MatrixAnimationManager(host), cost: 'medium' },

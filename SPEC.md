@@ -69,7 +69,7 @@ Imported from the private homepage repo, as a **fresh copy with no git history**
 | `starfield` | starfield.js | 26 KB | |
 | `cherry-blossoms` | cherry-blossoms.js | 21 KB | Leaks a resize listener on every `start()`. |
 | `halloween` | halloween.js, halloween.html | 178 KB | Interactive (mouse). Settings are already data-driven (`controlSpec()`). |
-| `neko` | neko.js + `assets/neko/` (79 themes, 2,472 `.ico`, 20 MB) | 28 KB | Interactive. **Licensing, size and filename-case problems** (§7.3). |
+| `neko` | neko.js + `assets/neko/` (79 themes, 2,472 `.ico`, 20 MB) | 28 KB | Interactive. **Licensing, size and filename-case problems** (§7.3). Now the public-domain oneko bitmaps in sprites.js, recoloured per coat (§10.24). |
 | `matrix` | matrix.js | 23 KB | |
 | `fishtank` | fishtank.js, fishtank.html | 139 KB | Interactive. `ctx.filter` blur and per-frame `putImageData`; the hardest on WebView. |
 | `advent` | advent.js, advent-treats.js, advent.html | 365 KB | Interactive. Date-driven; `?date=` time travel. |
@@ -752,7 +752,7 @@ and the commits.
 | snow, rain, fireflies, cherry-blossoms | — | Spawn rate and cap × density; fireflies' glow sprites 32/64/128 px by tier; cherry-blossoms' sky and branches cached |
 | starfield | — | Stars × density, joining at the far plane; `onScroll` |
 | mountains, parallax-clouds | — | No density (the layers are the composition, and they cost ~1%); `onScroll` |
-| neko | — | Idles between Z steps while asleep (~10 frames/s) |
+| neko | — | With every cat asleep and no yarn about, idles until the next breath or the next cat sets off |
 | bing | — | No frames at all; CSS background |
 | harmonograph | — | Sheet canvas (paper + ink) cached; frames copy only the touched rectangle; slides are the only full-screen frames; Low: stride 2, one stroke at a time, idles between; idles while a finished drawing is admired |
 | pixel-room | — | ~320×180 buffer at a whole device-pixel scale; lit room rebuilt only when the light changes; 10 ticks/s on every tier via idleUntil |
@@ -1505,7 +1505,7 @@ Implemented in `tools/audit.mjs` (Phase 1), with four modes:
 
 | Item | Concern | Proposed action |
 |---|---|---|
-| Neko sprites (79 themes, 20 MB) | Copied from an MIT repo, but that repo doesn't credit the sprites; they trace back to decades of Neko skin packs by many authors. Several themes are trademarked characters (Sonic, Pac-Man, Metroid, Zelda, Doom, TIE fighter, Coke). Filenames have inconsistent case (`Awake.ico` vs `awake.ico`): 78 of 79 themes break on case-sensitive hosts such as Android and Linux. | **Done (phase 4.6).** Neko is code-drawn pixel art (`NekoSprites` in `neko.js`) with eight coats, keeping the classic behaviours (chase, yawn, scratch, wash, sleep, wall claws). 20 MB and every provenance question dropped; none of the old sprites were imported. |
+| Neko sprites (79 themes, 20 MB) | Copied from an MIT repo, but that repo doesn't credit the sprites; they trace back to decades of Neko skin packs by many authors. Several themes are trademarked characters (Sonic, Pac-Man, Metroid, Zelda, Doom, TIE fighter, Coke). Filenames have inconsistent case (`Awake.ico` vs `awake.ico`): 78 of 79 themes break on case-sensitive hosts such as Android and Linux. | **Done (phase 4.6; art replaced in §10.24).** None of the 79 themes were imported. The cat is now the one set of original Neko bitmaps that is plainly public domain (Gotoh, Koba and Kato, via oneko), 12 KB in `sprites.js`, recoloured in code for eight coats. |
 | Snow sprites (`tannenbaum.png`, `snow00–06.png`) | Look like xsnow's art. xsnow is GPL-3+ (older versions non-free). Provenance unverified. | Delete. snow.js already has a canvas fallback; make it the only path and improve it. |
 | Pixel Quest text | Affectionate parodies ("IT'S A SECRET TO EVERYBODY", Lonk, Zelderp). | Keep; parody is low risk. Note it in THIRD_PARTY.md. |
 | Fonts | System fonts only (`ui-rounded`, Courier New, emoji). | Nothing to ship. |
@@ -2587,6 +2587,105 @@ Hard-won:
   cracks get the orange-yellow core, and it doesn't accumulate.
 - Two round knots side by side read as eyes. Knots are lenses along the
   grain, birch scars long bands around the trunk, one at a time.
+
+### 10.24 Neko: the original cat, a family, yarn and hats (owner request, 2026-10-29)
+
+The 16×16 cat drawn in phase 4.6 read as a blob. Neko now uses the
+original art, and grew a household:
+
+- **Sprites.** `neko/sprites.js` (`NekoBitmaps`) holds oneko's 32 `neko`
+  frames, 32×32, as base64 XBM pairs [ink, shape]. The art is Juan Gotoh's
+  (*neko DA*), made into X11 bitmaps by Masayuki Koba (*xneko*) and reused
+  by *oneko*; all three released it to the public domain. It was taken from
+  Neco's `Sprites.swift` (CC0), which converted oneko-1.2.sakura.5's
+  `bitmaps/neko/`. Only the neko set came over. The BSD daemon and Sakura
+  bitmaps in that tarball did not. Frame names stay oneko's: `mati2` sit,
+  `mati3` yawn, `jare2` wash, `kaki` scratch, `*togi` claw at a wall,
+  `awake` startle, eight run directions, and nothing is mirrored. The sleep
+  frames carry their own z's.
+- **Coats** (13). `NekoSprites.paint` colours each frame once (ImageData,
+  at bake time only): ink, fur, and a pattern on the fur. Tabby stripes,
+  value-noise patches, or points on pixels furthest from the body's
+  centroid, which finds ears, paws and tail in any pose (tuxedo's white
+  points only below it). Fur just above an outline is shaded 14%. The
+  specials:
+  - ghost: translucent, shadowless, floating and bobbing;
+  - neon: a glow baked with `shadowBlur`, pulsing and now and then buzzing;
+  - rainbow: eight baked hue phases that flow while the cat is awake;
+  - galaxy: nebula patches and stars;
+  - gold: a diagonal sheen.
+
+  Assorted deals `ASSORTED` in turn from an offset that moves each day, so
+  the family is stable within a day and different the next.
+- **Cats** (1–42, default 1). Each cat has its own state, goal, pace (±10%)
+  and idle clock. Goals, in order:
+  - yarn: the four cats nearest each ball, a current chaser counting as
+    three lengths nearer, so the pack doesn't flicker; the rest watch or
+    sleep on;
+  - the pointer: a slot in rings of 6, 12, 18… around it;
+  - its own plans.
+
+  Overlapping cats ease apart every frame. A runner gives way five times
+  more than a sitter, so a crowd flows round a sleeping cat.
+- **Nobody about** (Wander, Wander After 30 s ±25% per cat). A rested cat
+  either roams to a far spot, or hunts another cat (60%). A hunt stalks at
+  0.55× speed beyond three lengths, then pounces at 1.3×. A tag startles
+  the prey (awake, if it was napping), sends it fleeing, and the hunter
+  swipes. The hunter keeps at it for 3–7 s, then washes as if it had meant
+  to. Between adventures the cats run oneko's idle chain and nap.
+- **Yarn** (Tap for Yarn; through `host.gestures`, so Android page swipes
+  don't count). A tap tosses a ball, up to three at a time, in six colours.
+  Swats knock it 3–7 lengths a second with drag, and it bounces off the
+  edges, unravelling a wobbly thread behind it that fades over 12 s. Swat
+  number 3–7 is the big one: toward the nearest edge, too fast to bounce,
+  gone. Cats chasing it claw at the wall (oneko's togi, which they do any
+  time what they want lies past the edge). Then they settle, and the one
+  that hit it looks startled.
+- **Hats** (`neko/hats.js`, `NekoHats`). Pixel art at the cats' scale,
+  hand-placed on each frame's head (`anchors`: x, y, facing), mirrored
+  facing left; the propeller spins while its cat runs.
+  - 14 everyday hats: top hat, cap (blue, no logo), party, crown,
+    propeller beanie, wizard, cowboy, chef, pirate, viking, bow, flower
+    crown, halo, mortarboard.
+  - 9 holiday hats, by `host.now()`:
+    - New Year: Dec 31 – Jan 1
+    - Valentine's: Feb 13–14
+    - St Patrick's: Mar 16–17
+    - Easter: Good Friday to Easter Monday (computed)
+    - the Fourth: Jul 3–4
+    - Halloween: Oct 24–31
+    - Thanksgiving: Thursday and Friday (computed)
+    - Christmas: Dec 10–26, santa hats and antlers in turn
+  - Settings: holiday hats only (default), assorted (holiday hats on
+    holidays), none, or any one hat. The panel's list of hats lives in
+    `settings.js` (the panel doesn't load `hats.js`). `tools/neko.test.mjs`
+    keeps it, the coats and the anchors in step with the code.
+- **Size.** 32–256 px in 16 px steps (default 64, 2×). The canvas is sized
+  by `devicePixelRatio` and the art is snapped to device pixels, so 48 px
+  on a 2× screen is exactly 3×. Distances scale with size, and everything
+  stays above `host.insets.bottom`.
+- **Timing.** Timers count in `time`, the ms the wallpaper has run. A
+  pointer event is stamped on the next frame. With every cat asleep and
+  nothing rolling, the stage idles until the next breath or the next cat
+  due to set off, and that gap counts in full, not clamped to 100 ms.
+
+Cost: 42 cats with two balls, update and draw, 0.3 ms a frame on a CPU
+slowed 4×. Smoke (`neko`): 32 frames of 32 px art; with no pointer the
+cat goes exploring; 42 cats reach the pointer without stacking; a tapped
+ball is batted, knocked out and leaves the cats idle with a fading thread;
+`?date=` brings witch hats on Halloween, santa and antlers on Christmas Eve,
+none in June.
+
+Hard-won:
+- Base64 of a mostly empty frame is a long run of `A`s, which the audit's
+  bare-hex rule reads as a key: `sleep2` carries an `audit-allow`.
+- Every cat charging the ball buries it at the edge in a heap; four
+  chasers and an audience reads as a game.
+- Dark hats outlined in a light grey read as grey hats (the pilgrim hat
+  looked like a padlock). Dark hats take a dark outline and a bright
+  highlight.
+- Values from a `vm` context have their own `Array`: tests copy them
+  before `deepEqual`.
 
 ### 10.21 Jellyfin player (`jellyfin`, owner pick, high priority)
 
