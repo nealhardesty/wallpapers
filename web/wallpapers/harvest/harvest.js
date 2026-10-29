@@ -120,6 +120,7 @@ class HarvestAnimationManager {
         const changed = keys => keys.some(k => old[k] !== config[k]);
         if (changed(['village', 'houses', 'windmill', 'fields', 'pumpkinPatch', 'horizon', 'foliage', 'autumnColors', 'orchard', 'trees', 'treeSize'])) {
             this.resize();
+            this.buildCast();
             this.seed();
         } else {
             if (changed(['squirrels', 'turkeys', 'cats', 'wind'])) this.buildCast();
@@ -144,6 +145,7 @@ class HarvestAnimationManager {
 
     resize() {
         if (!this.canvas) return;
+        const prev = this.L ? { W: this.W, Hu: this.L.Hu } : null;     // a resize keeps the cast; only the first layout builds it
         const dpr = this.dpr = window.devicePixelRatio || 1;
         const W = this.W = window.innerWidth, H = this.H = window.innerHeight;
         for (const c of [this.canvas, this.world, this.fore]) { c.width = Math.round(W * dpr); c.height = Math.round(H * dpr); }
@@ -159,7 +161,7 @@ class HarvestAnimationManager {
         this.buildStars();
         this.buildMist(random);
         this.buildClouds();
-        this.buildCast();
+        if (prev) this.reflowCast(prev.W, prev.Hu); else this.buildCast();
         this.flocks = this.flocks || new HarvestFlocks(this);
         this.flocks.m = this;
         this.flocks.flocks = [];
@@ -307,6 +309,31 @@ class HarvestAnimationManager {
             const cat = new HarvestCat(this, spot, coat, 0.55 + Math.random() * 0.4);
             if (spot.roof || spot.fixed) { cat.state = Math.random() < 0.8 ? 'sleep' : 'loaf'; cat.fixedSpot = true; }
             this.cats.push(cat);
+        }
+    }
+
+    // The window changed size: the animals stay, and so do their errands.
+    // Everything on the ground is carried to the same place in the new
+    // layout, and each cat takes the nearest perch of its kind.
+    reflowCast(prevW, prevHu) {
+        const sx = this.W / prevW, sy = this.L.Hu / prevHu;
+        for (const o of [...this.squirrels, ...this.turkeys, ...this.cats, ...this.apples]) {
+            o.x *= sx; o.y *= sy;
+            if (o.target) o.target = { x: o.target.x * sx, y: o.target.y * sy };
+        }
+        for (const l of this.leafPool) { l.x *= sx; l.y *= sy; l.ground *= sy; }
+        this.puffs = [];
+        this.sparks = [];
+        this.buildCatSpots();
+        for (const cat of this.cats) {
+            let pool = this.catSpots.filter(s => !!s.fixed === !!cat.fixedSpot);
+            if (!pool.length) { cat.fixedSpot = false; pool = this.catSpots.filter(s => !s.fixed); }
+            let best = null, d = 1e9;
+            for (const s of pool) { const dd = Math.hypot(s.x - cat.x, (s.y - cat.y) * 2); if (dd < d) { d = dd; best = s; } }
+            if (!best) continue;
+            cat.spot = best;
+            if (cat.fixedSpot) { cat.x = best.x; cat.y = best.y; }
+            if (cat.target) cat.target = { x: best.x, y: best.y };
         }
     }
 

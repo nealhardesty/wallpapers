@@ -316,6 +316,7 @@ class HarvestSquirrel {
                 if (this.wait <= 0) {
                     const p = m.randomMeadow(), left = Math.random() < 0.5;
                     this.x = this.entryX = left ? -50 * u : m.W + 50 * u;     // where it came in, for the record
+                    this.entryW = m.W;
                     this.y = p.y;
                     this.go(p.x, p.y, 'wander');
                 }

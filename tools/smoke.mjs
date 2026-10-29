@@ -490,12 +490,20 @@ const STAGE_CHECKS = {
         if (!seen.has('carried') || !seen.has('carry')) record(`it wasn't carried (states: ${[...seen]})`);
         if (jump > 90) record(`the squirrel jumped ${Math.round(jump)} px on screen`);
         if (await evaluate('WP.stage.manager.squirrels[0].eaten - window.__eaten') !== 1) record('the squirrel kept no count');
+        // A resize doesn't replace the animals.
+        const before = await evaluate('WP.stage.manager.squirrels[0] === (window.__s = WP.stage.manager.squirrels[0]) && WP.stage.manager.cats.length + WP.stage.manager.turkeys.length');
+        await cdp.send('Emulation.setDeviceMetricsOverride', { width: 1000, height: 650, deviceScaleFactor: 1, mobile: false });
+        await sleep(500);
+        if (!await evaluate('WP.stage.manager.squirrels[0] === window.__s')) record('a resize replaced the squirrels');
+        if (await evaluate('WP.stage.manager.cats.length + WP.stage.manager.turkeys.length') !== before) record('a resize changed the cats and turkeys');
+        await cdp.send('Emulation.clearDeviceMetricsOverride');
+        await sleep(300);
         // It comes back in from an edge, not out of thin air.
         // (Judged by where it came in, not where it is by the time a slow runner looks.)
         let returned = false, edgeEntry = false, prev = null;
         await waitFor(async () => {
-            const q = await evaluate(`(m => ({ entry: m.squirrels[0].entryX, state: m.squirrels[0].state, w: m.W }))(WP.stage.manager)`);
-            if (prev && prev.state === 'away' && q.state !== 'away') { returned = true; edgeEntry = q.entry < 0 || q.entry > q.w; }
+            const q = await evaluate(`(m => ({ entry: m.squirrels[0].entryX, entryW: m.squirrels[0].entryW, state: m.squirrels[0].state }))(WP.stage.manager)`);
+            if (prev && prev.state === 'away' && q.state !== 'away') { returned = true; edgeEntry = q.entry < 0 || q.entry > q.entryW; }
             prev = q;
             return returned;
         }, 40000);
