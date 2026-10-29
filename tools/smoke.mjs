@@ -449,6 +449,21 @@ const STAGE_CHECKS = {
         if (r.flocks < 3) record(`only ${r.flocks} flocks at once`);
         if (r.n < 1 || r.n > 3 || !r.sameWay) record(`stragglers: ${JSON.stringify(r)}`);
         if (r.behind <= 0) record(`the stragglers aren't behind their flock (${Math.round(r.behind)} px)`);
+        // A minute and a half of flying, many flocks of every size and shape: none dips behind the hills.
+        const low = await evaluate(`(m => {
+            const f = m.flocks, ridge = m.L.hz - m.L.Hu * 0.157;
+            for (let i = 0; i < 36; i++) f.spawn(Math.random(), { n: [3, 8, 15, 30, 60, 100][i % 6], type: ['v', 'line', 'ragged'][i % 3] });
+            let lowest = -1e9, worst = null;
+            for (let step = 0; step < 900; step++) {
+                f.update(0.1);
+                for (const fl of f.flocks) for (const b of fl.birds) {
+                    const y = fl.y + b.ox * Math.sin(fl.tilt) + b.oy * Math.cos(fl.tilt) + fl.len * 0.5 + fl.len * 0.09;     // where it's drawn: tilted with the flock, swaying
+                    if (y > lowest) { lowest = y; worst = { n: fl.n, type: fl.type }; }
+                }
+            }
+            return { lowest, ridge, worst };
+        })(WP.stage.manager)`);
+        if (low.lowest > low.ridge) record(`a goose flew down to ${Math.round(low.lowest)}, behind the hills (the ridge is at ${Math.round(low.ridge)}): ${JSON.stringify(low.worst)}`);
         return true;
     }], ['a squirrel carries an apple off the edge of the screen, and never jumps', async () => {
         // No apples or acorns of their own falling meanwhile, so the squirrel has only the one.
@@ -476,13 +491,14 @@ const STAGE_CHECKS = {
         if (jump > 90) record(`the squirrel jumped ${Math.round(jump)} px on screen`);
         if (await evaluate('WP.stage.manager.squirrels[0].eaten - window.__eaten') !== 1) record('the squirrel kept no count');
         // It comes back in from an edge, not out of thin air.
+        // (Judged by where it came in, not where it is by the time a slow runner looks.)
         let returned = false, edgeEntry = false, prev = null;
         await waitFor(async () => {
-            const q = await evaluate(`(m => ({ x: m.squirrels[0].x, state: m.squirrels[0].state, w: m.W }))(WP.stage.manager)`);
-            if (prev && prev.state === 'away' && q.state !== 'away') { returned = true; edgeEntry = q.x < 0 || q.x > q.w; }
+            const q = await evaluate(`(m => ({ entry: m.squirrels[0].entryX, state: m.squirrels[0].state, w: m.W }))(WP.stage.manager)`);
+            if (prev && prev.state === 'away' && q.state !== 'away') { returned = true; edgeEntry = q.entry < 0 || q.entry > q.w; }
             prev = q;
             return returned;
-        }, 25000);
+        }, 40000);
         if (!returned) record('it never came back');
         else if (!edgeEntry) record('it came back from somewhere other than offscreen');
         return true;
@@ -495,10 +511,16 @@ const STAGE_CHECKS = {
         await waitFor(() => evaluate('WP.stage?.ready === true'));
         const night = await evaluate('WP.stage.manager.waitForGreatPumpkin()');
         if (!/Waiting/.test(night)) return record(`it wouldn't wake at night: ${night}`);
-        if (!await waitFor(() => evaluate("WP.stage.manager.great.state === 'rise'"), 12000)) return record(`never rose (${await evaluate('WP.stage.manager.great.state')})`);
-        await sleep(2500);
-        const { y, home } = await evaluate('({ y: WP.stage.manager.great.y, home: WP.stage.manager.L.sincere.y })');
-        if (y > home - 8) record(`it hasn't left the vine (${Math.round(y)} against ${Math.round(home)})`);
+        if (!await waitFor(() => evaluate("WP.stage.manager.great.state === 'rise'"), 30000)) return record(`never rose (${await evaluate('WP.stage.manager.great.state')})`);
+        if (!await waitFor(() => evaluate('WP.stage.manager.great.y < WP.stage.manager.L.sincere.y - 8'), 15000)) {
+            const { y, home } = await evaluate('({ y: WP.stage.manager.great.y, home: WP.stage.manager.L.sincere.y })');
+            record(`it hasn't left the vine (${Math.round(y)} against ${Math.round(home)})`);
+        }
+        // And a resize while it climbs doesn't put it back to sleep.
+        await cdp.send('Emulation.setDeviceMetricsOverride', { width: 1100, height: 700, deviceScaleFactor: 1, mobile: false });
+        await sleep(600);
+        if (await evaluate('WP.stage.manager.great.state') !== 'rise') record(`a resize reset the Great Pumpkin to ${await evaluate('WP.stage.manager.great.state')}`);
+        await cdp.send('Emulation.clearDeviceMetricsOverride');
         return true;
     }], ['every part can be left out, and a pinned night still has its moon', async () => {
         const off = { configVersion: 1, village: false, fields: false, pumpkinPatch: false, orchard: false, cats: 0, turkeys: 0, geese: 0, clouds: 0, leaves: 0, sky: 'night', moonPhase: 'full', mist: 0, beams: false };

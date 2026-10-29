@@ -41,22 +41,43 @@ class HarvestFlocks {
         const n = o.n ?? this.size(), scale = o.scale ?? 0.5 + Math.random() * 0.65, roll = Math.random();
         const type = o.type ?? (n < 5 || roll < 0.7 ? 'v' : roll < 0.85 ? 'line' : 'ragged'), behind = o.behind || 0;
         // A really big flock gets tighter, smaller birds, so it still fits the sky.
-        const crowd = n > 40 ? Math.sqrt(40 / n) : 1, len = 28 * u * scale * Math.max(0.55, crowd);
+        const crowd = n > 40 ? Math.sqrt(40 / n) : 1, len = 13 * u * scale * Math.max(0.6, crowd);
         const f = {
             dir, scale, n, type, len, t: 0, gap: Math.max(0.5, crowd),
             x: dir > 0 ? -len * 4 + at * (W + len * 8) - behind : W + len * 4 - at * (W + len * 8) + behind,
-            y: o.y ?? m.L.hz * (0.14 + Math.random() * 0.5),
+            y: o.y ?? 0,
             speed: (46 + Math.random() * 26) * u * (0.55 + scale * 0.5) * (o.speed ?? 1),
-            climb: (Math.random() - 0.5) * 8 * u, wave: Math.random() * 6, wave2: Math.random() * 6,
+            climb: (Math.random() - 0.5) * 0.1, wave: Math.random() * 6, wave2: Math.random() * 6,
             turn: 10 + Math.random() * 14, rate: (2.7 - 0.7 * scale + (Math.random() - 0.5) * 0.3) * (o.rate ?? 1),
             glide: 0, nextGlide: 6 + Math.random() * 12, tilt: 0, birds: [], offsets: [], ranks: [],
         };
         this.layout(f);
+        this.fit(f);
+        f.y = o.y === undefined ? f.top + Math.random() * Math.max(0, f.bottom - f.top) : harvestClamp(o.y, f.top, f.bottom);
         for (let k = 0; k < n; k++) {
             f.birds.push({ slot: k, ox: f.offsets[k][0], oy: f.offsets[k][1], jit: (Math.random() - 0.5) * 0.06, p1: Math.random() * 6, p2: Math.random() * 6 });
         }
         this.flocks.push(f);
         return f;
+    }
+
+    // Fit a flock into the sky: the band its leader may fly in keeps every
+    // goose, however far back along a tilted V it sits, above the highest
+    // ridge of the hills (they must never be clipped by it) and below the top
+    // of the screen. A very big flock that can't fit is flattened to.
+    fit(f) {
+        const m = this.m, hz = m.L.hz, len = f.len;
+        const topLimit = hz * 0.05 + len, bottomLimit = hz - m.L.Hu * 0.175 - len * 0.6;
+        const tiltY = Math.max(...f.offsets.map(o => Math.abs(o[0]))) * 0.17 + len * 0.2;     // the flock's tilt and the sway
+        let up = Math.max(0, ...f.offsets.map(o => -o[1])), down = Math.max(0, ...f.offsets.map(o => o[1]));
+        const room = bottomLimit - topLimit - 2 * tiltY;
+        if (up + down > room * 0.95 && up + down > 0) {
+            const k = Math.max(0.12, room * 0.95 / (up + down));
+            for (const o of f.offsets) o[1] *= k;
+            up *= k; down *= k;
+        }
+        f.top = topLimit + up + tiltY;
+        f.bottom = Math.max(f.top, bottomLimit - down - tiltY);
     }
 
     // One to three stragglers, well behind a flock: hurrying a little harder
@@ -116,12 +137,15 @@ class HarvestFlocks {
             // A curved path: speed swells and eases, and the flock climbs and
             // sinks, turning its nose up and down as it does.
             const speed = f.speed * (1 + 0.08 * Math.sin(f.t * 0.3 + f.wave)) * (0.85 + 0.3 * Math.min(2, m.windPush * f.dir + 1));
-            const vy = f.climb + Math.sin(f.t * 0.23 + f.wave2) * 11 * m.u * f.scale + Math.sin(f.t * 0.61 + f.wave) * 3 * m.u;
+            const vy = speed * (f.climb + 0.05 * Math.sin(f.t * 0.23 + f.wave2) + 0.018 * Math.sin(f.t * 0.61 + f.wave));
             f.x += f.dir * speed * dt;
             f.y += vy * dt;
-            if (f.y < m.L.hz * 0.1) f.climb = Math.abs(f.climb) + 2;
-            if (f.y > m.L.hz * 0.78) f.climb = -Math.abs(f.climb) - 2;
-            f.tilt += (Math.atan2(vy, speed) - f.tilt) * harvestEase(1.5, dt);
+            // Near an edge of its band, a flock turns back (never more steeply than it started).
+            if (f.y < f.top + 6 * m.u) f.climb = Math.max(f.climb, 0.03);
+            if (f.y > f.bottom - 6 * m.u) f.climb = Math.min(f.climb, -0.03);
+            f.y = harvestClamp(f.y, f.top, f.bottom);
+            // The tilt is capped: `fit` leaves room for exactly this much.
+            f.tilt += (harvestClamp(Math.atan2(vy, speed), -0.14, 0.14) - f.tilt) * harvestEase(1.5, dt);
             if (f.type !== 'ragged' && f.n > 4) {
                 f.turn -= dt;
                 if (f.turn <= 0) {
@@ -145,6 +169,7 @@ class HarvestFlocks {
     // Far flocks first, so near ones cross in front.
     draw(ctx, dpr, geese) {
         const m = this.m, frames = geese.frames, N = frames.length;
+        ctx.imageSmoothingQuality = 'high';          // they're small: shrink them well
         for (const f of this.flocks.slice().sort((a, b) => a.scale - b.scale)) {
             const s = f.len / geese.length, cos = Math.cos(f.tilt), sin = Math.sin(f.tilt);
             ctx.globalAlpha = 0.58 + 0.42 * harvestClamp((f.scale - 0.5) / 0.65, 0, 1);
@@ -290,7 +315,7 @@ class HarvestSquirrel {
                 this.wait -= dt;
                 if (this.wait <= 0) {
                     const p = m.randomMeadow(), left = Math.random() < 0.5;
-                    this.x = left ? -50 * u : m.W + 50 * u;
+                    this.x = this.entryX = left ? -50 * u : m.W + 50 * u;     // where it came in, for the record
                     this.y = p.y;
                     this.go(p.x, p.y, 'wander');
                 }

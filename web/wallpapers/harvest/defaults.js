@@ -40,9 +40,9 @@ WP.defaults('harvest', {
     wind: 1,                // × the usual breeze
     // Geese
     geese: 20,              // flocks crossing each hour, at High
-    flock: 30,              // geese in a flock, at most
+    flock: 15,              // geese in a flock, at most
     // Air
-    mist: 0.5,              // valley mist, thickest at dawn and dusk
+    mist: 0.15,             // valley mist, thickest at dawn and dusk
     beams: true,            // low sun slanting through the trees
     callouts: true,         // toasts: the moon's name, the holiday, the Great Pumpkin
     touch: true,            // a tap shakes the nearest tree (off: touch is ignored)
