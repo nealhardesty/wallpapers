@@ -18,9 +18,10 @@ wallpapers' only home. They run in three hosts:
 > measurements on a real phone (6.2's numbers, 6.4a), the first signed
 > release (6.6), the switch-over itself (7.2), and trying Phase 8's touch
 > and location, and Jellyfin, on a phone. The player, the stage, the panel
-> and all 33 wallpapers run from `web/index.html`, as a Chrome new-tab extension, on
+> and all 34 wallpapers run from `web/index.html`, as a Chrome new-tab extension, on
 > GitHub Pages at https://nealhardesty.github.io/wallpapers/, and as an
 > Android live wallpaper. Every wallpaper is tiered and within budget.
+> Phase 11 (Harvest Valley, §10.22) added the 34th wallpaper for Thanksgiving.
 > Next: Phase 10, the clock overlay (§4.9, specified 2026-10-28, not built);
 > §10 holds the other ideas.
 
@@ -101,6 +102,12 @@ Added in Phase 9 (design in §10.21):
 | id | Files | Size | Notes |
 |---|---|---|---|
 | `jellyfin` | jellyfin-logic.js, jellyfin-api.js, jellyfin-frames.js, frames/*.js (11 frames), jellyfin.js | ~9k lines | Network: `'user'` (the user's own server); a real `<video>`; sign-in through the panel's extras; keys Space, M, N/P, ←/→, S, I, V |
+
+Added for Thanksgiving, drawn in code (design in §10.22):
+
+| id | Files | Size | Notes |
+|---|---|---|---|
+| `harvest` | harvest-sky.js, harvest-art.js, harvest-actors.js, harvest.js | ~3k lines | Interactive (tap a tree, the scarecrow, the sky); pure sky and astronomy (`HarvestSky`), unit-tested; follows `host.now()`; keys G, H, W, M |
 
 About 1.7 MB of JavaScript in total. **Not imported:** links, weather, clocks,
 search/omniprompt, custom links, status bar, Docker/nginx, the homepage's
@@ -326,7 +333,7 @@ Phase 4 and 6 take it:
   | Jun – Aug | fireflies |
   | Sep | leaves |
   | Oct | halloween |
-  | Nov | fishtank |
+  | Nov | harvest |
   | Dec | advent (wins over snow's Dec–Apr) |
 
   It uses the local calendar month, so it is Northern-Hemisphere only.
@@ -762,6 +769,7 @@ and the commits.
 | lighthouse | `spray`, `glints` (medium) | Rain, ships, clouds, spray × density; sky, headland and beam sprite baked per resize; onScroll moves the camera |
 | wiki-pond | — | Ripple pool 60 + 140 × density, 8/s × (0.4 + 0.6 × density); pond baked; listens in bursts on Android |
 | satellites | — | Stars × density; sky and ground one layer every 30 s; positions once a second, interpolated; idle until the next second when nothing's up; onScroll |
+| harvest | `mist`, `beams` (medium) | Land is one baked layer per resize; trees, leaves, apples, geese and clouds are baked sprites; the world is washed once per frame with the hour's light; leaves, apples, smoke, sparks and flocks × density; squirrels × (0.5 + 0.5 density) |
 
 #### In the panel
 
@@ -1825,6 +1833,18 @@ and `make smoke-clock` (`node tools/smoke.mjs clock`: 17 checks, also part of
 the player suite, and one more under the extension), plus `make bench-clock`. Built differently from the plan: see the
 *As built* note at the end of §4.9.
 
+
+### Phase 11: Harvest Valley (owner, 2026-10-28)
+
+A Thanksgiving mash-up wallpaper, specified in §10.22. Built in one go; each
+"→" check is in `tools/harvest.test.mjs` (7 unit tests) or `node tools/smoke.mjs harvest`
+(4 checks, plus the generic boot, panel and storage ones).
+
+- [x] 11.0 `harvest` with the sky, village, fields, patch, orchard, geese, leaves and weather, every part on its own switch. → unit tests for the moon (against known new and full moons), sun times, the holiday and the light ramps; smoke: frame-one cast, a tap shakes a tree, a squirrel delivers an apple, the Great Pumpkin rises only at night, every part left out still boots and draws.
+- [x] 11.1 Seasonal's November becomes `harvest` (was the fish tank, a placeholder). → `tools/wp.test.mjs`.
+- [x] 11.2 Cats (owner request): random coats, sizes and temperaments, mostly asleep. Configurable autumn colours (owner request): seven presets and a custom palette.
+- [x] 11.3 Docs, the thumbnail (`make thumbnails`), and a `make bench` row (4.4% busy on Low, 5.3% on Medium, 13% on High at 4× throttle).
+
 ---
 
 ## 10. Ideas
@@ -2400,6 +2420,86 @@ moving point of light.
   `motion: 'slow'`.
 
 **As built:** full near-Earth SGP4 written from Spacetrack Report #3 as revised by Vallado et al. (2006), matching the verification vectors to under a metre; a J2-secular-only model measured 11–26 km off over 2–3 days (1.5–3°), so it was dropped. Deep-space orbits are skipped. Stereographic sky with a flat horizon; colour from the sun per pixel on a 128-px image every 30 s. Visible needs the sun below −6°, the satellite sunlit (shadow cylinder, 60 km soft edge) and above the ridge; unseen ones are optional faint rings. Elements cached per group, fetched at most every 12 h, stale after 3 days; offline, seeded sample orbits, labelled. `make bench` blocks CelesTrak.
+
+### 10.22 Harvest Valley (`harvest`, owner pick)
+
+A calm, cosy, whimsical autumn background for Thanksgiving: a mash-up of a
+harvest village, the harvest moon, geese, an apple orchard and a pumpkin
+patch. Ambient first, a little interactive. **Everything has a switch**:
+no village, no orchard, no day (only the moon), and so on.
+
+- **Sky (`harvest-sky.js`, pure):** the sun's declination from the day of
+  the year at a middling latitude (40°N, not a place), hour angles from
+  `host.now()`: the real sunrise and sunset for the date, rising left and
+  setting right, a low November sun. The moon is the mean synodic month
+  from a known new moon (good to about a day): its phase, where it rides
+  (it transits later by 50 minutes a day of age; its declination is
+  opposite the sun's at full, so the winter full moon is high), its bright
+  limb towards the sun, and its name (Harvest, Hunter's, Beaver… by the
+  month; the Harvest Moon is the full moon nearest the equinox). Sky
+  colours, the wash over the land, cloud tones, stars and "how dark" are
+  all ramps over the sun's altitude, continuous (a unit test checks there's
+  no jump), with moonlight lifting a dark night.
+- **Time of day:** live; a whole day in 1–30 minutes (time-lapse from now);
+  or pinned to day, golden hour or night. A pinned night scans the dark hours
+  for the moment the moon is highest, so "just the moon" has a moon whenever
+  one can be had. The moon's phase can be pinned too (full, gibbous, half,
+  crescent).
+- **Scene:** far hills and forest dabbed in autumn colour; a quilt of
+  farmland bands; a village (church, cottages with chimneys, window boxes,
+  pumpkins and a pie on a sill, a barn, a windmill whose sails turn with
+  the wind), bunting that spells *GIVE THANKS* in Thanksgiving week (the
+  four days either side of the fourth Thursday of November) and lights every
+  window on the day; a road with lamp posts; corn, shocks and bales; the
+  pumpkin patch with its sign (*Most Sincere Pumpkin Patch*); three rows of
+  apple trees in perspective, kept off the road, the corn and the patch.
+- **Cast:** geese in a V with the lead goose dropping to the back (offsets
+  ease, so it glides round the outside), and the odd glide; squirrels who
+  gather fallen apples in both paws and take them to a very small door at the
+  foot of the den tree, where a light comes on, and who bolt for it if the
+  pointer is fast and near; turkeys that stroll, peck, fan their tails
+  (more in Thanksgiving week) and avoid the pointer; cats (§ below); a
+  pumpkin-headed scarecrow with a crow that flies off and comes back; and
+  fall-colour leaves, apples that tumble, bounce, roll and fade.
+- **Cats (owner request):** each one random: coat (ginger, grey, black,
+  tuxedo, cream, calico, brown), size, laziness (55–95% of its time asleep),
+  and perch (a roof, a hay bale, a porch step, the pumpkin patch, the grass
+  under a tree, the warm side of the bonfire after dark). Roof and bale cats
+  stay put; the others may stretch and amble to somewhere better now and
+  then. They sleep (breathing, drifting z's), loaf, sit, wash a paw, stretch,
+  and watch squirrels with great interest, doing nothing about them.
+- **The Great Pumpkin:** on a dark night, at random (and always on `G`), the
+  most sincere pumpkin wakes (its carving lights), lifts on swirling sparks,
+  and climbs over the valley for 28 s until it's a star; the scarecrow turns
+  to look; the patch grows a new one later. Says so in a toast, with callouts
+  on. `G` by day says it's far too bright.
+- **After dark:** windows and lamps glow (a few windows stay dark), a
+  bonfire with sparks and people round it, stars and a faint galaxy, a
+  shooting star every 25–75 s, the moon's halo.
+- **Light:** the world is drawn at full daylight colour onto an offscreen
+  canvas and washed once per frame with a `source-atop` fill (a horizon haze
+  and the hour's tint); the sky, geese, glows and sunbeams are drawn on the
+  main canvas around it. One set of art serves every hour.
+- **Autumn colours (owner request):** seven presets (mixed, golden, crimson,
+  russet, ember, burgundy, early autumn) or a custom palette of up to eight
+  colours, which colours the trees, the leaves, the forested hills and the
+  litter on the grass.
+- **Settings:** time of day, minutes per day, sun, moon, phase, size, stars,
+  clouds, geese (flocks per hour, flock size), the village and each part of
+  it, fields, scarecrow, patch, Great Pumpkin, orchard (trees, size, apple
+  fall, squirrels, turkeys), cats, leaves, autumn colours, wind, mist,
+  sunbeams, callouts, tap to shake, and (Advanced) the horizon.
+- **Callouts:** `host.toast` for the holiday, a notable full moon (once a
+  day), the Great Pumpkin, and the keys: `G` wait for the Great Pumpkin, `H`
+  call the geese, `W` a gust, `M` what the moon's doing (name, how much is lit,
+  sunrise and sunset). Off with the Callouts setting.
+- **Input:** a tap shakes the nearest apple tree (apples and leaves fall),
+  scares the crow off the scarecrow, or calls a flock from the empty sky.
+  Touch can be switched off.
+- **Cost:** medium by design, low in practice (4.4% busy on Low, 13% on High
+  at 4× throttle). Effects `mist` and `beams` shed on Low. Leaves, apples,
+  smoke, sparks and flocks scale with `density`.
+- **Why seasonal November:** the fish tank was a placeholder there.
 
 ### 10.21 Jellyfin player (`jellyfin`, owner pick, high priority)
 
