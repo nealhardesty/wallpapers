@@ -16,10 +16,15 @@ ported from elsewhere. None was found.
 | Wallpaper | Inspired by | What we ship |
 |---|---|---|
 | snow | *xsnow* (Rick Jansen; later Willem Vermin, GPL-3+) | Our own physics. The tree and flakes are code-drawn pixel art in `snow.js`, an homage to the classic xsnow look. xsnow's pixmaps are **not** included. |
-| neko | *Neko* (Naoshi Watanabe, 1989) and *oneko* (Masayuki Koba) | Behaviour only: chase, yawn, scratch, wash, sleep. The cat is our own 16×16 pixel art, drawn in code (`NekoSprites` in `neko.js`), in eight coats. The decades of community sprite packs, including trademarked characters, are **not** included. |
 | quest | Classic top-down 8-bit adventure games | Original sprites, tiles, font and world generator. A few affectionate parody lines and names ("IT'S A SECRET TO EVERYBODY", Lonk, Zelderp). No game assets. |
 | matrix | The "digital rain" from the film *The Matrix* | Rendered from the system monospace font. |
 | wiki-pond | Hatnote's *Listen to Wikipedia* (Stephen LaPorte and Mahmoud Hashemi) | The idea of edits as rings coloured by who made them. Our own pond, lotuses and sounds, drawn and synthesised in code; no Hatnote code, sounds or assets. |
+
+## Public-domain art
+
+| Item | Where | Notes |
+|---|---|---|
+| The Neko cat (32 frames, 32×32, 1-bit) | `web/wallpapers/neko/sprites.js`, used by neko | Drawn by Juan Gotoh (後藤寿庵) for the Macintosh desk accessory *neko DA*; made into X11 bitmaps by Masayuki Koba (古場正行) for *xneko* (1990); reused by Tatsuya Kato's *oneko*. All three confirmed it free to use, modify and redistribute, and Debian, the FSF and Fedora treat it as public domain ([oneko COPYRIGHTS](https://www.3bit.co.jp/~sasaki/oneko/COPYRIGHTS)). Taken from oneko-1.2.sakura.5's `bitmaps/neko/` via [Neco](https://github.com/winebarrel/Neco)'s `Sprites.swift` (CC0). The coats, shading, shadow, hats and yarn are ours, drawn in code. The behaviour follows *Neko* (Naoshi Watanabe, 1989) and oneko. **Not** included: the BSD daemon and Cardcaptor Sakura bitmaps from the same tarball, and the decades of community sprite packs, including trademarked characters. |
 
 ## Network content
 

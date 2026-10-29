@@ -23,7 +23,7 @@ const SEED = 7;
 const SETTLE_MS = { 'wiki-pond': 5000, lighthouse: 4500, snow: 7000, leaves: 3000, rain: 4000, fireplace: 4000, halloween: 4000, advent: 4000, quest: 5000, fishtank: 4000 };
 const OVERRIDES = {
     quest: { configVersion: 1, story: false },
-    neko: { configVersion: 2, size: 128, coat: 'orange' },
+    neko: { configVersion: 2, cats: 5, coat: 'assorted', hat: 'assorted', size: 128 },
     fireflies: { configVersion: 2, glowSize: 12, brightness: 1.2 },
     snow: { configVersion: 1, treeCount: 14, accumulationRate: 0.4 },
     satellites: { configVersion: 1, facing: 'east' },
@@ -32,7 +32,7 @@ const OVERRIDES = {
 };
 // URL parameters for a better picture: satellites as its sample station
 // passes overhead before dawn (thumb mode never fetches, so it's the sample).
-const PARAMS = { satellites: '&date=2026-10-14T04:47:15', 'pixel-room': '&date=2026-10-22T18:20', 'rainy-window': '&date=2026-10-22T21:00', harvest: '&date=2026-11-20T15:50' };
+const PARAMS = { satellites: '&date=2026-10-14T04:47:15', 'pixel-room': '&date=2026-10-22T18:20', 'rainy-window': '&date=2026-10-22T21:00', harvest: '&date=2026-11-20T15:50', neko: '&date=2026-06-10T12:00' };
 SETTLE_MS.fireworks = 2600;
 SETTLE_MS.harvest = 4000;
 

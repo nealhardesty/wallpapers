@@ -417,6 +417,76 @@ const STAGE_CHECKS = {
         console.log(`    lanterns: ${first.sky} in the sky on frame ${first.frames}; pool ${cap}, at most ${most} after 200 taps`);
         return true;
     }]],
+    // Neko: the cats are the original 32 px art; with no pointer at all
+    // (a phone) they set off on their own once Wander After has passed; a
+    // crowd never stacks up; a tapped ball of yarn is chased, batted and
+    // finally knocked off the screen, and the cats go back to idling; the
+    // date brings the holiday's hats.
+    neko: [
+        ['the original art; no pointer, and the cat goes exploring', async () => {
+            if (!await stageWith('neko', { configVersion: 2, wanderAfter: 5000 })) return record('never ready');
+            const cat = `(m => ({ x: m.cats[0].x, y: m.cats[0].y, state: m.cats[0].state, art: m.cats[0].look.frames[0].mati2.width, frames: Object.keys(m.cats[0].look.frames[0]).length }))(WP.stage.manager)`;
+            const start = await evaluate(cat);
+            if (start.art !== 32 || start.frames !== 32) record(`sprites: ${start.frames} frames of ${start.art} px, not 32 of 32`);
+            let ran = false;
+            await waitFor(async () => (ran ||= (await evaluate(cat)).state === 3), 9000);
+            await sleep(1500);
+            const end = await evaluate(cat);
+            const moved = Math.hypot(end.x - start.x, end.y - start.y);
+            if (!ran || moved < 50) record(`with no pointer the cat stayed put: ran ${ran}, moved ${Math.round(moved)} px`);
+            console.log(`    neko: wandered ${Math.round(moved)} px with no pointer`);
+            return true;
+        }],
+        ['42 cats chase the pointer without piling up', async () => {
+            if (!await stageWith('neko', { configVersion: 2, cats: 42, coat: 'assorted', hat: 'assorted', size: 32 })) return record('never ready');
+            for (let i = 0; i <= 30; i++) {
+                await mouse('mouseMoved', 300 + i * 20, 250 + i * 6);
+                await sleep(80);
+            }
+            await sleep(2500);
+            const crowd = await evaluate(`(m => ({ n: m.cats.length, coats: new Set(m.cats.map(c => c.look.coat.name)).size, hats: m.cats.filter(c => c.hat).length,
+                closest: Math.min(...m.cats.flatMap((a, i) => m.cats.slice(i + 1).map(b => Math.hypot(a.x - b.x, a.y - b.y)))),
+                near: m.cats.filter(c => Math.hypot(c.x - 900, c.y - 430) < 32 * 5).length }))(WP.stage.manager)`);
+            if (crowd.n !== 42 || crowd.coats !== 13 || crowd.hats !== 42) record(`${crowd.n} cats, ${crowd.coats} coats, ${crowd.hats} hats`);
+            if (crowd.closest < 32 * 0.45) record(`two cats ${crowd.closest.toFixed(1)} px apart: piled up`);
+            if (crowd.near < 30) record(`only ${crowd.near} of 42 cats made it to the pointer`);
+            console.log(`    neko: ${crowd.near} of 42 round the pointer, the closest two ${crowd.closest.toFixed(1)} px apart`);
+            return true;
+        }],
+        ['a tapped ball of yarn is batted about, knocked off the screen, and the cats idle', async () => {
+            if (!await stageWith('neko', { configVersion: 2, cats: 3 })) return record('never ready');
+            await mouse('mousePressed', 640, 400);
+            await mouse('mouseReleased', 640, 400);
+            if (!await waitFor(() => evaluate('WP.stage.manager.yarns.length === 1'), 2000)) return record('a tap tossed no yarn');
+            // A short-lived ball, so the test doesn't wait on a long game.
+            await evaluate('WP.stage.manager.yarns[0].last = 3');
+            let most = 0;
+            const gone = await waitFor(async () => {
+                const state = await evaluate('(m => ({ yarns: m.yarns.length, hits: m.yarns[0]?.hits ?? -1 }))(WP.stage.manager)');
+                most = Math.max(most, state.hits);
+                return state.yarns === 0;
+            }, 20000);
+            if (!gone) record(`the yarn never left: ${most} hits`);
+            if (most < 2) record(`only ${most} hits before it went`);
+            await sleep(1500);
+            const after = await evaluate(`(m => ({ goals: m.cats.filter(c => c.goal).length, threads: m.threads.length }))(WP.stage.manager)`);
+            if (after.goals) record(`${after.goals} cats still chasing after the yarn left`);
+            if (!after.threads) record('no thread left on the floor');
+            console.log(`    neko: yarn batted ${most} times, then gone; the cats idle; its thread fading`);
+            return true;
+        }],
+        ['the date brings the holiday hats', async () => {
+            const hats = async date => {
+                await stageWith('neko', { configVersion: 2, cats: 2 }, `&date=${date}`);
+                return evaluate(`WP.stage.manager.cats.map(c => Object.keys(WP.stage.manager.hats).find(k => WP.stage.manager.hats[k] === c.hat) ?? null).join()`);
+            };
+            const halloween = await hats('2026-10-31T12:00'), christmas = await hats('2026-12-24T12:00'), june = await hats('2026-06-10T12:00');
+            if (halloween !== 'witch,witch') record(`Halloween: ${halloween}`);
+            if (christmas !== 'santa,antlers') record(`Christmas Eve: ${christmas}`);
+            if (june !== ',') record(`an ordinary day: ${june}`);
+            return true;
+        }],
+    ],
     // Fireplace: the wood is baked before the first frame, with char that
     // glows in zones, a coal bed and the grate; a pop flashes the zone it
     // bursts from and then lets it go; and the glow breathes on its own.
