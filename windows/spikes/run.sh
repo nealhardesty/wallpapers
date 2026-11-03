@@ -16,7 +16,7 @@ if /mnt/c/Windows/System32/tasklist.exe /fi "imagename eq Spike.exe" 2>/dev/null
 else
   rsync -a --delete "$OUT/bin/" "$WIN/bin/"
 fi
-[ -n "$SPIKE_WEB" ] && rsync -a --delete --exclude bing.json web/ "$WIN/web/"
+rsync -a --delete --exclude bing.json web/ "$WIN/web/"   # W0.2+: the pages, served at https://wallpapers.example/
 cd "$WIN"
 status=0
 # shellcheck disable=SC2086

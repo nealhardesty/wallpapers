@@ -213,6 +213,39 @@ public static class Check
         return rc == "Progman" || rc == "WorkerW";
     }
 
+    /// W0.2: is the desktop moving? Two captures 1 s apart; per monitor, the share of pixels that
+    /// changed, and how much host colour shows (host colour = the web view isn't drawing).
+    public static unsafe int Motion(Opts o)
+    {
+        var tag = o.Get("tag") ?? "motion";
+        var hostColor = ColorTranslator.FromHtml("#" + (o.Get("color") ?? "FF00C8"));
+        using var a = Capture(tag + "-a");
+        Thread.Sleep(1000);
+        using var b = Capture(tag + "-b");
+        var ok = true;
+        foreach (var m in MonitorInfo.All())
+        {
+            var origin = (POINT)a.Tag!;
+            var area = Rectangle.Intersect(new Rectangle(m.Rect.L - origin.X, m.Rect.T - origin.Y, m.Rect.W, m.Rect.H), new Rectangle(0, 0, a.Width, a.Height));
+            var da = a.LockBits(area, ImageLockMode.ReadOnly, PixelFormat.Format32bppArgb);
+            var db = b.LockBits(area, ImageLockMode.ReadOnly, PixelFormat.Format32bppArgb);
+            long changed = 0;
+            for (var y = 0; y < area.Height; y++)
+            {
+                byte* ra = (byte*)da.Scan0 + y * da.Stride, rb = (byte*)db.Scan0 + y * db.Stride;
+                for (var x = 0; x < area.Width * 4; x += 4)
+                    if (Math.Abs(ra[x] - rb[x]) > 16 || Math.Abs(ra[x + 1] - rb[x + 1]) > 16 || Math.Abs(ra[x + 2] - rb[x + 2]) > 16) changed++;
+            }
+            a.UnlockBits(da); b.UnlockBits(db);
+            var moved = (double)changed / ((long)area.Width * area.Height);
+            var magenta = Fraction(b, m.Rect, hostColor);
+            var exposed = BarePoint(DesktopTree.Snapshot(), [m], null) != null;
+            Log.Line($"motion {m.Device}: {moved:P2} of pixels changed in 1 s, host colour {magenta:P1}, desktop exposed={exposed}");
+            ok &= moved > 0.001 && magenta < 0.05;
+        }
+        return ok ? 0 : 1;
+    }
+
     /// The right-click test alone, with or without a host: the control for check 9.
     public static int MenuOnly()
     {

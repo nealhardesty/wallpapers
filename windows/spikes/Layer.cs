@@ -53,22 +53,26 @@ public static class Layer
 
     public static int Run(Opts o)
     {
+        DesktopTree.PrintEnvironment();
+        if (!AttachAll(o)) return 1;
+        return Loop(o.Int("seconds", 120), onTaskbarCreated: Reattach, onCheck: Watch, onTick: () => Hosts.ForEach(h => h.Tick()));
+    }
+
+    /// One host per monitor in the mode from --mode/--layered/--noredir (shared with `web`).
+    public static bool AttachAll(Opts o)
+    {
         mode = o.Get("mode") ?? "raised";
         layered = (o.Get("layered") ?? (mode == "workerw" ? "off" : "on")) == "on";
         noRedir = o.Has("noredir");
-        var seconds = o.Int("seconds", 120);
-        DesktopTree.PrintEnvironment();
-        if (!Prepare()) return 1;
-
+        if (!Prepare()) return false;
         var (parent, after) = Target(snap, mode);
         foreach (var m in MonitorInfo.All())
         {
             var h = new Host(m, mode, ColorFor(mode));
             if (h.Attach(parent, after, layered, noRedir)) Hosts.Add(h);
         }
-        if (Hosts.Count == 0) return 1;
         foreach (var h in Hosts) Log.Line($"z ok={ZOk(h)}");
-        return Loop(seconds, onTaskbarCreated: Reattach, onCheck: Watch, onTick: () => Hosts.ForEach(h => h.Tick()));
+        return Hosts.Count > 0;
     }
 
     /// The message loop shared by `layer` and `web`: a hidden top-level window for TaskbarCreated
@@ -105,7 +109,7 @@ public static class Layer
         return 0;
     }
 
-    static void Watch()
+    public static void Watch()
     {
         foreach (var h in Hosts.ToList())
         {

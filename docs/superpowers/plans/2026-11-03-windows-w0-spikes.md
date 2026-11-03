@@ -18,7 +18,7 @@
 - The app manifest declares Windows 8, 8.1 and 10/11 in `supportedOS`, with `PerMonitorV2` DPI awareness and `asInvoker`.
 - Layered hosts use **alpha 255** (`SetLayeredWindowAttributes(…, 255, LWA_ALPHA)`).
 - Hosts never take focus or input: `WS_EX_NOACTIVATE`, and they never appear in Alt-Tab or the taskbar.
-- W0.2 page: `index.html?w=aquarium&tier=high`, served at `https://wallpapers.example/` by `SetVirtualHostNameToFolderMapping(…, Deny)`. Occlusion flags to try first: `--disable-features=CalculateNativeWinOcclusion --disable-background-timer-throttling`. Soak: **10 minutes**.
+- W0.2 page: `index.html?w=fishtank&tier=high`, served at `https://wallpapers.example/` by `SetVirtualHostNameToFolderMapping(…, Deny)`. Occlusion flags to try first: `--disable-features=CalculateNativeWinOcclusion --disable-background-timer-throttling`. Soak: **10 minutes**.
 - Spike user data and binaries live in `%LOCALAPPDATA%\Wallpapers-spike\`, never the planned app's folders.
 - Public repo (AGENTS.md, `tools/audit.mjs`): nothing committed may contain a home path (`/home/<user>`, `C:\Users\<user>`), an email address, the Windows user name, or any hex run of 32 characters or more. Strip these from logs before pasting them into SPEC. The spike prints paths relative to `%LOCALAPPDATA%`.
 - Everything runnable is a make target with a `## description` and a README Development row. CI calls make only. `make ci` stays green (spikes aren't added to it).
@@ -210,7 +210,7 @@ Default `--layered` per mode: `raised` on, `defview` on, `workerw` off.
 
 **Interfaces:**
 - Consumes: `Layer` attach (the winner's parent and z rule), `Layer.Cleanup()`, the `TaskbarCreated` handler.
-- Produces: `web --mode <winner|window> --hosting windowed|visual [--args "<browser args>"] [--minutes 10] [--url "index.html?w=aquarium&tier=high"]`. `--args` defaults to the two occlusion flags, and `--args none` passes none. `--mode window` is a normal, visible, top-level 1280×720 window: the *reference* rate for this session.
+- Produces: `web --mode <winner|window> --hosting windowed|visual [--args "<browser args>"] [--minutes 10] [--url "index.html?w=fishtank&tier=high"]`. `--args` defaults to the two occlusion flags, and `--args none` passes none. `--mode window` is a normal, visible, top-level 1280×720 window: the *reference* rate for this session.
 - Produces: log lines `fps t=<s> frames=<n> fps=<f> vis=<stage visibilityState>/<top visibilityState>` every 10 s, and `cpu t=<s> app=<%> webview=<%> procs=<n>` every 60 s. Percentages are of one core.
 
 - [ ] **Step 1: Write the probes first.** The frame probe is `ExecuteScriptAsync` of `(() => { const f = [...document.querySelectorAll('iframe.stage')].pop(); const w = f && f.contentWindow; return JSON.stringify({ n: w?.WP?.host?.frames?.count ?? -1, vis: f?.contentDocument?.visibilityState ?? 'none', top: document.visibilityState }); })()`, every 10 s; fps = Δn/Δt. The CPU probe runs every 60 s over `env.GetProcessInfos()` pids plus our own: Δ`TotalProcessorTime` / Δwall × 100. At exit, print a summary: median, min and the first 10 s window under 50% of the median.
@@ -289,6 +289,8 @@ Default `--layered` per mode: `raised` on, `defview` on, `workerw` off.
 ## Progress
 
 - **2026-11-03: W0.1 passed** (Tasks 0–3 and Task 6 for W0.1 done; results in SPEC §10.25.21). Winner: raised, a layered child of `Progman` directly below `SHELLDLL_DefView`. Helpers added along the way: `show-desktop` (Win+D, so the checks can see the desktop past maximized windows) and `menu` (the right-click control). Next: Task 4 (W0.2).
+- **2026-11-03: W0.2 passed; the W0 gate is passed** (Task 4 and Task 6 for W0.2 done; SPEC §10.25.21). Decision: visual hosting, the controller parented to a hidden window of ours (`--own-parent`), `WS_EX_TRANSPARENT` on Chromium's input window (`windows/spikes/input-fix.ps1`), no browser flags needed. Added along the way: `--motion full` (emulates reduced motion off; RDP turns it on), `--hide-at/--hide-for` (IsVisible test), `cover` (a maximized window), `motion` (on-screen change between two captures), raw-rAF and GPU probes.
+- **For W0.3/W0.4:** Smart App Control on the owner's PC blocks some builds by hash (`FileLoadException … Application Control policy`); change a log string and rebuild. In W0.4, apply `input-fix.ps1 -how transparent` while a visual-hosted page runs, or `WindowFromPoint` returns Chromium's input window instead of the desktop. W0.3 can use `--mode window`.
 - Gotcha for anyone driving it from WSL: `pkill -f` with the exe's name also matches the shell running the command; signal a pid instead.
 
 ## Order and stopping points

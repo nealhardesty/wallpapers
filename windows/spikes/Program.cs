@@ -19,6 +19,9 @@ static class Program
                 "stop" => Shell.Stop(),
                 "show-desktop" => Check.ShowDesktop(),
                 "menu" => Check.MenuOnly(),
+                "motion" => Check.Motion(opts),
+                "web" => Web.Run(opts),
+                "cover" => Shell.Cover(opts),
                 "restart-explorer" => Shell.RestartExplorer(),
                 _ => Unknown(cmd),
             };

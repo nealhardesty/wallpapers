@@ -20,7 +20,11 @@ truth. This file is only the session's state and context.
 installed in WSL (Ubuntu's `dotnet-sdk-10.0`, 10.0.114), and **W0.1 passed**
 (SPEC §10.25.21: raised layout, a layered child of `Progman` below
 `SHELLDLL_DefView`; the host dies with Explorer and is recreated). Spike code:
-`windows/spikes/`, run with `make win-spike ARGS=…`. **Next: W0.2** (plan Task 4).
+`windows/spikes/`, run with `make win-spike ARGS=…`. **W0.2 passed too: the W0
+gate is passed** (visual hosting, controller parented to our own window, an
+input fix for Chromium's overlay; SPEC §10.25.21). **Next: W0.3 and W0.4**
+(plan Tasks 5 and 7). New owner decision pending: **signing**, since Smart App
+Control on this PC blocks some unsigned builds (SPEC Open questions).
 
 ~~**The very next step:** write the implementation plan for Phase W0.~~ Done.
 Nothing past W0 is built until W0.1 and W0.2 pass. See §5 below.
@@ -172,7 +176,7 @@ publishes win-x64 and launches the exe on the Windows side from WSL.
   to 2 s. Pass = visible behind the icons; icons, right-click menu, rubber
   band and icon drag still work; survives restarting Explorer (re-parent on
   `TaskbarCreated`). App manifest must declare Windows 8–11 support.
-- **W0.2 WebView2 animating in it.** `index.html?w=aquarium&tier=high`
+- **W0.2 WebView2 animating in it.** `index.html?w=fishtank&tier=high`
   (force High, since RDP would otherwise drop to Low later). Try (a)
   windowed WebView2 with `--disable-features=CalculateNativeWinOcclusion
   --disable-background-timer-throttling`, then (b) visual hosting

@@ -28,6 +28,28 @@ public static class Shell
         return 0;
     }
 
+    /// W0.2: a plain maximized window over the desktop for N seconds (a deterministic "covered").
+    public static int Cover(Opts o)
+    {
+        var seconds = o.Int("seconds", 60);
+        var f = new System.Windows.Forms.Form { Text = "W0.2 cover", WindowState = System.Windows.Forms.FormWindowState.Maximized, BackColor = System.Drawing.Color.DimGray };
+        var t = new System.Windows.Forms.Timer { Interval = seconds * 1000 };
+        t.Tick += (_, _) => f.Close();
+        // Launched from WSL, the first show can come out minimized: force it up and in front.
+        f.Shown += (_, _) =>
+        {
+            f.WindowState = System.Windows.Forms.FormWindowState.Normal;
+            f.WindowState = System.Windows.Forms.FormWindowState.Maximized;
+            f.TopMost = true; f.TopMost = false;
+            f.Activate();
+            t.Start();
+            Log.Line($"cover: maximized for {seconds}s, state={f.WindowState}");
+        };
+        System.Windows.Forms.Application.Run(f);
+        Log.Line("cover: closed");
+        return 0;
+    }
+
     public static int RestartExplorer()
     {
         var session = Process.GetCurrentProcess().SessionId;

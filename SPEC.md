@@ -3016,6 +3016,13 @@ New questions go here, each with a recommendation.
   300 ms, resumed at once. Tune after the two-monitor pass (W6).
 - **Windows: sound on the desktop** (§10.25.9). *Recommendation:* muted, with
   *Allow Sound* in the tray, off by default. Matters once Jellyfin arrives.
+- **Windows: signing, now that Smart App Control is in play** (§10.25.13,
+  found in W0.2). The owner's PC enforces SAC, which blocks unsigned builds
+  by hash with no override (2 of ~20 spike builds). "Signing later" may have
+  to become "signing before W4", or SAC goes off on this PC (Windows can
+  only turn it back on with a reset). *Recommendation:* Azure Trusted Signing
+  (publicly trusted, inexpensive) for releases; during W1–W3, a build that's
+  refused gets a version bump and is rebuilt. **Owner decision.**
 - **Windows: one ~70 MB self-contained exe, or require the .NET runtime?**
   (§10.25.13). *Recommendation:* self-contained: nothing to install first,
   and the `.scr` copy just works. Size is the cost.
@@ -3428,8 +3435,8 @@ CI `mac` job.
 One native Windows 11 app that runs the same `web/` wallpapers behind the
 desktop icons, on every monitor, controlled from a tray icon, and later as
 the screen saver: the Mac app (§10.21) for Windows, going further where
-Windows allows. **Status: designed, owner-approved; spike W0.1 passed
-(2026-11-03, §10.25.21), W0.2–W0.4 to go.** Phase W0
+Windows allows. **Status: designed, owner-approved; the W0 gate passed
+(W0.1 and W0.2, 2026-11-03, §10.25.21); W0.3–W0.4 to go, then W1.** Phase W0
 (spikes) is the gate: if a live web page can't run behind the icons on 25H2,
 the project stops. Brainstormed and reviewed 2026-11-02; the original design
 note is `docs/superpowers/specs/2026-11-02-windows-design.md`, and this
@@ -3558,7 +3565,12 @@ argument `--disable-features=CalculateNativeWinOcclusion` (plus
 (`CoreWebView2CompositionController` drawing into our own DirectComposition
 visual), which also gives real input injection (§10.25.8). This is the analogue of
 the Mac saver's occlusion gotcha. We then own visibility ourselves through
-`CoreWebView2Controller.IsVisible` (§10.25.9).
+`CoreWebView2Controller.IsVisible` (§10.25.9). **Settled by W0.2
+(§10.25.21):** on 25H2 Chromium never throttles our host, flags or not,
+icons above it or a maximized window over it (the host's top-level ancestor
+is Explorer's, not ours, so Chromium's occlusion pass ignores it). The
+flags are harmless and unneeded; **visual hosting** wins on cost (~10× less
+CPU than windowed) and on Explorer restarts.
 
 **The owner's machine right now:** Windows 11 25H2, a laptop (RTX 3080 Ti
 Laptop + Iris Xe, a battery), usually two monitors; this session was over
@@ -3633,10 +3645,14 @@ the same apart from §10.25.7's small additions.
   Re-detect, re-create the layer (send `0x052C` again: the new `Progman` has
   none), and re-attach. **Spike W0.1 found that a host HWND dies with
   Explorer** (it's a child of Explorer's `Progman`), so it is *recreated*, not
-  re-parented. Whether the page survives without a reload depends on the
-  hosting W0.2 picks: a windowed WebView2 lives in the dead HWND; visual
-  hosting's composition controller may be re-targeted to a new host. W0.2
-  measures it.
+  re-parented. **The page still survives without a reload (W0.2):** with
+  visual hosting, the `CoreWebView2CompositionController` is parented to a
+  hidden top-level window of *ours* (Explorer can't take it down), and only
+  the DirectComposition target lives on the host. On restart: detach the
+  visual from the dead target (`SetRoot(null)`), bind it to the new host's
+  target, `Commit`. Measured: re-bound in 7 ms, frame counter unbroken. (A
+  controller parented to the host itself is disposed with it: recreate and
+  reload, ~3 s.)
   Also re-attach if the parent HWND dies (`IsWindow` check on the timer).
 - **At login:** Explorer may not be ready. Retry the attach with backoff for
   up to 60 s, then stay running and attach on the next `TaskbarCreated`.
@@ -3724,7 +3740,11 @@ Each is useful beyond Windows and testable in a browser with URL parameters.
 4. *(With span, later: `?screens=x,y,w,h;…` → `host.screens`. Not in v1.)*
 5. **Power policy:** a `remote` signal (Remote Desktop session) lowers the
    ceiling to Low at 15 fps: RDP sends every changed pixel over the
-   network. Reason text `remote desktop`.
+   network. Reason text `remote desktop`. *(W0.2 found RDP already turns
+   animation effects off, so Chromium reports `prefers-reduced-motion` and
+   the existing policy caps at 20 fps; with RDP's 32 Hz frames that paces to
+   16 fps. A 15 fps cap would pace to ~10.7. Revisit whether `remote` adds
+   anything in W2.)*
 6. **Tests:** unit tests for the params and the policy; a smoke
    `STAGE_CHECKS` entry proving `insets` reaches `host.insets` and
    `display=` keeps two choices apart.
@@ -3753,9 +3773,16 @@ page, as the Mac does with its global monitor.
   buttons are never forwarded.
 - **Coordinates:** physical px → the surface's client px → CSS px (÷ its
   rasterization scale).
-- **Delivery:** first choice, if visual hosting won in W0.2,
+- **Delivery:** visual hosting won W0.2, so
   `CoreWebView2CompositionController.SendMouseInput`: real, trusted events
-  with zero script. Otherwise the Mac's approach: `ExecuteScriptAsync`
+  with zero script (W0.4/W3 confirm).
+- **Chromium's input window (W0.2):** visual hosting makes WebView2 create a
+  top-level, full-screen `Chrome_WidgetWin_1` (layered, alpha 0) over the
+  desktop. As created, it **swallows the first right-click on the desktop**
+  and `WindowFromPoint` returns it everywhere. Adding `WS_EX_TRANSPARENT` to
+  it (cross-process `SetWindowLongPtr`, same user) fixes both; reapply after
+  every controller creation and check it on the 5 s timer. Disabling it
+  (`EnableWindow(false)`) doesn't help. Otherwise the Mac's approach: `ExecuteScriptAsync`
   dispatching `PointerEvent`s and `MouseEvent`s into the active
   `iframe.stage` (same origin under our virtual host, so `contentDocument`
   is reachable). Also a `pointerleave` when the cursor leaves a surface.
@@ -3777,7 +3804,10 @@ Everything becomes `WP.power({...})` on each page, as on Mac and Android,
 plus `IsVisible = false` on hidden web views (Chromium then stops rendering
 outright, the biggest saving).
 
-**Per-monitor coverage.**
+**Per-monitor coverage.** *(W0.2: needed for power, not just tidiness: a
+covered visual surface costs ~10× an exposed one, ~55% of a core against
+~5% for Harvest Valley; `IsVisible = false` stops frames at once and
+`visible` resumes them within a second.)*
 - Candidates: top-level windows that are visible, not minimized, not cloaked
   (`DWMWA_CLOAKED`: other virtual desktops, suspended UWP apps, Task View),
   not ours, not shell windows (`Progman`, `WorkerW`, `Shell_TrayWnd`,
@@ -3943,6 +3973,15 @@ desktop surfaces go `hidden`.
 - **SmartScreen:** an unsigned exe from the internet shows "Windows
   protected your PC" → *More info* → *Run anyway*. The README says so. Built
   locally with `make win-install`, there's no Mark of the Web and no warning.
+- **Smart App Control (found in W0.2; changes the signing call):** the
+  owner's machine has SAC **on, enforcing**. It judges every unsigned binary
+  by its hash, from cloud reputation, with no *Run anyway*: during the spikes
+  it blocked 2 of about 20 local builds of `Spike.dll` outright (Code
+  Integrity events 3033/3077, SAC's policy `{0283ac0f-…}`); a blocked hash
+  stays blocked, and changing one log string gave a new hash that passed.
+  Local builds aren't exempt (no Mark of the Web needed). So an unsigned
+  release may simply not run on SAC machines, and day-to-day builds can be
+  refused at random. See Open questions.
 - **Single instance:** a second launch tells the first (named pipe) to open
   Settings, and exits.
 - No admin rights anywhere. No services, no scheduled tasks, no drivers.
@@ -3950,7 +3989,8 @@ desktop surfaces go `hidden`.
 #### 10.25.14 Web view details (`WebFactory.cs`)
 
 - One `CoreWebView2Environment` for the app, user data folder as in §4.
-  Browser arguments decided in W0.2. DevTools and
+  Browser arguments: none needed (W0.2); `--disable-features=
+  CalculateNativeWinOcclusion` may be kept as cheap insurance. DevTools and
   `--remote-debugging-port` only with `WP_DEBUG=1`.
 - **Serving `web/`:** `SetVirtualHostNameToFolderMapping("wallpapers.example",
   <web folder>, Deny)`, so pages load from `https://wallpapers.example/`: one
@@ -4059,7 +4099,7 @@ Task Manager; RDP in and out; the saver from Windows' dialog; uninstall.
   - W0.1 Behind the icons on 25H2: a host window with a plain coloured
     panel, in each layout candidate. → visible behind icons, icons and
     right-click work, survives Explorer restart. Record what worked.
-  - W0.2 WebView2 in it: `index.html?w=aquarium` animating at display rate
+  - W0.2 WebView2 in it: `index.html?w=fishtank` (the Fish Tank; the id was misnamed `aquarium` here at first) animating at display rate
     behind the icons for 10 minutes. Try windowed + occlusion flags, then
     visual hosting. → pick one; record fps and CPU.
   - W0.3 Two processes on one user data folder (app + saver). → works or
@@ -4102,6 +4142,7 @@ Task Manager; RDP in and out; the saver from Windows' dialog; uninstall.
 | Chromium occlusion stops rAF behind the icons | W0.2 before anything else; visual hosting as the fallback |
 | WebView2 can't render inside a layered child | Visual hosting (DirectComposition) sidesteps redirection; W0.2 |
 | Two monitors × a heavy wallpaper on a laptop | Per-monitor pause, battery ceiling, governor |
+| Smart App Control blocks unsigned builds (found in W0.2) | Sign releases with a publicly trusted certificate (e.g. Azure Trusted Signing); dev builds: retry with a changed build, or the owner turns SAC off (irreversible without a reset). Owner decision |
 | RDP shows one virtual screen, unlike the console | Treated as its own layout: rebuild on session change, `remote` ceiling; fake layouts and fixtures (§10.25.15) cover two monitors until W6 |
 | SmartScreen scares a first-time user | README; local builds aren't flagged; signing later |
 
@@ -4213,6 +4254,65 @@ wallpaper `.jpg`, 2026-11-03)
   drop `System.IO`.
 - Still to check: the console session (not RDP) and two monitors (W6, or
   RDP's *Use all my monitors* earlier).
+
+**W0.2 WebView2 animating behind the icons: passes.** (same machine and
+session; WebView2 runtime 156.0.4314.58, SDK 1.0.4314.35; GPU: ANGLE on the
+Intel Iris Xe, Direct3D 11, even over RDP; mains power; 2026-11-03)
+- **The reference rate R:** in a normal window the session's own rAF runs at
+  **32 Hz** (RDP). RDP also turns Windows' animation effects off, so the page
+  sees `prefers-reduced-motion` and the existing policy caps it at 20 fps,
+  which paces to **16 fps** on 32 Hz frames. To test at full rate, runs
+  emulated reduced motion off (DevTools `Emulation.setEmulatedMedia`): then
+  the stage runs at the full 32. Pass = median ≥ 0.9 R, no 10 s window
+  below 0.5 R, `visibilityState` visible throughout.
+- **The page:** the plan said `?w=aquarium`, which isn't an id (the Fish Tank
+  is `fishtank`), so the first soaks ran Harvest Valley (what Seasonal shows
+  in November, the real default and the heavier scene); the Fish Tank was
+  run afterwards too.
+
+  | Run (raised layout, 2940×1686, High, full motion) | Length | fps median / min | WebView2 CPU (of one core) |
+  |---|---|---|---|
+  | (a) windowed + occlusion flags, Harvest | 10 min, 58 samples | 32.0 / 31.1 | 65% |
+  | windowed, no flags (60 s of it covered by a maximized window) | 3 min | 32.0 / 31.7 | 64–76% |
+  | windowed, unlayered host | 2.5 min | 32.0 / 31.8 | 56% |
+  | **(b) visual + flags, Harvest** | **10 min, 58 samples** | **32.0 / 31.7** | **5.6%** |
+  | visual, unlayered host (with or without `WS_EX_NOREDIRECTIONBITMAP`) | 2.5 min each | 32.0 / 31.8 | 3.6–4.0% |
+  | visual, no flags, exposed → covered | 4 min | 32.0 / 31.7 | 3.9% → 54.8% |
+  | visual + flags, exposed → covered (control) | 4 min | 32.0 / 31.7 | 5.7% → 55.9% |
+  | visual, Fish Tank, exposed / covered | 5 min | 32.0 / 30.6 | ~98% / ~121% |
+  | visual, Fish Tank, **defaults** (Auto, system motion) | 3 min | 15.9 / 15.8 | 28% |
+
+  Our app itself: 0.3–0.7% of a core in every run. WebView2 private memory
+  ~0.9 GB across its 6 processes at this size (Harvest). The Fish Tank costs
+  ~15× Harvest at a forced High (a question for the web bench, not hosting).
+- **Occlusion is a non-issue:** no run lost a frame to Chromium's occlusion
+  tracking, with or without flags, under the icons or under a maximized
+  window (it reports `visible` throughout). Nothing pauses us for free, so
+  coverage → `IsVisible = false` is ours to do, and **it works**: frames
+  stop at once (`hidden`), resume within a second.
+- **Visual hosting renders on screen** (DirectComposition target on the
+  layered host child of `Progman`, topmost visual): screenshots show the
+  scene behind the icons, 5–11% of pixels changing per second, no host colour
+  showing. The host style barely matters to it.
+- **The input catch, and its fix:** see §10.25.8. Chromium's full-screen
+  alpha-0 input window swallowed the first desktop right-click (4 of 4
+  tries; windowed and no-web-view runs never did); with `WS_EX_TRANSPARENT`
+  added, the menu opens first time. **Owner by eye, visual + fix, Fish
+  Tank:** first right-click opens the menu, icon drag and double-click,
+  rubber band, smooth with no lag.
+- **Explorer restart with a live page:** controller parented to the host →
+  disposed with it, recreated in ~0.3 s, page reloaded, animating again ~3 s
+  after the kill. Controller parented to our own hidden window → **no
+  reload**: the visual re-bound to the new host in 7 ms, frames unbroken.
+  Chromium's input window survives that (the fix stays applied).
+- **Decision:** visual hosting, controller parented to a hidden top-level
+  window of ours, DirectComposition target on each host, `WS_EX_TRANSPARENT`
+  on Chromium's input window, no browser flags required.
+- **Smart App Control** (§10.25.13) blocked 2 of the ~20 spike builds; each
+  was rebuilt with a trivial change and ran.
+- **Tooling gotchas:** GUI windows started from WSL can come up minimized
+  (force the window state after `Shown`); `make win-spike` skips replacing
+  the exe while one runs, so a second command uses the running build.
 
 
 ## Appendix A: legacy standalone pages, to bring back
