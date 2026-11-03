@@ -141,14 +141,14 @@ else
 	@echo "win-unit: skipped (no dotnet; see README)"
 endif
 
-win-run: win-build ## Build the Windows app and start it on the Windows side from WSL (your normal settings)
-	@windows/run.sh run
+win-run: ## Build the Windows app and start it on the Windows side from WSL (your normal settings)
+	@BUILD=1 windows/run.sh run
 
-win-dev: win-build ## Run the Windows app straight from this checkout's web/, with its own settings and DevTools (Reload Wallpapers in the tray after an edit)
-	@windows/run.sh dev
+win-dev: ## Run the Windows app straight from this checkout's web/, with its own settings and DevTools (Reload Wallpapers in the tray after an edit)
+	@BUILD=1 windows/run.sh dev
 
-win-test: win-build ## Run the Windows app's self-test against a throwaway settings store (about 30 s; shows a wallpaper behind your icons)
-	@windows/run.sh test
+win-test: ## Run the Windows app's self-test against a throwaway settings store (about 30 s; shows a wallpaper behind your icons)
+	@BUILD=1 windows/run.sh test
 
 win-log: ## Show the Windows app's log (FLAVOR=dev or test for those; FOLLOW=1 to follow)
 	@windows/run.sh log $(or $(FLAVOR),run)

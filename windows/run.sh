@@ -4,11 +4,13 @@
 #   run.sh dev   the same into ...\dev, with WP_DEV=1 WP_DEBUG=1 and WP_WEB_ROOT on this checkout's web/
 #   run.sh test  the same into ...\test, run --selftest, print its report, exit with its code
 #   run.sh log [run|dev|test]   the last lines of that flavour's log (FOLLOW=1 to follow)
-# Extra arguments for the app: WIN_ARGS="--dump-displays".
+# Extra arguments for the app: WIN_ARGS="--dump-displays". BUILD=1 builds first, and builds again when
+# Smart App Control refuses the build (every build is a new file to it; SPEC §10.25.13), up to 3 times.
 set -e
 cd "$(dirname "$0")/.."
 mode=${1:-run}
 CMD=/mnt/c/Windows/System32/cmd.exe
+PS=/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe
 LAD=$("$CMD" /c echo %LOCALAPPDATA% 2>/dev/null | tr -d '\r')
 # WSL interop can fail for a moment ("Exec format error"); an empty answer would put the Windows-side
 # folders inside this checkout, so stop instead.
@@ -24,38 +26,67 @@ if [ "$mode" = log ]; then
   exit 0
 fi
 
-[ -f dist/win/Wallpapers.exe ] || { echo "run.sh: build first (make win-build)" >&2; exit 1; }
 BIN="$LOCAL/Wallpapers-build/$mode"
 mkdir -p "$BIN"
 export WSLENV="WP_DEV:WP_DEBUG:WP_WEB_ROOT${WSLENV:+:$WSLENV}"
 if [ "$mode" = dev ]; then
   export WP_DEV=1 WP_DEBUG=1 WP_WEB_ROOT="$(wslpath -w "$PWD/web")"
 fi
-cd "$BIN"
-# A running copy of this flavour locks its exe: ask it to quit, then wait for the file to come free.
-if [ -f Wallpapers.exe ]; then
-  ./Wallpapers.exe --quit >/dev/null 2>&1 || true
-  for _ in $(seq 1 20); do (: >> Wallpapers.exe) 2>/dev/null && break; sleep 0.5; done
-fi
-cd - >/dev/null
-rsync -a --delete dist/win/ "$BIN/"
 LOG="$(root_for "$mode")/log.txt"
-before=$(stat -c %s "$LOG" 2>/dev/null || echo 0)
-cd "$BIN"
-if [ "$mode" = test ]; then
+OUTPUT=$(mktemp)
+trap 'rm -f "$OUTPUT"' EXIT
+REPO=$PWD
+
+# Copy the build over and start it. Returns 3 when Windows refused the exe.
+launch() {
+  cd "$REPO"
+  [ -f dist/win/Wallpapers.exe ] || { echo "run.sh: build first (make win-build)" >&2; return 1; }
+  cd "$BIN"
+  # A running copy of this flavour locks its exe: ask it to quit, then wait for the file to come free.
+  if [ -f Wallpapers.exe ]; then
+    ./Wallpapers.exe --quit >/dev/null 2>&1 || true
+    for _ in $(seq 1 20); do (: >> Wallpapers.exe) 2>/dev/null && break; sleep 0.5; done
+  fi
+  rsync -a --delete "$REPO/dist/win/" "$BIN/"
+  # Probe the new exe with a command that exits at once (nothing is running now): a refused
+  # build says so here. (The real start below can't be captured: a GUI app started through
+  # `cmd /c start` inherits the redirection and WSL would wait for it to exit.)
+  ./Wallpapers.exe --quit > "$OUTPUT" 2>&1 || true
+  if grep -qiE "Device Guard|Application Control" "$OUTPUT"; then return 3; fi
+  local before status=0
+  before=$(stat -c %s "$LOG" 2>/dev/null || echo 0)
+  if [ "$mode" = test ]; then
+    # shellcheck disable=SC2086
+    ./Wallpapers.exe --selftest $WIN_ARGS || status=$?
+  else
+    # ShellExecute (Start-Process), so the app inherits none of WSL interop's pipes: with
+    # `cmd /c start` it would, and this script would wait until the app quit.
+    local args=""
+    for a in $WIN_ARGS; do args="$args'$a',"; done
+    "$PS" -NoProfile -Command "Start-Process -FilePath '$(wslpath -w "$BIN/Wallpapers.exe")' -WorkingDirectory '$(wslpath -w "$BIN")'${args:+ -ArgumentList ${args%,}}" < /dev/null
+  fi
+  if [ "$mode" = test ]; then
+    local report
+    report="$(root_for test)/selftest.txt"
+    if [ -f "$report" ]; then tr -d '\r' < "$report"; else echo "run.sh: no selftest report (exit $status)" >&2; [ $status = 0 ] && status=1; fi
+    return $status
+  fi
+  for _ in $(seq 1 16); do [ "$(stat -c %s "$LOG" 2>/dev/null || echo 0)" != "$before" ] && break; sleep 0.5; done
+  if [ "$(stat -c %s "$LOG" 2>/dev/null || echo 0)" = "$before" ]; then
+    echo "run.sh: Wallpapers.exe didn't start (no new log line in $LOG)" >&2
+    return 1
+  fi
+  echo "started ($mode): log at $LOG"
+}
+
+for attempt in 1 2 3; do
+  if [ -n "$BUILD" ]; then (cd "$REPO" && windows/build.sh) || exit 1; fi
   status=0
-  # shellcheck disable=SC2086
-  ./Wallpapers.exe --selftest $WIN_ARGS || status=$?
-  report="$(root_for test)/selftest.txt"
-  if [ -f "$report" ]; then tr -d '\r' < "$report"; else echo "run.sh: no selftest report (exit $status)" >&2; [ $status = 0 ] && status=1; fi
-  exit $status
-fi
-# shellcheck disable=SC2086
-"$CMD" /c start "" Wallpapers.exe $WIN_ARGS
-# A build that never writes to its log within a few seconds was probably refused by Windows.
-for _ in $(seq 1 16); do [ "$(stat -c %s "$LOG" 2>/dev/null || echo 0)" != "$before" ] && break; sleep 0.5; done
-if [ "$(stat -c %s "$LOG" 2>/dev/null || echo 0)" = "$before" ]; then
-  echo "run.sh: Wallpapers.exe didn't start (no log line). If Smart App Control blocked it, build again: every build is a new file to it." >&2
-  exit 1
-fi
-echo "started ($mode): log at $LOG"
+  launch || status=$?
+  [ $status = 3 ] || exit $status
+  if [ -z "$BUILD" ] || [ $attempt = 3 ]; then
+    echo "run.sh: Smart App Control blocked this build. Build again (make win-build): every build is a new file to it." >&2
+    exit 3
+  fi
+  echo "run.sh: Smart App Control blocked this build; building a new one (try $((attempt + 1)) of 3)"
+done
