@@ -7,8 +7,8 @@
     'use strict';
 
     const params = WP.parseParams(location.search);
-    const host = params.host === 'android' ? 'android'
-        : location.protocol === 'chrome-extension:' ? 'extension' : 'standalone';
+    const host = WP.hostKind(params, location.protocol);
+    const insets = WP.parseInsets(params.insets, host);
     const settingsScreen = host === 'android' && params.panel === 'open';
     const FADE_MS = 600;
     const REBUILD_MS = 400;
@@ -47,7 +47,7 @@
 
     function stageUrl(id) {
         const query = new URLSearchParams({ w: id });
-        for (const key of ['date', 'theme', 'host', 'tier', 'hud']) if (params[key]) query.set(key, params[key]);
+        for (const key of ['date', 'theme', 'host', 'tier', 'hud', 'insets']) if (params[key]) query.set(key, params[key]);
         return `stage.html?${query}`;
     }
 
@@ -95,7 +95,7 @@
         }
         WP.clockface.view.init({
             now,
-            insets: { top: 0, right: 0, bottom: host === 'android' ? 48 : 0, left: 0 },
+            insets,
             override: () => clockOverride,
             reduced: () => matchMedia('(prefers-reduced-motion: reduce)').matches,
             wallpaper: () => stage?.id,

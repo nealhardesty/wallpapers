@@ -316,7 +316,8 @@ Phase 4 and 6 take it:
   | `panel=open` | Open the switcher and settings panel on load (closes as usual with `,` or `Esc`) |
   | `date=YYYY-MM-DD`, `theme=<id>` | Passed to the wallpaper as `host.params`. Advent uses them for time travel and themes, e.g. `?w=advent&date=2026-12-25` |
   | `tier=low\|medium\|high` | Pin a performance tier for this load (§4.8), e.g. to see Low on a desktop |
-  | `host=android`, `hud=1`, `thumb=1` | Host simulation (§4.3), performance HUD (§4.8), thumbnail mode (§4.7) |
+  | `host=android`, `hud=1`, `thumb=1` | Host simulation (§4.3), performance HUD (§4.8), thumbnail mode (§4.7). The Windows app passes `host=windows` (and its saver `host=windows-saver`, W5) |
+  | `insets=t,r,b,l` | CSS px kept clear on each edge, on any host (the Windows app passes its taskbar), e.g. `?w=harvest&insets=0,0,48,0`. Malformed values fall back to the host's default (48 px at the bottom on Android, else 0) |
 | `clock=on\|off\|<motion>` | §4.9: force the clock overlay on or off for this load, or on with a motion (`static`, `drift`, `bounce`, `teleport`, `follow`). Never persisted |
 
   Picking a wallpaper in the panel while `w=` is active does persist, as
@@ -352,10 +353,10 @@ One object, passed to every wallpaper's constructor and also available as
 
 ```js
 host = {
-  kind: 'standalone' | 'extension' | 'android',
+  kind: 'standalone' | 'extension' | 'android' | 'windows' | 'windows-saver',
   id: 'fishtank',                         // this stage's wallpaper
   params: { date, theme, … },             // URL parameters (§4.2)
-  insets: { top, right, bottom, left },   // px kept clear, e.g. Android's gesture bar; 0 elsewhere
+  insets: { top, right, bottom, left },   // px kept clear: ?insets= (Windows' taskbar), Android's gesture bar; else 0
   storage: { get(key), set(key, value) }, // non-setting state, under wp:<id>:<key>
   quality: { tier, fps, renderScale, dpr, density, slowFps },  // the current tier (§4.8)
   frames: { count, workMs },              // from the frame pacer, for the governor and tests
@@ -3722,12 +3723,12 @@ entry.
 
 Each is useful beyond Windows and testable in a browser with URL parameters.
 
-1. **`host=windows` / `windows-saver`** recognised by `player.js` and
+1. *(Built in W1: `WP.hostKind`.)* **`host=windows` / `windows-saver`** recognised by `player.js` and
    `stage.js` as host kinds (the desktop defaults: Auto, ceiling High,
    battery-aware). Today only `android` is special-cased; `mac` falls through
    to `standalone`, and that's fine for Windows too, except for the next
    items.
-2. **`?insets=t,r,b,l`** (CSS px) sets `host.insets` on any host; the player
+2. *(Built in W1: `WP.parseInsets`.)* **`?insets=t,r,b,l`** (CSS px) sets `host.insets` on any host; the player
    passes it to the stage. Replaces nothing: `host=android` keeps its 48 px
    default when `insets` is absent. Lets anyone test ground lines in a
    browser: `?w=harvest&insets=0,0,48,0`.

@@ -33,6 +33,25 @@ test('seasons: every seasonal wallpaper exists and can be shown', () => {
     for (const id of new Set(WP.SEASONS)) assert.ok(showable.includes(id), id);
 });
 
+test('host kind: android, windows, the saver, the extension, else standalone', () => {
+    assert.equal(WP.hostKind({ host: 'android' }, 'file:'), 'android');
+    assert.equal(WP.hostKind({ host: 'windows' }, 'https:'), 'windows');
+    assert.equal(WP.hostKind({ host: 'windows-saver' }, 'https:'), 'windows-saver');
+    assert.equal(WP.hostKind({ host: 'windows' }, 'chrome-extension:'), 'extension');
+    assert.equal(WP.hostKind({}, 'file:'), 'standalone');
+    assert.equal(WP.hostKind({ host: 'mac' }, 'https:'), 'standalone');
+});
+
+test('insets: t,r,b,l in CSS px on any host; Android keeps its 48 px default', () => {
+    assert.deepEqual(plain(WP.parseInsets('0,0,48,0', 'windows')), { top: 0, right: 0, bottom: 48, left: 0 });
+    assert.deepEqual(plain(WP.parseInsets('12,0,0,40', 'standalone')), { top: 12, right: 0, bottom: 0, left: 40 });
+    assert.deepEqual(plain(WP.parseInsets(undefined, 'android')), { top: 0, right: 0, bottom: 48, left: 0 });
+    assert.deepEqual(plain(WP.parseInsets('0,0,24,0', 'android')), { top: 0, right: 0, bottom: 24, left: 0 });
+    for (const bad of ['', '1,2,3', '1,2,3,x', '-1,0,0,0', '0,0,9999,0'])
+        assert.deepEqual(plain(WP.parseInsets(bad, 'windows')), { top: 0, right: 0, bottom: 0, left: 0 }, bad);
+    assert.deepEqual(plain(WP.parseInsets('0, 0, 48.6, 0', 'windows')), { top: 0, right: 0, bottom: 49, left: 0 });
+});
+
 test('URL parameters: only known keys, values as given', () => {
     assert.deepEqual(plain(WP.parseParams('?w=fishtank&panel=open&tier=low&evil=1')), { w: 'fishtank', panel: 'open', tier: 'low' });
     assert.deepEqual(plain(WP.parseParams('')), {});

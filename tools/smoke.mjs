@@ -1407,6 +1407,18 @@ async function playerSuite(catalog) {
         return await playerReady() === 'rain' && await evaluate("localStorage.getItem('wp:current')") === null;
     });
 
+    await check('?insets= reaches the stage; host=windows is a kind', async () => {
+        await fresh(`${WEB}/index.html?w=harvest&host=windows&insets=0,0,48,0`);
+        if (await playerReady() !== 'harvest') return record('harvest not shown');
+        const got = await inStage('JSON.stringify({ kind: WP.host.kind, insets: WP.host.insets })');
+        const { kind, insets } = JSON.parse(got);
+        if (kind !== 'windows' || insets.bottom !== 48 || insets.top || insets.left || insets.right) return record(`stage got ${got}`);
+        await fresh(`${WEB}/index.html?w=harvest`);
+        await playerReady();
+        const plain = JSON.parse(await inStage('JSON.stringify(WP.host.insets)'));
+        return plain.bottom === 0 || record(`no ?insets=, yet bottom ${plain.bottom}`);
+    });
+
     await check('] switches, persists and drops ?w= from the URL', async () => {
         await cdp.send('Input.dispatchKeyEvent', { type: 'keyDown', key: ']', text: ']' });
         await cdp.send('Input.dispatchKeyEvent', { type: 'keyUp', key: ']' });
