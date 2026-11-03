@@ -358,6 +358,9 @@ Requirements:
   found)
 - `openssl`, for `make serve-https`
 - Docker, for the container
+- For the Windows app: the .NET 10 SDK (in WSL or Linux is fine: it
+  cross-compiles; running it needs Windows, which WSL reaches directly).
+  Without it, `make ci` skips the Windows unit tests with a note.
 - For Android: the Android SDK and a JDK 17 or later. With Android Studio
   installed in the usual place, the Makefile finds both (`ANDROID_HOME=`
   and `JAVA_HOME=` override). Gradle comes with the wrapper.
@@ -409,6 +412,12 @@ Run `make` to list every target.
 | `make mac-saver-live` | Run the installed saver in Apple's real host for a few seconds and read its log (once you've chosen it in System Settings) |
 | `make mac-saver-log` | The screen saver's own log |
 | `make mac-install` / `make mac-uninstall` | Put the app in `~/Applications` / remove it |
+| `make win-build` | Build the Windows app: `dist/win/Wallpapers.exe` (self-contained, about 50 MB) with `web/` beside it; cross-compiles in WSL or Linux |
+| `make win-unit` | The Windows app's unit tests (`windows/Wallpapers.Tests`); no Windows needed |
+| `make win-run` | Build it and start it on the Windows side from WSL, with your normal settings: the wallpaper goes behind your desktop icons, a tray icon controls it |
+| `make win-dev` | Run it straight from this checkout's `web/`, with its own settings and DevTools, so edits show after *Reload Wallpapers* in the tray |
+| `make win-test` | The app's self-test against a throwaway settings store: layer, animation, settings sharing, pause, insets, Bing, Explorer restart, a renderer crash, cleanup (about 30 s) |
+| `make win-log` | The app's log (`FLAVOR=dev` or `test` for those; `FOLLOW=1` to follow) |
 | `make win-spike` | Temporary, for the Windows design's W0 spikes: build the spike exe in WSL and run it on the Windows side, `ARGS="tree"` etc. (SPEC §10.25.21) |
 | `make docker-build` | Build the container image `wallpapers` |
 | `make docker-run` | Run it at http://localhost:8000 (read-only, unprivileged) |

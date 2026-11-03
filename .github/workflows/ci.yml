@@ -22,7 +22,11 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 22
+      - uses: actions/setup-dotnet@v6   # the Windows app: make ci runs its unit tests (SPEC §10.25.15)
+        with:
+          dotnet-version: 10.0.x
       - run: make ci
+      - run: make win-build   # cross-compiles the Windows app on Linux on every push
       - uses: actions/upload-artifact@v7
         with:
           name: wallpapers-extension
