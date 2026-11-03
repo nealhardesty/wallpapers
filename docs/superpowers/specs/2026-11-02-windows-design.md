@@ -1,8 +1,7 @@
 # Windows: live desktop wallpaper, tray app and screen saver — design
 
-Date: 2026-11-02 · Status: owner decisions in (§20); awaiting approval · Becomes SPEC.md §10.25
-when building starts (the Mac app's design lives at §10.21; this follows its
-shape on purpose).
+Date: 2026-11-02 · Status: **approved; superseded by SPEC.md §10.25**, which
+is the living version. This file is kept as the original design note.
 
 ## 1. Intent
 
