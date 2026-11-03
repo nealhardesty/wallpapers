@@ -3428,7 +3428,8 @@ CI `mac` job.
 One native Windows 11 app that runs the same `web/` wallpapers behind the
 desktop icons, on every monitor, controlled from a tray icon, and later as
 the screen saver: the Mac app (§10.21) for Windows, going further where
-Windows allows. **Status: designed, owner-approved; nothing built.** Phase W0
+Windows allows. **Status: designed, owner-approved; spike W0.1 passed
+(2026-11-03, §10.25.21), W0.2–W0.4 to go.** Phase W0
 (spikes) is the gate: if a live web page can't run behind the icons on 25H2,
 the project stops. Brainstormed and reviewed 2026-11-02; the original design
 note is `docs/superpowers/specs/2026-11-02-windows-design.md`, and this
@@ -3538,6 +3539,8 @@ wallpaper layer is a `WorkerW` child of `Progman` below it. Lively broke on
   (24H2+), or **not split** (draw in front of the icons as a last resort,
   and log it).
 
+**Settled on 25H2 by spike W0.1 (§10.25.21):** the raised recipe works as
+written: a layered child of `Progman` directly below `SHELLDLL_DefView`.
 Reports disagree on details across builds (one finds parenting into
 `SHELLDLL_DefView` works where `Progman` didn't), so W0.1 tries the
 candidates on the owner's 25H2 machine and records what works, like the Mac's
@@ -3627,8 +3630,13 @@ the same apart from §10.25.7's small additions.
   back `WorkerW`. Checked on every display change and on a 5 s timer;
   repaired only when wrong.
 - **Explorer restarts:** listen for the registered `TaskbarCreated` message.
-  Re-detect, re-create the layer, and **re-parent the existing hosts**: the
-  web views keep running, no reload, the cat doesn't lose its place.
+  Re-detect, re-create the layer (send `0x052C` again: the new `Progman` has
+  none), and re-attach. **Spike W0.1 found that a host HWND dies with
+  Explorer** (it's a child of Explorer's `Progman`), so it is *recreated*, not
+  re-parented. Whether the page survives without a reload depends on the
+  hosting W0.2 picks: a windowed WebView2 lives in the dead HWND; visual
+  hosting's composition controller may be re-targeted to a new host. W0.2
+  measures it.
   Also re-attach if the parent HWND dies (`IsWindow` check on the timer).
 - **At login:** Explorer may not be ready. Retry the attach with backoff for
   up to 60 s, then stay running and attach on the next `TaskbarCreated`.
@@ -4151,8 +4159,60 @@ Task Manager; RDP in and out; the saver from Windows' dialog; uninstall.
 
 #### 10.25.21 Spike results
 
-None yet. W0.1–W0.4 each record here: Windows build, session type (console or
-Remote Desktop), monitors, what was tried, what worked, numbers.
+W0.1–W0.4 each record here: Windows build, session type (console or Remote
+Desktop), monitors, what was tried, what worked, numbers. The spike code is
+`windows/spikes/` (`make win-spike ARGS=…`; plan:
+`docs/superpowers/plans/2026-11-03-windows-w0-spikes.md`), throwaway, deleted at W1.
+
+**W0.1 behind the icons: passes.** (Windows 11 25H2 build 26200, Remote
+Desktop, one monitor 2940×1686 at 200%, work area 2940×1590, picture
+wallpaper `.jpg`, 2026-11-03)
+- **Tree before:** `Progman` (`WS_EX_TOOLWINDOW | WS_EX_NOREDIRECTIONBITMAP`)
+  → `SHELLDLL_DefView` (`WS_EX_LAYERED`) → `SysListView32`; no wallpaper
+  `WorkerW` yet, so the layout is *raised*. The desktop also has a dozen tiny
+  hidden top-level `WorkerW`s, some owned by other processes: layout detection
+  must only consider Explorer's visible ones.
+- **`0x052C` (0xD, 1)** was needed (no layer at first) and built it in
+  **~105 ms**: a visible `WorkerW` child of `Progman`, z just below
+  `SHELLDLL_DefView`. Later runs found it already there and sent nothing.
+- **Candidate (a), the winner:** `CreateWindowEx` directly with `Progman` (in
+  Explorer's process) as the parent works (no `SetParent` dance).
+  `WS_CHILD | WS_VISIBLE | WS_CLIPCHILDREN | WS_CLIPSIBLINGS`,
+  `WS_EX_LAYERED | WS_EX_NOACTIVATE`, alpha 255, then `SetWindowPos(host,
+  DefView)`. Order `SHELLDLL_DefView > host > WorkerW`; bounds equal the
+  monitor in physical px at 200% (PerMonitorV2); host colour on 93% of the
+  screen; all 4 icons, their labels and the selection highlight draw over it;
+  a `GDI+` clock in it ticks; `WindowFromPoint` on bare desktop is still
+  `SysListView32`, and right-click opens Explorer's menu (a XAML
+  `Microsoft.UI.Content.PopupWindowSiteBridge`, not `#32768`). **Owner by
+  eye:** icon drag and drop, rubber-band selection, double-click to open, and
+  Win+D twice all normal, no lag.
+- **Candidate (b)** child of that `WorkerW`: invisible unless layered (0%
+  colour); layered (alpha 255), it passes the same checks. A fallback, not
+  needed.
+- **Candidate (c)** child of `SHELLDLL_DefView` below `SysListView32`:
+  never visible, layered or not (the list view paints opaquely). Ruled out.
+- **Explorer restart** (killed, Windows restarted it in ~0.8 s):
+  **our host died with it** (`IsWindow` false; it was Explorer's `Progman`'s
+  child). `TaskbarCreated` arrived ~2.4 s after the kill; the new `Progman` had
+  no layer, so `0x052C` was sent again (114 ms); a new host was created, and
+  every check passed again. Design consequence in §10.25.5.
+- **Quit:** destroying the host, then re-applying the wallpaper path, leaves
+  Explorer's picture with no stale frame. **Ctrl+C through WSL interop
+  terminates the Windows process outright** (no `CancelKeyPress`), and
+  `taskkill /f` likewise: in both cases Windows destroys the dead process's
+  host and Explorer's own `WorkerW` shows through, so nothing stale is left
+  even without our cleanup.
+- **Gotchas:** WinForms' `NativeWindow.CreateHandle` superclasses a custom
+  class name (`WindowsForms10.<name>…`), so create with `CreateWindowEx` and
+  `AssignHandle`. After an Explorer restart the first desktop menu can take
+  ~5 s (cold XAML). Synthetic right-clicks over RDP sometimes landed on the
+  taskbar instead (a jump list opened), with no host attached as well, so the
+  automated menu check is advisory; the owner's by-eye check is the real one.
+  `UseWPF` (for UI Automation) cross-compiles fine in WSL; implicit usings then
+  drop `System.IO`.
+- Still to check: the console session (not RDP) and two monitors (W6, or
+  RDP's *Use all my monitors* earlier).
 
 
 ## Appendix A: legacy standalone pages, to bring back

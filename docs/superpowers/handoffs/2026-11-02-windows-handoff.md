@@ -15,9 +15,15 @@ truth. This file is only the session's state and context.
 | Status | **Design approved by the owner.** No code, no `windows/` folder, no Makefile targets, no README changes yet (nothing to run, so README is untouched on purpose) |
 | Checks | `make lint`, `make audit`, `make test` (228 pass) all green on the branch |
 
-**The very next step:** write the implementation plan for **Phase W0** (the
-spikes) with the `superpowers:writing-plans` skill, then run W0. Nothing past
-W0 is built until W0.1 and W0.2 pass. See §5 below.
+**Update 2026-11-03:** the W0 plan is written
+(`docs/superpowers/plans/2026-11-03-windows-w0-spikes.md`), the .NET 10 SDK is
+installed in WSL (Ubuntu's `dotnet-sdk-10.0`, 10.0.114), and **W0.1 passed**
+(SPEC §10.25.21: raised layout, a layered child of `Progman` below
+`SHELLDLL_DefView`; the host dies with Explorer and is recreated). Spike code:
+`windows/spikes/`, run with `make win-spike ARGS=…`. **Next: W0.2** (plan Task 4).
+
+~~**The very next step:** write the implementation plan for Phase W0.~~ Done.
+Nothing past W0 is built until W0.1 and W0.2 pass. See §5 below.
 
 Merging PR #9 before W0 is fine (it's docs only) or it can stay open and
 collect the spike results. Owner's call; not discussed.

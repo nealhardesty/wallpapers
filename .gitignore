@@ -162,3 +162,7 @@ web/bing.json
 
 # Jellyfin dev server and its made-up media (make jellyfin-media, make jellyfin-dev)
 .jellyfin/
+
+# Windows builds (dotnet)
+windows/**/bin/
+windows/**/obj/

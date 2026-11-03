@@ -409,6 +409,7 @@ Run `make` to list every target.
 | `make mac-saver-live` | Run the installed saver in Apple's real host for a few seconds and read its log (once you've chosen it in System Settings) |
 | `make mac-saver-log` | The screen saver's own log |
 | `make mac-install` / `make mac-uninstall` | Put the app in `~/Applications` / remove it |
+| `make win-spike` | Temporary, for the Windows design's W0 spikes: build the spike exe in WSL and run it on the Windows side, `ARGS="tree"` etc. (SPEC §10.25.21) |
 | `make docker-build` | Build the container image `wallpapers` |
 | `make docker-run` | Run it at http://localhost:8000 (read-only, unprivileged) |
 | `make lint` | Syntax-check every script and JSON file |
