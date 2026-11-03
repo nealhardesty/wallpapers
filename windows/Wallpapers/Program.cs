@@ -13,7 +13,10 @@ static class Program
         Directory.CreateDirectory(root);
         File.AppendAllText(Path.Combine(root, "log.txt"), $"{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff} Wallpapers {version}{Environment.NewLine}");
         if (args.Contains("--dump-displays"))
+        {
             File.WriteAllText(Path.Combine(root, "displays.json"), Displays.ToJson(N.Monitors()));
+            File.WriteAllText(Path.Combine(root, "tree.json"), DesktopShape.TreeToJson(DesktopLayer.Anonymised(DesktopLayer.Snapshot())));
+        }
         return 0;
     }
 }
