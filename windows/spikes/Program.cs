@@ -22,6 +22,8 @@ static class Program
                 "motion" => Check.Motion(opts),
                 "web" => Web.Run(opts),
                 "cover" => Shell.Cover(opts),
+                "share" => Share.Run(opts),
+                "input" => Input.Run(opts),
                 "restart-explorer" => Shell.RestartExplorer(),
                 _ => Unknown(cmd),
             };

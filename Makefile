@@ -126,8 +126,8 @@ mac-saver-live: ## Run the installed screen saver in Apple's real host for a few
 mac-saver-log: ## Show the screen saver's own log (it writes inside the host's sandbox)
 	@tail -40 "$(HOME)/Library/Containers/com.apple.ScreenSaver.Engine.legacyScreenSaver/Data/wallpapers-saver.log"
 
-win-spike: ## Windows Phase W0 spikes (throwaway, SPEC §10.25.21): build windows/spikes in WSL and run it on the Windows side (ARGS="tree", "layer --mode raised", "check", …)
-	@DOTNET="$(DOTNET)" ARGS="$(ARGS)" windows/spikes/run.sh
+win-spike: ## Windows Phase W0 spikes (throwaway, SPEC §10.25.21): build windows/spikes in WSL and run it on the Windows side (ARGS="tree", "layer --mode raised", "check", …; SPIKE_EXE=Spike.scr)
+	@DOTNET="$(DOTNET)" ARGS="$(ARGS)" SPIKE_EXE="$(SPIKE_EXE)" windows/spikes/run.sh
 
 bench: ## Every wallpaper at every tier on a simulated phone (4× slower CPU): budgets, bench/results.json, the ⚡ badges (SPEC §4.8)
 	node tools/bench.mjs

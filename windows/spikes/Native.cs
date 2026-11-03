@@ -130,6 +130,7 @@ public static class N
     [DllImport("user32.dll", SetLastError = true)] public static extern bool DestroyWindow(IntPtr h);
     [DllImport("user32.dll")] public static extern IntPtr GetDesktopWindow();
     [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+    [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);
     [DllImport("user32.dll")] public static extern bool ScreenToClient(IntPtr h, ref POINT p);
     [DllImport("ntdll.dll")] public static extern int RtlGetVersion(ref OSVERSIONINFOEX v);
 

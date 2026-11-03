@@ -22,8 +22,10 @@ installed in WSL (Ubuntu's `dotnet-sdk-10.0`, 10.0.114), and **W0.1 passed**
 `SHELLDLL_DefView`; the host dies with Explorer and is recreated). Spike code:
 `windows/spikes/`, run with `make win-spike ARGS=…`. **W0.2 passed too: the W0
 gate is passed** (visual hosting, controller parented to our own window, an
-input fix for Chromium's overlay; SPEC §10.25.21). **Next: W0.3 and W0.4**
-(plan Tasks 5 and 7). New owner decision pending: **signing**, since Smart App
+input fix for Chromium's overlay; SPEC §10.25.21). **W0.3 and W0.4 are done
+as well** (the saver shares the WebView2 folder, no mirror; clicks go in by
+script because a `SendMouseInput` press steals focus). **Phase W0 is complete.
+Next: plan and build W1** (SPEC §10.25.16). New owner decision pending: **signing**, since Smart App
 Control on this PC blocks some unsigned builds (SPEC Open questions).
 
 ~~**The very next step:** write the implementation plan for Phase W0.~~ Done.
@@ -229,7 +231,7 @@ from the console.
 | `WebFactory.swift` (shared store, quiet `wp:hinted`, sync script, nav policy) | `WebFactory.cs` | Virtual host instead of the `wp://` scheme |
 | `AssetScheme.swift` | `SetVirtualHostNameToFolderMapping` | |
 | `Power.swift` | `Power.cs`, `Coverage.cs` | |
-| `SaverSync.swift` (mirror `wp:` keys minus secrets and `wp:hinted`) | `Core/Mirror.cs` (+ only if W0.3 fails) | |
+| `SaverSync.swift` (mirror `wp:` keys minus secrets and `wp:hinted`) | *(not needed: W0.3, the saver shares the user data folder)* | |
 | `Saver/WallpapersSaverView.swift` (watchdog: 4 s checks, reload → rebuild → clock) | `Saver/` | Use the web clock overlay, not a native clock |
 | `SettingsWindow.swift` | `SettingsWindow.cs` | |
 | `SelfTest.swift`, `mac-test` | `SelfTest.cs`, `win-test` | |

@@ -45,7 +45,26 @@ public static class Web
     static double refFps;
     static bool fullMotion;
     static int hideAt, hideFor;
-    static bool ownParent;
+    static bool ownParent, inputOn, fixOverlay, refocus;
+    static IntPtr fgBefore;
+    static string clickVia = "input";
+    // The Mac's way (§10.25.8 fallback): synthetic pointer + mouse events at a CSS point in the stage document.
+    static string ScriptPress(bool down, double x, double y) =>
+        "(() => { const f = [...document.querySelectorAll('iframe.stage')].pop(); const d = f && f.contentDocument; if (!d) return 'no stage';" +
+        $" const x = {x:F1}, y = {y:F1}, t = d.elementFromPoint(x, y) || d.documentElement, w = d.defaultView;" +
+        " const o = { bubbles: true, cancelable: true, composed: true, clientX: x, clientY: y, button: 0, pointerId: 1, pointerType: 'mouse', isPrimary: true, view: w };" +
+        (down ? " t.dispatchEvent(new w.PointerEvent('pointerdown', { ...o, buttons: 1 })); t.dispatchEvent(new w.MouseEvent('mousedown', { ...o, buttons: 1 }));"
+              : " t.dispatchEvent(new w.PointerEvent('pointerup', { ...o, buttons: 0 })); t.dispatchEvent(new w.MouseEvent('mouseup', { ...o, buttons: 0 })); t.dispatchEvent(new w.MouseEvent('click', { ...o, buttons: 0 }));") +
+        " return t.tagName; })()";
+    static Input? input;
+    static Surface? pointerIn;
+    static bool gesture;
+    static int sentMoves, sentDowns, sentUps;
+    // Counts the pointer events that reach the wallpaper's own document (iframe.stage), and the last one.
+    const string PageCounter = "(() => { const f = [...document.querySelectorAll('iframe.stage')].pop(); const d = f && f.contentDocument; if (!d) return 'no stage';" +
+        " if (!d.__pc) { d.__pc = { move: 0, down: 0, up: 0, trusted: 0, last: null }; for (const t of ['pointermove', 'pointerdown', 'pointerup'])" +
+        " d.addEventListener(t, e => { d.__pc[t.slice(7)]++; if (e.isTrusted) d.__pc.trusted++; d.__pc.last = [t, Math.round(e.clientX), Math.round(e.clientY)]; }, true); }" +
+        " return JSON.stringify(d.__pc); })()";
     static NativeWindow? keeper;
 
     public static int Run(Opts o)
@@ -58,6 +77,10 @@ public static class Web
         fullMotion = o.Get("motion") == "full";
         hideAt = o.Int("hide-at", 0);
         ownParent = o.Has("own-parent");
+        inputOn = o.Has("input");
+        fixOverlay = o.Has("fix-overlay");
+        refocus = o.Has("refocus");
+        clickVia = o.Get("click-via") ?? "input";
         hideFor = o.Int("hide-for", 30);
         refFps = double.TryParse(o.Get("ref"), System.Globalization.CultureInfo.InvariantCulture, out var r) ? r : 0;
         var seconds = (int)(double.Parse(o.Get("minutes") ?? "10", System.Globalization.CultureInfo.InvariantCulture) * 60);
@@ -86,6 +109,12 @@ public static class Web
 
         _ = StartAsync();
         Clock.Start();
+        if (inputOn)
+        {
+            input = new Input();
+            input.Moved += Move;
+            input.Button += Press;
+        }
         return Layer.Loop(seconds,
             onTaskbarCreated: () => { if (mode != "window") Layer.Reattach(); },
             onCheck: () => { if (mode != "window") Layer.Watch(); },
@@ -170,6 +199,8 @@ public static class Web
         if (hideAt > 0 && ticks == hideAt) foreach (var s in Surfaces) { if (s.C != null) s.C.IsVisible = false; Log.Line($"surface {s.Index}: IsVisible=false"); }
         if (hideAt > 0 && ticks == hideAt + hideFor) foreach (var s in Surfaces) { if (s.C != null) s.C.IsVisible = true; Log.Line($"surface {s.Index}: IsVisible=true"); }
         if (ticks % 10 == 0) foreach (var s in Surfaces) _ = Sample(s);
+        if (inputOn && ticks % 5 == 0) input!.Report();
+        if (fixOverlay && ticks % 5 == 0) FixOverlay();
         if (ticks % 60 == 0) SampleCpu();
     }
 
@@ -231,6 +262,89 @@ public static class Web
         }
         else Log.Line($"fps surface={s.Index} t={t:F0} frames={n} vis={vis} exposed={exposed} tier={tier} (first sample)");
         if (n >= 0) { s.LastN = n; s.LastT = t; s.LastRaf = raf; }
+        if (inputOn)
+        {
+            var pc = JsonSerializer.Deserialize<string>(await s.C.CoreWebView2.ExecuteScriptAsync(PageCounter));
+            Log.Line($"pointer surface={s.Index} sent moves={sentMoves} downs={sentDowns} ups={sentUps}; page got {pc}");
+        }
+    }
+
+    static Surface? SurfaceAt(POINT p) =>
+        Surfaces.FirstOrDefault(s => s.Index < Layer.Hosts.Count && Layer.Hosts[s.Index].Monitor.Rect.Contains(p));
+
+    static Point Local(Surface s, POINT p) { var r = Layer.Hosts[s.Index].Monitor.Rect; return new Point(p.X - r.L, p.Y - r.T); }
+
+    /// §10.25.8: moves go to the surface under the cursor even over app windows; leaving sends Leave.
+    static void Move(POINT p)
+    {
+        var s = SurfaceAt(p);
+        if (pointerIn != null && pointerIn != s && pointerIn.CC != null)
+            pointerIn.CC.SendMouseInput(CoreWebView2MouseEventKind.Leave, CoreWebView2MouseEventVirtualKeys.None, 0, new Point(0, 0));
+        pointerIn = s;
+        if (s?.CC == null || !s.C!.IsVisible) return;
+        s.CC.SendMouseInput(CoreWebView2MouseEventKind.Move, gesture ? CoreWebView2MouseEventVirtualKeys.LeftButton : CoreWebView2MouseEventVirtualKeys.None, 0, Local(s, p));
+        sentMoves++;
+    }
+
+    /// Left button only, and only a press that starts on bare desktop; its release always follows.
+    static void Press(int seq, bool down, POINT p, Input.Verdict v)
+    {
+        var s = SurfaceAt(p);
+        if (s?.CC == null) { Log.Line($"click #{seq}: no visual surface there, not delivered"); return; }
+        if (down && v.Kind == "bare")
+        {
+            gesture = true;
+            fgBefore = N.GetForegroundWindow();   // Explorer, which the real click just went to
+            if (clickVia == "script") _ = s.C!.CoreWebView2.ExecuteScriptAsync(ScriptPress(true, Local(s, p).X / s.C.RasterizationScale, Local(s, p).Y / s.C.RasterizationScale));
+            else s.CC.SendMouseInput(CoreWebView2MouseEventKind.LeftButtonDown, CoreWebView2MouseEventVirtualKeys.LeftButton, 0, Local(s, p));
+            sentDowns++;
+            Log.Line($"click #{seq}: delivered down at {Local(s, p)} (CSS {Local(s, p).X / s.C!.RasterizationScale:F0},{Local(s, p).Y / s.C.RasterizationScale:F0})");
+        }
+        else if (!down && gesture)
+        {
+            gesture = false;
+            if (clickVia == "script") _ = s.C!.CoreWebView2.ExecuteScriptAsync(ScriptPress(false, Local(s, p).X / s.C.RasterizationScale, Local(s, p).Y / s.C.RasterizationScale));
+            else s.CC.SendMouseInput(CoreWebView2MouseEventKind.LeftButtonUp, CoreWebView2MouseEventVirtualKeys.None, 0, Local(s, p));
+            sentUps++;
+            Log.Line($"click #{seq}: delivered up at {Local(s, p)}");
+            // WebView2 takes focus on a delivered press, activating our window: §10.25.2 anti-goal.
+            var t = new System.Windows.Forms.Timer { Interval = 60 };
+            t.Tick += (_, _) =>
+            {
+                t.Stop(); t.Dispose();
+                var fg = N.GetForegroundWindow();
+                var ours = N.PidOf(fg) == Environment.ProcessId || (env != null && env.GetProcessInfos().Any(i => i.ProcessId == N.PidOf(fg)));
+                if (ours && refocus && fgBefore != IntPtr.Zero)
+                {
+                    var ok = N.SetForegroundWindow(fgBefore);
+                    Log.Line($"click #{seq}: focus was taken by {N.ClassOf(fg)} \"{N.TextOf(fg)}\"; gave it back to {N.ClassOf(fgBefore)} ok={ok} now={N.ClassOf(N.GetForegroundWindow())}");
+                }
+                else Log.Line($"click #{seq}: foreground after delivery: {N.ClassOf(fg)} \"{N.TextOf(fg)}\"{(ours ? " (OURS)" : "")}");
+            };
+            t.Start();
+        }
+        else Log.Line($"click #{seq}: {(down ? "down" : "up")} on {v.Kind}, not delivered");
+    }
+
+    /// WebView2's visual-hosting input window (top-level Chrome_WidgetWin_1, layered alpha 0) swallows
+    /// the desktop's first right-click until it's click-through (§10.25.8). Ours = in our environment's processes.
+    static void FixOverlay()
+    {
+        if (env == null) return;
+        var pids = env.GetProcessInfos().Select(p => p.ProcessId).ToHashSet();
+        N.EnumWindows((h, _) =>
+        {
+            if (N.IsWindowVisible(h) && pids.Contains(N.PidOf(h)) && N.ClassOf(h) == "Chrome_WidgetWin_1")
+            {
+                var ex = N.ExStyle(h);
+                if ((ex & N.WS_EX_LAYERED) != 0 && (ex & N.WS_EX_TRANSPARENT) == 0)
+                {
+                    N.SetWindowLongPtr(h, N.GWL_EXSTYLE, (IntPtr)(ex | N.WS_EX_TRANSPARENT));
+                    Log.Line($"overlay: made {N.Hex(h)} click-through (ex 0x{ex:X8} -> 0x{N.ExStyle(h):X8})");
+                }
+            }
+            return true;
+        }, IntPtr.Zero);
     }
 
     static void SampleCpu()
@@ -294,6 +408,9 @@ public static class Web
         }
         if (Cpu.Count > 0)
             Log.Line($"summary cpu app median={Median(Cpu.Select(c => c.app)):F1}% webview median={Median(Cpu.Select(c => c.web)):F1}% of one core, webview private MB median={Median(Cpu.Select(c => c.mem)):F0}");
+        if (input != null)
+            Log.Line($"summary input: raw moves={input.Moves} sent moves={sentMoves} downs={sentDowns} ups={sentUps}");
+        input?.Stop();
         foreach (var s in Surfaces) try { s.C?.Close(); } catch { }
     }
 }

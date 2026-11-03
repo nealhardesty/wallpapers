@@ -3436,7 +3436,8 @@ One native Windows 11 app that runs the same `web/` wallpapers behind the
 desktop icons, on every monitor, controlled from a tray icon, and later as
 the screen saver: the Mac app (§10.21) for Windows, going further where
 Windows allows. **Status: designed, owner-approved; the W0 gate passed
-(W0.1 and W0.2, 2026-11-03, §10.25.21); W0.3–W0.4 to go, then W1.** Phase W0
+(W0.1 and W0.2, 2026-11-03, §10.25.21), and W0.3 and W0.4 are done too; W1
+is next.** Phase W0
 (spikes) is the gate: if a live web page can't run behind the icons on 25H2,
 the project stops. Brainstormed and reviewed 2026-11-02; the original design
 note is `docs/superpowers/specs/2026-11-02-windows-design.md`, and this
@@ -3611,7 +3612,6 @@ windows/
     SaverArgs.cs               /s /p:123 /p 123 /c:456 parsing (Windows passes all of these)
     AppSettings.cs             settings.json (mode, mouse, saver choices) with defaults
     PageUrl.cs                 index.html?host=windows&display=…&insets=…&screens=…
-    Mirror.cs                  which wp: keys reach the saver (no secrets, no wp:hinted)
   Wallpapers.Tests/            xUnit over Core; runs in WSL and CI
   build.sh                     publish + copy web/ + version stamping (like mac/build.sh)
   release.sh                   zip, checksum, checks
@@ -3627,7 +3627,6 @@ the same apart from §10.25.7's small additions.
 | App | `%LOCALAPPDATA%\Programs\Wallpapers\` (`Wallpapers.exe`, `Wallpapers.scr`, `web\`) |
 | Web storage (all wallpaper settings) | `%LOCALAPPDATA%\Wallpapers\WebView2\` (one shared user data folder) |
 | App settings (display mode, mouse, saver) | `%LOCALAPPDATA%\Wallpapers\settings.json` |
-| Saver mirror (if needed, §10.25.12) | `%LOCALAPPDATA%\Wallpapers\saver.json` |
 | Log | `%LOCALAPPDATA%\Wallpapers\log.txt` (rolls at 1 MB, keeps one old) |
 
 #### 10.25.5 Behind the icons (`DesktopLayer.cs`)
@@ -3760,32 +3759,51 @@ page, as the Mac does with its global monitor.
   never focused, no hook (so nothing Windows can time out, no lag added to
   the user's mouse). Position from `GetCursorPos` (physical px with
   PerMonitorV2); buttons from the raw flags. Unregistered while every surface
-  is hidden.
+  is hidden. *(W0.4: works unfocused, over app windows and the taskbar;
+  100–275 raw moves a second when the mouse is busy.)*
 - **Moves:** forwarded to the surface under the cursor, if it's visible,
   coalesced to at most 60 per second. Moves count even when the cursor is
   over an app window (fish still follow it), matching the Mac.
 - **Clicks (left button only):** forwarded only on **bare desktop**:
   `WindowFromPoint` is the desktop (`SysListView32` in `SHELLDLL_DefView`,
   `Progman`, `WorkerW` or our host), and UI Automation's `ElementFromPoint`
-  there isn't a `ListItem` (an icon). Down, up and click, so `host.gestures`
-  sees taps and drags. A drag on bare desktop also draws Explorer's
+  there isn't a `ListItem` (an icon). Ask UI Automation **only** when
+  `WindowFromPoint` already says desktop, on a worker thread (W0.4: on the
+  desktop median 10 ms, p95 37 ms; over app windows it's slower, p95 79 ms,
+  max 178 ms, and not needed). The press decides: a gesture that starts on
+  an icon is never forwarded, even if it ends on bare desktop (an icon drag);
+  one that starts bare is forwarded through its release. Down, up and click,
+  so `host.gestures` sees taps and drags; W3 also synthesizes `dblclick`
+  (the Fish Tank taps the glass) from the system's double-click time and
+  distance. A drag on bare desktop also draws Explorer's
   selection rectangle; that's expected and harmless. Right and middle
   buttons are never forwarded.
 - **Coordinates:** physical px → the surface's client px → CSS px (÷ its
   rasterization scale).
-- **Delivery:** visual hosting won W0.2, so
-  `CoreWebView2CompositionController.SendMouseInput`: real, trusted events
-  with zero script (W0.4/W3 confirm).
-- **Chromium's input window (W0.2):** visual hosting makes WebView2 create a
-  top-level, full-screen `Chrome_WidgetWin_1` (layered, alpha 0) over the
-  desktop. As created, it **swallows the first right-click on the desktop**
-  and `WindowFromPoint` returns it everywhere. Adding `WS_EX_TRANSPARENT` to
-  it (cross-process `SetWindowLongPtr`, same user) fixes both; reapply after
-  every controller creation and check it on the 5 s timer. Disabling it
-  (`EnableWindow(false)`) doesn't help. Otherwise the Mac's approach: `ExecuteScriptAsync`
-  dispatching `PointerEvent`s and `MouseEvent`s into the active
-  `iframe.stage` (same origin under our virtual host, so `contentDocument`
-  is reachable). Also a `pointerleave` when the cursor leaves a surface.
+- **Delivery (settled by W0.4):** **moves** through
+  `CoreWebView2CompositionController.SendMouseInput` (real, trusted
+  `pointermove`s; Chromium coalesces them to its frame rate), plus `Leave`
+  when the cursor leaves a surface. **Clicks** by the Mac's approach:
+  `ExecuteScriptAsync` dispatching `PointerEvent`s and `MouseEvent`s at the
+  CSS point into the active `iframe.stage` (same origin under our virtual
+  host, so `contentDocument` is reachable). `SendMouseInput` presses work
+  too, but **WebView2 then takes the foreground** (our controller's parent
+  window becomes active despite `WS_EX_NOACTIVATE`), so keys typed on the
+  desktop afterwards would go to us; script clicks never move focus (owner:
+  an arrow key after a click still reached the desktop). No wallpaper reads
+  `isTrusted`. (Handing the foreground straight back works as well, but
+  leaves a ~100–200 ms gap where we hold it.)
+- **Chromium's input window (W0.2, W0.4):** visual hosting makes WebView2
+  create a top-level, full-screen `Chrome_WidgetWin_1` (layered, alpha 0),
+  placed directly above `Progman`. With the controller parented to the
+  *host*, it **swallows the first right-click on the desktop** and covers
+  every hit test (bare-desktop classifier: 0 of 24 right). With the
+  controller parented to **our own hidden window** (§10.25.5), it's harmless
+  (24 of 24, menus open first time), though it sits at the same place in the
+  z-order; why isn't known. Belt and braces: add `WS_EX_TRANSPARENT` to it
+  (cross-process `SetWindowLongPtr`, same user), found among the
+  environment's own process ids after every controller creation and
+  re-checked on the 5 s timer. `EnableWindow(false)` doesn't help.
 - **Settings (tray):** *Wallpaper Follows the Mouse* (moves) and *Clicks on
   the Desktop Play* (taps), both on by default. Touchscreens arrive as mouse
   raw input and just work.
@@ -3794,9 +3812,12 @@ page, as the Mac does with its global monitor.
   **Play in a Window**: the current wallpaper in a normal, focused,
   resizable window where keys and clicks work natively. It also covers games
   you'd rather play than watch.
-- **Elevated apps:** when an admin window has focus, Windows may withhold
-  input from us (UIPI). The wallpaper then just doesn't react until focus
-  moves. Accepted.
+- **Elevated apps:** when an admin window has focus, Windows withholds raw
+  input from us (UIPI; W0.4: zero raw moves for 15 s with Task Manager
+  focused while the cursor crossed the screen, and a click lost its press).
+  `GetCursorPos` keeps working, so W3 polls it (~30 Hz) while raw input is
+  silent and the cursor moves: fish still follow. Clicks are lost until
+  focus moves (clicking the desktop moves it anyway). Accepted.
 
 #### 10.25.9 Visibility and power (`Power.cs`, `Coverage.cs`)
 
@@ -3938,13 +3959,15 @@ SPIF_SENDCHANGE)`. Group Policy can override; we detect that and say so.
 "A Different One Each Time" skips Blank, Jellyfin and Bing (they need a
 network), and monitors avoid each other's wallpaper, as on the Mac.
 
-**Settings reach the saver.** First choice (W0.3): the saver opens the
-**same WebView2 user data folder** as the app. WebView2 lets two processes
-share one if their environment options match; they then share a browser
-process and `localStorage` directly, so no mirror at all. If that proves
-unreliable, the Mac's approach: the app mirrors every `wp:` key (no
-`secrets`, no `wp:hinted`) to `saver.json` a second after it settles, and the
-saver seeds a throwaway profile from it before the page runs.
+**Settings reach the saver.** **Settled by W0.3 (§10.25.21): the saver
+opens the same WebView2 user data folder as the app, and there is no
+mirror.** The two processes share one browser process and `localStorage`
+directly, in either start order: storage events arrive in ~1 ms, a saver
+started alone reads the last values, and a crash of the app leaves the
+saver's page running. **The environment options must be identical** (same
+browser arguments; a mismatch fails `CreateAsync` with `0x8007139F`), so
+both come from one place in the code. *(The superseded alternative was the
+Mac's `saver.json` mirror, `Core/Mirror.cs`; not built.)*
 
 **Watchdog** (from the Mac): the page's frame counter is checked every 4 s;
 two stalls reload, the next recreates the web view, the next shows the clock
@@ -4057,7 +4080,7 @@ non-zero on failure):
 **Core unit tests (xUnit, Linux):** surfaces and insets for side-by-side,
 stacked, offset, mixed-size and negative-origin layouts; coverage math
 (maximized, two snapped halves, 96% vs 98%, overlays ignored); display key
-stability; saver argument forms; page URL encoding; mirror filtering.
+stability; saver argument forms; page URL encoding.
 
 **CI:**
 - `ci` (Ubuntu): `make win-build` and `make win-unit` (cross-compile proves
@@ -4152,7 +4175,7 @@ Task Manager; RDP in and out; the saver from Windows' dialog; uninstall.
 - Exact Z-order and parent per layout (W0.1 decides).
 - Menu wording and order details, thumbnail size, icon rendering.
 - Log format, retry timings within the ranges given.
-- Whether the saver shares the user data folder or mirrors (W0.3 decides).
+- ~~Whether the saver shares the user data folder or mirrors~~ (W0.3: shares).
 - File and class names beyond the sketch in §4.
 
 #### 10.25.19 Ideas for later (not in scope)
@@ -4313,6 +4336,57 @@ Intel Iris Xe, Direct3D 11, even over RDP; mains power; 2026-11-03)
 - **Tooling gotchas:** GUI windows started from WSL can come up minimized
   (force the window state after `Shown`); `make win-spike` skips replacing
   the exe while one runs, so a second command uses the running build.
+
+**W0.3 two processes, one user data folder: works; no mirror.** (same
+machine, RDP, 2026-11-03; the "saver" ran as `Spike.scr`, the same bytes as
+`Spike.exe` renamed, as the real saver will be)
+- **App first, saver second:** one shared browser process (same
+  `BrowserProcessId` in both); the saver read the value written 1.2 s before
+  it started, then got **29 of the ~30** writes made while it ran as
+  `storage` events, **median 1 ms**, max 3 ms.
+- **Saver first, app second:** the app joined the saver's browser process;
+  **22 of 22**, median 1 ms.
+- **Saver alone afterwards:** reads the last value (18 s old). Settings
+  persist with nothing else running.
+- **Mismatched browser arguments:** the second process can't create its
+  environment (`COMException 0x8007139F`, "not in the correct state"), so
+  it fails loudly rather than silently getting a separate profile.
+- **App killed mid-run** (`taskkill /f`): the saver's page stayed alive for
+  the rest of its run, on the same browser process.
+- Decision in §10.25.12.
+
+**W0.4 Raw Input and the bare-desktop hit test: works, with two design
+changes.** (same machine, RDP, 2026-11-03; visual hosting, controller on our
+own window, the Fish Tank, whose clicks drop food)
+- **Raw Input with `RIDEV_INPUTSINK`** on a hidden window: moves arrive while
+  the terminal or File Explorer is focused, over apps and the taskbar.
+- **Classifier self-test** (every icon centre plus a grid of bare points, no
+  clicks): 24 of 24 with no web view and with own-parent visual hosting; **0
+  of 24** with a host-parented controller (Chromium's overlay in the way,
+  §10.25.8).
+- **The owner's script, real clicks:** 26 presses, every one classified
+  correctly. 14 bare presses delivered (food dropped there); icons (6),
+  app windows (4) and the taskbar (2) not; an icon drag (press on an icon,
+  release on bare desktop) not; a rubber band delivered as one gesture. In
+  the page: 14 downs and 14 ups, as sent; 1891 moves sent arrived as 1235
+  `pointermove`s (Chromium coalesces to its frame rate), all trusted.
+- **Delivered `SendMouseInput` presses took the foreground** (our hidden
+  window), in the owner's run and reproduced by a synthetic click; handing
+  it back works; **script-dispatched clicks never moved it** (exact CSS point,
+  physical ÷ 2). Decision in §10.25.8. Owner, final run: food on bare clicks
+  only, and an arrow key after a click still reached the desktop.
+- **UI Automation latency** over 54 real lookups: median 12.5 ms, p95 72 ms
+  overall; on the desktop alone median 10 ms, p95 37 ms; the slow ones were
+  app windows (hence: only ask UIA when the window is the desktop).
+- **Elevated foreground** (Task Manager, opened inside the session; in RDP,
+  Ctrl+Shift+Esc opens the *local* one): zero raw moves for 15 s while the
+  cursor crossed the screen; `GetCursorPos` still moved (hence the poll
+  fallback, §10.25.8).
+- The Fish Tank's own cursor reaction is subtle (fish drift to a cursor that
+  sits still; fast moves startle), so the in-page counter, not the eye, is
+  the proof that moves arrive. Neko is the obvious visual check for W3.
+- Spike builds: Smart App Control blocked none of today's later builds
+  (2 of ~25 overall).
 
 
 ## Appendix A: legacy standalone pages, to bring back
