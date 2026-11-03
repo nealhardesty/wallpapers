@@ -1,0 +1,38 @@
+{
+  "monitors": [
+    {
+      "device": "\\\\.\\DISPLAY1",
+      "bounds": {
+        "left": 0,
+        "top": 0,
+        "right": 2560,
+        "bottom": 1440
+      },
+      "work": {
+        "left": 0,
+        "top": 0,
+        "right": 2560,
+        "bottom": 1392
+      },
+      "dpi": 96,
+      "primary": true
+    },
+    {
+      "device": "\\\\.\\DISPLAY2",
+      "bounds": {
+        "left": -1920,
+        "top": -300,
+        "right": 0,
+        "bottom": 780
+      },
+      "work": {
+        "left": -1920,
+        "top": -300,
+        "right": 0,
+        "bottom": 732
+      },
+      "dpi": 96,
+      "primary": false
+    }
+  ]
+}

@@ -1,0 +1,72 @@
+{
+  "monitors": [
+    {
+      "device": "\\\\.\\DISPLAY1",
+      "bounds": {
+        "left": 0,
+        "top": 0,
+        "right": 1920,
+        "bottom": 1080
+      },
+      "work": {
+        "left": 48,
+        "top": 0,
+        "right": 1920,
+        "bottom": 1080
+      },
+      "dpi": 96,
+      "primary": true
+    },
+    {
+      "device": "\\\\.\\DISPLAY2",
+      "bounds": {
+        "left": 1920,
+        "top": 0,
+        "right": 3840,
+        "bottom": 1080
+      },
+      "work": {
+        "left": 1920,
+        "top": 48,
+        "right": 3840,
+        "bottom": 1080
+      },
+      "dpi": 96,
+      "primary": false
+    },
+    {
+      "device": "\\\\.\\DISPLAY3",
+      "bounds": {
+        "left": 3840,
+        "top": 0,
+        "right": 5760,
+        "bottom": 1080
+      },
+      "work": {
+        "left": 3840,
+        "top": 0,
+        "right": 5712,
+        "bottom": 1080
+      },
+      "dpi": 96,
+      "primary": false
+    },
+    {
+      "device": "\\\\.\\DISPLAY4",
+      "bounds": {
+        "left": 5760,
+        "top": 0,
+        "right": 7680,
+        "bottom": 1080
+      },
+      "work": {
+        "left": 5760,
+        "top": 0,
+        "right": 7680,
+        "bottom": 1080
+      },
+      "dpi": 96,
+      "primary": false
+    }
+  ]
+}

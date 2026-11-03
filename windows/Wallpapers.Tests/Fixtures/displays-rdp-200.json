@@ -1,0 +1,21 @@
+{
+  "monitors": [
+    {
+      "device": "\\\\.\\DISPLAY81",
+      "bounds": {
+        "left": 0,
+        "top": 0,
+        "right": 2940,
+        "bottom": 1686
+      },
+      "work": {
+        "left": 0,
+        "top": 0,
+        "right": 2940,
+        "bottom": 1590
+      },
+      "dpi": 192,
+      "primary": true
+    }
+  ]
+}
