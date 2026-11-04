@@ -37,6 +37,19 @@ deleted. The owner checked an RDP reconnect and resize too. **Next: plan W2**
 (monitors and power, SPEC §10.25.16) with superpowers:writing-plans. Signing is
 still the owner's call.
 
+**Update 2026-11-04: W2 is built** (monitors and power). Plan
+`docs/superpowers/plans/2026-11-04-windows-w2-monitors-power.md`; results and the
+owner's by-hand checklist in SPEC §10.25.16 *As built*. Done: display keys,
+Different mode, in-place reconcile, coverage pause, every power signal, the
+Monitors and Performance menus, Identify Monitors, `WP_FAKE_DISPLAYS`; `make
+win-unit` and `make win-test` pass over RDP and in fake two-monitor layouts.
+**Pending:** the owner's console pass with two real monitors, then over RDP
+(the checklist; lock, sleep, display-off, battery and unplug were never
+triggered). Known limit: a missed display-on without a sleep leaves the
+wallpaper hidden. **Next: plan and build W3** (interactivity: Raw Input,
+desktop clicks, Play in a Window; SPEC §10.25.8 and §10.25.16). Signing is
+still the owner's call.
+
 ~~**The very next step:** write the implementation plan for Phase W0.~~ Done.
 Nothing past W0 is built until W0.1 and W0.2 pass. See §5 below.
 

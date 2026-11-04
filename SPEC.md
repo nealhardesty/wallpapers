@@ -305,7 +305,9 @@ Phase 4 and 6 take it:
   Old homepage settings move over by hand, once: the extension is a new
   identity with its own storage. The README's console snippet saves the
   old wallpaper keys to a file, and the panel's Import converts it
-  (Appendix B).
+  (Appendix B). Export and Import carry per-display `wp:current@<key>`
+  entries like any other `wp:` key; keys for monitors that another machine
+  doesn't have are harmless.
 - **URL parameters (decided).** They override for **this page load only**:
   nothing is persisted, the saved choice and Seasonal are untouched, and a
   reload without them returns to normal. They replace the old
@@ -3440,7 +3442,8 @@ One native Windows 11 app that runs the same `web/` wallpapers behind the
 desktop icons, on every monitor, controlled from a tray icon, and later as
 the screen saver: the Mac app (§10.21) for Windows, going further where
 Windows allows. **Status: W0 passed (2026-11-03, §10.25.21); W1 built
-(2026-11-03, *As built* in §10.25.16); W2 next.** Phase W0
+(2026-11-03, *As built* in §10.25.16); W2 built (2026-11-04; by-hand console
+pass pending); W3 next.** Phase W0
 (spikes) is the gate: if a live web page can't run behind the icons on 25H2,
 the project stops. Brainstormed and reviewed 2026-11-02; the original design
 note is `docs/superpowers/specs/2026-11-02-windows-design.md`, and this
@@ -3591,16 +3594,18 @@ packages but `Microsoft.Web.WebView2` (and xUnit in the test project).
 ```
 windows/
   Wallpapers/                  net10.0-windows, WinForms, the exe
-    Program.cs                 mode dispatch: app · /s /p /c (saver) · --install · --uninstall · --selftest
+    Program.cs                 mode dispatch: app · /s /p /c (saver) · --install · --uninstall · --selftest · --dump-displays · --cover-for-test
     App.cs                     single instance (named mutex + pipe), startup, shutdown, crash cleanup
     Tray.cs                    NotifyIcon and the whole menu (§10.25.10)
     DesktopLayer.cs            finds/creates Explorer's wallpaper layer, attaches hosts, repairs Z-order (§10.25.5)
-    Desktop.cs                 one Surface per monitor; rebuilds on display change (§10.25.6)
+    Desktop.cs                 one Surface per monitor; reconciles on display change (§10.25.6)
+    DisplayConfig.cs           QueryDisplayConfig: monitor device paths and friendly names (§10.25.6)
+    IdentifyWindow.cs          the big numbers of Identify Monitors
     Surface.cs                 a host HWND + its WebView2; bounds, DPI, visibility, power push
     WebFactory.cs              the shared CoreWebView2Environment; serves web/ and bing.json itself; policies (§10.25.14)
     BingJson.cs                answers bing.json natively, like Android/Mac
     Pointer.cs                 Raw Input → pointer events in the right page (§10.25.8)
-    Coverage.cs                gathers top-level window rects per monitor (math is in Core)
+    Coverage.cs                win-event hooks + EnumWindows: top-level window rects per monitor (math is in Core)
     Power.cs                   lock, display, sleep, battery, Energy Saver, RDP, fullscreen apps (§10.25.9)
     SettingsWindow.cs          the panel in a normal window (§10.25.11)
     PlayWindow.cs              a wallpaper in a normal focused window, for keyboard games (§10.25.8)
@@ -3611,7 +3616,9 @@ windows/
     app.manifest               PerMonitorV2 DPI, Windows 8–11 compatibility, asInvoker
   Wallpapers.Core/             net10.0, no Windows references, so it builds and tests on Linux
     Layout.cs                  modes → surfaces, insets, display keys
-    CoverageMath.cs            rectangle subtraction: fraction of a work area covered
+    DisplayKey.cs              the stable `m-xxxxxx` key of a monitor
+    Coverage.cs                rectangle subtraction: fraction of a work area covered, and the pause hysteresis
+    Power.cs                   the power state → what each page is told (`WP.power` JSON)
     SaverArgs.cs               /s /p:123 /p 123 /c:456 parsing (Windows passes all of these)
     AppSettings.cs             settings.json (mode, mouse, saver choices) with defaults
     PageUrl.cs                 index.html?host=windows&display=…&insets=…&screens=…
@@ -3627,6 +3634,13 @@ windows/
 
 **Host kind:** `?host=windows` (and `?host=windows-saver`). The page code stays
 the same apart from §10.25.7's small additions.
+
+**Program modes** (besides the app itself): `--quit`, `--reload`, `--settings`,
+`--dump-displays` (writes `displays.json` and `tree.json` to the data folder),
+`--selftest [--bad-web-root]`, and `--cover-for-test <rect>`: a borderless,
+work-area-sized, non-activating window that closes itself after 20 s. Only
+the self-test starts it (§10.25.15); it has to be a separate process because
+coverage ignores our own windows.
 
 **Where things live (per user):**
 
@@ -3688,16 +3702,31 @@ A tray choice, `Monitors ▸`, stored in `settings.json`:
   `\\.\DISPLAY1`: use the monitor device path from `QueryDisplayConfig` +
   `DisplayConfigGetDeviceInfo` (falls back to the GDI name), hashed to a
   short stable id (`m-3fa9c2`). Friendly names come from the same call
-  ("DELL U2720Q"), for the menu.
+  ("DELL U2720Q"), for the menu. *(Built in W2: key = `m-` + the first six
+  hex digits of SHA-256 of the lowercased path, or of `gdi:` + the GDI name
+  when there is no path; a duplicate gets `-2`, `-3`. Monitor numbers are
+  1-based in plan order: primary first, then by left, then top.)*
 - **Same wallpaper on two monitors in Different mode share that wallpaper's
   settings** (`wp:<id>`); only the *choice* is per monitor. *(Design call;
   keeps the panel and storage model unchanged.)*
 - **Hot-plug, resolution, DPI, taskbar moves:** `WM_DISPLAYCHANGE`,
   `WM_SETTINGCHANGE` (`SPI_SETWORKAREA`) and `WM_DPICHANGED`, debounced
-  500 ms, then rebuild like the Mac: surfaces whose key still exists are kept
-  and moved; new monitors get a surface; gone ones are disposed. A monitor
-  that comes back in Different mode gets its old wallpaper back (its key's
-  `wp:current@` stays in storage).
+  500 ms, then reconcile: surfaces whose key still exists are kept and
+  moved (a resize or scale change doesn't reload the page; only a changed
+  inset does, and only that surface's); new monitors get a surface; gone
+  ones are disposed. A monitor that comes back in Different mode gets its
+  old wallpaper back (its key's `wp:current@` stays in storage). *(Built in
+  W2. A surface that fails to start is dropped and tried again at the next
+  change. `SetModeAsync` does not persist the mode: the tray saves
+  `settings.json`.)*
+- **Over Remote Desktop** *(measured in W2)*: there is a monitor device path
+  (`Default_Monitor`), and the friendly name is empty, so menus say
+  "Display 1". The key (`m-5b3fcd` here) was the same across two runs;
+  whether it survives a disconnect and reconnect is still to check by hand
+  (§10.25.16). The `displays-rdp-200*.json` fixtures were captured in W1,
+  before paths were read, so they have none and key by GDI name;
+  `Diff_rdp_resize_is_a_move` tests that fallback, which a real RDP session
+  no longer takes.
 - **DPI:** the process is PerMonitorV2. Each per-monitor surface uses its
   monitor's scale (WebView2 `RasterizationScale`), so CSS px match Windows'
   scaling on each screen.
@@ -3839,20 +3868,25 @@ covered visual surface costs ~10× an exposed one, ~55% of a core against
 `visible` resumes them within a second.)*
 - Candidates: top-level windows that are visible, not minimized, not cloaked
   (`DWMWA_CLOAKED`: other virtual desktops, suspended UWP apps, Task View),
-  not ours, not shell windows (`Progman`, `WorkerW`, `Shell_TrayWnd`,
+  not ours (our process and our WebView2 child processes: the full-screen
+  input overlay belongs to them), not shell windows (`Progman`, `WorkerW`, `Shell_TrayWnd`,
   `Shell_SecondaryTrayWnd`), and not click-through overlays
   (`WS_EX_TRANSPARENT`, or layered with alpha 0: GeForce and Discord
-  overlays are full-screen and must not pause us). Rects from
+  overlays are full-screen and must not pause us; a per-pixel-alpha overlay
+  from `UpdateLayeredWindow` without `WS_EX_TRANSPARENT` counts as covering).
+  Rects from
   `DWMWA_EXTENDED_FRAME_BOUNDS` (excludes the invisible resize border).
 - **Covered** when ≥ 97% of the monitor's work area is under candidates
-  (rectangle subtraction in `Core/CoverageMath.cs`). That catches
+  (rectangle subtraction in `Core/Coverage.cs`). That catches
   fullscreen, maximized and two snapped halves.
 - **When:** `SetWinEventHook` (out of context) for foreground, show/hide,
   minimize start/end, move-size end, cloak/uncloak and top-level location
-  changes; debounced 150 ms; plus a 2 s safety timer. An `EnumWindows` pass
+  changes; coalesced (it fires 150 ms after the first event; later events
+  don't push it back); plus a 2 s safety timer. An `EnumWindows` pass
   is well under a millisecond.
-- **Hysteresis:** uncovered → resume at once; covered → pause after 300 ms
-  (Alt-Tab and window drags don't flicker).
+- **Hysteresis:** uncovered → resume at once (after the coalescing wait
+  above); covered → pause after 300 ms (Alt-Tab and window drags don't
+  flicker). Off in a fake layout.
 
 **All signals:**
 
@@ -3872,9 +3906,24 @@ covered visual surface costs ~10× an exposed one, ~55% of a core against
 This matches the owner's rule: battery and Energy Saver *lower* quality and
 never pause. Only invisibility pauses.
 
+*As built in W2 (`Core/Power.cs`, `Power.cs`):*
+- Lock and disconnect are re-polled every 2 s as well as notified, so a
+  missed message can't leave the wallpaper hidden. Fullscreen app and screen
+  saver are polled too.
+- A console display-off does not hide while the session is remote: the
+  display-state setting is the physical console, and an RDP viewer still sees
+  the wallpaper.
+- `DisplayOff` is never re-read: a missed display-on without a sleep leaves
+  the wallpaper hidden. A known limit. `Asleep` is cleared only by a resume
+  message.
+- Every surface gets its visibility set before any script is awaited, so one
+  hung page can't hold the others in the wrong state.
+
 **GPU on hybrid laptops:** WebView2 renders on the adapter Chromium picks
 (usually the one driving the display). Nothing to do; noted in the README for
 anyone who wants to force the power-saving GPU in Windows' Graphics settings.
+(README, Windows: Settings → System → Display → Graphics, add
+`Wallpapers.exe`.)
 
 **Sound:** web views are muted (`IsMuted`) on the desktop. *Allow Sound* in
 the tray (off by default) unmutes them; it matters once Jellyfin arrives
@@ -4078,6 +4127,26 @@ blocked).
 
 **`--selftest`** (like `mac-test`, about 30 s, prints one line per check, exits
 non-zero on failure):
+*As built (W2), `make win-test` runs these checks:* `layer`, `animates` and
+`insets` (per surface), `overlay`, `storage`, `pause`, `coverage`, `power`,
+`display=`, `resize in place`, `resize in place (monitor removed)`,
+`performance` low/medium/high/auto, `performance battery toggle`,
+`bing.json`, `shell restart (simulated)`, `renderer crash`,
+`power after reload`, `cleanup`, and with `--bad-web-root` the `web root`
+check. About 45 s. Details that matter:
+- `coverage` starts `Wallpapers.exe --cover-for-test <monitor 1 work area>`
+  (a borderless, non-activating window, not a real maximize, so it takes no
+  focus from whoever is working), checks that only monitor 1 hides, that the
+  foreground window is unchanged and that closing it resumes. It is SKIPped
+  when something already covers every surface. Coverage is off for the other
+  checks' frames and on only for this one.
+- `display=` and the two `resize in place` checks always run in a built-in
+  fake two-monitor layout, even at the console with two real monitors.
+- The `performance` checks compare against the stricter of the picked mode
+  and the page's ceiling (battery, Energy Saver or Remote Desktop can lower
+  it); `power` asserts the JSON the page last received.
+
+*The design's list (numbers as in the plan):*
 1. Desktop layer found (layout name logged); host attached below the icons;
    Z-order correct.
 2. Every surface's page reports ready and its frame counter advances (proves
@@ -4086,8 +4155,8 @@ non-zero on failure):
    desktop page.
 4. `WP.power({hidden})` freezes frames; resume restarts them; `IsVisible`
    follows.
-5. Coverage: a test window maximized on a monitor hides that surface only;
-   restoring it resumes.
+5. Coverage: a test window covering a monitor's work area hides that surface
+   only; closing it resumes.
 6. Pointer: a synthetic move/click fed through the forwarder lands in the
    page (`host.gestures` sees a tap at the right CSS px).
 7. `display=` keeps two monitors' choices apart (fake two-monitor layout, below).
@@ -4126,6 +4195,9 @@ there to work:
   icons), so Different mode, the tray's per-monitor submenus,
   hot-plug (edit the file) and pointer mapping can be exercised on one
   screen. `--selftest` check 7 uses it.
+- `run.sh` passes `WP_FAKE_DISPLAYS` through to the Windows side (as a
+  translated path; keep the file under `/mnt/c` so Windows sees edits):
+  `WP_FAKE_DISPLAYS=/mnt/c/…/displays.json BUILD=1 windows/run.sh dev`.
 - The owner's RDP client can also present both physical monitors
   (*Use all my monitors*), a cheap real two-monitor check before W6.
 
@@ -4191,6 +4263,128 @@ Task Manager; RDP in and out; the saver from Windows' dialog; uninstall.
 - **W2 Monitors and power:** Different mode and display keys, hot-plug and
   DPI, coverage pause, every power signal, Performance menu, Identify
   Monitors. Web §7.3, §7.5. Self-test 5, 7.
+
+  *As built (2026-11-04; plan
+  `docs/superpowers/plans/2026-11-04-windows-w2-monitors-power.md`).* Built
+  and checked over Remote Desktop (one monitor at 200%) and in fake
+  two-monitor layouts; the console pass with real hardware is pending.
+  - **Built:** display keys from `QueryDisplayConfig` (§10.25.6); Same and
+    Different per Monitor (`wp:current@<key>`, with `?display=`, §10.25.7);
+    reconcile in place on display, DPI and taskbar changes; per-monitor
+    coverage pause (§10.25.9); every power signal, with lock and disconnect
+    re-polled; Remote Desktop → ceiling Low and no extra fps cap (owner
+    decision, 2026-11-04); the tray's Monitors menu (Same / Different,
+    Identify Monitors), per-monitor wallpaper and Settings submenus, and the
+    Performance menu (Auto, Low, Medium, High, Save Power on Battery, a
+    "now:" line); `WP_FAKE_DISPLAYS`; `--dump-displays`.
+  - **Verified (by script or self-test):** `make win-unit` (135+ tests,
+    including the recorded layouts), `make win-test` (all pass, ~45 s) over
+    RDP, the fake layouts (a resize or an unplug keeps the other page; a
+    taskbar move navigates only that surface; `display=` in the URLs), the
+    coverage gate on RDP (covered ~450 ms after the window appears,
+    uncovered ~150 ms after it closes), power reaching every page, the
+    Performance picks (RDP shows Low for all of them, by its ceiling), the
+    key `m-5b3fcd` stable across two RDP runs, and menus and Identify
+    Monitors on RDP and in fake layouts.
+  - **Not verified, and known limits:** a real second monitor; a real
+    unplug; lock, sleep, display-off and battery transitions (the owner is
+    usually on RDP, so none were triggered); `DisplayOff` is never re-read
+    (§10.25.9); the self-test's `display=` and resize checks never use real
+    monitors.
+  - **Still to check by hand (owner, at the console with two monitors, then
+    over RDP).** Watch `make win-log FOLLOW=1` (normal app, `make win-run`).
+    1. *Keys.* `WIN_ARGS=--dump-displays make win-run`, open
+       `%LOCALAPPDATA%\Wallpapers\displays.json`: two monitors, each with a
+       `path`, a friendly `name` and an `m-xxxxxx` key, no key twice. Run it
+       again, and again after a reboot: same keys.
+    2. *Start.* Two `reconcile: added m-…` lines, a surface behind the icons
+       on each monitor.
+    3. *Monitors menu.* Different per Monitor: both keep what they showed;
+       rows `1 …` and `2 …`, then `Monitor 1 · <name> (main)` and
+       `Monitor 2 · <name>` with the real model names.
+    4. *Different mode.* Monitor 2 ▸ Wallpaper ▸ Fish Tank changes only
+       monitor 2; the tooltip reads `Wallpapers: <m1> · Fish Tank`. Quit and
+       start: both kept. Monitor 2 ▸ Settings…: title
+       `Wallpapers Settings · Monitor 2 · <name>`; a pick in the panel changes
+       only monitor 2; Monitor 1 ▸ Settings… moves the same window to monitor
+       1. Back to Same on All: both show `wp:current`, and the window title
+       is plain again.
+    5. *Identify Monitors,* with a window focused on each monitor: "1" and
+       "2" (names, "(main)" on the primary) centred on the right screens for
+       3 s; the same relative size on a 4K@250% and a 1080p@150% panel; the
+       typing focus stays; clicks pass through.
+    6. *Unplug monitor 2* (or Settings → Display → Disconnect this display;
+       or toggle RDP *Use all my monitors*) with the menu on Different:
+       `removed m-…`, monitor 1 doesn't reload, its submenu and row go.
+       Plug it back: `added m-…` with the same key and its old wallpaper.
+    7. *Scale change on one monitor* (Settings → Display): `reconcile: kept
+       m-… (moved WxH@1.5 → WxH@1.25)`, no `navigating` line, the scene
+       redraws sharp and keeps its state.
+    8. *Resolution change; taskbar moved to the left:* `kept … (moved …)`;
+       the taskbar gives `kept … (insets … → …)` and only that surface
+       navigates.
+    9. *Explorer restart* (Task Manager) with real hosts: W1's re-bind, no
+       reload (only simulated so far).
+    10. *RDP live resize:* `kept m-… (moved 2940x1686@2 → 2940x1844@2)`, no
+        reload.
+    11. *Coverage.* Maximize a window on monitor 2: within ~0.5 s
+        `coverage: <key> covered (…%)` and `IsVisible=false` for that surface
+        only; restore: `uncovered` and `IsVisible=true` within ~150 ms. Then:
+        snap two windows left and right on monitor 1 (covered; un-snap one,
+        uncovered); a window straddling both monitors, maximized on neither
+        (neither covered); a GeForce or Discord overlay, if present (no
+        `coverage:` line); a maximized window on another virtual desktop
+        (no pause in Task View; switch to that desktop: covered; back:
+        uncovered); Alt-Tab between a maximized and a half-snapped window
+        (follows the end state, no burst of flips); the tray menu and the
+        Settings window maximized over a monitor (no pause: they're ours);
+        taskbar on auto-hide with a maximized window (covered).
+    12. *Lock.* Win+L, then unlock: `power: session lock`, `power: locked, …`,
+        `IsVisible=false` on every surface; then `power: session unlock`,
+        `IsVisible=true`, animating within a second. This also confirms that
+        the 2 s poll's `WTSINFOEX` lock flag (`SessionFlags`) reads right on
+        Windows 10 and 11, since it now overrides the notifications.
+    13. *Display off.* `powercfg /change monitor-timeout-ac 1` and wait (or
+        lock and let the monitors sleep): `power: display off`,
+        `IsVisible=false`; on wake `power: display on`, `IsVisible=true`.
+        Over RDP the same timeout must not hide it (the state reads
+        `display off, remote`, no `IsVisible=false`).
+    14. *Sleep and wake:* `power: suspending` (it may not reach the log
+        before the freeze), then `power: resumed`, a state without `asleep`
+        or `display off`, `IsVisible=true` even if no `display on` follows.
+    15. *RDP disconnect and reconnect:* `power: session disconnect`, then
+        `disconnected, remote`, `IsVisible=false`; on reconnect `power:
+        session connect`, `remote`, `IsVisible=true`. A console↔RDP switch
+        adds or removes `remote`. After a reconnect, dump displays again: is
+        the key still `m-5b3fcd`? If not, the RDP path isn't stable across
+        sessions and Different mode loses its choices over RDP. Also redo
+        item 3–4 with Different mode kept across a restart and a reconnect.
+    16. *Battery.* Unplug the laptop: `power: …, on battery NN%`, the
+        `?hud=1` line shows `on battery` (`battery low` under 20%); plug in:
+        `charging NN%`. Quality drops, nothing pauses.
+    17. *Energy Saver* (Quick Settings, or below its threshold): `energy
+        saver`; the page shows `battery saver` and a 15 fps cap.
+    18. *Fullscreen game or presentation mode, and the screen saver*
+        (`scrnsave.scr /s`, or a short timeout): `fullscreen app` or `screen
+        saver` within 2 s, `IsVisible=false`.
+    19. *Performance menu,* on the console (not RDP): Low, Medium, High
+        change the scene's quality (`?hud=1`) and the status line within
+        ~1 s; the Settings panel shows the same mode; in Different mode all
+        monitors follow. Toggle Save Power on Battery on battery.
+    20. *`make win-test` at the console with two monitors,* with no
+        maximized window on monitor 1: `PASS coverage` with "1 other
+        surface(s) unchanged" and "focus kept". On battery, `performance
+        high` reads "stage says Medium (expected medium, ceiling medium)" and
+        still passes; `power` shows `"battery":{"charging":false,…}` and
+        the reason `on battery`. At the console `power` shows
+        `"remote":false` and no `remote desktop` reason.
+    21. *Remote Desktop:* the `remote desktop` reason appears and the stage
+        runs at Low with no extra fps cap.
+  - **Changed from the design:** SetModeAsync leaves persistence to the
+    tray; lock and disconnect are polled too; a console display-off doesn't
+    hide a remote session; the coverage "debounce" is coalesced from the
+    first event; "ours" includes our WebView2 children; the self-test's
+    coverage window is a separate process, not a real maximize.
 - **W3 Interactivity (required):** Raw Input, bare-desktop clicks, delivery,
   the two tray toggles, Play in a Window. Self-test 6.
 - **W4 Install and release:** self-installer, Start with Windows, updates,

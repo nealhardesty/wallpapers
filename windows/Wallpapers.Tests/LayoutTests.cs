@@ -157,8 +157,9 @@ public class LayoutTests
     [Fact]
     public void Diff_rdp_resize_is_a_move()
     {
-        // No device path, so the GDI fallback keys them. The two fixtures came from different
-        // sessions (DISPLAY81, DISPLAY97); a resize inside one session keeps its GDI name.
+        // These W1 captures have no device path, so this tests the GDI-name fallback (a real RDP
+        // session has a path since W2). The two fixtures came from different sessions (DISPLAY81,
+        // DISPLAY97); a resize inside one session keeps its GDI name.
         var before = Displays.FromJson(Fixture.Read("displays-rdp-200.json"));
         var resized = Displays.FromJson(Fixture.Read("displays-rdp-200-resized.json")).Select(m => m with { Device = before[0].Device }).ToList();
         var change = Layout.Diff(Layout.Plan(before), Layout.Plan(resized));

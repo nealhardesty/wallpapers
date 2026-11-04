@@ -164,6 +164,13 @@ at first: drag it onto the taskbar to keep it there. Left or right click opens
 the menu:
 - pick a wallpaper (with thumbnails), **Surprise Me**, **Next** and **Previous**
 - **Pause**
+- **Monitors**: **Same on All** (every monitor shows the current wallpaper) or
+  **Different per Monitor** (each monitor gets its own, with a submenu per
+  monitor to pick its wallpaper and open its settings; a monitor you unplug
+  gets its wallpaper back when you plug it in). **Identify Monitors** shows a
+  big number on each screen for three seconds, to match the menu's rows.
+- **Performance**: **Auto**, **Low**, **Medium**, **High**, and **Save Power on
+  Battery**, with a line saying what it is doing now
 - **Settings…**: the same panel as everywhere else, in a window; a pick there
   changes the desktop at once
 - **Troubleshooting**: **Open Log Folder**, **Reload Wallpapers**, and **Draw
@@ -171,7 +178,17 @@ the menu:
   the icons
 
 It keeps going when Explorer restarts and when a Remote Desktop session
-resizes the screen. **Quit** gives you your own picture back. Wallpapers don't
+resizes the screen. Plugging a monitor in or out, changing its scale or moving
+the taskbar adjusts that monitor and leaves the others running.
+
+It pauses, and stops drawing, while it can't be seen: the PC is locked, the
+display is off or asleep, a fullscreen game or presentation is running, the
+screen saver is on, you've disconnected from Remote Desktop, or a monitor is
+covered by windows (a maximized window, or two snapped halves; the other
+monitors keep going). It lowers quality, but never pauses, on battery, with
+Energy Saver on and over Remote Desktop. On a laptop with two graphics chips,
+it uses the one Windows picks; to force the power-saving one, add
+`Wallpapers.exe` in Settings → System → Display → Graphics. **Quit** gives you your own picture back. Wallpapers don't
 react to the mouse on Windows yet (that's coming: SPEC §10.25.8). The exe isn't
 signed, so **Smart App Control**, if it's on, can refuse a build by its hash.
 `make win-run` notices and builds again (each build is a new file to it).
@@ -446,6 +463,7 @@ Run `make` to list every target.
 | `make win-dev` | Run it straight from this checkout's `web/` (over `\\wsl.localhost`), with its own settings and DevTools, so an edit shows after `make win-reload` or *Reload Wallpapers* in the tray |
 | `make win-reload` | Reload the running app's pages after a `web/` edit: the `win-dev` one, or `FLAVOR=run` for the normal one |
 | `make win-test` | The app's self-test against a throwaway settings store: layer, animation, settings sharing, pause, coverage (a test window over monitor 1; skipped when something else already covers it), power reaching every page, `display=` and a resize in place (in a fake two-monitor layout), the Performance menu, insets, overlay, Bing, Explorer restart (simulated), a renderer crash, cleanup (about 45 s; `WIN_ARGS=--bad-web-root` checks the missing-files case) |
+| `WP_FAKE_DISPLAYS=<file>` with `make win-run` or `make win-dev` | Lay the surfaces out as a recorded monitor layout says (a JSON file under `/mnt/c`, made with `WIN_ARGS=--dump-displays make win-run`), each in an ordinary window, to try Different mode, per-monitor menus and hot-plug (edit the file) on one screen |
 | `make win-log` | The app's log (`FLAVOR=dev` or `test` for those; `FOLLOW=1` to follow) |
 | `make docker-build` | Build the container image `wallpapers` |
 | `make docker-run` | Run it at http://localhost:8000 (read-only, unprivileged) |
