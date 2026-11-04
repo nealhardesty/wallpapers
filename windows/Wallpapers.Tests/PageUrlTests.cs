@@ -17,4 +17,8 @@ public class PageUrlTests
     [Fact]
     public void Settings_with_display() =>
         Assert.Equal("https://wallpapers.example/index.html?host=windows&panel=open&display=m-3fa9c2-2", PageUrl.Settings("m-3fa9c2-2"));
+
+    [Fact]
+    public void Play_shows_one_wallpaper() =>
+        Assert.Equal("https://wallpapers.example/index.html?host=windows&w=quest", PageUrl.Play("quest"));
 }

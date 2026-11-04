@@ -164,9 +164,14 @@ at first: drag it onto the taskbar to keep it there. Left or right click opens
 the menu:
 - pick a wallpaper (with thumbnails), **Surprise Me**, **Next** and **Previous**
 - **Pause**
+- **Wallpaper Follows the Mouse** and **Clicks on the Desktop Play** (both on
+  at first): untick them to keep the desktop to itself
+- **Play in a Window…**: the current wallpaper in an ordinary window you can
+  resize, fill the screen with (**f**) and type into, for the ones that want
+  keys (Pixel Quest's arrows; **,** opens the panel there). It has sound.
 - **Monitors**: **Same on All** (every monitor shows the current wallpaper) or
   **Different per Monitor** (each monitor gets its own, with a submenu per
-  monitor to pick its wallpaper and open its settings; a monitor you unplug
+  monitor to pick its wallpaper, open its settings or play it in a window; a monitor you unplug
   gets its wallpaper back when you plug it in). **Identify Monitors** shows a
   big number on each screen for three seconds, to match the menu's rows.
 - **Performance**: **Auto**, **Low**, **Medium**, **High**, and **Save Power on
@@ -188,8 +193,11 @@ covered by windows (a maximized window, or two snapped halves; the other
 monitors keep going). It lowers quality, but never pauses, on battery, with
 Energy Saver on and over Remote Desktop. On a laptop with two graphics chips,
 it uses the one Windows picks; to force the power-saving one, add
-`Wallpapers.exe` in Settings → System → Display → Graphics. **Quit** gives you your own picture back. Wallpapers don't
-react to the mouse on Windows yet (that's coming: SPEC §10.25.8). The exe isn't
+`Wallpapers.exe` in Settings → System → Display → Graphics. **Quit** gives you your own picture back. Wallpapers that
+react to the mouse do on the desktop too: they follow it everywhere, even over
+your windows, and a click plays only on bare desktop (never on an icon or a
+window). Keys never reach the desktop (typing there jumps between icons): use
+**Play in a Window**. The exe isn't
 signed, so **Smart App Control**, if it's on, can refuse a build by its hash.
 `make win-run` notices and builds again (each build is a new file to it).
 SmartScreen asks about a downloaded copy: **More info → Run anyway**. (Or

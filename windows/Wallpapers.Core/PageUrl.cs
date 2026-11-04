@@ -11,5 +11,8 @@ public static class PageUrl
 
     public static string Settings(string? display = null) => $"{Origin}index.html?host=windows&panel=open{Display(display)}";
 
+    /// Play in a Window (SPEC §10.25.8): one wallpaper, for this load only (?w= is never saved).
+    public static string Play(string id) => $"{Origin}index.html?host=windows&w={Uri.EscapeDataString(id)}";
+
     static string Display(string? key) => key == null ? "" : "&display=" + Uri.EscapeDataString(key);
 }

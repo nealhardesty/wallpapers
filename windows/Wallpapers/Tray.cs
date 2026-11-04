@@ -19,7 +19,7 @@ sealed class Tray : IDisposable
     readonly App app;
     readonly NotifyIcon icon;
     readonly ContextMenuStrip menu = new();
-    readonly ToolStripMenuItem header, wallpaper, surprise, next, previous, pause, follow, clicks, same, different, identify, settings, reload, drawAbove, devTools, about, quit;
+    readonly ToolStripMenuItem header, wallpaper, surprise, next, previous, pause, follow, clicks, play, same, different, identify, settings, reload, drawAbove, devTools, about, quit;
     readonly Dictionary<string, Bitmap> thumbs = [];          // 128×72 from the page, by id
     readonly Dictionary<string, Bitmap> scaledThumbs = [];    // at the menu's device size
     readonly HashSet<string> balloonsShown = [];
@@ -50,6 +50,8 @@ sealed class Tray : IDisposable
         pause = Item("Pause", () => app.Desktop.SetPausedAsync(!app.Desktop.Paused));
         follow = Item("Wallpaper Follows the Mouse", () => { app.SetFollowMouse(!app.Settings.FollowMouse); Sync(); return Task.CompletedTask; });
         clicks = Item("Clicks on the Desktop Play", () => { app.SetDesktopClicks(!app.Settings.DesktopClicks); Sync(); return Task.CompletedTask; });
+        // In Different mode: monitor 1's (App.OpenPlay picks it).
+        play = Item("Play in a Window…", () => { app.OpenPlay(); return Task.CompletedTask; });
         same = Item("Same on All", () => app.SetMonitorModeAsync(MonitorMode.Same));
         different = Item("Different per Monitor", () => app.SetMonitorModeAsync(MonitorMode.Different));
         same.Tag = different.Tag = RadioRenderer.Radio;
@@ -87,7 +89,7 @@ sealed class Tray : IDisposable
         ]);
         menu.Items.AddRange([
             header, wallpaper, surprise, next, previous, new ToolStripSeparator(),
-            pause, follow, clicks, new ToolStripSeparator(),
+            pause, follow, clicks, play, new ToolStripSeparator(),
             monitors, performanceMenu, settings, troubleshooting, about, quit,
         ]);
         menu.Renderer = new RadioRenderer();   // its submenus draw with their owner's renderer
@@ -202,6 +204,9 @@ sealed class Tray : IDisposable
         }
     }
 
+    /// What that monitor's page last said it shows (null until it has answered).
+    public CatalogInfo? CatalogFor(string key) => catalogs.GetValueOrDefault(key);
+
     /// The self-test clicks the real rows (SPEC §10.25.16).
     internal void ClickPerformanceForTest(string? mode) => (mode == null ? batteryAware : modeRows[mode]).PerformClick();
     internal void ClickPointerForTest(string which) => (which == "follow" ? follow : clicks).PerformClick();
@@ -275,6 +280,7 @@ sealed class Tray : IDisposable
             SyncWallpaperList(m.Wallpaper, info, m.Key, live);
             m.Surprise.Enabled = m.Next.Enabled = m.Previous.Enabled = live && info != null;
             m.Settings.Enabled = app.Problem == null;
+            m.Play.Enabled = live && info != null;
         }
         foreach (var (mode, row) in modeRows) row.Checked = performance?.Mode == mode;
         batteryAware.Checked = performance?.BatteryAware ?? true;
@@ -287,6 +293,7 @@ sealed class Tray : IDisposable
         pause.Text = paused ? "Resume" : "Pause";
         follow.Checked = app.Settings.FollowMouse;
         clicks.Checked = app.Settings.DesktopClicks;
+        play.Enabled = live && app.Problem == null && catalog != null;
         drawAbove.Checked = app.Settings.DrawAboveIcons;
         devTools.Enabled = live;
         settings.Enabled = app.Problem == null;   // without web/ there's no panel to show
@@ -375,7 +382,8 @@ sealed class Tray : IDisposable
 
     /// One monitor's items in Different mode: its row under the header, and its submenu.
     sealed record MonitorItems(string Key, int Number, ToolStripMenuItem Row, ToolStripMenuItem Menu,
-        ToolStripMenuItem Wallpaper, ToolStripMenuItem Surprise, ToolStripMenuItem Next, ToolStripMenuItem Previous, ToolStripMenuItem Settings);
+        ToolStripMenuItem Wallpaper, ToolStripMenuItem Surprise, ToolStripMenuItem Next, ToolStripMenuItem Previous, ToolStripMenuItem Settings,
+        ToolStripMenuItem Play);
 
     /// Makes the per-monitor items again when the monitors (or their numbers and names) change; none in Same mode.
     void SyncPerMonitor(IReadOnlyList<SurfacePlan> plans)
@@ -407,8 +415,13 @@ sealed class Tray : IDisposable
                 {
                     app.OpenSettings(app.Desktop.Surfaces.FirstOrDefault(s => s.Plan.Key == key)?.Plan);
                     return Task.CompletedTask;
+                }),
+                Item("Play in a Window…", () =>
+                {
+                    app.OpenPlay(app.Desktop.Surfaces.FirstOrDefault(s => s.Plan.Key == key)?.Plan);
+                    return Task.CompletedTask;
                 }));
-            items.Menu.DropDownItems.AddRange([list, items.Surprise, items.Next, items.Previous, items.Settings]);
+            items.Menu.DropDownItems.AddRange([list, items.Surprise, items.Next, items.Previous, items.Settings, items.Play]);
             menu.Items.Insert(menu.Items.IndexOf(header) + 1 + perMonitor.Count, row);
             menu.Items.Insert(menu.Items.IndexOf(previous) + 1 + perMonitor.Count, items.Menu);
             perMonitor.Add(items);

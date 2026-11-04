@@ -17,6 +17,7 @@ sealed class App : ApplicationContext
     public Desktop Desktop { get; }
     public Tray Tray { get; }
     SettingsWindow? settingsWindow;
+    PlayWindow? playWindow;
     /// Why nothing can be shown (no web root), or null.
     public string? Problem { get; }
     bool cleaned;
@@ -64,6 +65,32 @@ sealed class App : ApplicationContext
         if (Problem != null) { Log.Warn($"settings: can't open ({Problem})"); return; }
         settingsWindow ??= new SettingsWindow(this);
         _ = settingsWindow.ShowOrFocusAsync(monitor);
+    }
+
+    /// Play in a Window: that surface's current wallpaper (monitor 1's, or Same mode's), as the tray last
+    /// heard it, in a window on the real monitor under it (a fake layout's monitors are windows on one).
+    public void OpenPlay(SurfacePlan? monitor = null)
+    {
+        if (Problem != null) { Log.Warn($"play: can't open ({Problem})"); return; }
+        var surface = monitor == null ? Desktop.Surfaces.FirstOrDefault() : Desktop.Surfaces.FirstOrDefault(s => s.Plan.Key == monitor.Key);
+        if (surface == null || Tray.CatalogFor(surface.Plan.Key) is not { } info)
+        {
+            Log.Info("play: nothing to play yet (that monitor's page hasn't said what it shows)");
+            return;
+        }
+        var id = info.Current;
+        var name = info.NameOf(id);
+        var screen = surface.Placement.Screen;
+        var real = N.Monitors();
+        var under = real.FirstOrDefault(m => m.Bounds.Contains(screen.Left + screen.Width / 2, screen.Top + screen.Height / 2))
+            ?? real.FirstOrDefault(m => m.Primary) ?? real.FirstOrDefault();
+        Log.Info($"play: {name} ({id}) on monitor {surface.Plan.Number}");
+        if (playWindow == null)
+        {
+            var window = playWindow = new PlayWindow(this);
+            window.FormClosed += (_, _) => { if (playWindow == window) playWindow = null; };
+        }
+        _ = playWindow.ShowAsync(id, name, under?.Work ?? surface.Plan.Work);
     }
 
     /// Same or Different (the tray's Monitors menu): saved, then every page follows, and so does an
@@ -117,6 +144,8 @@ sealed class App : ApplicationContext
         Tray?.Dispose();   // null when cleanup comes during startup
         try { settingsWindow?.CloseForGood(); }
         catch (Exception e) { Log.Error($"cleanup: settings window: {e.Message}"); }
+        try { playWindow?.Close(); }
+        catch (Exception e) { Log.Error($"cleanup: play window: {e.Message}"); }
         try { Desktop.Dispose(); }
         catch (Exception e) { Log.Error($"cleanup: {e.Message}"); }
         Layer.Dispose();
