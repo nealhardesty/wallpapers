@@ -186,9 +186,13 @@ sealed class Desktop : IDisposable
         {
             Log.Error($"desktop: couldn't reconcile the surfaces: {e}");
         }
-        finally { building = false; }
-        Changed?.Invoke();
-        done.TrySetResult();
+        finally
+        {
+            // Whatever ended the pass (even an exception the filter lets through), its waiters go on.
+            building = false;
+            done.TrySetResult();
+            Changed?.Invoke();
+        }
     }
 
     async Task ReconcileOnceAsync(string why)
