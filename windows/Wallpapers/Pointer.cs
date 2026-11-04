@@ -25,6 +25,7 @@ sealed class Pointer : IDisposable
     public bool Clicks { get; set; } = true;
     /// Raw input is registered and the poll runs.
     public bool Active { get; private set; }
+    bool clicksWas = true;
 
     /// A left button change waiting for its verdict (Probe: ClassifyForTest's, nothing is pressed).
     readonly record struct Job(int Click, bool Down, int X, int Y, long T, HitKind? Kind, TaskCompletionSource<(HitKind, double)>? Probe = null);
@@ -78,6 +79,8 @@ sealed class Pointer : IDisposable
         var why = !Follow && !Clicks ? "both toggles off" : !surfaces().Any(s => s.Target.Visible) ? "no visible surface" : null;
         if (why == null && !Active) Start();
         else if (why != null && Active) Stop(why);
+        else if (Active && clicksWas != Clicks) Log.Info($"pointer: clicks {(Clicks ? "on" : "off")}");
+        clicksWas = Clicks;
         // A press whose surface is hidden now (paused, covered) ends: its drag moves would go to a hidden page.
         if (!Clicks || (tracker.Pressed is { } key && SurfaceFor(key)?.Visible != true)) EndGesture();
     }

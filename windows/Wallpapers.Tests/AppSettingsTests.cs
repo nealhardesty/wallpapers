@@ -37,6 +37,26 @@ public class AppSettingsTests
     }
 
     [Fact]
+    public void Pointer_toggles_round_trip()
+    {
+        using var dir = new TempDir();
+        var s = new AppSettings(FollowMouse: false, DesktopClicks: false);
+        s.Save(dir.File("settings.json"));
+        Assert.Contains("\"followMouse\": false", File.ReadAllText(dir.File("settings.json")));
+        Assert.Equal(s, AppSettings.Load(dir.File("settings.json")));
+    }
+
+    [Fact]
+    public void Old_files_without_the_toggles_follow_and_click()
+    {
+        using var dir = new TempDir();
+        File.WriteAllText(dir.File("settings.json"), "{ \"drawAboveIcons\": true }");
+        var s = AppSettings.Load(dir.File("settings.json"));
+        Assert.True(s.FollowMouse);
+        Assert.True(s.DesktopClicks);
+    }
+
+    [Fact]
     public void Corrupt_file_gives_defaults_and_is_kept_aside()
     {
         using var dir = new TempDir();

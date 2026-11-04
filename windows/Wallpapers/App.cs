@@ -31,7 +31,7 @@ sealed class App : ApplicationContext
         Layer = new DesktopLayer(Log.Info) { DrawAboveIcons = Settings.DrawAboveIcons };
         Layer.EndSession += () => Cleanup("logoff");
         Power.Start();
-        Desktop = new Desktop(paths, Layer, Settings.Monitors, Power);
+        Desktop = new Desktop(paths, Layer, Settings.Monitors, Power, Settings.FollowMouse, Settings.DesktopClicks);
         Power.Changed += () => _ = Desktop.ApplyPowerAsync();
         Problem = paths.CheckWebRoot();
         if (Problem != null) Log.Error(Problem);
@@ -74,6 +74,23 @@ sealed class App : ApplicationContext
         SaveSettings(Settings with { Monitors = mode });
         await Desktop.SetModeAsync(mode);
         settingsWindow?.FollowMode();
+    }
+
+    /// The tray's two mouse rows: saved, then the pointer re-decides whether raw input is needed.
+    public void SetFollowMouse(bool on)
+    {
+        SaveSettings(Settings with { FollowMouse = on });
+        Desktop.Pointer.Follow = on;
+        Desktop.Pointer.Update();
+        Log.Info($"tray: follows the mouse {(on ? "on" : "off")}");
+    }
+
+    public void SetDesktopClicks(bool on)
+    {
+        SaveSettings(Settings with { DesktopClicks = on });
+        Desktop.Pointer.Clicks = on;
+        Desktop.Pointer.Update();
+        Log.Info($"tray: clicks on the desktop {(on ? "on" : "off")}");
     }
 
     public void Quit()

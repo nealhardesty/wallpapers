@@ -19,7 +19,7 @@ sealed class Tray : IDisposable
     readonly App app;
     readonly NotifyIcon icon;
     readonly ContextMenuStrip menu = new();
-    readonly ToolStripMenuItem header, wallpaper, surprise, next, previous, pause, same, different, identify, settings, reload, drawAbove, devTools, about, quit;
+    readonly ToolStripMenuItem header, wallpaper, surprise, next, previous, pause, follow, clicks, same, different, identify, settings, reload, drawAbove, devTools, about, quit;
     readonly Dictionary<string, Bitmap> thumbs = [];          // 128×72 from the page, by id
     readonly Dictionary<string, Bitmap> scaledThumbs = [];    // at the menu's device size
     readonly HashSet<string> balloonsShown = [];
@@ -48,6 +48,8 @@ sealed class Tray : IDisposable
         next = Item("Next", () => app.Desktop.CycleAsync(1));
         previous = Item("Previous", () => app.Desktop.CycleAsync(-1));
         pause = Item("Pause", () => app.Desktop.SetPausedAsync(!app.Desktop.Paused));
+        follow = Item("Wallpaper Follows the Mouse", () => { app.SetFollowMouse(!app.Settings.FollowMouse); Sync(); return Task.CompletedTask; });
+        clicks = Item("Clicks on the Desktop Play", () => { app.SetDesktopClicks(!app.Settings.DesktopClicks); Sync(); return Task.CompletedTask; });
         same = Item("Same on All", () => app.SetMonitorModeAsync(MonitorMode.Same));
         different = Item("Different per Monitor", () => app.SetMonitorModeAsync(MonitorMode.Different));
         same.Tag = different.Tag = RadioRenderer.Radio;
@@ -85,7 +87,7 @@ sealed class Tray : IDisposable
         ]);
         menu.Items.AddRange([
             header, wallpaper, surprise, next, previous, new ToolStripSeparator(),
-            pause, new ToolStripSeparator(),
+            pause, follow, clicks, new ToolStripSeparator(),
             monitors, performanceMenu, settings, troubleshooting, about, quit,
         ]);
         menu.Renderer = new RadioRenderer();   // its submenus draw with their owner's renderer
@@ -202,6 +204,7 @@ sealed class Tray : IDisposable
 
     /// The self-test clicks the real rows (SPEC §10.25.16).
     internal void ClickPerformanceForTest(string? mode) => (mode == null ? batteryAware : modeRows[mode]).PerformClick();
+    internal void ClickPointerForTest(string which) => (which == "follow" ? follow : clicks).PerformClick();
     internal string PerformanceStatusForTest => performanceStatus.Text ?? "";
 
     /// Runs script on monitor 1's page (a performance pick: the other pages follow through storage).
@@ -282,6 +285,8 @@ sealed class Tray : IDisposable
         identify.Enabled = live;
         pause.Enabled = reload.Enabled = live;
         pause.Text = paused ? "Resume" : "Pause";
+        follow.Checked = app.Settings.FollowMouse;
+        clicks.Checked = app.Settings.DesktopClicks;
         drawAbove.Checked = app.Settings.DrawAboveIcons;
         devTools.Enabled = live;
         settings.Enabled = app.Problem == null;   // without web/ there's no panel to show

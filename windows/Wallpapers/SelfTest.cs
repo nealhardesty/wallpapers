@@ -207,6 +207,7 @@ sealed class SelfTest
         // 4c. The tray's Performance rows are real clicks; the pick reaches the page's store and the
         // status line follows the stage's own report. Auto is put back at the end.
         await PerformanceAsync(first);
+        PointerToggles();
 
         // 7 (W1). bing.json is answered by the app.
         await BingAsync(first);
@@ -279,6 +280,23 @@ sealed class SelfTest
         app.Tray.ClickPerformanceForTest(null);
         var restored = await Until(3000, async () => await Js<bool>(first, "(WP.store.get('wp:performance') || {}).batteryAware !== false") == before);
         Check("performance battery toggle", flipped && restored, $"was {before}, flipped {flipped}, restored {restored}");
+    }
+
+    /// The tray's two mouse rows save to settings.json and tell the pointer; both end where they began.
+    void PointerToggles()
+    {
+        bool Saved(Func<AppSettings, bool> pick) => pick(AppSettings.Load(app.Paths.SettingsFile));
+        var f = app.Settings.FollowMouse;
+        var c = app.Settings.DesktopClicks;
+        app.Tray.ClickPointerForTest("follow");
+        app.Tray.ClickPointerForTest("clicks");
+        var flipped = app.Desktop.Pointer.Follow == !f && app.Desktop.Pointer.Clicks == !c
+            && Saved(x => x.FollowMouse) == !f && Saved(x => x.DesktopClicks) == !c;
+        app.Tray.ClickPointerForTest("follow");
+        app.Tray.ClickPointerForTest("clicks");
+        var restored = app.Desktop.Pointer.Follow == f && app.Desktop.Pointer.Clicks == c
+            && Saved(x => x.FollowMouse) == f && Saved(x => x.DesktopClicks) == c;
+        Check("pointer toggles", flipped && restored, $"flipped {flipped}, restored {restored}");
     }
 
     static readonly string[] Tiers = ["low", "medium", "high"];

@@ -56,13 +56,13 @@ sealed class Desktop : IDisposable
     /// The mouse, replayed into the visible surfaces (§10.25.8).
     public Pointer Pointer { get; }
 
-    public Desktop(AppPaths paths, DesktopLayer layer, MonitorMode mode, Power power)
+    public Desktop(AppPaths paths, DesktopLayer layer, MonitorMode mode, Power power, bool followMouse = true, bool desktopClicks = true)
     {
         this.paths = paths;
         this.layer = layer;
         this.power = power;
         Mode = mode;
-        Pointer = new Pointer(() => surfaces);
+        Pointer = new Pointer(() => surfaces) { Follow = followMouse, Clicks = desktopClicks };
         watch.Tick += (_, _) => Watch();
         debounce.Tick += async (_, _) =>
         {
