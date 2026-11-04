@@ -22,6 +22,8 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4314.35" />
     <ProjectReference Include="../Wallpapers.Core/Wallpapers.Core.csproj" />
+    <!-- The tray icon, loaded at the small-icon size for the screen's DPI. -->
+    <EmbeddedResource Include="app.ico" LogicalName="app.ico" />
     <Using Include="Wallpapers.Core" />
     <Using Include="System.Runtime.InteropServices" />
   </ItemGroup>

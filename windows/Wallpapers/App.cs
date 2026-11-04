@@ -14,6 +14,7 @@ sealed class App : ApplicationContext
     public AppSettings Settings { get; private set; }
     public DesktopLayer Layer { get; }
     public Desktop Desktop { get; }
+    public Tray Tray { get; }
     /// Why nothing can be shown (no web root), or null.
     public string? Problem { get; }
     bool cleaned;
@@ -31,6 +32,7 @@ sealed class App : ApplicationContext
         Problem = paths.CheckWebRoot();
         if (Problem != null) Log.Error(Problem);
         else _ = Desktop.StartAsync();
+        Tray = new Tray(this);
         SingleInstance.Listen(paths.Flavor, OnCommand);
     }
 
@@ -64,6 +66,9 @@ sealed class App : ApplicationContext
     {
         Log.Error($"crash: {e}");
         Cleanup("crash");
+        // With the wallpaper and the tray icon gone, staying would leave an invisible process that
+        // holds the single-instance lock: the next launch would only "open settings" in it.
+        ExitThread();
     }
 
     /// Idempotent: everything that must not outlive us (hosts, web views, a stale frame).
@@ -72,6 +77,7 @@ sealed class App : ApplicationContext
         if (cleaned) return;
         cleaned = true;
         Log.Info($"cleanup reason={reason}");
+        Tray?.Dispose();   // null when cleanup comes during startup
         try { Desktop.Dispose(); }
         catch (Exception e) { Log.Error($"cleanup: {e.Message}"); }
         Layer.Dispose();

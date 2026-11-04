@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Windows.Forms;
 using Microsoft.Web.WebView2.Core;
 
@@ -23,6 +24,8 @@ sealed class Desktop : IDisposable
     /// Why the desktop can't be drawn (no WebView2 runtime, no layer), for the tray to say.
     public string? Problem { get; private set; }
     public event Action? Changed;
+    /// A surface's page finished loading: the tray can ask it for the catalog.
+    public event Action? PageReady;
 
     public Desktop(AppPaths paths, DesktopLayer layer)
     {
@@ -80,6 +83,7 @@ sealed class Desktop : IDisposable
                 {
                     var surface = new Surface(plan, layer.CreateHost(plan));
                     surface.Lost += s => { Log.Warn($"surface {s.Plan.Device}: browser process lost; rebuilding"); ScheduleRebuild(); };
+                    surface.Loaded += _ => PageReady?.Invoke();
                     surfaces.Add(surface);
                     await surface.StartAsync(env, paths, bing);
                     if (Paused) await surface.SetVisibleAsync(false);
@@ -109,7 +113,9 @@ sealed class Desktop : IDisposable
         if (building) { rebuildAgain = true; return; }
         Log.Info($"desktop: rebuilding ({why})");
         await TearDown();
-        if (layer.Prepare()) await BuildAsync();
+        // Also the way out of a failed start: ticking Draw Above Icons on a Windows build with no
+        // layer behind the icons lands here, so the 5 s watch starts with the first surfaces.
+        if (layer.Prepare()) { await BuildAsync(); if (surfaces.Count > 0) watch.Start(); }
     }
 
     async Task<bool> TearDown()
@@ -176,6 +182,23 @@ sealed class Desktop : IDisposable
         foreach (var s in surfaces) await s.SetVisibleAsync(!paused);
         Log.Info(paused ? "paused" : "resumed");
         Changed?.Invoke();
+    }
+
+    /// A pick, on every monitor (Same mode), saved so the next start shows it too.
+    public Task ShowAsync(string id) => RunEverywhereAsync(ShowScript(id));
+
+    static string ShowScript(string id) =>
+        $"window.WP && WP.player && WP.player.show({JsonSerializer.Serialize(id)}, {{ persist: true }})";
+
+    /// Next or Previous. The first page steps (and says what's next in its toast); the others are
+    /// told the result. Stepping each page would race: the first's save reaches the others as a
+    /// storage event, and a page that had already followed it would step one further.
+    public async Task CycleAsync(int step)
+    {
+        if (surfaces.Count == 0) return;
+        var raw = await surfaces[0].EvalAsync($"window.WP && WP.player ? (WP.player.cycle({step}), WP.player.choice) : null");
+        if (JsonSerializer.Deserialize<string?>(raw) is not { } id) return;
+        foreach (var s in surfaces.Skip(1)) await s.EvalAsync(ShowScript(id));
     }
 
     public async Task RunEverywhereAsync(string js)

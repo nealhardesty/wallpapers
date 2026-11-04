@@ -1,4 +1,5 @@
 using System.Drawing;
+using System.Text.Json;
 using System.Windows.Forms;
 using Microsoft.Web.WebView2.Core;
 
@@ -16,6 +17,8 @@ sealed class Surface : IDisposable
     public bool Visible => controller?.IsVisible ?? false;
     /// The browser process is gone: this surface can't recover by itself; Desktop rebuilds it.
     public event Action<Surface>? Lost;
+    /// The page finished loading (first load and every reload): it can answer scripts now.
+    public event Action<Surface>? Loaded;
 
     CoreWebView2CompositionController? controller;
     Dcomp? dcomp;
@@ -52,6 +55,7 @@ sealed class Surface : IDisposable
         controller.CoreWebView2.NavigationCompleted += (_, e) =>
         {
             if (!e.IsSuccess) Log.Warn($"surface {Plan.Device}: navigation failed ({e.WebErrorStatus})");
+            else Loaded?.Invoke(this);
         };
         controller.CoreWebView2.Navigate(PageUrl.Desktop(Plan.Insets));
         Log.Info($"surface {Plan.Device}: started on host {Host:X}");
@@ -71,10 +75,24 @@ sealed class Surface : IDisposable
     {
         if (controller == null) return;
         controller.IsVisible = visible;
+        Log.Info($"surface {Plan.Device}: IsVisible={(visible ? "true" : "false")}");
         await EvalAsync($"window.WP && WP.power && WP.power({{ hidden: {(visible ? "false" : "true")} }})");
     }
 
     public async Task<string> EvalAsync(string js) => Web == null ? "null" : await Web.ExecuteScriptAsync(js);
+
+    /// A script whose value is a promise of a string (ExecuteScriptAsync doesn't wait for promises).
+    /// Null when the page threw, or gave back something else.
+    public async Task<string?> EvaluateAsync(string expression)
+    {
+        if (Web == null) return null;
+        var json = await Web.CallDevToolsProtocolMethodAsync("Runtime.evaluate",
+            JsonSerializer.Serialize(new { expression, awaitPromise = true, returnByValue = true }));
+        using var doc = JsonDocument.Parse(json);
+        if (doc.RootElement.TryGetProperty("exceptionDetails", out var ex)) { Log.Warn($"surface {Plan.Device}: script threw: {ex}"); return null; }
+        return doc.RootElement.TryGetProperty("result", out var r) && r.TryGetProperty("value", out var v) && v.ValueKind == JsonValueKind.String
+            ? v.GetString() : null;
+    }
 
     public void Reload() => Web?.Reload();
 
