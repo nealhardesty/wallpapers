@@ -7,7 +7,7 @@ namespace Wallpapers;
 /// Hosts are plain windows of class WallpapersHost; a Surface draws into each through DirectComposition.
 sealed class DesktopLayer : IDisposable
 {
-    public const string HostClass = "WallpapersHost";
+    public const string HostClass = HitTest.HostClass;
     static bool registered;
 
     readonly Action<string> log;
