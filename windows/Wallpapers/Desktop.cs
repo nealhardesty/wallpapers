@@ -28,6 +28,11 @@ sealed class Desktop : IDisposable
     /// Completes when the running pass, and any passes asked for during it, are done: a caller that
     /// arrives mid-pass awaits this, so awaiting ReconcileAsync or RebuildAsync means the layout is in place.
     TaskCompletionSource passDone = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    /// Surfaces that couldn't start, in a row, and when the 5 s watch may try them again: at its next
+    /// tick after the first failure, then every 30 s (§10.25.6).
+    int startFailures;
+    DateTime retryAt;
+    static readonly TimeSpan RetryEvery = TimeSpan.FromSeconds(30);
 
     public IReadOnlyList<Surface> Surfaces => surfaces;
     public CoreWebView2Environment? Environment => env;
@@ -100,8 +105,8 @@ sealed class Desktop : IDisposable
         // At login Explorer may not be ready: retry with backoff for a minute, then wait for TaskbarCreated (§10.25.5).
         foreach (var delay in new[] { 0, 1, 2, 4, 8, 15, 30 })
         {
-            if (disposed) return;
             if (delay > 0) await Task.Delay(TimeSpan.FromSeconds(delay));
+            if (disposed) return;
             if (Fake || layer.Prepare()) { await ReconcileAsync("start"); watch.Start(); return; }
             if (layer.Shape.Kind == ShapeKind.NotSplit)
             {
@@ -167,9 +172,10 @@ sealed class Desktop : IDisposable
         if (building) { rebuildAgain = true; await passDone.Task; return; }
         Log.Info($"desktop: rebuilding ({why})");
         await TearDown();
+        if (disposed) return;
         // Also the way out of a failed start: ticking Draw Above Icons on a Windows build with no
         // layer behind the icons lands here, so the 5 s watch starts with the first surfaces.
-        if (Fake || layer.Prepare()) { await ReconcileAsync(why); if (surfaces.Count > 0) watch.Start(); }
+        if (Fake || layer.Prepare()) { await ReconcileAsync(why); if (surfaces.Count > 0 || startFailures > 0) watch.Start(); }
     }
 
     /// Brings the surfaces in line with the monitors, keeping every page that can be kept (§10.25.6):
@@ -212,11 +218,13 @@ sealed class Desktop : IDisposable
             Log.Info($"reconcile: {(Fake ? "real → fake" : "fake → real")} monitors; starting over");
             await TearDown();
         }
+        if (disposed) return;   // Quit or logoff came during a teardown
         if (surfaces.Count == 0) hostsFake = Fake;
         var plans = Layout.Plan(CurrentMonitors());
         var where = Placements(plans);
         var change = Layout.Diff(surfaces.Select(s => s.Plan).ToList(), plans);
         Log.Info($"reconcile ({why}): {plans.Count} monitor(s){(Fake ? " (fake)" : "")}, {change.Kept.Count} kept, {change.Added.Count} added, {change.Removed.Count} removed");
+        var failed = false;
         foreach (var gone in change.Removed)
         {
             var s = surfaces.First(x => x.Plan.Key == gone.Key);
@@ -257,17 +265,28 @@ sealed class Desktop : IDisposable
             try { await surface.StartAsync(env!, paths, bing, url); }
             catch (Exception e) when (e is COMException or InvalidOperationException or ArgumentException)
             {
-                // Not kept as a dead surface: the next reconcile (any display change) adds it again.
-                Log.Error($"reconcile: couldn't start {plan.Key}; dropped until the next change: {e}");
+                if (disposed) return;   // Dispose already closed it with the rest
+                // Not kept as a dead surface: the watch's retry (or any display change) adds it again.
+                // Logged once per streak of failures; the retries after the first are 30 s apart.
+                if (startFailures++ == 0) Log.Error($"reconcile: couldn't start {plan.Key}; retrying in 5 s, then every 30 s: {e}");
+                retryAt = DateTime.UtcNow + (startFailures == 1 ? TimeSpan.Zero : RetryEvery);
+                failed = true;
                 surfaces.Remove(surface);
                 surface.Dispose();
                 layer.DestroyHost(surface.Host);
                 continue;
             }
+            // Quit or logoff came while it started: Dispose closed it with the rest; make nothing more.
+            if (disposed) return;
             if (UrlFor(plan) != url) surface.Navigate(UrlFor(plan));   // the mode changed while it started
             // A page that starts while locked or paused doesn't draw. IsVisible is set now; the page is
             // told when it loads, so the pass doesn't wait on a script.
             _ = ApplyPowerAsync(surface);
+        }
+        if (!failed && startFailures > 0 && surfaces.Count == plans.Count)
+        {
+            Log.Info($"reconcile: every monitor started (after {startFailures} failed start(s))");
+            startFailures = 0;
         }
         // Monitor 1 first: it's the one Next and Previous step, and the tray asks.
         surfaces.Sort((a, b) => a.Plan.Number.CompareTo(b.Plan.Number));
@@ -283,7 +302,15 @@ sealed class Desktop : IDisposable
         if (mode == Mode) return Task.CompletedTask;
         Mode = mode;
         Log.Info($"monitors: {mode.ToString().ToLowerInvariant()}");
-        foreach (var s in surfaces) s.Navigate(UrlFor(s.Plan));
+        foreach (var s in surfaces)
+        {
+            // A page whose browser just died throws; the others must still change mode (it's rebuilt).
+            try { s.Navigate(UrlFor(s.Plan)); }
+            catch (Exception e) when (e is COMException or InvalidOperationException or ObjectDisposedException)
+            {
+                Log.Warn($"surface {s.Plan.Key}: couldn't navigate for the new mode ({e.GetType().Name}: {e.Message})");
+            }
+        }
         Changed?.Invoke();
         return Task.CompletedTask;
     }
@@ -350,6 +377,14 @@ sealed class Desktop : IDisposable
 
     void Watch()
     {
+        if (disposed) return;
+        // A monitor whose surface couldn't start has none: try again, backing off. (The monitors are
+        // read only during a streak of failures: the fake file's warnings would repeat every 5 s.)
+        if (startFailures > 0 && !building && DateTime.UtcNow >= retryAt && surfaces.Count < Layout.Plan(CurrentMonitors()).Count)
+        {
+            retryAt = DateTime.UtcNow + RetryEvery;   // a pass that throws before reaching the start still waits 30 s
+            _ = ReconcileAsync("a monitor has no surface");
+        }
         if (surfaces.Count == 0) return;
         if (!hostsFake)
         {

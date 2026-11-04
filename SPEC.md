@@ -3716,8 +3716,9 @@ A tray choice, `Monitors ▸`, stored in `settings.json`:
   inset does, and only that surface's); new monitors get a surface; gone
   ones are disposed. A monitor that comes back in Different mode gets its
   old wallpaper back (its key's `wp:current@` stays in storage). *(Built in
-  W2. A surface that fails to start is dropped and tried again at the next
-  change. `SetModeAsync` does not persist the mode: the tray saves
+  W2. A surface that fails to start is dropped and tried again by the 5 s
+  watch: at its next tick, then every 30 s while it keeps failing (logged
+  once per streak), and at any display change. `SetModeAsync` does not persist the mode: the tray saves
   `settings.json`.)*
 - **Over Remote Desktop** *(measured in W2)*: there is a monitor device path
   (`Default_Monitor`), and the friendly name is empty, so menus say
@@ -3914,8 +3915,12 @@ never pause. Only invisibility pauses.
   display-state setting is the physical console, and an RDP viewer still sees
   the wallpaper.
 - `DisplayOff` is never re-read: a missed display-on without a sleep leaves
-  the wallpaper hidden. A known limit. `Asleep` is cleared only by a resume
-  message.
+  the wallpaper hidden. A known limit. `Asleep` is cleared by a resume
+  message, or by the second 2 s poll tick after the suspend (a tick only
+  fires while the machine runs, so a missed resume or an aborted suspend
+  can't leave it hidden; logged `power: no resume message; awake again`).
+  In modern standby the ticks keep coming, which is harmless: `DisplayOff`
+  still hides.
 - Every surface gets its visibility set before any script is awaited, so one
   hung page can't hold the others in the wrong state.
 
@@ -4270,7 +4275,8 @@ Task Manager; RDP in and out; the saver from Windows' dialog; uninstall.
   two-monitor layouts; the console pass with real hardware is pending.
   - **Built:** display keys from `QueryDisplayConfig` (§10.25.6); Same and
     Different per Monitor (`wp:current@<key>`, with `?display=`, §10.25.7);
-    reconcile in place on display, DPI and taskbar changes; per-monitor
+    reconcile in place on display, DPI and taskbar changes, with a failed
+    surface start retried by the 5 s watch (5 s, then every 30 s); per-monitor
     coverage pause (§10.25.9); every power signal, with lock and disconnect
     re-polled; Remote Desktop → ceiling Low and no extra fps cap (owner
     decision, 2026-11-04); the tray's Monitors menu (Same / Different,
@@ -4280,7 +4286,9 @@ Task Manager; RDP in and out; the saver from Windows' dialog; uninstall.
   - **Verified (by script or self-test):** `make win-unit` (135+ tests,
     including the recorded layouts), `make win-test` (all pass, ~45 s) over
     RDP, the fake layouts (a resize or an unplug keeps the other page; a
-    taskbar move navigates only that surface; `display=` in the URLs), the
+    taskbar move navigates only that surface; `display=` in the URLs; a
+    monitor 2 whose start was made to fail came back 5 s later, and with
+    three failures in a row, retried at 5, 35 and 65 s), the
     coverage gate on RDP (covered ~450 ms after the window appears,
     uncovered ~150 ms after it closes), power reaching every page, the
     Performance picks (RDP shows Low for all of them, by its ceiling), the

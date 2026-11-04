@@ -21,6 +21,8 @@ sealed class SettingsWindow : Form
     /// The page it should show, and the one it does (null while hidden).
     string? wanted, shown;
     bool quitting;
+    /// The monitor it edits in Different mode (by key), so its title follows a renumbering.
+    string? monitorKey;
 
     public SettingsWindow(App app)
     {
@@ -33,6 +35,7 @@ sealed class SettingsWindow : Form
         MinimumSize = new Size(LogicalToDeviceUnits(480), LogicalToDeviceUnits(400));
         Controls.Add(web);
         Place();
+        app.Desktop.Changed += FollowMonitors;
     }
 
     /// Opens it, or brings it to the front when it's already open. In Different mode it edits one
@@ -72,10 +75,23 @@ sealed class SettingsWindow : Form
         Go();
     }
 
+    /// A reconcile can renumber the monitors: the title follows the one shown (by key), and with
+    /// that monitor gone the window moves to monitor 1's, as when none is named.
+    void FollowMonitors()
+    {
+        if (IsDisposed || !Visible || monitorKey == null || app.Desktop.Building) return;
+        (wanted, Text) = Target(app.Desktop.Surfaces.FirstOrDefault(s => s.Plan.Key == monitorKey)?.Plan);
+        Go();
+    }
+
     (string Url, string Title) Target(SurfacePlan? monitor)
     {
+        monitorKey = null;
         if (app.Desktop.Mode == MonitorMode.Different && (monitor ?? app.Desktop.Surfaces.FirstOrDefault()?.Plan) is { } m)
+        {
+            monitorKey = m.Key;
             return (PageUrl.Settings(m.Key), $"{BaseTitle} · Monitor {m.Number} · {m.Name}");
+        }
         return (PageUrl.Settings(), BaseTitle);
     }
 
@@ -137,6 +153,7 @@ sealed class SettingsWindow : Form
     public void CloseForGood()
     {
         quitting = true;
+        app.Desktop.Changed -= FollowMonitors;
         Close();
         Dispose();
     }

@@ -172,7 +172,10 @@ sealed class Tray : IDisposable
         }
         var keys = app.Desktop.Surfaces.Select(s => s.Plan.Key).ToHashSet();
         foreach (var gone in catalogs.Keys.Where(k => !keys.Contains(k)).ToList()) catalogs.Remove(gone);
-        catalog = catalogs.GetValueOrDefault(live[0].Plan.Key) ?? catalog;
+        // Monitor 1 now: a reconcile while the pages answered can have renumbered them. Until the new
+        // monitor 1 answers, another current monitor's catalog beats a gone one's.
+        var firstKey = app.Desktop.Surfaces.FirstOrDefault()?.Plan.Key;
+        catalog = (firstKey == null ? null : catalogs.GetValueOrDefault(firstKey)) ?? catalogs.Values.FirstOrDefault() ?? catalog;
         if (await AskAsync(live[0], PerformanceInfo.Script) is { } perf)
         {
             try { performance = PerformanceInfo.Parse(perf); }

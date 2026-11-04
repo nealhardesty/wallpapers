@@ -28,6 +28,7 @@ sealed class Surface : IDisposable
     readonly Queue<DateTime> crashes = new();
     /// What the page was last told by WP.power (null: nothing yet).
     string? powerJson;
+    bool disposed;
 
     public Surface(SurfacePlan plan, HostPlacement placement, IntPtr host)
     {
@@ -44,7 +45,10 @@ sealed class Surface : IDisposable
             Caption = "WallpapersKeeper", X = Placement.Screen.Left, Y = Placement.Screen.Top, Width = 1, Height = 1,
             Style = unchecked((int)N.WS_POPUP), ExStyle = (int)(N.WS_EX_TOOLWINDOW | N.WS_EX_NOACTIVATE),
         });
-        controller = await env.CreateCoreWebView2CompositionControllerAsync(keeper.Handle);
+        var made = await env.CreateCoreWebView2CompositionControllerAsync(keeper.Handle);
+        // Disposed while it was being made (Quit, logoff): nothing else will close this one.
+        if (disposed) { try { made.Close(); } catch (Exception e) when (e is InvalidOperationException or COMException) { } return; }
+        controller = made;
         controller.BoundsMode = CoreWebView2BoundsMode.UseRawPixels;
         controller.ShouldDetectMonitorScaleChanges = false;
         controller.RasterizationScale = Placement.RasterizationScale;
@@ -56,6 +60,7 @@ sealed class Surface : IDisposable
         dcomp.Commit();
         controller.IsVisible = true;
         await WebFactory.SetUpAsync(controller.CoreWebView2, paths, bing, desktop: true);
+        if (disposed) return;   // Dispose closed it
         controller.CoreWebView2.ProcessFailed += OnProcessFailed;
         controller.CoreWebView2.NavigationCompleted += (_, e) =>
         {
@@ -169,6 +174,7 @@ sealed class Surface : IDisposable
 
     public void Dispose()
     {
+        disposed = true;
         try { controller?.Close(); } catch (Exception e) when (e is InvalidOperationException or COMException) { }
         controller = null;
         dcomp?.Dispose();

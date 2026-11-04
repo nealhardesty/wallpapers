@@ -18,6 +18,8 @@ sealed class Power : IDisposable
     readonly List<IntPtr> registrations = [];
     MessageWindow? window;
     bool sessionRegistered;
+    /// Poll ticks seen while asleep (PowerSignals.Tick): the second clears a missed resume.
+    int ticksAsleep;
     /// Windows 11 24H2 renamed battery saver Energy Saver and gave it a new GUID.
     static readonly Guid SaverGuid = Environment.OSVersion.Version.Build >= 26100 ? N.GUID_ENERGY_SAVER_STATUS : N.GUID_POWER_SAVING_STATUS;
 
@@ -36,8 +38,16 @@ sealed class Power : IDisposable
             if (r != IntPtr.Zero) registrations.Add(r);
             else Log.Warn($"power: can't register for {guid} (error {Marshal.GetLastWin32Error()})");
         }
-        poll.Tick += (_, _) => Set(Polled(State));
+        poll.Tick += (_, _) => OnPoll();
         poll.Start();
+    }
+
+    void OnPoll()
+    {
+        var (next, ticks) = PowerSignals.Tick(State, ticksAsleep);
+        if (State.Asleep && !next.Asleep) Log.Info("power: no resume message; awake again");
+        ticksAsleep = ticks;
+        Set(Polled(next));
     }
 
     /// The signals nothing announces, read now.
@@ -86,7 +96,7 @@ sealed class Power : IDisposable
     {
         switch (kind)
         {
-            case N.PBT_APMSUSPEND: Log.Info("power: suspending"); Set(PowerSignals.Apply(State, PowerEvent.Suspend)); break;
+            case N.PBT_APMSUSPEND: Log.Info("power: suspending"); ticksAsleep = 0; Set(PowerSignals.Apply(State, PowerEvent.Suspend)); break;
             case N.PBT_APMRESUMEAUTOMATIC or N.PBT_APMRESUMESUSPEND: Log.Info("power: resumed"); Set(PowerSignals.Apply(State, PowerEvent.Resume)); break;
             case N.PBT_POWERSETTINGCHANGE when N.PowerSetting(l) is { } changed:
                 var (setting, value) = changed;

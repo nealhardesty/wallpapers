@@ -51,6 +51,16 @@ public static class PowerSignals
         PowerEvent.Connect => s with { Disconnected = false },
         _ => s,
     };
+
+    /// One 2 s poll tick, counting the ticks seen while asleep. A tick only fires while the UI thread
+    /// runs, so the second one after a suspend means the machine is awake and the resume message was
+    /// missed (or the suspend was aborted): Asleep is cleared, so nothing stays hidden. The first can be
+    /// one queued just before the suspend. In modern standby the ticks keep coming while "asleep";
+    /// that's harmless, as the display is off and DisplayOff still hides.
+    public static (PowerState State, int TicksAsleep) Tick(PowerState s, int ticksAsleep) =>
+        !s.Asleep ? (s, 0)
+        : ticksAsleep + 1 >= 2 ? (s with { Asleep = false }, 0)
+        : (s, ticksAsleep + 1);
 }
 
 public static class PowerJson

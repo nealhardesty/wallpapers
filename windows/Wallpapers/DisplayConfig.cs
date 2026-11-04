@@ -12,7 +12,7 @@ static class DisplayConfig
         if (!SizesOk()) { Once("DisplayConfig: struct sizes don't match wingdi.h; no device paths"); return found; }
         PATH_INFO[] paths;
         MODE_INFO[] modes;
-        int error;
+        int error, attempts = 0;
         do
         {
             error = GetDisplayConfigBufferSizes(QDC_ONLY_ACTIVE_PATHS, out var pathCount, out var modeCount);
@@ -21,7 +21,7 @@ static class DisplayConfig
             modes = new MODE_INFO[modeCount];
             error = QueryDisplayConfig(QDC_ONLY_ACTIVE_PATHS, ref pathCount, paths, ref modeCount, modes, IntPtr.Zero);
             Array.Resize(ref paths, (int)pathCount);
-        } while (error == ERROR_INSUFFICIENT_BUFFER);   // the layout changed between the two calls
+        } while (error == ERROR_INSUFFICIENT_BUFFER && ++attempts < 3);   // the layout changed between the two calls
         if (error != 0) { Once($"DisplayConfig: QueryDisplayConfig failed ({error}); no device paths"); return found; }
 
         foreach (var p in paths)

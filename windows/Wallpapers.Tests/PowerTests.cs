@@ -49,6 +49,31 @@ public class PowerTests
     }
 
     [Fact]
+    public void A_missed_resume_is_cleared_on_the_second_poll_tick()
+    {
+        var s = PowerSignals.Apply(new PowerState(), PowerEvent.Suspend);
+        // The first tick can be one queued just before the machine slept: still asleep.
+        var (once, ticks) = PowerSignals.Tick(s, 0);
+        Assert.True(once.Asleep);
+        Assert.Equal(1, ticks);
+        // The second means the UI thread has been running for a while: awake, resume or not.
+        var (twice, after) = PowerSignals.Tick(once, ticks);
+        Assert.False(twice.Asleep || twice.HiddenEverywhere);
+        Assert.Equal(0, after);
+    }
+
+    [Fact]
+    public void Poll_ticks_dont_touch_display_off_or_an_awake_state()
+    {
+        // Modern standby: ticks while asleep with the display off clear Asleep, but the display still hides.
+        var s = PowerSignals.Apply(PowerSignals.Apply(new PowerState(), PowerEvent.DisplayOff), PowerEvent.Suspend);
+        var (state, _) = PowerSignals.Tick(PowerSignals.Tick(s, 0).State, 1);
+        Assert.True(state.DisplayOff && state.HiddenEverywhere);
+        // Awake: nothing changes and the count stays at zero.
+        Assert.Equal((new PowerState(Locked: true), 0), PowerSignals.Tick(new PowerState(Locked: true), 0));
+    }
+
+    [Fact]
     public void Unlock_after_lock_clears()
     {
         var s = PowerSignals.Apply(new PowerState(), PowerEvent.Lock);
