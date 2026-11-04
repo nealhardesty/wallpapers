@@ -15,6 +15,7 @@ sealed class App : ApplicationContext
     public DesktopLayer Layer { get; }
     public Desktop Desktop { get; }
     public Tray Tray { get; }
+    SettingsWindow? settingsWindow;
     /// Why nothing can be shown (no web root), or null.
     public string? Problem { get; }
     bool cleaned;
@@ -54,7 +55,12 @@ sealed class App : ApplicationContext
         }
     }
 
-    public void OpenSettings() => Log.Info("settings: not built yet (W1 Task 8)");
+    public void OpenSettings()
+    {
+        if (Problem != null) { Log.Warn($"settings: can't open ({Problem})"); return; }
+        settingsWindow ??= new SettingsWindow(this);
+        _ = settingsWindow.ShowOrFocusAsync();
+    }
 
     public void Quit()
     {
@@ -78,6 +84,8 @@ sealed class App : ApplicationContext
         cleaned = true;
         Log.Info($"cleanup reason={reason}");
         Tray?.Dispose();   // null when cleanup comes during startup
+        try { settingsWindow?.CloseForGood(); }
+        catch (Exception e) { Log.Error($"cleanup: settings window: {e.Message}"); }
         try { Desktop.Dispose(); }
         catch (Exception e) { Log.Error($"cleanup: {e.Message}"); }
         Layer.Dispose();

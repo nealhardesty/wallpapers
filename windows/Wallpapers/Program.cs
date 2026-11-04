@@ -26,6 +26,7 @@ static class Program
         if (!SingleInstance.TryBecomeFirst(paths.Flavor))
         {
             // A second launch (the Start menu, make win-run twice) opens the first one's settings.
+            N.AllowSetForegroundWindow(N.ASFW_ANY);
             Log.Info($"second instance: {(SingleInstance.Send(paths.Flavor, "settings") ? "asked the first to open settings" : "the first didn't answer")}");
             return 0;
         }

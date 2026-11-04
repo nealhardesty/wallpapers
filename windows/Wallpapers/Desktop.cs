@@ -19,6 +19,9 @@ sealed class Desktop : IDisposable
 
     public IReadOnlyList<Surface> Surfaces => surfaces;
     public CoreWebView2Environment? Environment => env;
+    readonly TaskCompletionSource<CoreWebView2Environment?> envReady = new();
+    /// The environment once StartAsync has made it (null if it couldn't), for the settings window.
+    public Task<CoreWebView2Environment?> EnvironmentReady => envReady.Task;
     public BingJson Bing => bing;
     public bool Paused { get; private set; }
     /// Why the desktop can't be drawn (no WebView2 runtime, no layer), for the tray to say.
@@ -42,10 +45,12 @@ sealed class Desktop : IDisposable
         try { env = await WebFactory.CreateAsync(paths); }
         catch (WebView2RuntimeNotFoundException)
         {
+            envReady.TrySetResult(null);
             Fail("The Microsoft Edge WebView2 Runtime isn't installed. It comes with Windows 11; get it from Microsoft's WebView2 page.");
             return;
         }
         Log.Info($"webview2 runtime {env.BrowserVersionString}");
+        envReady.TrySetResult(env);
         // At login Explorer may not be ready: retry with backoff for a minute, then wait for TaskbarCreated (§10.25.5).
         foreach (var delay in new[] { 0, 1, 2, 4, 8, 15, 30 })
         {
@@ -224,6 +229,7 @@ sealed class Desktop : IDisposable
     {
         if (disposed) return;
         disposed = true;
+        envReady.TrySetResult(null);   // a settings window still waiting gives up
         watch.Stop();
         debounce.Stop();
         foreach (var s in surfaces) { s.Dispose(); layer.DestroyHost(s.Host); }

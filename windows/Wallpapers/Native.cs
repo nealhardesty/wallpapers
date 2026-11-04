@@ -72,6 +72,10 @@ static class N
     [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr h, out RECT r);
     [DllImport("user32.dll")] public static extern bool IsWindow(IntPtr h);
     [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);
+    /// A second launch lets the first bring its settings window forward (Windows only lets the
+    /// foreground process do that, and the second launch is it).
+    [DllImport("user32.dll")] public static extern bool AllowSetForegroundWindow(int pid);
+    public const int ASFW_ANY = -1;
     [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr h);
     [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr h, out int pid);
     [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW")] public static extern IntPtr GetWindowLongPtr(IntPtr h, int i);

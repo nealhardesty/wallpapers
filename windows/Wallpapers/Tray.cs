@@ -40,9 +40,7 @@ sealed class Tray : IDisposable
         next = Item("Next", () => app.Desktop.CycleAsync(1));
         previous = Item("Previous", () => app.Desktop.CycleAsync(-1));
         pause = Item("Pause", () => app.Desktop.SetPausedAsync(!app.Desktop.Paused));
-        // The settings window arrives in W1 Task 8; until then the item is there but disabled.
         settings = Item("Settings…", () => { app.OpenSettings(); return Task.CompletedTask; });
-        settings.Enabled = false;
         reload = Item("Reload Wallpapers", () => { app.Desktop.ReloadAll(); return Task.CompletedTask; });
         drawAbove = Item("Draw Above Icons", () => { ToggleDrawAbove(); return Task.CompletedTask; });
         devTools = Item("Developer Tools", () => { app.Desktop.Surfaces.FirstOrDefault()?.Web?.OpenDevToolsWindow(); return Task.CompletedTask; });
@@ -62,7 +60,7 @@ sealed class Tray : IDisposable
         ]);
         menu.Opening += (_, _) => { Sync(); Run("refresh", RefreshAsync); };
 
-        icon = new NotifyIcon { Icon = LoadIcon(), Text = "Wallpapers", ContextMenuStrip = menu, Visible = true };
+        icon = new NotifyIcon { Icon = LoadIcon(SystemInformation.SmallIconSize), Text = "Wallpapers", ContextMenuStrip = menu, Visible = true };
         icon.MouseUp += (_, e) => { if (e.Button == MouseButtons.Left) ShowMenu(); };
         // Hovering asks the page again (at most every 3 s), so the tooltip follows picks made
         // elsewhere (the settings window) and Seasonal's rollovers without polling.
@@ -96,11 +94,12 @@ sealed class Tray : IDisposable
         catch (Exception) { }
     }
 
-    static Icon LoadIcon()
+    /// The app's icon: at one size (the tray's), or with every size in the .ico (a window's).
+    internal static Icon LoadIcon(Size? size = null)
     {
         using var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("app.ico")
             ?? throw new InvalidOperationException("app.ico isn't embedded");
-        return new Icon(stream, SystemInformation.SmallIconSize);
+        return size is { } s ? new Icon(stream, s) : new Icon(stream);
     }
 
     /// Left click opens the same menu as right click. NotifyIcon's own ShowContextMenu also makes the
@@ -182,6 +181,7 @@ sealed class Tray : IDisposable
         pause.Text = paused ? "Resume" : "Pause";
         drawAbove.Checked = app.Settings.DrawAboveIcons;
         devTools.Enabled = live;
+        settings.Enabled = app.Problem == null;   // without web/ there's no panel to show
     }
 
     void SetTooltip(string text)
