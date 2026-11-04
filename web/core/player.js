@@ -358,7 +358,7 @@
             rebuild();
         } else if (message.wp === 'corner') {
             const gear = document.getElementById('gear'), full = document.getElementById('fullscreen');
-            const c = host === 'android' ? null : message.near;
+            const c = WP.cornerButtons(host) ? message.near : null;
             gear.classList.toggle('bottom', c === 'br');
             full.classList.toggle('bottom', c === 'bl');
             gear.classList.toggle('show', settingsScreen || c === 'tr' || c === 'br');

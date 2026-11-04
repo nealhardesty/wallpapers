@@ -42,6 +42,14 @@ test('host kind: android, windows, the saver, the extension, else standalone', (
     assert.equal(WP.hostKind({ host: 'mac' }, 'https:'), 'standalone');
 });
 
+test('corner buttons: hosts that can\'t click the player get none', () => {
+    assert.equal(WP.cornerButtons('standalone'), true);
+    assert.equal(WP.cornerButtons('extension'), true);
+    assert.equal(WP.cornerButtons('android'), false);
+    assert.equal(WP.cornerButtons('windows'), false);
+    assert.equal(WP.cornerButtons('windows-saver'), false);
+});
+
 test('insets: t,r,b,l in CSS px on any host; Android keeps its 48 px default', () => {
     assert.deepEqual(plain(WP.parseInsets('0,0,48,0', 'windows')), { top: 0, right: 0, bottom: 48, left: 0 });
     assert.deepEqual(plain(WP.parseInsets('12,0,0,40', 'standalone')), { top: 12, right: 0, bottom: 0, left: 40 });

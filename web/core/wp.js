@@ -35,6 +35,11 @@
     WP.hostKind = (params, protocol) => protocol === 'chrome-extension:' ? 'extension'
         : WP.HOST_KINDS.includes(params.host) ? params.host : 'standalone';
 
+    // The player's corner buttons (gear, full screen) need a pointer that can
+    // press them. Android has touch pages of its own; a Windows desktop page
+    // gets forwarded moves, not clicks on the player (SPEC §10.25.7).
+    WP.cornerButtons = kind => !['android', 'windows', 'windows-saver'].includes(kind);
+
     // Where this page keeps its wallpaper choice (SPEC §4.2): ?display=<key>
     // gives one monitor its own; a malformed key is ignored.
     WP.currentKey = params => /^[a-z0-9-]{1,40}$/.test(params?.display ?? '') ? `wp:current@${params.display}` : 'wp:current';

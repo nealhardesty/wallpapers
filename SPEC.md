@@ -3785,6 +3785,13 @@ Each is useful beyond Windows and testable in a browser with URL parameters.
 6. **Tests:** unit tests for the params and the policy; a smoke
    `STAGE_CHECKS` entry proving `insets` reaches `host.insets` and
    `display=` keeps two choices apart.
+7. *(Built in W3: `WP.cornerButtons`.)* **No corner buttons on `windows` and
+   `windows-saver`** (as on `android`). W3 sends real pointer moves into the
+   desktop pages and the stage reports a mouse near a corner, which would show
+   the gear and full-screen buttons; a desktop click goes into the stage, not
+   the player, so they could never be pressed. `,` still opens the panel in
+   *Play in a Window*. The settings window opens its panel with `panel=open`,
+   so it doesn't need the gear. Owner's call (2026-11-04).
 
 #### 10.25.8 The mouse (`Pointer.cs`), required
 
@@ -4461,7 +4468,7 @@ Task Manager; RDP in and out; the saver from Windows' dialog; uninstall.
 
 **Design calls made without the owner (check these):**
 - Same wallpaper on both monitors in Different mode shares its settings.
-- Remote Desktop runs at Low, 15 fps (new `remote` signal).
+- Remote Desktop runs at Low with no extra fps cap (new `remote` signal; owner's W2 pick, §10.25.7 item 5).
 - Covered = 97% of a monitor's work area; pause after 300 ms.
 - Moves are forwarded even over app windows; clicks only on bare desktop,
   left button only; keys never (Play in a Window instead).
