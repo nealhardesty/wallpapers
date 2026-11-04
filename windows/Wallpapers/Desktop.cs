@@ -23,6 +23,9 @@ sealed class Desktop : IDisposable
     /// The surfaces' hosts are fake windows (a switch to or from a fake layout starts them over).
     bool hostsFake;
     bool building, reconcileAgain, rebuildAgain, rebuildPending, restarting, disposed;
+    /// Completes when the running pass, and any passes asked for during it, are done: a caller that
+    /// arrives mid-pass awaits this, so awaiting ReconcileAsync or RebuildAsync means the layout is in place.
+    TaskCompletionSource passDone = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
     public IReadOnlyList<Surface> Surfaces => surfaces;
     public CoreWebView2Environment? Environment => env;
@@ -151,7 +154,7 @@ sealed class Desktop : IDisposable
     public async Task RebuildAsync(string why)
     {
         if (disposed || env == null) return;
-        if (building) { rebuildAgain = true; return; }
+        if (building) { rebuildAgain = true; await passDone.Task; return; }
         Log.Info($"desktop: rebuilding ({why})");
         await TearDown();
         // Also the way out of a failed start: ticking Draw Above Icons on a Windows build with no
@@ -165,8 +168,9 @@ sealed class Desktop : IDisposable
     public async Task ReconcileAsync(string why)
     {
         if (disposed || env == null) return;
-        if (building) { reconcileAgain = true; return; }
+        if (building) { reconcileAgain = true; await passDone.Task; return; }
         building = true;
+        var done = passDone = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         try
         {
             do
@@ -184,6 +188,7 @@ sealed class Desktop : IDisposable
         }
         finally { building = false; }
         Changed?.Invoke();
+        done.TrySetResult();
     }
 
     async Task ReconcileOnceAsync(string why)
@@ -235,7 +240,16 @@ sealed class Desktop : IDisposable
             surfaces.Add(surface);
             Log.Info($"reconcile: added {plan.Key} (monitor {plan.Number}, {plan.Device}, {Size(plan)})");
             var url = UrlFor(plan);
-            await surface.StartAsync(env!, paths, bing, url);
+            try { await surface.StartAsync(env!, paths, bing, url); }
+            catch (Exception e) when (e is COMException or InvalidOperationException or ArgumentException)
+            {
+                // Not kept as a dead surface: the next reconcile (any display change) adds it again.
+                Log.Error($"reconcile: couldn't start {plan.Key}; dropped until the next change: {e}");
+                surfaces.Remove(surface);
+                surface.Dispose();
+                layer.DestroyHost(surface.Host);
+                continue;
+            }
             if (UrlFor(plan) != url) surface.Navigate(UrlFor(plan));   // the mode changed while it started
             if (Paused) await surface.SetVisibleAsync(false);   // Task 4 replaces this with ApplyPowerAsync
         }
