@@ -1,12 +1,21 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace Wallpapers.Core;
 
+/// Same wallpaper on every monitor, or each its own (SPEC §10.25.6).
+public enum MonitorMode { Same, Different }
+
 /// The app's own settings (settings.json in the data folder; SPEC §10.25.4). Wallpaper settings
 /// live in the pages' localStorage, not here.
-public sealed record AppSettings(bool DrawAboveIcons = false, Rect? SettingsBounds = null)
+public sealed record AppSettings(bool DrawAboveIcons = false, Rect? SettingsBounds = null, MonitorMode Monitors = MonitorMode.Same)
 {
-    static readonly JsonSerializerOptions Options = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase, WriteIndented = true };
+    static readonly JsonSerializerOptions Options = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        WriteIndented = true,
+        Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase) },   // "monitors": "different"
+    };
 
     /// Missing → defaults. Unreadable → defaults, with the bad file kept beside it as settings.bad.json.
     public static AppSettings Load(string path)

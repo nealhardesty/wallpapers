@@ -5,7 +5,9 @@
 #   run.sh test  the same into ...\test, run --selftest, print its report, exit with its code
 #   run.sh log [run|dev|test]   the last lines of that flavour's log (FOLLOW=1 to follow)
 #   run.sh reload [dev|run]     reload the running app's pages (after a web/ edit, for dev)
-# Extra arguments for the app: WIN_ARGS="--dump-displays". BUILD=1 builds first, and builds again when
+# Extra arguments for the app: WIN_ARGS="--dump-displays". WP_FAKE_DISPLAYS=<displays JSON> (a WSL path,
+# translated; keep it under /mnt/c so Windows sees edits to it) lays the surfaces out as that file says,
+# in ordinary windows (§10.25.15). BUILD=1 builds first, and builds again when
 # Smart App Control refuses the build (every build is a new file to it; SPEC §10.25.13), up to 3 times.
 set -e
 cd "$(dirname "$0")/.."
@@ -41,7 +43,7 @@ fi
 
 BIN="$LOCAL/Wallpapers-build/$mode"
 mkdir -p "$BIN"
-export WSLENV="WP_DEV:WP_DEBUG:WP_WEB_ROOT${WSLENV:+:$WSLENV}"
+export WSLENV="WP_DEV:WP_DEBUG:WP_WEB_ROOT:WP_FAKE_DISPLAYS/p${WSLENV:+:$WSLENV}"
 if [ "$mode" = dev ]; then
   export WP_DEV=1 WP_DEBUG=1 WP_WEB_ROOT="$(wslpath -w "$PWD/web")"
 fi

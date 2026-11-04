@@ -92,6 +92,29 @@ sealed class DesktopLayer : IDisposable
         return host;
     }
 
+    /// A host for a monitor of a fake layout (WP_FAKE_DISPLAYS, §10.25.15): an ordinary window on the real
+    /// screen, not in Explorer's layer and not click-through, that never takes focus.
+    public IntPtr CreateFakeHost(SurfacePlan plan, HostPlacement placement)
+    {
+        Register();
+        var r = placement.Screen;
+        var host = N.CreateWindowEx(N.WS_EX_NOACTIVATE, HostClass, $"Wallpapers (fake) · Monitor {plan.Number} · {plan.Name}",
+            N.WS_POPUP | N.WS_VISIBLE, r.Left, r.Top, r.Width, r.Height, IntPtr.Zero, IntPtr.Zero, N.GetModuleHandle(null), IntPtr.Zero);
+        if (host == IntPtr.Zero) throw new InvalidOperationException($"CreateWindowEx (fake) failed: {Marshal.GetLastWin32Error()}");
+        log($"host {host:X} for {plan.Key} (fake {plan.Bounds.Width}x{plan.Bounds.Height} scale {plan.Scale}) at {r.Left},{r.Top} {r.Width}x{r.Height} scale {placement.RasterizationScale:0.###} insets {plan.Insets.ToParam()}");
+        return host;
+    }
+
+    /// The monitor moved or resized: its host follows, keeping its place in the z-order. `screen` is in
+    /// screen px; a host inside the layer is placed in its parent's client coordinates.
+    public void MoveHost(IntPtr host, Rect screen)
+    {
+        var parent = N.GetParent(host);
+        var r = ((long)N.GetWindowLongPtr(host, N.GWL_STYLE) & N.WS_CHILD) != 0
+            ? InClient(parent, screen) : new N.RECT { L = screen.Left, T = screen.Top, R = screen.Right, B = screen.Bottom };
+        N.SetWindowPos(host, IntPtr.Zero, r.L, r.T, r.R - r.L, r.B - r.T, N.SWP_NOZORDER | N.SWP_NOACTIVATE);
+    }
+
     void PlaceAboveProgman(IntPtr host)
     {
         var above = N.GetWindow((IntPtr)Shape.Progman, N.GW_HWNDPREV);

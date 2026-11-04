@@ -4,8 +4,10 @@ using Microsoft.Web.WebView2.Core;
 
 namespace Wallpapers;
 
-/// The wallpaper on every monitor (SPEC §10.25.6, Same mode): one Surface per monitor, rebuilt when
-/// the displays change, re-bound when Explorer restarts, watched every 5 s, cleaned up on the way out.
+/// The wallpaper on every monitor (SPEC §10.25.6): one Surface per monitor, in Same or Different mode.
+/// When the displays change the surfaces are reconciled (kept ones move, new monitors get one, gone
+/// ones are disposed); re-bound when Explorer restarts, watched every 5 s, cleaned up on the way out.
+/// With WP_FAKE_DISPLAYS the monitors come from a JSON file instead, in ordinary windows (§10.25.15).
 sealed class Desktop : IDisposable
 {
     readonly AppPaths paths;
@@ -14,8 +16,13 @@ sealed class Desktop : IDisposable
     readonly List<Surface> surfaces = [];
     readonly System.Windows.Forms.Timer watch = new() { Interval = 5000 };
     readonly System.Windows.Forms.Timer debounce = new() { Interval = 500 };
+    readonly string? fakeFile = System.Environment.GetEnvironmentVariable("WP_FAKE_DISPLAYS") is { Length: > 0 } f ? Path.GetFullPath(f) : null;
+    readonly FileSystemWatcher? fakeWatcher;
+    IReadOnlyList<MonitorInfo>? testLayout, lastFakeFile;
     CoreWebView2Environment? env;
-    bool building, rebuildAgain, restarting, disposed;
+    /// The surfaces' hosts are fake windows (a switch to or from a fake layout starts them over).
+    bool hostsFake;
+    bool building, reconcileAgain, rebuildAgain, rebuildPending, restarting, disposed;
 
     public IReadOnlyList<Surface> Surfaces => surfaces;
     public CoreWebView2Environment? Environment => env;
@@ -24,6 +31,9 @@ sealed class Desktop : IDisposable
     public Task<CoreWebView2Environment?> EnvironmentReady => envReady.Task;
     public BingJson Bing => bing;
     public bool Paused { get; private set; }
+    public MonitorMode Mode { get; private set; }
+    /// The monitors are a fake layout (WP_FAKE_DISPLAYS, or the self-test's), in ordinary windows.
+    public bool Fake => testLayout != null || fakeFile != null;
     /// Surfaces are being made: the list may not have every monitor yet.
     public bool Building => building;
     /// Why the desktop can't be drawn (no WebView2 runtime, no layer), for the tray to say.
@@ -32,14 +42,35 @@ sealed class Desktop : IDisposable
     /// A surface's page finished loading: the tray can ask it for the catalog.
     public event Action? PageReady;
 
-    public Desktop(AppPaths paths, DesktopLayer layer)
+    public Desktop(AppPaths paths, DesktopLayer layer, MonitorMode mode)
     {
         this.paths = paths;
         this.layer = layer;
+        Mode = mode;
         watch.Tick += (_, _) => Watch();
-        debounce.Tick += async (_, _) => { debounce.Stop(); await RebuildAsync("displays changed"); };
-        layer.DisplayChanged += ScheduleRebuild;
+        debounce.Tick += async (_, _) =>
+        {
+            debounce.Stop();
+            if (rebuildPending) { rebuildPending = false; await RebuildAsync("surface lost or host kind changed"); }
+            else await ReconcileAsync("displays changed");
+        };
+        layer.DisplayChanged += ScheduleReconcile;
         layer.ShellRestarted += () => _ = OnShellRestartedAsync();
+        if (fakeFile != null)
+        {
+            Log.Info($"displays: fake, from {fakeFile} (WP_FAKE_DISPLAYS)");
+            // An edit is a hot-plug. Editors save in place or by renaming a new file over the old one.
+            var ui = SynchronizationContext.Current;
+            fakeWatcher = new FileSystemWatcher(Path.GetDirectoryName(fakeFile)!, Path.GetFileName(fakeFile))
+            {
+                NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.FileName | NotifyFilters.Size,
+            };
+            FileSystemEventHandler changed = (_, _) => ui?.Post(_ => ScheduleReconcile(), null);
+            fakeWatcher.Changed += changed;
+            fakeWatcher.Created += changed;
+            fakeWatcher.Renamed += (_, _) => ui?.Post(_ => ScheduleReconcile(), null);
+            fakeWatcher.EnableRaisingEvents = true;
+        }
     }
 
     public async Task StartAsync()
@@ -58,7 +89,7 @@ sealed class Desktop : IDisposable
         {
             if (disposed) return;
             if (delay > 0) await Task.Delay(TimeSpan.FromSeconds(delay));
-            if (layer.Prepare()) { await BuildAsync(); watch.Start(); return; }
+            if (Fake || layer.Prepare()) { await ReconcileAsync("start"); watch.Start(); return; }
             if (layer.Shape.Kind == ShapeKind.NotSplit)
             {
                 Fail("This version of Windows has no desktop layer behind the icons. Troubleshooting → Draw Above Icons draws over them instead.");
@@ -76,44 +107,47 @@ sealed class Desktop : IDisposable
         Changed?.Invoke();
     }
 
-    async Task BuildAsync()
+    /// The monitors now: the fake layout when there is one, else Windows' (with paths and names).
+    public IReadOnlyList<MonitorInfo> CurrentMonitors()
     {
-        if (env == null) return;
-        if (building) { rebuildAgain = true; return; }
-        building = true;
-        try
+        if (testLayout != null) return testLayout;
+        if (fakeFile == null) return N.Monitors();
+        try { lastFakeFile = Displays.FromJson(File.ReadAllText(fakeFile)); }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or JsonException or FormatException)
         {
-            do
-            {
-                rebuildAgain = false;
-                foreach (var plan in Layout.Plan(N.Monitors()))
-                {
-                    var surface = new Surface(plan, layer.CreateHost(plan));
-                    surface.Lost += s => { Log.Warn($"surface {s.Plan.Device}: browser process lost; rebuilding"); ScheduleRebuild(); };
-                    surface.Loaded += _ => PageReady?.Invoke();
-                    surfaces.Add(surface);
-                    await surface.StartAsync(env, paths, bing);
-                    if (Paused) await surface.SetVisibleAsync(false);
-                }
-                FixOverlay();
-            } while (rebuildAgain && !disposed && await TearDown());
-            Problem = null;
-            Changed?.Invoke();
+            // Mid-save, or a typo: keep what was there until the next edit.
+            Log.Warn($"displays: can't read {fakeFile} ({e.Message}); keeping the last layout");
         }
-        catch (Exception e) when (e is COMException or InvalidOperationException or ArgumentException)
-        {
-            Log.Error($"desktop: couldn't build the surfaces: {e}");
-        }
-        finally { building = false; }
+        return lastFakeFile ?? [];
     }
 
-    /// Displays, DPI or the taskbar changed: rebuild once things settle (500 ms).
-    public void ScheduleRebuild()
+    /// Where each surface's host goes: on its monitor, or for a fake layout, fitted to the real primary
+    /// monitor's work area with the page's scale shrunk to match.
+    IReadOnlyDictionary<string, HostPlacement> Placements(IReadOnlyList<SurfacePlan> plans)
+    {
+        if (!Fake) return plans.ToDictionary(p => p.Key, p => new HostPlacement(p.Bounds, p.Scale));
+        var real = N.Monitors();
+        return FakeLayout.Fit(plans, (real.FirstOrDefault(m => m.Primary) ?? real[0]).Work);
+    }
+
+    string UrlFor(SurfacePlan plan) => PageUrl.Desktop(plan.Insets, Mode == MonitorMode.Different ? plan.Key : null);
+
+    /// Displays, DPI or the taskbar changed (or the fake file did): reconcile once things settle (500 ms).
+    public void ScheduleReconcile()
     {
         debounce.Stop();
         debounce.Start();
     }
 
+    /// The surfaces can't be kept (a browser process died, the host kind changed): rebuild once things settle.
+    public void ScheduleRebuild()
+    {
+        rebuildPending = true;
+        ScheduleReconcile();
+    }
+
+    /// Everything starts over: every host and page is made again. Only for a change of host kind
+    /// (Draw Above Icons) or a lost browser; a display change reconciles instead.
     public async Task RebuildAsync(string why)
     {
         if (disposed || env == null) return;
@@ -122,7 +156,114 @@ sealed class Desktop : IDisposable
         await TearDown();
         // Also the way out of a failed start: ticking Draw Above Icons on a Windows build with no
         // layer behind the icons lands here, so the 5 s watch starts with the first surfaces.
-        if (layer.Prepare()) { await BuildAsync(); if (surfaces.Count > 0) watch.Start(); }
+        if (Fake || layer.Prepare()) { await ReconcileAsync(why); if (surfaces.Count > 0) watch.Start(); }
+    }
+
+    /// Brings the surfaces in line with the monitors, keeping every page that can be kept (§10.25.6):
+    /// removed monitors lose theirs, kept ones move and resize in place (navigating only when the URL
+    /// changes), new ones get one. A request during a pass runs another pass after it.
+    public async Task ReconcileAsync(string why)
+    {
+        if (disposed || env == null) return;
+        if (building) { reconcileAgain = true; return; }
+        building = true;
+        try
+        {
+            do
+            {
+                if (rebuildAgain) { Log.Info("desktop: rebuilding (asked for during a pass)"); await TearDown(); }
+                reconcileAgain = rebuildAgain = false;
+                await ReconcileOnceAsync(why);
+                why = "changed again during the last pass";
+            } while ((reconcileAgain || rebuildAgain) && !disposed);
+            Problem = null;
+        }
+        catch (Exception e) when (e is COMException or InvalidOperationException or ArgumentException)
+        {
+            Log.Error($"desktop: couldn't reconcile the surfaces: {e}");
+        }
+        finally { building = false; }
+        Changed?.Invoke();
+    }
+
+    async Task ReconcileOnceAsync(string why)
+    {
+        if (surfaces.Count > 0 && hostsFake != Fake)
+        {
+            Log.Info($"reconcile: {(Fake ? "real → fake" : "fake → real")} monitors; starting over");
+            await TearDown();
+        }
+        if (surfaces.Count == 0) hostsFake = Fake;
+        var plans = Layout.Plan(CurrentMonitors());
+        var where = Placements(plans);
+        var change = Layout.Diff(surfaces.Select(s => s.Plan).ToList(), plans);
+        Log.Info($"reconcile ({why}): {plans.Count} monitor(s){(Fake ? " (fake)" : "")}, {change.Kept.Count} kept, {change.Added.Count} added, {change.Removed.Count} removed");
+        foreach (var gone in change.Removed)
+        {
+            var s = surfaces.First(x => x.Plan.Key == gone.Key);
+            surfaces.Remove(s);
+            s.Dispose();
+            layer.DestroyHost(s.Host);
+            Log.Info($"reconcile: removed {gone.Key}");
+        }
+        foreach (var (old, plan) in change.Kept)
+        {
+            var s = surfaces.First(x => x.Plan.Key == old.Key);
+            var placement = where[plan.Key];
+            var notes = new List<string>();
+            if (Layout.Moved(old, plan) || s.Placement != placement)
+            {
+                layer.MoveHost(s.Host, placement.Screen);
+                // A fake monitor can stay put while its window moves (the layout's fit changed).
+                notes.Add(Layout.Moved(old, plan) ? $"moved {Size(old)} → {Size(plan)}"
+                    : $"window to {placement.Screen.Left},{placement.Screen.Top} {placement.Screen.Width}x{placement.Screen.Height} scale {placement.RasterizationScale:0.###}");
+            }
+            s.Resize(plan, placement);   // also takes the new plan's number and name
+            if (Layout.NeedsNavigate(old, plan))
+            {
+                s.Navigate(UrlFor(plan));
+                notes.Add($"insets {old.Insets.ToParam()} → {plan.Insets.ToParam()}");
+            }
+            Log.Info($"reconcile: kept {plan.Key}{(notes.Count > 0 ? $" ({string.Join(", ", notes)})" : " (unchanged)")}");
+        }
+        foreach (var plan in change.Added)
+        {
+            var placement = where[plan.Key];
+            var surface = new Surface(plan, placement, hostsFake ? layer.CreateFakeHost(plan, placement) : layer.CreateHost(plan));
+            surface.Lost += s => { Log.Warn($"surface {s.Plan.Key}: browser process lost; rebuilding"); ScheduleRebuild(); };
+            surface.Loaded += _ => PageReady?.Invoke();
+            surfaces.Add(surface);
+            Log.Info($"reconcile: added {plan.Key} (monitor {plan.Number}, {plan.Device}, {Size(plan)})");
+            var url = UrlFor(plan);
+            await surface.StartAsync(env!, paths, bing, url);
+            if (UrlFor(plan) != url) surface.Navigate(UrlFor(plan));   // the mode changed while it started
+            if (Paused) await surface.SetVisibleAsync(false);   // Task 4 replaces this with ApplyPowerAsync
+        }
+        // Monitor 1 first: it's the one Next and Previous step, and the tray asks.
+        surfaces.Sort((a, b) => a.Plan.Number.CompareTo(b.Plan.Number));
+        FixOverlay();
+    }
+
+    static string Size(SurfacePlan p) => $"{p.Bounds.Width}x{p.Bounds.Height}{(p.Scale != 1 ? $"@{p.Scale:0.##}" : "")}";
+
+    /// Same or Different (§10.25.6): every page navigates to its URL for the new mode; no host is
+    /// made again. Saving the choice to settings.json is the caller's job (the tray's).
+    public Task SetModeAsync(MonitorMode mode)
+    {
+        if (mode == Mode) return Task.CompletedTask;
+        Mode = mode;
+        Log.Info($"monitors: {mode.ToString().ToLowerInvariant()}");
+        foreach (var s in surfaces) s.Navigate(UrlFor(s.Plan));
+        Changed?.Invoke();
+        return Task.CompletedTask;
+    }
+
+    /// For the self-test: a fake layout in memory (null: back to the real monitors, or WP_FAKE_DISPLAYS),
+    /// reconciled at once, without the debounce.
+    internal Task UseFakeDisplaysForTest(IReadOnlyList<MonitorInfo>? layout)
+    {
+        testLayout = layout;
+        return ReconcileAsync(layout == null ? "self-test: real monitors" : "self-test: fake layout");
     }
 
     async Task<bool> TearDown()
@@ -138,12 +279,14 @@ sealed class Desktop : IDisposable
     public async Task OnShellRestartedAsync()
     {
         if (restarting || disposed || env == null) return;
+        // Fake hosts are ordinary windows: they don't die with Explorer.
+        if (hostsFake && surfaces.Count > 0) { Log.Info("shell restart: the hosts are fake windows; nothing to re-bind"); return; }
         restarting = true;
         try
         {
             for (var i = 0; i < 20 && !layer.Prepare(); i++) await Task.Delay(500);
             if (DesktopShape.AttachTarget(layer.Shape).Parent == 0 && !layer.DrawAboveIcons) { Log.Warn("shell restart: no layer yet"); return; }
-            if (surfaces.Count == 0) { await BuildAsync(); watch.Start(); return; }
+            if (surfaces.Count == 0) { await ReconcileAsync("shell restarted"); watch.Start(); return; }
             foreach (var s in surfaces)
             {
                 layer.DestroyHost(s.Host);   // normally already gone with Explorer
@@ -157,8 +300,11 @@ sealed class Desktop : IDisposable
     void Watch()
     {
         if (surfaces.Count == 0) return;
-        if (!layer.ParentAlive) { Log.Warn("watch: the layer's parent is gone"); _ = OnShellRestartedAsync(); return; }
-        foreach (var s in surfaces) layer.CheckAndRepair(s.Host);
+        if (!hostsFake)
+        {
+            if (!layer.ParentAlive) { Log.Warn("watch: the layer's parent is gone"); _ = OnShellRestartedAsync(); return; }
+            foreach (var s in surfaces) layer.CheckAndRepair(s.Host);
+        }
         FixOverlay();
     }
 
@@ -191,26 +337,32 @@ sealed class Desktop : IDisposable
         Changed?.Invoke();
     }
 
-    /// A pick, on every monitor (Same mode), saved so the next start shows it too.
-    public Task ShowAsync(string id) => RunEverywhereAsync(ShowScript(id));
+    /// A pick, saved so the next start shows it too: on one monitor (by key), or on every one (null).
+    /// In Same mode a pick on one reaches the others through `wp:current`.
+    public async Task ShowAsync(string id, string? key = null)
+    {
+        foreach (var s in surfaces.Where(s => key == null || s.Plan.Key == key)) await s.EvalAsync(ShowScript(id));
+    }
 
     static string ShowScript(string id) =>
         $"window.WP && WP.player && WP.player.show({JsonSerializer.Serialize(id)}, {{ persist: true }})";
 
-    /// Next or Previous. The first page steps (and says what's next in its toast); the others are
-    /// told the result. Stepping each page would race: the first's save reaches the others as a
-    /// storage event, and a page that had already followed it would step one further.
-    public async Task CycleAsync(int step)
+    /// Next or Previous, on one monitor (by key) or all (null). In Different mode each page steps its
+    /// own choice. In Same mode one page steps (and says what's next in its toast) and the others are
+    /// told the result: stepping each would race, as the first's save reaches the others as a storage
+    /// event and a page that had already followed it would step one further.
+    public async Task CycleAsync(int step, string? key = null)
     {
-        if (surfaces.Count == 0) return;
-        var raw = await surfaces[0].EvalAsync($"window.WP && WP.player ? (WP.player.cycle({step}), WP.player.choice) : null");
+        var script = $"window.WP && WP.player ? (WP.player.cycle({step}), WP.player.choice) : null";
+        if (Mode == MonitorMode.Different)
+        {
+            foreach (var s in surfaces.Where(s => key == null || s.Plan.Key == key)) await s.EvalAsync(script);
+            return;
+        }
+        if (surfaces.FirstOrDefault(s => key == null || s.Plan.Key == key) is not { } first) return;
+        var raw = await first.EvalAsync(script);
         if (JsonSerializer.Deserialize<string?>(raw) is not { } id) return;
-        foreach (var s in surfaces.Skip(1)) await s.EvalAsync(ShowScript(id));
-    }
-
-    public async Task RunEverywhereAsync(string js)
-    {
-        foreach (var s in surfaces) await s.EvalAsync(js);
+        foreach (var s in surfaces.Where(s => s != first)) await s.EvalAsync(ShowScript(id));
     }
 
     public async Task<string?> EvalFirstAsync(string js) => surfaces.Count == 0 ? null : await surfaces[0].EvalAsync(js);
@@ -234,6 +386,7 @@ sealed class Desktop : IDisposable
         envReady.TrySetResult(null);   // a settings window still waiting gives up
         watch.Stop();
         debounce.Stop();
+        fakeWatcher?.Dispose();
         foreach (var s in surfaces) { s.Dispose(); layer.DestroyHost(s.Host); }
         surfaces.Clear();
         Shell.Repaint();

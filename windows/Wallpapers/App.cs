@@ -29,7 +29,7 @@ sealed class App : ApplicationContext
         AppDomain.CurrentDomain.UnhandledException += (_, e) => Crash(e.ExceptionObject as Exception);
         Layer = new DesktopLayer(Log.Info) { DrawAboveIcons = Settings.DrawAboveIcons };
         Layer.EndSession += () => Cleanup("logoff");
-        Desktop = new Desktop(paths, Layer);
+        Desktop = new Desktop(paths, Layer, Settings.Monitors);
         Problem = paths.CheckWebRoot();
         if (Problem != null) Log.Error(Problem);
         else _ = Desktop.StartAsync();

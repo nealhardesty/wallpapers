@@ -11,7 +11,9 @@ namespace Wallpapers;
 /// re-bound to the new host (W0.2, §10.25.5).
 sealed class Surface : IDisposable
 {
-    public SurfacePlan Plan { get; }
+    public SurfacePlan Plan { get; private set; }
+    /// Where its host is and the page's scale: the monitor itself, or its spot in a fake layout.
+    public HostPlacement Placement { get; private set; }
     public IntPtr Host { get; private set; }
     public CoreWebView2? Web => controller?.CoreWebView2;
     public bool Visible => controller?.IsVisible ?? false;
@@ -25,25 +27,26 @@ sealed class Surface : IDisposable
     readonly NativeWindow keeper = new();
     readonly Queue<DateTime> crashes = new();
 
-    public Surface(SurfacePlan plan, IntPtr host)
+    public Surface(SurfacePlan plan, HostPlacement placement, IntPtr host)
     {
         Plan = plan;
+        Placement = placement;
         Host = host;
     }
 
-    public async Task StartAsync(CoreWebView2Environment env, AppPaths paths, BingJson bing)
+    public async Task StartAsync(CoreWebView2Environment env, AppPaths paths, BingJson bing, string url)
     {
         // Hidden, never shown, placed on this monitor (some WebView2 queries look at its parent's monitor).
         keeper.CreateHandle(new CreateParams
         {
-            Caption = "WallpapersKeeper", X = Plan.Bounds.Left, Y = Plan.Bounds.Top, Width = 1, Height = 1,
+            Caption = "WallpapersKeeper", X = Placement.Screen.Left, Y = Placement.Screen.Top, Width = 1, Height = 1,
             Style = unchecked((int)N.WS_POPUP), ExStyle = (int)(N.WS_EX_TOOLWINDOW | N.WS_EX_NOACTIVATE),
         });
         controller = await env.CreateCoreWebView2CompositionControllerAsync(keeper.Handle);
         controller.BoundsMode = CoreWebView2BoundsMode.UseRawPixels;
         controller.ShouldDetectMonitorScaleChanges = false;
-        controller.RasterizationScale = Plan.Scale;
-        controller.Bounds = new Rectangle(0, 0, Plan.Bounds.Width, Plan.Bounds.Height);
+        controller.RasterizationScale = Placement.RasterizationScale;
+        controller.Bounds = new Rectangle(0, 0, Placement.Screen.Width, Placement.Screen.Height);
         controller.DefaultBackgroundColor = Color.Black;
         dcomp = new Dcomp();
         dcomp.BindTo(Host);
@@ -57,8 +60,27 @@ sealed class Surface : IDisposable
             if (!e.IsSuccess) Log.Warn($"surface {Plan.Device}: navigation failed ({e.WebErrorStatus})");
             else Loaded?.Invoke(this);
         };
-        controller.CoreWebView2.Navigate(PageUrl.Desktop(Plan.Insets));
-        Log.Info($"surface {Plan.Device}: started on host {Host:X}");
+        controller.CoreWebView2.Navigate(url);
+        Log.Info($"surface {Plan.Key} ({Plan.Device}): started on host {Host:X}");
+    }
+
+    /// The monitor moved, resized or changed scale (its host has already moved): the same page at the
+    /// new size and scale. No reload.
+    public void Resize(SurfacePlan plan, HostPlacement placement)
+    {
+        Plan = plan;
+        Placement = placement;
+        if (controller == null) return;
+        N.SetWindowPos(keeper.Handle, IntPtr.Zero, placement.Screen.Left, placement.Screen.Top, 0, 0, N.SWP_NOSIZE | N.SWP_NOZORDER | N.SWP_NOACTIVATE);
+        controller.RasterizationScale = placement.RasterizationScale;
+        controller.Bounds = new Rectangle(0, 0, placement.Screen.Width, placement.Screen.Height);
+    }
+
+    /// A new URL (new insets, or the monitor mode changed): this one does load the page again.
+    public void Navigate(string url)
+    {
+        Log.Info($"surface {Plan.Key}: navigating to {url}");
+        Web?.Navigate(url);
     }
 
     /// Explorer restarted: the same page, the same visual, a new host. No reload.
