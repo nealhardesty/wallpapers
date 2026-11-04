@@ -259,7 +259,9 @@ sealed class Desktop : IDisposable
                 continue;
             }
             if (UrlFor(plan) != url) surface.Navigate(UrlFor(plan));   // the mode changed while it started
-            await ApplyPowerAsync(surface);   // a page that starts while locked or paused doesn't draw
+            // A page that starts while locked or paused doesn't draw. IsVisible is set now; the page is
+            // told when it loads, so the pass doesn't wait on a script.
+            _ = ApplyPowerAsync(surface);
         }
         // Monitor 1 first: it's the one Next and Previous step, and the tray asks.
         surfaces.Sort((a, b) => a.Plan.Number.CompareTo(b.Plan.Number));
@@ -361,11 +363,9 @@ sealed class Desktop : IDisposable
 
     /// Pause, power and coverage, to every page (§10.25.9): a surface is visible when not paused, not
     /// hidden everywhere and not covered; each page gets `WP.power` with the rest. Call it whenever
-    /// any of them changes.
-    public async Task ApplyPowerAsync()
-    {
-        foreach (var s in surfaces.ToList()) await ApplyPowerAsync(s);
-    }
+    /// any of them changes. Every surface's IsVisible is set before any script is awaited, so one
+    /// slow or closing page can't hold the others in the wrong state.
+    public Task ApplyPowerAsync() => Task.WhenAll(surfaces.ToList().Select(ApplyPowerAsync));
 
     Task ApplyPowerAsync(Surface s)
     {

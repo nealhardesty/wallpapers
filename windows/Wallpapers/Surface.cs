@@ -60,7 +60,7 @@ sealed class Surface : IDisposable
         controller.CoreWebView2.NavigationCompleted += (_, e) =>
         {
             if (!e.IsSuccess) { Log.Warn($"surface {Plan.Device}: navigation failed ({e.WebErrorStatus})"); return; }
-            if (powerJson != null) _ = EvalAsync(PowerScript(powerJson));
+            if (powerJson != null) _ = TellPowerAsync(powerJson);
             Loaded?.Invoke(this);
         };
         controller.CoreWebView2.Navigate(url);
@@ -98,19 +98,38 @@ sealed class Surface : IDisposable
     /// Pause and power (§10.25.9): hidden web views stop rendering outright (W0.2), and the page is
     /// told `WP.power(json)` so it pauses cleanly and picks its quality. Nothing happens when neither
     /// changed; every load (a reload, a navigate) is told again, as a new page knows nothing.
-    public async Task ApplyPowerAsync(bool visible, string json)
+    /// IsVisible is set before the first await, so a caller that starts this on every surface has
+    /// them all right at once; the script can't throw (a closing or crashed page is logged).
+    public Task ApplyPowerAsync(bool visible, string json)
     {
-        if (controller == null || (visible == controller.IsVisible && json == powerJson)) return;
-        if (visible != controller.IsVisible)
+        if (controller == null) return Task.CompletedTask;
+        try
         {
-            controller.IsVisible = visible;
-            Log.Info($"surface {Plan.Device}: IsVisible={(visible ? "true" : "false")}");
+            if (visible == controller.IsVisible && json == powerJson) return Task.CompletedTask;
+            if (visible != controller.IsVisible)
+            {
+                controller.IsVisible = visible;
+                Log.Info($"surface {Plan.Device}: IsVisible={(visible ? "true" : "false")}");
+            }
+        }
+        catch (Exception e) when (e is COMException or InvalidOperationException)
+        {
+            // Its browser process is gone (Desktop rebuilds it); the others must still get theirs.
+            Log.Warn($"surface {Plan.Device}: couldn't set IsVisible ({e.GetType().Name}: {e.Message})");
+            return Task.CompletedTask;
         }
         powerJson = json;
-        await EvalAsync(PowerScript(json));
+        return TellPowerAsync(json);
     }
 
-    static string PowerScript(string json) => $"window.WP && WP.power && WP.power({json})";
+    async Task TellPowerAsync(string json)
+    {
+        try { await EvalAsync($"window.WP && WP.power && WP.power({json})"); }
+        catch (Exception e) when (e is COMException or InvalidOperationException or ObjectDisposedException)
+        {
+            Log.Warn($"surface {Plan.Device}: couldn't tell the page its power state ({e.GetType().Name}: {e.Message})");
+        }
+    }
 
     public async Task<string> EvalAsync(string js) => Web == null ? "null" : await Web.ExecuteScriptAsync(js);
 
