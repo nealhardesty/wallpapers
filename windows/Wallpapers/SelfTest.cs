@@ -124,6 +124,11 @@ sealed class SelfTest
             return;
         }
         var surfaces = desktop.Surfaces.ToList();
+        // Coverage (§10.25.9) is right to hide a monitor under a maximized terminal, but the checks
+        // below count frames: off from here on, saying what it saw once its 2 s poll has seen every surface.
+        await Wait(2500);
+        var covered = await desktop.CoverageOffForTest();
+        Line("INFO", "coverage", covered.Count == 0 ? "no monitor covered; off for the rest of the test" : $"covered: {string.Join(", ", covered)}; off for the rest of the test");
 
         // 1. The layer, and every host in it, right under the icons; one surface per monitor.
         var shape = layer.Shape;

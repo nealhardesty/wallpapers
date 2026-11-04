@@ -169,6 +169,33 @@ static class N
         return length >= 4 ? (setting, Marshal.ReadInt32(l, 20)) : null;
     }
 
+    // ---- Coverage (Coverage.cs, SPEC §10.25.9) -----------------------------------------------
+    // Values from the Windows SDK headers (WinUser.h, dwmapi.h).
+    public const uint EVENT_SYSTEM_FOREGROUND = 0x3, EVENT_SYSTEM_MOVESIZEEND = 0xB, EVENT_SYSTEM_MINIMIZESTART = 0x16, EVENT_SYSTEM_MINIMIZEEND = 0x17;
+    public const uint EVENT_OBJECT_SHOW = 0x8002, EVENT_OBJECT_HIDE = 0x8003, EVENT_OBJECT_LOCATIONCHANGE = 0x800B, EVENT_OBJECT_CLOAKED = 0x8017, EVENT_OBJECT_UNCLOAKED = 0x8018;
+    public const uint WINEVENT_OUTOFCONTEXT = 0, WINEVENT_SKIPOWNPROCESS = 2;
+    public const int OBJID_WINDOW = 0, CHILDID_SELF = 0;
+    public const int DWMWA_EXTENDED_FRAME_BOUNDS = 9, DWMWA_CLOAKED = 14;
+
+    public delegate void WinEventProc(IntPtr hook, uint ev, IntPtr h, int idObject, int idChild, uint thread, uint time);
+    [DllImport("user32.dll")] public static extern IntPtr SetWinEventHook(uint min, uint max, IntPtr module, WinEventProc proc, uint pid, uint thread, uint flags);
+    [DllImport("user32.dll")] public static extern bool UnhookWinEvent(IntPtr hook);
+    [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr h);
+    [DllImport("user32.dll")] public static extern bool GetLayeredWindowAttributes(IntPtr h, out uint key, out byte alpha, out uint flags);
+    [DllImport("dwmapi.dll")] static extern int DwmGetWindowAttribute(IntPtr h, int attribute, out int value, int size);
+    [DllImport("dwmapi.dll")] static extern int DwmGetWindowAttribute(IntPtr h, int attribute, out RECT value, int size);
+
+    /// Cloaked by DWM: on another virtual desktop, behind Task View, or a suspended UWP app.
+    public static bool IsCloaked(IntPtr h) => DwmGetWindowAttribute(h, DWMWA_CLOAKED, out int c, sizeof(int)) == 0 && c != 0;
+
+    /// The visible frame (without the invisible resize border); the window rect when DWM can't say.
+    public static Rect FrameOf(IntPtr h) =>
+        DwmGetWindowAttribute(h, DWMWA_EXTENDED_FRAME_BOUNDS, out RECT r, Marshal.SizeOf<RECT>()) == 0 ? r.ToRect() : RectOf(h);
+
+    /// Layered and fully transparent through SetLayeredWindowAttributes.
+    public static bool IsLayeredAlphaZero(IntPtr h, uint ex) =>
+        (ex & WS_EX_LAYERED) != 0 && GetLayeredWindowAttributes(h, out _, out var alpha, out var flags) && (flags & LWA_ALPHA) != 0 && alpha == 0;
+
     public static List<IntPtr> TopLevel(string cls)
     {
         var list = new List<IntPtr>();

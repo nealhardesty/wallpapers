@@ -13,6 +13,7 @@ sealed class Desktop : IDisposable
     readonly AppPaths paths;
     readonly DesktopLayer layer;
     readonly Power power;
+    readonly Coverage coverage;
     readonly BingJson bing = new();
     readonly List<Surface> surfaces = [];
     readonly System.Windows.Forms.Timer watch = new() { Interval = 5000 };
@@ -35,7 +36,7 @@ sealed class Desktop : IDisposable
     public Task<CoreWebView2Environment?> EnvironmentReady => envReady.Task;
     public BingJson Bing => bing;
     public bool Paused { get; private set; }
-    /// Whether a monitor (by key) is covered by other windows; Coverage sets it (§10.25.9).
+    /// Whether a monitor (by key) is covered by other windows: Coverage's, set in the constructor (§10.25.9).
     public Func<string, bool> Covered { get; set; } = _ => false;
     public MonitorMode Mode { get; private set; }
     /// The monitors are a fake layout (WP_FAKE_DISPLAYS, or the self-test's), in ordinary windows.
@@ -63,6 +64,11 @@ sealed class Desktop : IDisposable
         };
         layer.DisplayChanged += ScheduleReconcile;
         layer.ShellRestarted += () => _ = OnShellRestartedAsync();
+        // Our WebView2 processes' windows are ours too; coverage is off for fake layouts (§10.25.9).
+        coverage = new Coverage(() => env?.GetProcessInfos().Select(p => p.ProcessId) ?? []);
+        Covered = coverage.IsCovered;
+        coverage.Changed += () => _ = ApplyPowerAsync();
+        if (fakeFile == null) coverage.Start(() => Fake ? [] : surfaces.Select(s => s.Plan).ToList());
         if (fakeFile != null)
         {
             Log.Info($"displays: fake, from {fakeFile} (WP_FAKE_DISPLAYS)");
@@ -290,6 +296,16 @@ sealed class Desktop : IDisposable
         return ReconcileAsync(layout == null ? "self-test: real monitors" : "self-test: fake layout");
     }
 
+    /// For the self-test: it counts frames, and the terminal it runs from may be maximized over the
+    /// desktop. Returns the keys coverage had hidden.
+    internal async Task<List<string>> CoverageOffForTest()
+    {
+        var covered = surfaces.Select(s => s.Plan.Key).Where(Covered).ToList();
+        Covered = _ => false;
+        await ApplyPowerAsync();
+        return covered;
+    }
+
     async Task<bool> TearDown()
     {
         foreach (var s in surfaces) { s.Dispose(); layer.DestroyHost(s.Host); }
@@ -423,6 +439,7 @@ sealed class Desktop : IDisposable
         envReady.TrySetResult(null);   // a settings window still waiting gives up
         watch.Stop();
         debounce.Stop();
+        coverage.Dispose();
         fakeWatcher?.Dispose();
         foreach (var s in surfaces) { s.Dispose(); layer.DestroyHost(s.Host); }
         surfaces.Clear();
