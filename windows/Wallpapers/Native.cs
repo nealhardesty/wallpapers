@@ -51,11 +51,11 @@ static class N
 
     // ---- Windows and the desktop tree ------------------------------------------------------
     public const uint WS_CHILD = 0x40000000, WS_POPUP = 0x80000000, WS_VISIBLE = 0x10000000, WS_CLIPCHILDREN = 0x02000000, WS_CLIPSIBLINGS = 0x04000000;
-    public const uint WS_EX_LAYERED = 0x80000, WS_EX_NOACTIVATE = 0x08000000, WS_EX_TOOLWINDOW = 0x80, WS_EX_TRANSPARENT = 0x20;
+    public const uint WS_EX_LAYERED = 0x80000, WS_EX_NOACTIVATE = 0x08000000, WS_EX_TOOLWINDOW = 0x80, WS_EX_TRANSPARENT = 0x20, WS_EX_TOPMOST = 0x8;
     public const int GWL_STYLE = -16, GWL_EXSTYLE = -20;
     public const uint GW_HWNDNEXT = 2, GW_HWNDPREV = 3, GW_CHILD = 5;
     public const uint SWP_NOSIZE = 1, SWP_NOMOVE = 2, SWP_NOZORDER = 4, SWP_NOACTIVATE = 0x10, SWP_SHOWWINDOW = 0x40;
-    public static readonly IntPtr HWND_TOP = IntPtr.Zero;
+    public static readonly IntPtr HWND_TOP = IntPtr.Zero, HWND_TOPMOST = -1;
     public const uint LWA_ALPHA = 2, SMTO_NORMAL = 0;
 
     public delegate bool EnumWindowsProc(IntPtr h, IntPtr l);

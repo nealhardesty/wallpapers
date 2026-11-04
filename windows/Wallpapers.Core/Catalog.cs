@@ -88,13 +88,32 @@ public sealed record CatalogInfo(string Current, string Resolved, IReadOnlyList<
         var suffix = paused ? " · paused" : "";
         var name = Current == Resolved ? NameOf(Current) : $"{NameOf(Resolved)} ({NameOf(Current)})";
         var room = TooltipMax - prefix.Length - suffix.Length;
-        if (name.Length > room)
-        {
-            var cut = room - 1;
-            if (char.IsHighSurrogate(name[cut - 1])) cut--;   // never half an emoji
-            name = name[..cut] + "…";
-        }
-        return prefix + name + suffix;
+        return prefix + Cut(name, room) + suffix;
+    }
+
+    /// Every monitor's (in monitor order): W1's single form when there's one, or when they all show the
+    /// same thing; else what each shows, "Wallpapers: Snow · Fish Tank". Long names are cut evenly:
+    /// each to the same length, short ones kept whole, so the whole is never past TooltipMax.
+    public static string Tooltip(IReadOnlyList<CatalogInfo> perMonitor, bool paused)
+    {
+        var first = perMonitor[0];
+        if (perMonitor.All(c => c.Current == first.Current && c.Resolved == first.Resolved)) return first.Tooltip(paused);
+        const string prefix = "Wallpapers: ", between = " · ";
+        var suffix = paused ? " · paused" : "";
+        var names = perMonitor.Select(c => c.NameOf(c.Resolved)).ToList();
+        var room = TooltipMax - prefix.Length - suffix.Length - between.Length * (names.Count - 1);
+        var each = names.Max(n => n.Length);
+        while (each > 2 && names.Sum(n => Math.Min(n.Length, each)) > room) each--;
+        return prefix + string.Join(between, names.Select(n => Cut(n, each))) + suffix;
+    }
+
+    /// At most `room` characters, ending in "…" when cut; never half an emoji.
+    static string Cut(string name, int room)
+    {
+        if (name.Length <= room) return name;
+        var cut = room - 1;
+        if (cut > 0 && char.IsHighSurrogate(name[cut - 1])) cut--;
+        return name[..cut] + "…";
     }
 }
 

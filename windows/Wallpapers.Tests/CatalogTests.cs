@@ -50,6 +50,54 @@ public class CatalogTests
         Assert.EndsWith("… · paused", tip);
     }
 
+    static CatalogInfo Showing(string id, string name) => new(id, id, [new CatalogEntry(id, name, "*", false)]);
+
+    [Fact]
+    public void Tooltip_joins_monitors()
+    {
+        IReadOnlyList<CatalogInfo> two = [Showing("snow", "Snow"), Showing("fish-tank", "Fish Tank")];
+        Assert.Equal("Wallpapers: Snow · Fish Tank", CatalogInfo.Tooltip(two, paused: false));
+        Assert.Equal("Wallpapers: Snow · Fish Tank · paused", CatalogInfo.Tooltip(two, paused: true));
+        // Seasonal says what it's showing; two monitors of three that agree are still named apart.
+        IReadOnlyList<CatalogInfo> three = [Page(), Showing("snow", "Snow"), Showing("snow", "Snow")];
+        Assert.Equal("Wallpapers: Harvest Valley · Snow · Snow", CatalogInfo.Tooltip(three, paused: false));
+    }
+
+    [Fact]
+    public void Tooltip_same_everywhere_is_the_single_form()
+    {
+        Assert.Equal(Page().Tooltip(paused: false), CatalogInfo.Tooltip([Page()], paused: false));
+        Assert.Equal("Wallpapers: Harvest Valley (Seasonal)", CatalogInfo.Tooltip([Page(), Page()], paused: false));
+        Assert.Equal("Wallpapers: Snow · paused", CatalogInfo.Tooltip([Showing("snow", "Snow"), Showing("snow", "Snow")], paused: true));
+    }
+
+    [Fact]
+    public void Tooltip_cuts_long_names_evenly_within_63()
+    {
+        // Two long names: each is cut to the same length, and the whole fits.
+        IReadOnlyList<CatalogInfo> longs = [Showing("a", new string('a', 50)), Showing("b", new string('b', 50))];
+        var tip = CatalogInfo.Tooltip(longs, paused: true);
+        Assert.True(tip.Length <= CatalogInfo.TooltipMax, $"{tip.Length}: {tip}");
+        Assert.EndsWith(" · paused", tip);
+        var names = tip["Wallpapers: ".Length..^" · paused".Length].Split(" · ");
+        Assert.Equal(2, names.Length);
+        Assert.Equal(names[0].Length, names[1].Length);
+        Assert.All(names, n => Assert.EndsWith("…", n));
+        Assert.True(names[0].Length >= 15, "the room is shared, not wasted");
+
+        // A short name stays whole; the long one gets the rest of the room.
+        tip = CatalogInfo.Tooltip([Showing("snow", "Snow"), Showing("x", new string('x', 100))], paused: false);
+        Assert.Equal(CatalogInfo.TooltipMax, tip.Length);
+        Assert.StartsWith("Wallpapers: Snow · xxx", tip);
+        Assert.EndsWith("x…", tip);
+
+        // Never half an emoji.
+        tip = CatalogInfo.Tooltip([Showing("a", string.Concat(Enumerable.Repeat("❄️🐟", 30))), Showing("snow", "Snow")], paused: false);
+        Assert.True(tip.Length <= CatalogInfo.TooltipMax);
+        for (var i = 0; i < tip.Length; i++)
+            if (char.IsHighSurrogate(tip[i])) Assert.True(i + 1 < tip.Length && char.IsLowSurrogate(tip[i + 1]), $"half an emoji at {i}: {tip}");
+    }
+
     [Fact]
     public void The_thumbnail_script_asks_for_every_real_wallpaper()
     {

@@ -13,16 +13,19 @@ sealed class SettingsWindow : Form
 {
     const int DefaultWidth = 1280, DefaultHeight = 800;   // logical px
     const string PanelClosed = "panel-closed";
+    const string BaseTitle = "Wallpapers Settings";
 
     readonly App app;
     readonly WebView2 web = new() { Dock = DockStyle.Fill, DefaultBackgroundColor = Color.Black };
     Task? setUp;
+    /// The page it should show, and the one it does (null while hidden).
+    string? wanted, shown;
     bool quitting;
 
     public SettingsWindow(App app)
     {
         this.app = app;
-        Text = "Wallpapers Settings";
+        Text = BaseTitle;
         Icon = Tray.LoadIcon();
         BackColor = Color.Black;
         StartPosition = FormStartPosition.Manual;
@@ -32,13 +35,17 @@ sealed class SettingsWindow : Form
         Place();
     }
 
-    /// Opens it, or brings it to the front when it's already open.
-    public async Task ShowOrFocusAsync()
+    /// Opens it, or brings it to the front when it's already open. In Different mode it edits one
+    /// monitor's choice (monitor 1's when none is named); it's one window, so another monitor's
+    /// Settings… navigates it there.
+    public async Task ShowOrFocusAsync(SurfacePlan? monitor = null)
     {
+        (wanted, Text) = Target(monitor);
         if (Visible)
         {
             if (WindowState == FormWindowState.Minimized) WindowState = FormWindowState.Normal;
             Activate();
+            Go();
             return;
         }
         Place();
@@ -48,14 +55,36 @@ sealed class SettingsWindow : Form
         {
             await (setUp ??= SetUpAsync());
             if (web.CoreWebView2 == null) { Hide(); return; }
-            web.CoreWebView2.Navigate(PageUrl.Settings());
-            Log.Info("settings: shown");
+            Go();   // the latest ask: another may have come while the page was being set up
         }
         catch (Exception e) when (e is COMException or InvalidOperationException or WebView2RuntimeNotFoundException)
         {
             Log.Error($"settings: couldn't start the page: {e.Message}");
             Hide();
         }
+    }
+
+    /// The monitor mode changed: an open window follows it (monitor 1's in Different, the shared one in Same).
+    public void FollowMode()
+    {
+        if (!Visible) return;
+        (wanted, Text) = Target(null);
+        Go();
+    }
+
+    (string Url, string Title) Target(SurfacePlan? monitor)
+    {
+        if (app.Desktop.Mode == MonitorMode.Different && (monitor ?? app.Desktop.Surfaces.FirstOrDefault()?.Plan) is { } m)
+            return (PageUrl.Settings(m.Key), $"{BaseTitle} · Monitor {m.Number} · {m.Name}");
+        return (PageUrl.Settings(), BaseTitle);
+    }
+
+    void Go()
+    {
+        if (web.CoreWebView2 == null || wanted == null || wanted == shown) return;
+        web.CoreWebView2.Navigate(wanted);
+        shown = wanted;
+        Log.Info($"settings: shown ({Text})");
     }
 
     async Task SetUpAsync()
@@ -98,6 +127,7 @@ sealed class SettingsWindow : Form
             e.Cancel = true;
             Hide();
             web.CoreWebView2?.Navigate("about:blank");
+            shown = null;
             Log.Info("settings: hidden");
         }
         base.OnFormClosing(e);

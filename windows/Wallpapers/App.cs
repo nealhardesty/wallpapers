@@ -58,11 +58,22 @@ sealed class App : ApplicationContext
         }
     }
 
-    public void OpenSettings()
+    /// The panel; in Different mode for one monitor (monitor 1 when none is named).
+    public void OpenSettings(SurfacePlan? monitor = null)
     {
         if (Problem != null) { Log.Warn($"settings: can't open ({Problem})"); return; }
         settingsWindow ??= new SettingsWindow(this);
-        _ = settingsWindow.ShowOrFocusAsync();
+        _ = settingsWindow.ShowOrFocusAsync(monitor);
+    }
+
+    /// Same or Different (the tray's Monitors menu): saved, then every page follows, and so does an
+    /// open settings window.
+    public async Task SetMonitorModeAsync(MonitorMode mode)
+    {
+        if (mode == Desktop.Mode) return;
+        SaveSettings(Settings with { Monitors = mode });
+        await Desktop.SetModeAsync(mode);
+        settingsWindow?.FollowMode();
     }
 
     public void Quit()
