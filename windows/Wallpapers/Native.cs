@@ -108,6 +108,67 @@ static class N
         return list;
     }
 
+    // ---- Power and the session (Power.cs, SPEC §10.25.9) -------------------------------------
+    // Values checked against the Windows SDK 10.0.28000 headers (WinUser.h, WtsApi32.h, shellapi.h, winnt.h).
+    public const int WM_POWERBROADCAST = 0x218, WM_WTSSESSION_CHANGE = 0x2B1;
+    public const int PBT_APMSUSPEND = 4, PBT_APMRESUMESUSPEND = 7, PBT_APMRESUMEAUTOMATIC = 0x12, PBT_POWERSETTINGCHANGE = 0x8013;
+    public const int WTS_CONSOLE_CONNECT = 1, WTS_CONSOLE_DISCONNECT = 2, WTS_REMOTE_CONNECT = 3, WTS_REMOTE_DISCONNECT = 4, WTS_SESSION_LOCK = 7, WTS_SESSION_UNLOCK = 8;
+    public const int NOTIFY_FOR_THIS_SESSION = 0, DEVICE_NOTIFY_WINDOW_HANDLE = 0;
+    public const int QUNS_RUNNING_D3D_FULL_SCREEN = 3, QUNS_PRESENTATION_MODE = 4;
+    public const uint SPI_GETSCREENSAVERRUNNING = 0x72;
+    public const int SM_REMOTESESSION = 0x1000;
+    public static readonly Guid GUID_CONSOLE_DISPLAY_STATE = new("6FE69556-704A-47A0-8F24-C28D936FDA47");
+    public static readonly Guid GUID_ACDC_POWER_SOURCE = new("5D3E9A59-E9D5-4B00-A6BD-FF34FF516548");
+    public static readonly Guid GUID_BATTERY_PERCENTAGE_REMAINING = new("A7AD8041-B45A-4CAE-87A3-EECBB468A9E1");
+    /// Windows 11 24H2 ("Germanium", build 26100) on; before it, GUID_POWER_SAVING_STATUS.
+    public static readonly Guid GUID_ENERGY_SAVER_STATUS = new("550E8400-E29B-41D4-A716-446655440000");
+    public static readonly Guid GUID_POWER_SAVING_STATUS = new("E00958C0-C213-4ACE-AC77-FECCED2EEEA5");
+
+    [DllImport("wtsapi32.dll", SetLastError = true)] public static extern bool WTSRegisterSessionNotification(IntPtr h, int flags);
+    [DllImport("wtsapi32.dll")] public static extern bool WTSUnRegisterSessionNotification(IntPtr h);
+    [DllImport("wtsapi32.dll", EntryPoint = "WTSQuerySessionInformationW", SetLastError = true)]
+    static extern bool WTSQuerySessionInformation(IntPtr server, int session, int infoClass, out IntPtr buffer, out int bytes);
+    [DllImport("wtsapi32.dll")] static extern void WTSFreeMemory(IntPtr p);
+    [DllImport("user32.dll", SetLastError = true)] public static extern IntPtr RegisterPowerSettingNotification(IntPtr h, in Guid setting, int flags);
+    [DllImport("user32.dll")] public static extern bool UnregisterPowerSettingNotification(IntPtr registration);
+    [DllImport("shell32.dll")] public static extern int SHQueryUserNotificationState(out int state);
+    [DllImport("user32.dll", EntryPoint = "SystemParametersInfoW")] public static extern bool SystemParametersInfo(uint action, uint param, out int value, uint winIni);
+    [DllImport("user32.dll")] public static extern int GetSystemMetrics(int index);
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct SYSTEM_POWER_STATUS { public byte ACLineStatus, BatteryFlag, BatteryLifePercent, SystemStatusFlag; public int BatteryLifeTime, BatteryFullLifeTime; }
+    [DllImport("kernel32.dll")] public static extern bool GetSystemPowerStatus(out SYSTEM_POWER_STATUS status);
+
+    const int WTS_CURRENT_SESSION = -1, WTSSessionInfoEx = 25, WTSDisconnected = 4;
+    const int WTS_SESSIONSTATE_LOCK = 0, WTS_SESSIONSTATE_UNLOCK = 1;
+
+    /// This session's lock and connection state (WTSINFOEXW level 1), or null when Windows can't say.
+    public static (bool Locked, bool Disconnected)? SessionState()
+    {
+        if (!WTSQuerySessionInformation(IntPtr.Zero, WTS_CURRENT_SESSION, WTSSessionInfoEx, out var p, out var bytes)) return null;
+        try
+        {
+            // WTSINFOEXW: DWORD Level, then the union (8-aligned: it holds LARGE_INTEGERs) whose level 1
+            // starts ULONG SessionId, WTS_CONNECTSTATE_CLASS SessionState, LONG SessionFlags.
+            if (bytes < 20 || Marshal.ReadInt32(p, 0) != 1) return null;
+            var state = Marshal.ReadInt32(p, 12);
+            var flags = Marshal.ReadInt32(p, 16);
+            if (flags is not (WTS_SESSIONSTATE_LOCK or WTS_SESSIONSTATE_UNLOCK)) return null;   // WTS_SESSIONSTATE_UNKNOWN
+            return (flags == WTS_SESSIONSTATE_LOCK, state == WTSDisconnected);
+        }
+        finally { WTSFreeMemory(p); }
+    }
+
+    /// The DWORD a PBT_POWERSETTINGCHANGE carries (POWERBROADCAST_SETTING: GUID PowerSetting,
+    /// DWORD DataLength, UCHAR Data[]), or null when it's for another setting or too short.
+    public static (Guid Setting, int Value)? PowerSetting(IntPtr l)
+    {
+        if (l == IntPtr.Zero) return null;
+        var setting = Marshal.PtrToStructure<Guid>(l);
+        var length = Marshal.ReadInt32(l, 16);
+        return length >= 4 ? (setting, Marshal.ReadInt32(l, 20)) : null;
+    }
+
     public static List<IntPtr> TopLevel(string cls)
     {
         var list = new List<IntPtr>();

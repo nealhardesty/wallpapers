@@ -13,6 +13,7 @@ sealed class App : ApplicationContext
     public AppPaths Paths { get; }
     public AppSettings Settings { get; private set; }
     public DesktopLayer Layer { get; }
+    public Power Power { get; } = new();
     public Desktop Desktop { get; }
     public Tray Tray { get; }
     SettingsWindow? settingsWindow;
@@ -29,7 +30,9 @@ sealed class App : ApplicationContext
         AppDomain.CurrentDomain.UnhandledException += (_, e) => Crash(e.ExceptionObject as Exception);
         Layer = new DesktopLayer(Log.Info) { DrawAboveIcons = Settings.DrawAboveIcons };
         Layer.EndSession += () => Cleanup("logoff");
-        Desktop = new Desktop(paths, Layer, Settings.Monitors);
+        Power.Start();
+        Desktop = new Desktop(paths, Layer, Settings.Monitors, Power);
+        Power.Changed += () => _ = Desktop.ApplyPowerAsync();
         Problem = paths.CheckWebRoot();
         if (Problem != null) Log.Error(Problem);
         else _ = Desktop.StartAsync();
@@ -89,5 +92,6 @@ sealed class App : ApplicationContext
         try { Desktop.Dispose(); }
         catch (Exception e) { Log.Error($"cleanup: {e.Message}"); }
         Layer.Dispose();
+        Power.Dispose();
     }
 }

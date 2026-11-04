@@ -26,6 +26,8 @@ sealed class Surface : IDisposable
     Dcomp? dcomp;
     readonly NativeWindow keeper = new();
     readonly Queue<DateTime> crashes = new();
+    /// What the page was last told by WP.power (null: nothing yet).
+    string? powerJson;
 
     public Surface(SurfacePlan plan, HostPlacement placement, IntPtr host)
     {
@@ -57,8 +59,9 @@ sealed class Surface : IDisposable
         controller.CoreWebView2.ProcessFailed += OnProcessFailed;
         controller.CoreWebView2.NavigationCompleted += (_, e) =>
         {
-            if (!e.IsSuccess) Log.Warn($"surface {Plan.Device}: navigation failed ({e.WebErrorStatus})");
-            else Loaded?.Invoke(this);
+            if (!e.IsSuccess) { Log.Warn($"surface {Plan.Device}: navigation failed ({e.WebErrorStatus})"); return; }
+            if (powerJson != null) _ = EvalAsync(PowerScript(powerJson));
+            Loaded?.Invoke(this);
         };
         controller.CoreWebView2.Navigate(url);
         Log.Info($"surface {Plan.Key} ({Plan.Device}): started on host {Host:X}");
@@ -92,14 +95,22 @@ sealed class Surface : IDisposable
         Log.Info($"surface {Plan.Device}: re-bound to host {newHost:X}");
     }
 
-    /// Hidden web views stop rendering outright (W0.2), and the page is told so it can pause cleanly.
-    public async Task SetVisibleAsync(bool visible)
+    /// Pause and power (§10.25.9): hidden web views stop rendering outright (W0.2), and the page is
+    /// told `WP.power(json)` so it pauses cleanly and picks its quality. Nothing happens when neither
+    /// changed; every load (a reload, a navigate) is told again, as a new page knows nothing.
+    public async Task ApplyPowerAsync(bool visible, string json)
     {
-        if (controller == null) return;
-        controller.IsVisible = visible;
-        Log.Info($"surface {Plan.Device}: IsVisible={(visible ? "true" : "false")}");
-        await EvalAsync($"window.WP && WP.power && WP.power({{ hidden: {(visible ? "false" : "true")} }})");
+        if (controller == null || (visible == controller.IsVisible && json == powerJson)) return;
+        if (visible != controller.IsVisible)
+        {
+            controller.IsVisible = visible;
+            Log.Info($"surface {Plan.Device}: IsVisible={(visible ? "true" : "false")}");
+        }
+        powerJson = json;
+        await EvalAsync(PowerScript(json));
     }
+
+    static string PowerScript(string json) => $"window.WP && WP.power && WP.power({json})";
 
     public async Task<string> EvalAsync(string js) => Web == null ? "null" : await Web.ExecuteScriptAsync(js);
 

@@ -165,15 +165,23 @@ sealed class SelfTest
         // path every change from the settings window takes.
         await StorageAsync(first);
 
-        // 4. Hidden stops frames outright; visible starts them again.
-        await first.SetVisibleAsync(false);
+        // 4. Pause, through the path every power signal takes: hidden stops frames outright and the
+        // page hears it; visible starts them again.
+        await desktop.SetPausedAsync(true);
         await Wait(300);
         var hidden = await FramesOver(first, 1500);
         var visibleFlag = first.Visible;
-        await first.SetVisibleAsync(true);
+        var pageHeard = await Js<bool>(first, "WP.player.policy.pause");
+        await desktop.SetPausedAsync(false);
         await Wait(500);
         var resumed = await FramesOver(first, 1500);
-        Check("pause", hidden is >= 0 and <= 2 && !visibleFlag && resumed > 10, $"hidden {hidden} frames in 1.5 s (IsVisible={visibleFlag}); visible {resumed}");
+        Check("pause", hidden is >= 0 and <= 2 && !visibleFlag && pageHeard && resumed > 10,
+            $"hidden {hidden} frames in 1.5 s (IsVisible={visibleFlag}, page {(pageHeard ? "paused" : "NOT told")}); visible {resumed}");
+
+        // 4b. The power state reached the page: over Remote Desktop its ceiling is Low (§10.25.7).
+        var power = app.Power.State;
+        var reasons = await Js<string[]>(first, "WP.player.policy.reasons") ?? [];
+        Check("power", reasons.Contains("remote desktop") == power.Remote, $"{power.Describe()}; page reasons [{string.Join(", ", reasons)}]");
 
         // 7 (W1). bing.json is answered by the app.
         await BingAsync(first);
@@ -279,6 +287,9 @@ sealed class SelfTest
             await Js<double>(s, "performance.timeOrigin") is var o && o != 0 && o != origin && await Ready(s) && await FrameCount(s) > 5);
         var seconds = clock.Elapsed.TotalSeconds;
         Check("renderer crash", back && seconds <= 5, back ? $"reloaded and animating again in {seconds:0.0} s" : "not animating 10 s after the crash");
+        // A reloaded page is new: it must have been told the power state again.
+        var reasons = await Js<string[]>(s, "WP.player.policy.reasons") ?? [];
+        Check("power after reload", back && reasons.Contains("remote desktop") == app.Power.State.Remote, $"page reasons [{string.Join(", ", reasons)}]");
     }
 
     /// --selftest --bad-web-root: the app must say what's wrong, draw nothing, and keep its tray.

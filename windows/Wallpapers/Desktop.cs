@@ -12,6 +12,7 @@ sealed class Desktop : IDisposable
 {
     readonly AppPaths paths;
     readonly DesktopLayer layer;
+    readonly Power power;
     readonly BingJson bing = new();
     readonly List<Surface> surfaces = [];
     readonly System.Windows.Forms.Timer watch = new() { Interval = 5000 };
@@ -34,6 +35,8 @@ sealed class Desktop : IDisposable
     public Task<CoreWebView2Environment?> EnvironmentReady => envReady.Task;
     public BingJson Bing => bing;
     public bool Paused { get; private set; }
+    /// Whether a monitor (by key) is covered by other windows; Coverage sets it (§10.25.9).
+    public Func<string, bool> Covered { get; set; } = _ => false;
     public MonitorMode Mode { get; private set; }
     /// The monitors are a fake layout (WP_FAKE_DISPLAYS, or the self-test's), in ordinary windows.
     public bool Fake => testLayout != null || fakeFile != null;
@@ -45,10 +48,11 @@ sealed class Desktop : IDisposable
     /// A surface's page finished loading: the tray can ask it for the catalog.
     public event Action? PageReady;
 
-    public Desktop(AppPaths paths, DesktopLayer layer, MonitorMode mode)
+    public Desktop(AppPaths paths, DesktopLayer layer, MonitorMode mode, Power power)
     {
         this.paths = paths;
         this.layer = layer;
+        this.power = power;
         Mode = mode;
         watch.Tick += (_, _) => Watch();
         debounce.Tick += async (_, _) =>
@@ -255,7 +259,7 @@ sealed class Desktop : IDisposable
                 continue;
             }
             if (UrlFor(plan) != url) surface.Navigate(UrlFor(plan));   // the mode changed while it started
-            if (Paused) await surface.SetVisibleAsync(false);   // Task 4 replaces this with ApplyPowerAsync
+            await ApplyPowerAsync(surface);   // a page that starts while locked or paused doesn't draw
         }
         // Monitor 1 first: it's the one Next and Previous step, and the tray asks.
         surfaces.Sort((a, b) => a.Plan.Number.CompareTo(b.Plan.Number));
@@ -350,9 +354,24 @@ sealed class Desktop : IDisposable
     public async Task SetPausedAsync(bool paused)
     {
         Paused = paused;
-        foreach (var s in surfaces) await s.SetVisibleAsync(!paused);
         Log.Info(paused ? "paused" : "resumed");
+        await ApplyPowerAsync();
         Changed?.Invoke();
+    }
+
+    /// Pause, power and coverage, to every page (§10.25.9): a surface is visible when not paused, not
+    /// hidden everywhere and not covered; each page gets `WP.power` with the rest. Call it whenever
+    /// any of them changes.
+    public async Task ApplyPowerAsync()
+    {
+        foreach (var s in surfaces.ToList()) await ApplyPowerAsync(s);
+    }
+
+    Task ApplyPowerAsync(Surface s)
+    {
+        var state = power.State;
+        var visible = !Paused && !state.HiddenEverywhere && !Covered(s.Plan.Key);
+        return s.ApplyPowerAsync(visible, PowerJson.For(state, hidden: !visible));
     }
 
     /// A pick, saved so the next start shows it too: on one monitor (by key), or on every one (null).
