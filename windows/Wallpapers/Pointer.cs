@@ -1,6 +1,5 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
-using System.Windows.Automation;
 using System.Windows.Forms;
 
 namespace Wallpapers;
@@ -15,6 +14,10 @@ namespace Wallpapers;
 sealed class Pointer : IDisposable
 {
     const int PollMs = 33, ReportMs = 60_000;
+    /// A press whose verdict comes later than this is dropped: a stalled UI Automation mustn't replay old clicks.
+    const int StaleMs = 1000;
+    /// UI Automation's connection and transaction timeouts (its defaults are 2 s and 20 s).
+    const uint UiaTimeoutMs = 500;
 
     /// Wallpaper Follows the Mouse: moves.
     public bool Follow { get; set; } = true;
@@ -39,6 +42,9 @@ sealed class Pointer : IDisposable
     /// Kept in fields: the window gets messages, and the worker runs, long after the constructor.
     readonly MessageWindow window;
     readonly Thread worker;
+    /// UI Automation, made and used on the worker only (an MTA thread).
+    N.IUIAutomation? automation;
+    bool automationTried;
     GestureTracker tracker = new(DoubleClickRule.WindowsDefault);
     /// The surface the last move went to (it gets a Leave when the cursor goes elsewhere).
     string? over;
@@ -72,7 +78,8 @@ sealed class Pointer : IDisposable
         var why = !Follow && !Clicks ? "both toggles off" : !surfaces().Any(s => s.Target.Visible) ? "no visible surface" : null;
         if (why == null && !Active) Start();
         else if (why != null && Active) Stop(why);
-        if (!Clicks) EndGesture();
+        // A press whose surface is hidden now (paused, covered) ends: its drag moves would go to a hidden page.
+        if (!Clicks || (tracker.Pressed is { } key && SurfaceFor(key)?.Visible != true)) EndGesture();
     }
 
     void Start()
@@ -99,7 +106,7 @@ sealed class Pointer : IDisposable
         flush.Stop();
         throttle.Flush(clock.ElapsedMilliseconds);
         EndGesture();
-        if (over != null) SurfaceFor(over)?.SendLeave();
+        Leave();
         over = null;
         Log.Info($"pointer: off ({why})");
     }
@@ -119,6 +126,12 @@ sealed class Pointer : IDisposable
     }
 
     Surface? SurfaceFor(string key) => surfaces().FirstOrDefault(s => s.Plan.Key == key);
+
+    /// The surface the cursor was over gets a Leave, unless it's hidden (a hidden surface gets nothing).
+    void Leave()
+    {
+        if (over != null && SurfaceFor(over) is { Visible: true } s) s.SendLeave();
+    }
 
     // ---- Moves ------------------------------------------------------------------------------
 
@@ -167,8 +180,8 @@ sealed class Pointer : IDisposable
         // While a gesture is in flight its surface gets the moves, even off it.
         if (tracker.Move(x, y) is { } drag)
         {
-            if (SurfaceFor(drag.Key) is not { } pressed) return;
-            if (over != null && over != drag.Key) SurfaceFor(over)?.SendLeave();
+            if (SurfaceFor(drag.Key) is not { Visible: true } pressed) return;
+            if (over != drag.Key) Leave();
             over = drag.Key;
             pressed.SendMove(drag.At.LocalX, drag.At.LocalY, leftDown: true);
             sent++;
@@ -177,7 +190,7 @@ sealed class Pointer : IDisposable
         if (!Follow) return;
         var all = surfaces();
         var target = PointerMap.Find(all.Select(s => s.Target).ToList(), x, y);
-        if (over != null && over != target?.Key) SurfaceFor(over)?.SendLeave();
+        if (over != target?.Key) Leave();
         over = target?.Key;
         if (target == null || all.FirstOrDefault(s => s.Plan.Key == target.Key) is not { } surface) return;
         var hit = PointerMap.Into(target, x, y);
@@ -203,19 +216,58 @@ sealed class Pointer : IDisposable
             var (kind, ms) = !job.Down ? (HitKind.Other, 0.0) : job.Kind is { } fed ? (fed, 0.0) : Classify(job.X, job.Y);
             ui.Post(_ => { if (job.Down) OnDown(job, kind, ms); else OnUp(job); }, null);
         }
+        if (automation != null) Marshal.FinalReleaseComObject(automation);
+    }
+
+    /// CUIAutomation8 (it has the timeouts, IUIAutomation2), else CUIAutomation; null when neither can be made.
+    N.IUIAutomation? Automation()
+    {
+        if (automationTried) return automation;
+        automationTried = true;
+        foreach (var clsid in new[] { N.CLSID_CUIAutomation8, N.CLSID_CUIAutomation })
+        {
+            try
+            {
+                var made = Activator.CreateInstance(Type.GetTypeFromCLSID(clsid, throwOnError: true)!)!;
+                if (made is N.IUIAutomation2 timed)
+                {
+                    timed.put_ConnectionTimeout(UiaTimeoutMs);
+                    timed.put_TransactionTimeout(UiaTimeoutMs);
+                }
+                else Log.Info($"pointer: UI Automation has no timeouts (no IUIAutomation2); a hung lookup can stall presses until it ends");
+                return automation = (N.IUIAutomation)made;
+            }
+            catch (Exception e) when (e is COMException or InvalidCastException or TypeLoadException)
+            {
+                Log.Warn($"pointer: can't make UI Automation {clsid} ({e.GetType().Name}: {e.Message})");
+            }
+        }
+        Log.Warn("pointer: no UI Automation; every press on the desktop counts as bare");
+        return null;
     }
 
     /// On the worker (MTA). Bare desktop is one of the desktop's windows (or our host) under the point,
     /// and there UI Automation's element isn't a list item (an icon). A UIA failure there counts as bare.
-    static (HitKind Kind, double UiaMs) Classify(int x, int y)
+    (HitKind Kind, double UiaMs) Classify(int x, int y)
     {
-        var cls = N.ClassOf(N.WindowFromPoint(new N.POINT { X = x, Y = y }));
+        var p = new N.POINT { X = x, Y = y };
+        var cls = N.ClassOf(N.WindowFromPoint(p));
         if (!HitTest.IsDesktop(cls)) return (HitKind.Other, 0);
         var clock = Stopwatch.StartNew();
         bool? listItem = null;
-        // Anything UIA throws (an element gone, a COM failure, a timeout) means "don't know": never the app's end.
-        try { listItem = AutomationElement.FromPoint(new System.Windows.Point(x, y)).Current.ControlType == ControlType.ListItem; }
+        N.IUIAutomationElement? element = null;
+        // Anything UIA throws (an element gone, a COM failure, its 500 ms timeout) means "don't know":
+        // never the app's end.
+        try
+        {
+            if (Automation() is { } uia)
+            {
+                element = uia.ElementFromPoint(p);
+                listItem = element.get_CurrentControlType() == N.UIA_ListItemControlTypeId;
+            }
+        }
         catch (Exception e) { Log.Debug($"pointer: UI Automation at ({x},{y}) failed ({e.GetType().Name}: {e.Message}); bare"); }
+        finally { if (element != null) Marshal.ReleaseComObject(element); }
         return (HitTest.Kind(cls, listItem), clock.Elapsed.TotalMilliseconds);
     }
 
@@ -224,10 +276,16 @@ sealed class Pointer : IDisposable
         if (disposed || !Active || !Clicks) return;
         // A missed up (it went to an elevated window): the pressed page gets its release first.
         if (tracker.Pressed != null) Release(tracker.Up(job.X, job.Y, job.T), job.Click - 1, "missed");
-        var target = PointerMap.Find(surfaces().Select(s => s.Target).ToList(), job.X, job.Y);
-        var press = tracker.Down(target, kind, job.X, job.Y, job.T);
         var verdict = kind.ToString().ToLowerInvariant();
         var uia = uiaMs > 0 ? $" uia {uiaMs:0} ms" : "";
+        // Its verdict came too late (UI Automation stalled): dropped, so its up finds nothing pressed.
+        if (clock.ElapsedMilliseconds - job.T > StaleMs)
+        {
+            Log.Debug($"pointer: click #{job.Click} down {verdict} (stale, {clock.ElapsedMilliseconds - job.T} ms old){uia}");
+            return;
+        }
+        var target = PointerMap.Find(surfaces().Select(s => s.Target).ToList(), job.X, job.Y);
+        var press = tracker.Down(target, kind, job.X, job.Y, job.T);
         if (press == null)
         {
             Log.Debug($"pointer: click #{job.Click} down {verdict} ({(kind == HitKind.Bare ? "no visible surface" : "not forwarded")}){uia}");
@@ -263,12 +321,13 @@ sealed class Pointer : IDisposable
         queue.Add(d ? new Job(++clicks, true, x, y, now, kind) : new Job(clicks, false, x, y, now, null));
     }
 
-    /// The real classifier, on the worker, at a real point (nothing is clicked).
+    /// The real classifier, on the worker, at a real point (nothing is clicked). Throws TimeoutException
+    /// when the worker hasn't answered in 3 s.
     internal Task<(HitKind Kind, double UiaMs)> ClassifyForTest(int x, int y)
     {
         var probe = new TaskCompletionSource<(HitKind, double)>(TaskCreationOptions.RunContinuationsAsynchronously);
         queue.Add(new Job(0, false, x, y, 0, null, probe));
-        return probe.Task;
+        return probe.Task.WaitAsync(TimeSpan.FromSeconds(3));
     }
 
     public void Dispose()

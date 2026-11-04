@@ -4,8 +4,6 @@
     <TargetFramework>net10.0-windows</TargetFramework>
     <OutputType>WinExe</OutputType>
     <UseWindowsForms>true</UseWindowsForms>
-    <!-- Only for UIAutomationClient: the pointer asks UI Automation whether a press is on an icon (SPEC §10.25.8). -->
-    <UseWPF>true</UseWPF>
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>app.ico</ApplicationIcon>
@@ -28,11 +26,8 @@
     <EmbeddedResource Include="app.ico" LogicalName="app.ico" />
     <Using Include="Wallpapers.Core" />
     <Using Include="System.Runtime.InteropServices" />
-    <!-- UseWPF drops these from the implicit usings. -->
-    <Using Include="System.IO" />
-    <Using Include="System.Net.Http" />
   </ItemGroup>
-  <!-- The WebView2 package references its WPF control on every .NET 5+ app; this one uses no WPF controls. -->
+  <!-- The WebView2 package references its WPF control on every .NET 5+ app; this one has no WPF. -->
   <Target Name="DropWebView2Wpf" BeforeTargets="ResolveAssemblyReferences">
     <ItemGroup>
       <Reference Remove="@(Reference)" Condition="'%(Filename)' == 'Microsoft.Web.WebView2.Wpf'" />

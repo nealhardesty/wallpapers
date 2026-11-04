@@ -223,4 +223,49 @@ static class N
     [DllImport("user32.dll")] public static extern bool GetCursorPos(out POINT p);
     [DllImport("user32.dll")] public static extern IntPtr WindowFromPoint(POINT p);
     [DllImport("user32.dll")] public static extern uint GetDoubleClickTime();
+
+    // ---- UI Automation (Pointer.cs's classifier; COM, UIAutomationCore) ------------------------
+    // Hand-written from the Windows SDK 10.0.26100 UIAutomationClient.h/.idl: only the calls we make,
+    // every earlier vtable slot kept as a placeholder (_n is absolute slot n; 0-2 are IUnknown's).
+    // Placeholders are never called. Use from an MTA thread only.
+    public static readonly Guid CLSID_CUIAutomation = new("ff48dba4-60ef-4201-aa87-54103eef594e");
+    public static readonly Guid CLSID_CUIAutomation8 = new("e22ad333-b25f-460c-83d0-0581107395c9");
+    public const int UIA_ListItemControlTypeId = 50007;
+
+    [ComImport, Guid("30cbe57d-d9d0-452a-ab13-7ac5ac4825ee"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    public interface IUIAutomation
+    {
+        void _3(); void _4(); void _5(); void _6();
+        /// Slot 7.
+        IUIAutomationElement ElementFromPoint(POINT pt);
+    }
+
+    /// IUIAutomation (slots 3-57) plus the timeouts (Windows 8 on; CUIAutomation8 gives it).
+    [ComImport, Guid("34723aff-0c9d-49d0-9896-7ab52df8cd8a"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    public interface IUIAutomation2
+    {
+        void _3(); void _4(); void _5(); void _6(); void _7(); void _8(); void _9(); void _10();
+        void _11(); void _12(); void _13(); void _14(); void _15(); void _16(); void _17(); void _18();
+        void _19(); void _20(); void _21(); void _22(); void _23(); void _24(); void _25(); void _26();
+        void _27(); void _28(); void _29(); void _30(); void _31(); void _32(); void _33(); void _34();
+        void _35(); void _36(); void _37(); void _38(); void _39(); void _40(); void _41(); void _42();
+        void _43(); void _44(); void _45(); void _46(); void _47(); void _48(); void _49(); void _50();
+        void _51(); void _52(); void _53(); void _54(); void _55(); void _56(); void _57();
+        void _58(); void _59(); void _60();   // get/put_AutoSetFocus, get_ConnectionTimeout
+        /// Slot 61 (ms).
+        void put_ConnectionTimeout(uint timeout);
+        void _62();   // get_TransactionTimeout
+        /// Slot 63 (ms).
+        void put_TransactionTimeout(uint timeout);
+    }
+
+    [ComImport, Guid("d22108aa-8ac5-49a5-837b-37bbb3d7591e"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    public interface IUIAutomationElement
+    {
+        void _3(); void _4(); void _5(); void _6(); void _7(); void _8(); void _9(); void _10();
+        void _11(); void _12(); void _13(); void _14(); void _15(); void _16(); void _17(); void _18();
+        void _19(); void _20();
+        /// Slot 21.
+        int get_CurrentControlType();
+    }
 }
