@@ -77,6 +77,8 @@ sealed class Tray : IDisposable
         SayProblems();
     }
 
+    public bool Visible => !disposed && icon.Visible;
+
     ToolStripMenuItem Item(string text, Func<Task> action)
     {
         var item = new ToolStripMenuItem(text);

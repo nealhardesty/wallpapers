@@ -25,6 +25,8 @@ sealed class AppPaths
         };
     }
 
+    public AppPaths WithWebRoot(string webRoot) => new() { Flavor = Flavor, Root = Root, WebRoot = webRoot };
+
     /// Why the pages can't be served from WebRoot, or null when they can.
     public string? CheckWebRoot() =>
         File.Exists(Path.Combine(WebRoot, "index.html")) ? null : $"No wallpapers found: {WebRoot} has no index.html";

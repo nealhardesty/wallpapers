@@ -4016,16 +4016,24 @@ desktop surfaces go `hidden`.
   Browser arguments: none needed (W0.2); `--disable-features=
   CalculateNativeWinOcclusion` may be kept as cheap insurance. DevTools and
   `--remote-debugging-port` only with `WP_DEBUG=1`.
-- **Serving `web/`:** `SetVirtualHostNameToFolderMapping("wallpapers.example",
-  <web folder>, Deny)`, so pages load from `https://wallpapers.example/`: one
+- **Serving `web/`:** pages load from `https://wallpapers.example/`: one
   origin for every web view (shared storage), a secure context (battery
   API, geolocation), the CSP holds, no local server, no open port. `.example`
-  is reserved and never resolves. `WP_WEB_ROOT` overrides the folder for
-  development (§10.25.15).
-- **`bing.json`:** `WebResourceRequested` for
-  `https://wallpapers.example/bing.json` → `BingJson.cs` fetches Bing's
+  is reserved and never resolves. The app answers every request to that
+  origin itself, in `WebResourceRequested` (filter `https://wallpapers.example/*`),
+  from the web folder (`Core/WebFiles.cs`: nothing outside it, `..` and
+  backslashes refused, 404 otherwise; `Cache-Control: no-cache`, so *Reload
+  Wallpapers* shows an edit). *Not* `SetVirtualHostNameToFolderMapping`, the
+  first design: `WebResourceRequested` never fires for a mapped host
+  ([Microsoft's docs](https://learn.microsoft.com/microsoft-edge/webview2/how-to/webresourcerequested)),
+  so `bing.json` fell through to the folder and failed; `--selftest`'s
+  `bing.json` check found it (W1, 2026-11-03). `WP_WEB_ROOT` overrides the
+  folder for development (§10.25.15).
+- **`bing.json`:** the same handler sends
+  `https://wallpapers.example/bing.json` to `BingJson.cs`, which fetches Bing's
   archive natively (no CORS for the app) in `tools/bing.mjs`'s shape, cached
-  an hour. `bing.js` already fetches `bing.json` on non-`http:` pages.
+  an hour, with `X-Wallpapers-Bing: native` (503 when Bing can't be reached).
+  `bing.js` already fetches `bing.json` on non-`http:` pages.
 - **Navigation:** only our origin and `about:` load; any `http(s)` link
   (Bing's credit) opens the default browser; new windows likewise.
 - **Console:** page errors go to the log (`WP_DEBUG=1`: everything).

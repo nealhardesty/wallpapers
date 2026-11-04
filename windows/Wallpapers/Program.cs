@@ -2,13 +2,22 @@ using System.Windows.Forms;
 
 namespace Wallpapers;
 
-/// Modes (SPEC §10.25.4): the app · --quit · --settings · --dump-displays · --selftest (Task 9).
+/// Modes (SPEC §10.25.4): the app · --quit · --settings · --dump-displays · --selftest [--bad-web-root].
 static class Program
 {
     [STAThread]
     static int Main(string[] args)
     {
         var paths = AppPaths.Resolve(args);
+        var selfTest = paths.Flavor == "test";
+        if (selfTest)
+        {
+            // One at a time (never wipe a running test's folder); then it starts from nothing, and
+            // --bad-web-root points it at a folder that isn't there.
+            if (!SingleInstance.TryBecomeFirst(paths.Flavor)) return 2;
+            SelfTest.Wipe(paths.Root);
+            if (args.Contains("--bad-web-root")) paths = paths.WithWebRoot(Path.Combine(paths.Root, "no-such-web"));
+        }
         Log.Init(paths);
 
         if (args.Contains("--quit"))
@@ -23,7 +32,7 @@ static class Program
             Log.Info($"--dump-displays: wrote displays.json and tree.json to {paths.Root}");
             return 0;
         }
-        if (!SingleInstance.TryBecomeFirst(paths.Flavor))
+        if (!selfTest && !SingleInstance.TryBecomeFirst(paths.Flavor))
         {
             // A second launch (the Start menu, make win-run twice) opens the first one's settings.
             N.AllowSetForegroundWindow(N.ASFW_ANY);
@@ -36,7 +45,8 @@ static class Program
         SynchronizationContext.SetSynchronizationContext(new WindowsFormsSynchronizationContext());
         var app = new App(paths);
         if (args.Contains("--settings")) app.OpenSettings();
+        if (selfTest) SelfTest.Start(app, badWebRoot: args.Contains("--bad-web-root"));
         Application.Run(app);
-        return 0;
+        return selfTest ? SelfTest.ExitCode : 0;
     }
 }
