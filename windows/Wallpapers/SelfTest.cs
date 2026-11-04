@@ -188,6 +188,10 @@ sealed class SelfTest
         var reasons = await Js<string[]>(first, "WP.player.policy.reasons") ?? [];
         Check("power", reasons.Contains("remote desktop") == power.Remote, $"{power.Describe()}; page reasons [{string.Join(", ", reasons)}]");
 
+        // 4c. The tray's Performance rows are real clicks; the pick reaches the page's store and the
+        // status line follows the stage's own report. Auto is put back at the end.
+        await PerformanceAsync(first);
+
         // 7 (W1). bing.json is answered by the app.
         await BingAsync(first);
 
@@ -233,6 +237,29 @@ sealed class SelfTest
             return true;
         }, IntPtr.Zero);
         return found;
+    }
+
+    async Task PerformanceAsync(Surface first)
+    {
+        const string Stored = "JSON.stringify(WP.store.get('wp:performance') || {})";
+        var labels = new Dictionary<string, string>();
+        foreach (var mode in new[] { "low", "medium", "high", "auto" })
+        {
+            app.Tray.ClickPerformanceForTest(mode);
+            var picked = await Until(3000, async () => (await Js<string>(first, Stored) ?? "").Contains($"\"mode\":\"{mode}\"") || mode == "auto" && !(await Js<string>(first, Stored) ?? "").Contains("\"mode\":\"low\""));
+            // The stage reports once a second; the tray's line is what it last asked.
+            await Wait(1300);
+            var label = await Js<string>(first, "WP.player.stats && WP.player.stats.label") ?? "?";
+            labels[mode] = label;
+            Check($"performance {mode}", picked && (mode == "auto" || label.Equals(mode, StringComparison.OrdinalIgnoreCase) || app.Power.State.Remote),
+                $"store {await Js<string>(first, Stored)}; stage says {label}; tray line \"{app.Tray.PerformanceStatusForTest}\"");
+        }
+        var before = await Js<bool>(first, "(WP.store.get('wp:performance') || {}).batteryAware !== false");
+        app.Tray.ClickPerformanceForTest(null);
+        var flipped = await Until(3000, async () => await Js<bool>(first, "(WP.store.get('wp:performance') || {}).batteryAware !== false") != before);
+        app.Tray.ClickPerformanceForTest(null);
+        var restored = await Until(3000, async () => await Js<bool>(first, "(WP.store.get('wp:performance') || {}).batteryAware !== false") == before);
+        Check("performance battery toggle", flipped && restored, $"was {before}, flipped {flipped}, restored {restored}");
     }
 
     async Task StorageAsync(Surface desktopPage)

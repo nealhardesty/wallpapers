@@ -117,6 +117,45 @@ public sealed record CatalogInfo(string Current, string Resolved, IReadOnlyList<
     }
 }
 
+/// The page's performance choice and what it's doing (SPEC §4.8, §10.25.10). Mode is "auto", "low",
+/// "medium" or "high"; Status is the stage's own line, or null before it has reported.
+public sealed record PerformanceInfo(string Mode, bool BatteryAware, string? Status)
+{
+    public const string Script = """
+        (window.WP && WP.player) ? JSON.stringify({
+            mode: (WP.store.get('wp:performance') || {}).mode || 'auto',
+            batteryAware: (WP.store.get('wp:performance') || {}).batteryAware !== false,
+            stats: WP.player.stats,
+        }) : null
+        """;
+
+    /// Throws FormatException for anything that isn't the page's answer.
+    public static PerformanceInfo Parse(string json)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
+            if (root.ValueKind != JsonValueKind.Object) throw new FormatException("the performance answer isn't an object");
+            var mode = root.TryGetProperty("mode", out var m) && m.ValueKind == JsonValueKind.String ? m.GetString()! : "auto";
+            var aware = !(root.TryGetProperty("batteryAware", out var b) && b.ValueKind == JsonValueKind.False);
+            return new PerformanceInfo(mode, aware, root.TryGetProperty("stats", out var s) ? StatusOf(s) : null);
+        }
+        catch (JsonException e) { throw new FormatException("the performance answer isn't JSON", e); }
+    }
+
+    static string? StatusOf(JsonElement s)
+    {
+        if (s.ValueKind != JsonValueKind.Object) return null;
+        var label = s.TryGetProperty("label", out var l) && l.ValueKind == JsonValueKind.String ? l.GetString() : null;
+        if (label == null || !s.TryGetProperty("fps", out var f) || f.ValueKind != JsonValueKind.Number) return null;
+        var reasons = s.TryGetProperty("reasons", out var r) && r.ValueKind == JsonValueKind.Array
+            ? r.EnumerateArray().Where(x => x.ValueKind == JsonValueKind.String).Select(x => x.GetString()!).ToList() : [];
+        var fps = Math.Round(f.GetDouble()).ToString(System.Globalization.CultureInfo.InvariantCulture);
+        return $"now: {label} · {fps} fps · {(reasons.Count > 0 ? string.Join(", ", reasons) : "no power limits")}";
+    }
+}
+
 /// Surprise Me (SPEC §10.25.10): any real wallpaper but the one showing. Never Seasonal (it's a
 /// pseudo entry), Blank (it looks broken) or Jellyfin (it needs a server signed in first).
 public static class Picker

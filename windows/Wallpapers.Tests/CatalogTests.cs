@@ -21,6 +21,30 @@ public class CatalogTests
     }
 
     [Fact]
+    public void Performance_parses_the_pages_answer()
+    {
+        var p = PerformanceInfo.Parse("""{ "mode": "low", "batteryAware": false, "stats": { "label": "Medium", "fps": 30, "reasons": ["on battery"] } }""");
+        Assert.Equal("low", p.Mode);
+        Assert.False(p.BatteryAware);
+        Assert.Equal("now: Medium · 30 fps · on battery", p.Status);
+        Assert.Equal("now: Low · 16 fps · remote desktop, reduced motion",
+            PerformanceInfo.Parse("""{ "mode": "auto", "batteryAware": true, "stats": { "label": "Low", "fps": 16.2, "reasons": ["remote desktop", "reduced motion"] } }""").Status);
+        Assert.Equal("now: High · 60 fps · no power limits",
+            PerformanceInfo.Parse("""{ "mode": "auto", "batteryAware": true, "stats": { "label": "High", "fps": 60, "reasons": [] } }""").Status);
+    }
+
+    [Fact]
+    public void Performance_defaults_without_a_saved_choice() =>
+        Assert.Equal(new PerformanceInfo("auto", true, null), PerformanceInfo.Parse("""{ "mode": "auto", "batteryAware": true }"""));
+
+    [Fact]
+    public void Performance_without_stats_has_no_status()
+    {
+        Assert.Null(PerformanceInfo.Parse("""{ "mode": "auto", "batteryAware": true, "stats": null }""").Status);
+        Assert.Throws<FormatException>(() => PerformanceInfo.Parse("nope"));
+    }
+
+    [Fact]
     public void A_missing_resolved_means_the_current_one() =>
         Assert.Equal("snow", CatalogInfo.Parse("""{ "current": "snow", "entries": [] }""").Resolved);
 

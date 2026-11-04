@@ -26,6 +26,10 @@ sealed class Tray : IDisposable
     /// Each surface's answer, by display key; `catalog` is monitor 1's (the catalog itself, and Same mode's choice).
     readonly Dictionary<string, CatalogInfo> catalogs = [];
     CatalogInfo? catalog;
+    /// Monitor 1's performance answer; a pick or toggle goes to that surface and the others follow its storage event.
+    PerformanceInfo? performance;
+    readonly Dictionary<string, ToolStripMenuItem> modeRows = [];
+    readonly ToolStripMenuItem batteryAware, performanceStatus, performanceMenu;
     /// Different mode's per-monitor rows and submenus, and the monitors they were made for.
     readonly List<MonitorItems> perMonitor = [];
     string perMonitorShape = "";
@@ -54,6 +58,17 @@ sealed class Tray : IDisposable
         });
         var monitors = new ToolStripMenuItem("Monitors");
         monitors.DropDownItems.AddRange([same, different, new ToolStripSeparator(), identify]);
+        performanceMenu = new ToolStripMenuItem("Performance");
+        foreach (var (mode, name) in new[] { ("auto", "Auto"), ("low", "Low"), ("medium", "Medium"), ("high", "High") })
+        {
+            var row = Item(name, () => RunOnFirst($"WP.player.setMode('{mode}')"));
+            row.Tag = RadioRenderer.Radio;
+            modeRows[mode] = row;
+            performanceMenu.DropDownItems.Add(row);
+        }
+        batteryAware = Item("Save Power on Battery", () => RunOnFirst("WP.player.setBatteryAware((WP.store.get('wp:performance') || {}).batteryAware === false)"));   // flips what the page has now, not what we last heard
+        performanceStatus = new ToolStripMenuItem("now: …") { Enabled = false };
+        performanceMenu.DropDownItems.AddRange([new ToolStripSeparator(), batteryAware, new ToolStripSeparator(), performanceStatus]);
         // In Different mode: monitor 1's (App.OpenSettings picks it).
         settings = Item("Settings…", () => { app.OpenSettings(); return Task.CompletedTask; });
         reload = Item("Reload Wallpapers", () => { app.Desktop.ReloadAll(); return Task.CompletedTask; });
@@ -71,7 +86,7 @@ sealed class Tray : IDisposable
         menu.Items.AddRange([
             header, wallpaper, surprise, next, previous, new ToolStripSeparator(),
             pause, new ToolStripSeparator(),
-            monitors, settings, troubleshooting, about, quit,
+            monitors, performanceMenu, settings, troubleshooting, about, quit,
         ]);
         menu.Renderer = new RadioRenderer();   // its submenus draw with their owner's renderer
         menu.Opening += (_, _) => { Sync(); Run("refresh", RefreshAsync); };
@@ -158,6 +173,11 @@ sealed class Tray : IDisposable
         var keys = app.Desktop.Surfaces.Select(s => s.Plan.Key).ToHashSet();
         foreach (var gone in catalogs.Keys.Where(k => !keys.Contains(k)).ToList()) catalogs.Remove(gone);
         catalog = catalogs.GetValueOrDefault(live[0].Plan.Key) ?? catalog;
+        if (await AskAsync(live[0], PerformanceInfo.Script) is { } perf)
+        {
+            try { performance = PerformanceInfo.Parse(perf); }
+            catch (FormatException e) { Log.Warn($"tray: performance: {e.Message}"); }
+        }
         Sync();
         if (thumbsAsked || catalog == null) return;
         thumbsAsked = true;
@@ -165,14 +185,26 @@ sealed class Tray : IDisposable
     }
 
     /// One surface's answer, or null (not ready, or closing): one page can't hold up the others.
-    static async Task<string?> AskAsync(Surface s)
+    static Task<string?> AskAsync(Surface s) => AskAsync(s, CatalogInfo.Script);
+
+    static async Task<string?> AskAsync(Surface s, string script)
     {
-        try { return JsonSerializer.Deserialize<string?>(await s.EvalAsync(CatalogInfo.Script)); }
+        try { return JsonSerializer.Deserialize<string?>(await s.EvalAsync(script)); }
         catch (Exception e) when (e is COMException or InvalidOperationException or ObjectDisposedException or JsonException)
         {
             Log.Warn($"tray: {s.Plan.Key}: {e.GetType().Name}: {e.Message}");
             return null;
         }
+    }
+
+    /// The self-test clicks the real rows (SPEC §10.25.16).
+    internal void ClickPerformanceForTest(string? mode) => (mode == null ? batteryAware : modeRows[mode]).PerformClick();
+    internal string PerformanceStatusForTest => performanceStatus.Text ?? "";
+
+    /// Runs script on monitor 1's page (a performance pick: the other pages follow through storage).
+    async Task RunOnFirst(string script)
+    {
+        if (app.Desktop.Surfaces.FirstOrDefault() is { } first) await first.EvalAsync(script);
     }
 
     async Task LoadThumbnailsAsync(Surface surface, CatalogInfo c)
@@ -238,6 +270,10 @@ sealed class Tray : IDisposable
             m.Surprise.Enabled = m.Next.Enabled = m.Previous.Enabled = live && info != null;
             m.Settings.Enabled = app.Problem == null;
         }
+        foreach (var (mode, row) in modeRows) row.Checked = performance?.Mode == mode;
+        batteryAware.Checked = performance?.BatteryAware ?? true;
+        performanceStatus.Text = performance?.Status ?? "now: …";
+        performanceMenu.Enabled = live && performance != null;
         same.Checked = desktop.Mode == MonitorMode.Same;
         different.Checked = desktop.Mode == MonitorMode.Different;
         identify.Enabled = live;
