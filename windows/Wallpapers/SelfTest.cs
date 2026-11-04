@@ -117,7 +117,8 @@ sealed class SelfTest
         var layer = app.Layer;
         Line("INFO", "self-test", $"Wallpapers {App.Version}, data {app.Paths.Root}");
 
-        if (!await Until(30000, () => Task.FromResult(desktop.Surfaces.Count > 0 || desktop.Problem != null)) || desktop.Surfaces.Count == 0)
+        // Every monitor's surface, not just the first one made (found on two monitors).
+        if (!await Until(30000, () => Task.FromResult((desktop.Surfaces.Count > 0 && !desktop.Building) || desktop.Problem != null)) || desktop.Surfaces.Count == 0)
         {
             Line("FAIL", "start", desktop.Problem ?? "no surfaces after 30 s");
             return;

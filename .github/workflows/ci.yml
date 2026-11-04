@@ -3,7 +3,7 @@ name: ci
 on:
   push:
     branches: [master]
-    tags: ['v*']   # a release: signed APK, extension zip and Mac app on a GitHub Release
+    tags: ['v*']   # a release: signed APK, extension zip, Mac app and Windows app on a GitHub Release
   pull_request:
   schedule:
     - cron: '23 9 * * *'   # daily, after Bing's new image: refreshes bing.json on Pages
@@ -26,11 +26,19 @@ jobs:
         with:
           dotnet-version: 10.0.x
       - run: make ci
-      - run: make win-build   # cross-compiles the Windows app on Linux on every push
+      # Cross-compiles the Windows app on Linux on every push, checks it and zips it
+      # (SPEC §10.25.15); the release job attaches that zip.
+      - run: make win-release
       - uses: actions/upload-artifact@v7
         with:
           name: wallpapers-extension
           path: dist/wallpapers-extension-*.zip
+      - uses: actions/upload-artifact@v7
+        with:
+          name: wallpapers-windows
+          path: |
+            dist/wallpapers-windows-*.zip
+            dist/wallpapers-windows-*.zip.sha256
 
   android:
     if: github.event_name != 'schedule'
@@ -123,12 +131,18 @@ jobs:
         if: needs.mac.result != 'success'
         run: |
           echo "::warning::the Mac build ${{ needs.mac.result }}; releasing without it"
+      # Built and checked by the ci job, which this job needs to have passed.
+      - name: Fetch the Windows app
+        uses: actions/download-artifact@v8
+        with:
+          name: wallpapers-windows
+          path: dist
       - name: Publish the release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           shopt -s nullglob
-          files=(dist/wallpapers-*.apk dist/wallpapers-extension-*.zip dist/wallpapers-mac-*.zip dist/wallpapers-mac-*.zip.sha256)
+          files=(dist/wallpapers-*.apk dist/wallpapers-extension-*.zip dist/wallpapers-mac-*.zip dist/wallpapers-mac-*.zip.sha256 dist/wallpapers-windows-*.zip dist/wallpapers-windows-*.zip.sha256)
           gh release create "$GITHUB_REF_NAME" --generate-notes "${files[@]}"
 
   pages:

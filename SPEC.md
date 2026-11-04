@@ -4068,7 +4068,7 @@ section):**
 | `win-install` / `win-uninstall` | install/uninstall the built app for this Windows user |
 | `win-saver` | run the built `.scr /s` for 15 s and print its log |
 | `win-log` | tail the log |
-| `win-release` | `windows/release.sh`: build, check, `dist/wallpapers-windows-<version>.zip` + `.sha256` |
+| `win-release` | `windows/release.sh`: build, check, `dist/wallpapers-windows-<version>.zip` + `.sha256`. *Built ahead of W4 (owner, 2026-11-03):* the `ci` job runs it on every push and uploads `wallpapers-windows`; the `release` job attaches it. The installer and the `win` job stay in W4 |
 
 `make ci` stays as it is, except `win-unit` joins it when `dotnet` is on the
 PATH (skipped with a note otherwise, so contributors without .NET aren't

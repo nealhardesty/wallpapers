@@ -153,8 +153,11 @@ saver reloads it, and failing that shows a clock on black rather than a broken
 screen. An update of the app updates the saver by itself.
 
 **On Windows, as your desktop background** (Windows 11, early: no installer
-yet). Build and start it from WSL with `make win-run` (it needs the .NET 10 SDK
-in WSL; see Development). The wallpaper runs live behind your desktop icons on
+yet). Download `wallpapers-windows-<version>.zip` from the latest
+[release](https://github.com/nealhardesty/wallpapers/releases) (check it against
+the `.sha256` beside it), unzip it anywhere you like to keep it, and run
+`Wallpapers\Wallpapers.exe`. Or build and start it from WSL with `make win-run`
+(it needs the .NET 10 SDK in WSL; see Development). The wallpaper runs live behind your desktop icons on
 every monitor, and the icons, the right-click menu and drag-selecting all work
 as before. A tray icon controls it. Windows puts new tray icons behind the **^**
 at first: drag it onto the taskbar to keep it there. Left or right click opens
@@ -172,8 +175,8 @@ resizes the screen. **Quit** gives you your own picture back. Wallpapers don't
 react to the mouse on Windows yet (that's coming: SPEC §10.25.8). The exe isn't
 signed, so **Smart App Control**, if it's on, can refuse a build by its hash.
 `make win-run` notices and builds again (each build is a new file to it).
-SmartScreen only asks about a downloaded copy (there are no Windows downloads
-yet); then it's **More info → Run anyway**. Its data
+SmartScreen asks about a downloaded copy: **More info → Run anyway**. (Or
+right-click the zip → Properties → **Unblock** before you unzip it.) Its data
 (settings, log) is in `%LOCALAPPDATA%\Wallpapers`.
 
 **On any phone,** without installing anything: open the hosted copy and
@@ -437,6 +440,7 @@ Run `make` to list every target.
 | `make mac-saver-log` | The screen saver's own log |
 | `make mac-install` / `make mac-uninstall` | Put the app in `~/Applications` / remove it |
 | `make win-build` | Build the Windows app: `dist/win/Wallpapers.exe` (self-contained, about 50 MB) with `web/` beside it; cross-compiles in WSL or Linux |
+| `make win-release` | Build it, check it (a 64-bit exe carrying the manifest's version, `web/` beside it) and zip it: `dist/wallpapers-windows-<version>.zip` and `.sha256`. CI does this on every push |
 | `make win-unit` | The Windows app's unit tests (`windows/Wallpapers.Tests`); no Windows needed |
 | `make win-run` | Build it and start it on the Windows side from WSL, with your normal settings: the wallpaper goes behind your desktop icons, a tray icon controls it |
 | `make win-dev` | Run it straight from this checkout's `web/` (over `\\wsl.localhost`), with its own settings and DevTools, so an edit shows after `make win-reload` or *Reload Wallpapers* in the tray |
@@ -485,10 +489,11 @@ browser features only work on secure pages.
 2. Bump `version` in `web/manifest.json` (it's the extension's and the
    app's version), commit, and push a matching tag: `git tag v0.6.0 &&
    git push --tags`.
-3. CI checks everything, builds the signed APK, the extension zip and the
-   universal Mac app (on a macOS runner), and publishes all three on a GitHub
-   Release: `wallpapers-<version>.apk`, `wallpapers-extension-<version>.zip` and
-   `wallpapers-mac-<version>.zip` with its `.sha256`. Until the secrets exist it
+3. CI checks everything, builds the signed APK, the extension zip, the
+   universal Mac app (on a macOS runner) and the Windows app (cross-compiled on
+   Linux), and publishes them on a GitHub Release: `wallpapers-<version>.apk`,
+   `wallpapers-extension-<version>.zip`, and `wallpapers-mac-<version>.zip` and
+   `wallpapers-windows-<version>.zip`, each with its `.sha256`. Until the secrets exist it
    publishes the debug APK (`wallpapers-<version>-debug.apk`) instead: it
    sideloads fine, but each one is signed by a throwaway key, so installing the
    next release means uninstalling first.
@@ -499,7 +504,9 @@ browser features only work on secure pages.
    in `mac/release.sh` and a few secrets; nothing else changes.)
 5. To try the Mac job before tagging: `gh workflow run ci.yml --ref <branch>`
    runs CI, the Android build and the Mac build, and uploads the zip as the
-   `wallpapers-mac` artifact, without publishing anything.
+   `wallpapers-mac` artifact, without publishing anything. Every CI run also
+   uploads the Windows zip as the `wallpapers-windows` artifact. It's unsigned:
+   see the Windows install notes.
 
 ### Adding a wallpaper
 

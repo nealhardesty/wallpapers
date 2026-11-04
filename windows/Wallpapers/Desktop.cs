@@ -24,6 +24,8 @@ sealed class Desktop : IDisposable
     public Task<CoreWebView2Environment?> EnvironmentReady => envReady.Task;
     public BingJson Bing => bing;
     public bool Paused { get; private set; }
+    /// Surfaces are being made: the list may not have every monitor yet.
+    public bool Building => building;
     /// Why the desktop can't be drawn (no WebView2 runtime, no layer), for the tray to say.
     public string? Problem { get; private set; }
     public event Action? Changed;
