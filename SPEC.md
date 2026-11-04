@@ -319,6 +319,7 @@ Phase 4 and 6 take it:
   | `tier=low\|medium\|high` | Pin a performance tier for this load (§4.8), e.g. to see Low on a desktop |
   | `host=android`, `hud=1`, `thumb=1` | Host simulation (§4.3), performance HUD (§4.8), thumbnail mode (§4.7). The Windows app passes `host=windows` (and its saver `host=windows-saver`, W5) |
   | `insets=t,r,b,l` | CSS px kept clear on each edge, on any host (the Windows app passes its taskbar), e.g. `?w=harvest&insets=0,0,48,0`. Malformed values fall back to the host's default (48 px at the bottom on Android, else 0) |
+  | `display=<key>` | the choice is kept per display, as `wp:current@<key>` (Windows' Different mode). With no value of its own it shows `wp:current`, then Seasonal. A key must match `[a-z0-9-]{1,40}`, else it is ignored |
 | `clock=on\|off\|<motion>` | §4.9: force the clock overlay on or off for this load, or on with a motion (`static`, `drift`, `bounce`, `teleport`, `follow`). Never persisted |
 
   Picking a wallpaper in the panel while `w=` is active does persist, as
@@ -652,6 +653,7 @@ they are stricter. "Battery-aware" can be switched off in the panel.
 | Thermal: moderate | — | `PowerManager.getCurrentThermalStatus()` + listener (API 29+; ignored on 26–28) | One tier lower |
 | Thermal: severe and above | — | same | Low and 10 fps. At `critical`, pause and hold the last frame |
 | Reduced motion | `prefers-reduced-motion` | `ANIMATOR_DURATION_SCALE == 0` | Slow-motion profile at the Low fps |
+| Remote Desktop | — (the Windows app passes `WP.power({ remote })`) | — | Ceiling Low, no fps cap of its own; reason `remote desktop` |
 | Wallpaper picker preview | — | `Engine.isPreview()` | High: it's brief and it's the sales pitch |
 
 **Host defaults:**
@@ -3737,19 +3739,19 @@ Each is useful beyond Windows and testable in a browser with URL parameters.
    passes it to the stage. Replaces nothing: `host=android` keeps its 48 px
    default when `insets` is absent. Lets anyone test ground lines in a
    browser: `?w=harvest&insets=0,0,48,0`.
-3. **`?display=<key>`**: the player reads and writes the choice as
+3. *(Built in W2.)* **`?display=<key>`**: the player reads and writes the choice as
    `wp:current@<key>` instead of `wp:current`. Absent key → inherit
    `wp:current` (so a new monitor starts with what the others show), then
    Seasonal. Its storage listener watches the right key. Picking in the
    panel opened with `display=` persists to that key.
 4. *(With span, later: `?screens=x,y,w,h;…` → `host.screens`. Not in v1.)*
-5. **Power policy:** a `remote` signal (Remote Desktop session) lowers the
-   ceiling to Low at 15 fps: RDP sends every changed pixel over the
+5. *(Built in W2.)* **Power policy:** a `remote` signal (Remote Desktop session) lowers the
+   ceiling to Low: RDP sends every changed pixel over the
    network. Reason text `remote desktop`. *(W0.2 found RDP already turns
    animation effects off, so Chromium reports `prefers-reduced-motion` and
    the existing policy caps at 20 fps; with RDP's 32 Hz frames that paces to
-   16 fps. A 15 fps cap would pace to ~10.7. Revisit whether `remote` adds
-   anything in W2.)*
+   16 fps. A 15 fps cap would pace to ~10.7. Owner's pick (2026-11-04): ceiling Low and
+   **no extra fps cap**, since RDP's own reduced-motion already paces it.)*
 6. **Tests:** unit tests for the params and the policy; a smoke
    `STAGE_CHECKS` entry proving `insets` reaches `host.insets` and
    `display=` keeps two choices apart.
@@ -3864,7 +3866,7 @@ covered visual surface costs ~10× an exposed one, ~55% of a core against
 | Tray Pause | menu | all: `hidden` (paused) |
 | On battery | `GUID_ACDC_POWER_SOURCE`, `GUID_BATTERY_PERCENTAGE_REMAINING` | `battery {charging, level}` → ceiling Medium, Low under 20% (existing policy) |
 | Energy Saver on | `GUID_ENERGY_SAVER_STATUS` (Win 11), else `GUID_POWER_SAVING_STATUS` | `saver` → Low, 15 fps |
-| Remote Desktop | `GetSystemMetrics(SM_REMOTESESSION)` + session change | `remote` → Low, 15 fps (§10.25.7) |
+| Remote Desktop | `GetSystemMetrics(SM_REMOTESESSION)` + session change | `remote` → Low, no extra fps cap (§10.25.7) |
 | Animation effects off | Chromium maps it to `prefers-reduced-motion` already | existing reduced-motion profile |
 
 This matches the owner's rule: battery and Energy Saver *lower* quality and

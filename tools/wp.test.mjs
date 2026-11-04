@@ -214,6 +214,21 @@ test('power: battery, saver, heat and reduced motion lower the ceiling; the stri
     assert.equal(WP.powerPolicy({ host: 'android', saver: true, preview: true }).ceiling, 'high', 'the picker preview gets the best');
 });
 
+test('power: remote desktop lowers the ceiling to Low', () => {
+    const remote = policy({ remote: true });
+    assert.equal(remote.ceiling, 'low');
+    assert.ok(remote.reasons.includes('remote desktop'));
+    assert.equal(remote.pause, false);
+    assert.equal(policy({ remote: true, reducedMotion: true }).fpsCap, WP.TIERS.low.fps);
+});
+
+test('display: its own key for the choice, a bad key falls back', () => {
+    assert.equal(WP.currentKey({}), 'wp:current');
+    assert.equal(WP.currentKey({ display: 'm-3fa9c2' }), 'wp:current@m-3fa9c2');
+    assert.equal(WP.currentKey({ display: '../x' }), 'wp:current');
+    assert.equal(WP.currentKey({ display: '' }), 'wp:current');
+});
+
 test('plan: a pinned tier never beats the power ceiling; Auto starts where it settled', () => {
     const onBattery = policy({ battery: { charging: false, level: 0.5 } });
     assert.equal(WP.planQuality({ entry: FISH, mode: 'high', policy: onBattery }).quality.tier, 'medium');

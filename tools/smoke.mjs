@@ -1434,6 +1434,28 @@ async function playerSuite(catalog) {
         return plain.bottom === 0 || record(`no ?insets=, yet bottom ${plain.bottom}`);
     });
 
+    await check('?display= keeps two monitors\' choices apart', async () => {
+        // Only the first load clears storage; the rest navigate straight on,
+        // so what the second and third read was written by show().
+        const open = async display => {
+            await cdp.send('Page.navigate', { url: `${WEB}/index.html?display=${display}&host=windows` });
+            return playerReady();
+        };
+        await fresh(`${WEB}/index.html?display=m-aaaaaa&host=windows`);
+        await playerReady();
+        await evaluate("WP.player.show('snow', { persist: true })");
+        await open('m-bbbbbb');
+        await evaluate("WP.player.show('rain', { persist: true })");
+        await open('m-aaaaaa');
+        const again = await waitFor(async () => await evaluate('WP.player.choice') === 'snow' && 'snow');
+        const got = await evaluate("JSON.stringify([localStorage.getItem('wp:current@m-aaaaaa'), localStorage.getItem('wp:current@m-bbbbbb'), localStorage.getItem('wp:current')])");
+        if (again !== 'snow' || got !== JSON.stringify(['"snow"', '"rain"', null])) return record(`reopened ${again}, storage ${got}`);
+        await evaluate("localStorage.setItem('wp:current', JSON.stringify('leaves'))");
+        await open('m-cccccc');
+        const inherited = await evaluate('WP.player.choice');
+        return inherited === 'leaves' || record(`a new display showed ${inherited}, not the shared leaves`);
+    });
+
     await check('] switches, persists and drops ?w= from the URL', async () => {
         await cdp.send('Input.dispatchKeyEvent', { type: 'keyDown', key: ']', text: ']' });
         await cdp.send('Input.dispatchKeyEvent', { type: 'keyUp', key: ']' });

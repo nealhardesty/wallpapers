@@ -20,7 +20,7 @@
 
     // URL parameters. They override for this page load only; nothing here
     // is ever persisted (SPEC §4.2).
-    WP.PARAMS = ['w', 'panel', 'date', 'theme', 'host', 'hud', 'thumb', 'tier', 'seed', 'clock', 'insets'];
+    WP.PARAMS = ['w', 'panel', 'date', 'theme', 'host', 'hud', 'thumb', 'tier', 'seed', 'clock', 'insets', 'display'];
 
     WP.parseParams = search => {
         const query = new URLSearchParams(search);
@@ -34,6 +34,10 @@
     WP.HOST_KINDS = ['android', 'windows', 'windows-saver'];
     WP.hostKind = (params, protocol) => protocol === 'chrome-extension:' ? 'extension'
         : WP.HOST_KINDS.includes(params.host) ? params.host : 'standalone';
+
+    // Where this page keeps its wallpaper choice (SPEC §4.2): ?display=<key>
+    // gives one monitor its own; a malformed key is ignored.
+    WP.currentKey = params => /^[a-z0-9-]{1,40}$/.test(params?.display ?? '') ? `wp:current@${params.display}` : 'wp:current';
 
     // ?insets=t,r,b,l (CSS px): room kept clear of the host's own chrome, such
     // as Windows' taskbar. Android's gesture bar is the only default; anything

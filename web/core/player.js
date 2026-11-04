@@ -8,6 +8,7 @@
 
     const params = WP.parseParams(location.search);
     const host = WP.hostKind(params, location.protocol);
+    const currentKey = WP.currentKey(params);
     const insets = WP.parseInsets(params.insets, host);
     const settingsScreen = host === 'android' && params.panel === 'open';
     const FADE_MS = 600;
@@ -41,7 +42,8 @@
             if (usable(params.w)) return params.w;
             console.warn(`wallpapers: ignoring unknown or disabled w=${params.w}`);
         }
-        const saved = WP.store.get('wp:current');
+        // A display with no choice of its own inherits the shared one.
+        const saved = WP.store.get(currentKey) ?? (currentKey === 'wp:current' ? null : WP.store.get('wp:current'));
         return usable(saved) ? saved : 'seasonal';
     }
 
@@ -126,7 +128,7 @@
     function show(next, { persist = false } = {}) {
         choice = next;
         if (persist) {
-            WP.store.set('wp:current', next);
+            WP.store.set(currentKey, next);
             // A pick from the keyboard or panel replaces a ?w= override, so
             // a reload shows what was picked.
             if (params.w) {
@@ -221,8 +223,9 @@
     // settings screen. Follow it.
     window.addEventListener('storage', event => {
         if (!event.key?.startsWith('wp:') || !stage) return;
-        if (event.key === 'wp:current' && !params.w) {
-            const saved = WP.store.get('wp:current');
+        const inherits = event.key === 'wp:current' && currentKey !== event.key && WP.store.get(currentKey) == null;
+        if ((event.key === currentKey || inherits) && !params.w) {
+            const saved = WP.store.get(event.key);
             if (saved && saved !== choice && usable(saved)) show(saved);
         } else if (event.key === `wp:${stage.id}`) {
             rebuild();
