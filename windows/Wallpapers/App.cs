@@ -13,6 +13,7 @@ sealed class App : ApplicationContext
     public AppPaths Paths { get; }
     public AppSettings Settings { get; private set; }
     public DesktopLayer Layer { get; }
+    public Desktop Desktop { get; }
     /// Why nothing can be shown (no web root), or null.
     public string? Problem { get; }
     bool cleaned;
@@ -26,8 +27,10 @@ sealed class App : ApplicationContext
         AppDomain.CurrentDomain.UnhandledException += (_, e) => Crash(e.ExceptionObject as Exception);
         Layer = new DesktopLayer(Log.Info) { DrawAboveIcons = Settings.DrawAboveIcons };
         Layer.EndSession += () => Cleanup("logoff");
+        Desktop = new Desktop(paths, Layer);
         Problem = paths.CheckWebRoot();
         if (Problem != null) Log.Error(Problem);
+        else _ = Desktop.StartAsync();
         SingleInstance.Listen(paths.Flavor, OnCommand);
     }
 
@@ -44,6 +47,7 @@ sealed class App : ApplicationContext
         {
             case "quit": Quit(); break;
             case "settings": OpenSettings(); break;
+            case "reload": Desktop.ReloadAll(); break;
             default: Log.Warn($"unknown command {command}"); break;
         }
     }
@@ -68,6 +72,8 @@ sealed class App : ApplicationContext
         if (cleaned) return;
         cleaned = true;
         Log.Info($"cleanup reason={reason}");
+        try { Desktop.Dispose(); }
+        catch (Exception e) { Log.Error($"cleanup: {e.Message}"); }
         Layer.Dispose();
     }
 }
