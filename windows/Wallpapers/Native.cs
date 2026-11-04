@@ -71,6 +71,8 @@ static class N
     [DllImport("user32.dll")] public static extern bool EnumWindows(EnumWindowsProc cb, IntPtr l);
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern IntPtr FindWindow(string? cls, string? title);
     [DllImport("user32.dll")] public static extern IntPtr GetParent(IntPtr h);
+    [DllImport("user32.dll")] public static extern IntPtr GetAncestor(IntPtr h, uint flags);
+    public const uint GA_ROOT = 2;
     [DllImport("user32.dll")] public static extern IntPtr GetWindow(IntPtr h, uint cmd);
     [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr h, out RECT r);
     [DllImport("user32.dll")] public static extern bool IsWindow(IntPtr h);
@@ -235,9 +237,29 @@ static class N
     [ComImport, Guid("30cbe57d-d9d0-452a-ab13-7ac5ac4825ee"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
     public interface IUIAutomation
     {
-        void _3(); void _4(); void _5(); void _6();
+        void _3(); void _4(); void _5();
+        /// Slot 6 (the self-test's icon list).
+        IUIAutomationElement ElementFromHandle(IntPtr hwnd);
         /// Slot 7.
         IUIAutomationElement ElementFromPoint(POINT pt);
+        void _8(); void _9(); void _10(); void _11(); void _12(); void _13(); void _14(); void _15();
+        void _16(); void _17(); void _18(); void _19(); void _20();
+        /// Slot 21 (the self-test's icon list).
+        IUIAutomationCondition CreateTrueCondition();
+    }
+
+    [ComImport, Guid("352ffba8-0973-437c-a61f-f64cafd81df9"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    public interface IUIAutomationCondition { }
+
+    public const int TreeScope_Children = 2;
+
+    [ComImport, Guid("14314595-b4bc-4055-95f2-58f2e42c9855"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    public interface IUIAutomationElementArray
+    {
+        /// Slot 3.
+        int get_Length();
+        /// Slot 4.
+        IUIAutomationElement GetElement(int index);
     }
 
     /// IUIAutomation (slots 3-57) plus the timeouts (Windows 8 on; CUIAutomation8 gives it).
@@ -262,10 +284,18 @@ static class N
     [ComImport, Guid("d22108aa-8ac5-49a5-837b-37bbb3d7591e"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
     public interface IUIAutomationElement
     {
-        void _3(); void _4(); void _5(); void _6(); void _7(); void _8(); void _9(); void _10();
+        void _3(); void _4(); void _5();
+        /// Slot 6 (the self-test's icon list).
+        IUIAutomationElementArray FindAll(int scope, IUIAutomationCondition condition);
+        void _7(); void _8(); void _9(); void _10();
         void _11(); void _12(); void _13(); void _14(); void _15(); void _16(); void _17(); void _18();
         void _19(); void _20();
         /// Slot 21.
         int get_CurrentControlType();
+        void _22(); void _23(); void _24(); void _25(); void _26(); void _27(); void _28(); void _29(); void _30();
+        void _31(); void _32(); void _33(); void _34(); void _35(); void _36(); void _37(); void _38(); void _39();
+        void _40(); void _41(); void _42();
+        /// Slot 43 (physical px).
+        RECT get_CurrentBoundingRectangle();
     }
 }

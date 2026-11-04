@@ -83,13 +83,13 @@ sealed class SelfTest
 
     static Task Wait(int ms) => Task.Delay(ms);
 
-    static async Task<bool> Until(int ms, Func<Task<bool>> condition)
+    static async Task<bool> Until(int ms, Func<Task<bool>> condition, int everyMs = 200)
     {
         var clock = Stopwatch.StartNew();
         while (clock.ElapsedMilliseconds < ms)
         {
             if (await condition()) return true;
-            await Wait(200);
+            await Wait(everyMs);
         }
         return await condition();
     }
@@ -153,6 +153,7 @@ sealed class SelfTest
             var ready = await Until(20000, async () => await Ready(s) && await Js<string>(s, "WP.player.stage.id") == TestWallpaper);
             var frames = ready ? await FramesOver(s, 2000) : -1;
             Check($"animates {s.Plan.Device}", ready && frames > 20, ready ? $"{frames} frames in 2 s" : "the stage never said ready");
+            await ListenAsync(s);
         }
         var first = surfaces[0];
 
@@ -191,6 +192,11 @@ sealed class SelfTest
         Check("pause", hidden is >= 0 and <= 2 && !visibleFlag && pageHeard && resumed > 10,
             $"hidden {hidden} frames in 1.5 s (IsVisible={visibleFlag}, page {(pageHeard ? "paused" : "NOT told")}); visible {resumed}");
 
+        // 6 (W3). The pointer, fed to the forwarder (never real input), and the classifier on the real desktop.
+        await PointerAsync(first);
+        await PointerTogglesAsync(first);
+        await ClassifyAsync(first);
+
         // 5 (W2). Coverage: another window over monitor 1 hides that surface only, and closing it shows it again.
         await CoverageAsync(surfaces);
 
@@ -207,7 +213,6 @@ sealed class SelfTest
         // 4c. The tray's Performance rows are real clicks; the pick reaches the page's store and the
         // status line follows the stage's own report. Auto is put back at the end.
         await PerformanceAsync(first);
-        PointerToggles();
 
         // 7 (W1). bing.json is answered by the app.
         await BingAsync(first);
@@ -282,21 +287,248 @@ sealed class SelfTest
         Check("performance battery toggle", flipped && restored, $"was {before}, flipped {flipped}, restored {restored}");
     }
 
-    /// The tray's two mouse rows save to settings.json and tell the pointer; both end where they began.
-    void PointerToggles()
+    // ---- The pointer (§10.25.8) ---------------------------------------------------------------
+
+    /// What a stage heard since its probe was last emptied: real moves (SendMouseInput), host.gestures
+    /// taps and the last dblclick, in CSS px.
+    sealed record Heard(int Moves, double[]? Last, double[][] Taps, double[]? Dbl)
     {
+        public override string ToString() =>
+            $"moves {Moves} last {At(Last)}, taps [{string.Join(" ", Taps.Select(At))}], dblclick {At(Dbl)}";
+    }
+
+    static string At(double[]? p) => p is [var x, var y] ? $"({x:0.#},{y:0.#})" : "none";
+    static readonly JsonSerializerOptions AnyCase = new() { PropertyNameCaseInsensitive = true };
+
+    /// The stage probe (installed once per stage), emptied. False when there's no stage to listen in.
+    static Task<bool> ListenAsync(Surface s) => Js<bool>(s, $$"""
+        (() => {
+          const w = {{Stage}};
+          if (!w || !w.WP || !w.WP.host) return false;
+          const fresh = !w.__pt;
+          w.__pt = { moves: 0, last: null, taps: [], dbl: null };
+          if (fresh) {
+            w.WP.host.gestures({ tap: (x, y) => w.__pt.taps.push([x, y]) });
+            w.document.addEventListener('pointermove', e => { w.__pt.moves++; w.__pt.last = [e.clientX, e.clientY]; });
+            w.document.addEventListener('dblclick', e => w.__pt.dbl = [e.clientX, e.clientY]);
+          }
+          return true;
+        })()
+        """);
+
+    static async Task<Heard?> HeardAsync(Surface s)
+    {
+        try { return JsonSerializer.Deserialize<Heard>(await s.EvalAsync($"{Stage}?.__pt ?? null"), AnyCase); }
+        catch (Exception e) when (e is JsonException or InvalidOperationException or COMException) { return null; }
+    }
+
+    /// Where CSS (400, 300) is on a surface, in physical px: its own placement, so a fit factor is in it.
+    static (int X, int Y) TestPoint(Surface s) =>
+        (s.Placement.Screen.Left + (int)Math.Round(400 * s.Placement.RasterizationScale),
+         s.Placement.Screen.Top + (int)Math.Round(300 * s.Placement.RasterizationScale));
+
+    static bool Near(double[]? p) => p is [var x, var y] && Math.Abs(x - 400) <= 1 && Math.Abs(y - 300) <= 1;
+
+    /// A left press and its release 50 ms later, at a physical point, through the forwarder.
+    async Task TapAsync(int x, int y, HitKind kind = HitKind.Bare)
+    {
+        app.Desktop.Pointer.FeedForTest(true, x, y, kind);
+        await Wait(50);
+        app.Desktop.Pointer.FeedForTest(false, x, y, kind);
+    }
+
+    /// A move, a tap and a double-click reach monitor 1's stage at the right CSS px without moving the
+    /// foreground; an icon press reaches nothing; a hidden surface gets nothing and the pointer is off.
+    async Task PointerAsync(Surface first)
+    {
+        var desktop = app.Desktop;
+        var pointer = desktop.Pointer;
+        var (x, y) = TestPoint(first);
+        if (!await ListenAsync(first)) { Line("FAIL", "pointer", "no stage to listen in"); return; }
+        Heard? h = null;
+
+        pointer.FeedForTest(null, x, y);
+        var moved = await Until(1000, async () => (h = await HeardAsync(first)) is { Moves: >= 1 } && Near(h.Last), 20);
+        Check("pointer move", moved, $"physical ({x},{y}) → {h}");
+
+        await ListenAsync(first);
+        var foreground = N.GetForegroundWindow();
+        await TapAsync(x, y);
+        var up = Stopwatch.StartNew();
+        await Until(1000, async () => (h = await HeardAsync(first)) is { Taps.Length: >= 1 }, 20);
+        var kept = N.GetForegroundWindow() == foreground;
+        Check("pointer tap", h is { Taps: [var tap], Dbl: null } && Near(tap) && kept,
+            $"physical ({x},{y}) → {h}; focus {(kept ? "kept" : "MOVED")}");
+
+        // The second press 200 ms after the first one's release: inside the double-click time.
+        await Wait(Math.Max(0, 200 - (int)up.ElapsedMilliseconds));
+        await TapAsync(x, y);
+        await Until(1000, async () => (h = await HeardAsync(first)) is { Taps.Length: >= 2, Dbl: not null }, 20);
+        Check("pointer double click", h is { Taps.Length: 2 } && Near(h.Dbl), $"{h}");
+
+        await TapAsync(x, y, HitKind.Icon);
+        await Wait(500);
+        h = await HeardAsync(first);
+        Check("pointer icon", h is { Taps.Length: 2 }, $"a press on an icon: {h}");
+
+        await desktop.SetPausedAsync(true);
+        try
+        {
+            var off = !pointer.Active;
+            var before = await HeardAsync(first);
+            pointer.FeedForTest(null, x + 2, y);
+            await TapAsync(x, y);
+            await Wait(500);
+            h = await HeardAsync(first);
+            var nothing = before != null && h != null && h.Moves == before.Moves && h.Taps.Length == before.Taps.Length;
+            await desktop.SetPausedAsync(false);
+            var on = pointer.Active;
+            Check("pointer hidden", off && nothing && on,
+                $"paused: pointer {(off ? "off" : "STILL ON")}, a move and a tap {(nothing ? "reached nothing" : $"REACHED the page ({before} → {h})")}; visible: pointer {(on ? "on" : "STILL OFF")}");
+        }
+        finally { if (desktop.Paused) await desktop.SetPausedAsync(false); }
+    }
+
+    /// The tray's two mouse rows: each stops what it says, saves to settings.json, and both off turns
+    /// the pointer off. Both end where they began.
+    async Task PointerTogglesAsync(Surface first)
+    {
+        var pointer = app.Desktop.Pointer;
+        var (x, y) = TestPoint(first);
         bool Saved(Func<AppSettings, bool> pick) => pick(AppSettings.Load(app.Paths.SettingsFile));
-        var f = app.Settings.FollowMouse;
-        var c = app.Settings.DesktopClicks;
-        app.Tray.ClickPointerForTest("follow");
-        app.Tray.ClickPointerForTest("clicks");
-        var flipped = app.Desktop.Pointer.Follow == !f && app.Desktop.Pointer.Clicks == !c
-            && Saved(x => x.FollowMouse) == !f && Saved(x => x.DesktopClicks) == !c;
-        app.Tray.ClickPointerForTest("follow");
-        app.Tray.ClickPointerForTest("clicks");
-        var restored = app.Desktop.Pointer.Follow == f && app.Desktop.Pointer.Clicks == c
-            && Saved(x => x.FollowMouse) == f && Saved(x => x.DesktopClicks) == c;
-        Check("pointer toggles", flipped && restored, $"flipped {flipped}, restored {restored}");
+        var (f, c) = (app.Settings.FollowMouse, app.Settings.DesktopClicks);
+        Heard? h = null;
+        var notes = new List<string>();
+        try
+        {
+            if (!f || !c) { Line("FAIL", "pointer toggles", $"they didn't start on (follow {f}, clicks {c})"); return; }
+
+            await ListenAsync(first);
+            app.Tray.ClickPointerForTest("clicks");
+            var clicksOff = !pointer.Clicks && !app.Settings.DesktopClicks && !Saved(st => st.DesktopClicks);
+            await TapAsync(x, y);
+            await Wait(500);
+            var blocked = (h = await HeardAsync(first)) is { Taps.Length: 0 };
+            notes.Add($"clicks off {(clicksOff ? "saved" : "NOT saved")}, a tap {(blocked ? "not delivered" : $"DELIVERED ({h})")}");
+            app.Tray.ClickPointerForTest("clicks");
+            var clicksOn = pointer.Clicks && app.Settings.DesktopClicks && Saved(st => st.DesktopClicks);
+            await TapAsync(x, y);
+            var delivered = await Until(1000, async () => (h = await HeardAsync(first)) is { Taps.Length: 1 }, 20);
+            notes.Add($"on {(clicksOn ? "saved" : "NOT saved")}, {(delivered ? "delivered" : $"NOT delivered ({h})")}");
+
+            // Moves to a new spot each time: a move to where the last one was may not reach the page.
+            await ListenAsync(first);
+            app.Tray.ClickPointerForTest("follow");
+            var followOff = !pointer.Follow && !app.Settings.FollowMouse && !Saved(st => st.FollowMouse);
+            pointer.FeedForTest(null, x + 2, y);
+            await Wait(500);
+            var still = (h = await HeardAsync(first)) is { Moves: 0 };
+            notes.Add($"follow off {(followOff ? "saved" : "NOT saved")}, a move {(still ? "not delivered" : $"DELIVERED ({h})")}");
+            app.Tray.ClickPointerForTest("follow");
+            var followOn = pointer.Follow && app.Settings.FollowMouse && Saved(st => st.FollowMouse);
+            pointer.FeedForTest(null, x + 4, y);
+            var movedAgain = await Until(1000, async () => (h = await HeardAsync(first)) is { Moves: >= 1 }, 20);
+            notes.Add($"on {(followOn ? "saved" : "NOT saved")}, {(movedAgain ? "delivered" : $"NOT delivered ({h})")}");
+
+            app.Tray.ClickPointerForTest("follow");
+            app.Tray.ClickPointerForTest("clicks");
+            var bothOff = !pointer.Active;
+            app.Tray.ClickPointerForTest("follow");
+            app.Tray.ClickPointerForTest("clicks");
+            var back = pointer.Active;
+            notes.Add($"both off: pointer {(bothOff ? "off" : "STILL ON")}, both on: {(back ? "on" : "STILL OFF")}");
+            Check("pointer toggles", clicksOff && blocked && clicksOn && delivered && followOff && still && followOn && movedAgain && bothOff && back,
+                string.Join("; ", notes));
+        }
+        finally
+        {
+            if (app.Settings.FollowMouse != f) app.Tray.ClickPointerForTest("follow");
+            if (app.Settings.DesktopClicks != c) app.Tray.ClickPointerForTest("clicks");
+        }
+    }
+
+    /// The real classifier (nothing is clicked) on monitor 1's real desktop: each icon UI Automation
+    /// lists is an icon, and a grid of points away from them is bare. Points under another window (the
+    /// terminal this runs from) are left out.
+    async Task ClassifyAsync(Surface first)
+    {
+        const string Name = "pointer classify";
+        if (app.Desktop.Fake) { Line("SKIP", Name, "fake monitors"); return; }
+        var work = first.Plan.Work;
+        static bool OnDesktop(int x, int y) =>
+            N.ClassOf(N.GetAncestor(N.WindowFromPoint(new N.POINT { X = x, Y = y }), N.GA_ROOT)) is "Progman" or "WorkerW";
+
+        var listView = N.Children((IntPtr)app.Layer.Shape.DefView).FirstOrDefault(h => N.ClassOf(h) == "SysListView32");
+        List<Rect> icons;
+        try { icons = listView != IntPtr.Zero && N.IsWindowVisible(listView) ? await Task.Run(() => IconRects(listView)) : []; }
+        catch (COMException e) { Line("FAIL", Name, $"UI Automation couldn't list the icons ({e.Message})"); return; }
+        var allIcons = icons.Count;
+        var points = new List<(int X, int Y, HitKind Want)>();
+        foreach (var r in icons)
+        {
+            var (cx, cy) = ((r.Left + r.Right) / 2, (r.Top + r.Bottom) / 2);
+            if (work.Contains(cx, cy) && OnDesktop(cx, cy)) points.Add((cx, cy, HitKind.Icon));
+        }
+        for (var i = 0; i < 5; i++)
+            for (var j = 0; j < 4; j++)
+            {
+                int x = work.Left + (2 * i + 1) * work.Width / 10, y = work.Top + (2 * j + 1) * work.Height / 8;
+                if (icons.Any(r => x >= r.Left - 8 && x < r.Right + 8 && y >= r.Top - 8 && y < r.Bottom + 8) || !OnDesktop(x, y)) continue;
+                points.Add((x, y, HitKind.Bare));
+            }
+        var iconPoints = points.Count(p => p.Want == HitKind.Icon);
+        var barePoints = points.Count - iconPoints;
+        var where = $"{iconPoints} of {allIcons} icon(s) and {barePoints} of 20 grid points uncovered on monitor 1";
+        if (points.Count == 0) { Line("SKIP", Name, $"no icons, no bare points: the desktop is covered ({where})"); return; }
+
+        var wrong = new List<string>();
+        var times = new List<double>();
+        foreach (var (x, y, want) in points)
+        {
+            try
+            {
+                var (kind, ms) = await app.Desktop.Pointer.ClassifyForTest(x, y);
+                times.Add(ms);
+                if (kind != want) wrong.Add($"({x},{y}) {kind} (want {want})");
+            }
+            catch (TimeoutException) { wrong.Add($"({x},{y}) no verdict in 3 s"); }
+        }
+        times.Sort();
+        double Pct(double q) => times.Count == 0 ? 0 : times[Math.Min(times.Count - 1, (int)Math.Ceiling(q * times.Count) - 1)];
+        Check(Name, wrong.Count == 0 && iconPoints > 0 && barePoints > 0,
+            $"{points.Count - wrong.Count} of {points.Count} right; uia median {Pct(0.5):0.#} ms, p95 {Pct(0.95):0.#} ms; {where}"
+            + (wrong.Count > 0 ? $"; wrong: {string.Join(", ", wrong)}" : ""));
+    }
+
+    /// The icons of the desktop's list view, as UI Automation sees them (physical px). On an MTA thread.
+    static List<Rect> IconRects(IntPtr listView)
+    {
+        var uia = (N.IUIAutomation)Activator.CreateInstance(Type.GetTypeFromCLSID(N.CLSID_CUIAutomation, throwOnError: true)!)!;
+        try
+        {
+            var items = uia.ElementFromHandle(listView).FindAll(N.TreeScope_Children, uia.CreateTrueCondition());
+            var found = new List<Rect>();
+            for (var i = 0; i < items.get_Length(); i++)
+                if (items.GetElement(i) is var item && item.get_CurrentControlType() == N.UIA_ListItemControlTypeId)
+                    found.Add(item.get_CurrentBoundingRectangle().ToRect());
+            return found;
+        }
+        finally { Marshal.FinalReleaseComObject(uia); }
+    }
+
+    /// A tap at monitor 2's test point of the fake layout lands on monitor 2 at CSS (400, 300), and
+    /// nowhere on monitor 1.
+    async Task FakeTapAsync(List<Surface> fake)
+    {
+        var (one, two) = (fake.First(s => s.Plan.Number == 1), fake.First(s => s.Plan.Number == 2));
+        var listening = await ListenAsync(one) & await ListenAsync(two);
+        var (x, y) = TestPoint(two);
+        await TapAsync(x, y);
+        Heard? h2 = null;
+        await Until(1000, async () => (h2 = await HeardAsync(two)) is { Taps.Length: >= 1 }, 20);
+        var h1 = await HeardAsync(one);
+        Check("pointer (fake monitor 2)", listening && h2 is { Taps: [var tap] } && Near(tap) && h1 is { Taps.Length: 0 },
+            $"physical ({x},{y}) at scale {two.Placement.RasterizationScale:0.###}: monitor 2 {h2?.ToString() ?? "no stage"}; monitor 1 {h1?.ToString() ?? "no stage"}");
     }
 
     static readonly string[] Tiers = ["low", "medium", "high"];
@@ -441,9 +673,10 @@ sealed class SelfTest
             + (bad.Count == 0 ? $"{surfaces.Count} page(s) got {got}, reasons [{string.Join(", ", reasons)}]" : string.Join("; ", bad)));
     }
 
-    /// Two fake 1280×720 monitors at 100%, side by side; monitor 1 can be made taller.
+    /// Two fake 1920×720 monitors at 100%, side by side; monitor 1 can be made taller. Wider than most real
+    /// work areas, so they're fitted (scaled down): the pointer's CSS px must have that factor in them.
     static List<MonitorInfo> FakeTwo(int firstHeight = 720) =>
-        [FakeMonitor(1, new Rect(0, 0, 1280, firstHeight)), FakeMonitor(2, new Rect(1280, 0, 2560, 720))];
+        [FakeMonitor(1, new Rect(0, 0, 1920, firstHeight)), FakeMonitor(2, new Rect(1920, 0, 3840, 720))];
 
     static MonitorInfo FakeMonitor(int n, Rect r) =>
         new($@"\\.\DISPLAY{n}", r, r, 96, Primary: n == 1, Path: $"selftest-fake-{n}", Name: $"Self-test {n}");
@@ -463,6 +696,7 @@ sealed class SelfTest
             else
             {
                 await DisplayAsync(fake);
+                await FakeTapAsync(fake);
                 await ResizeInPlaceAsync(fake);
             }
         }
@@ -531,7 +765,7 @@ sealed class SelfTest
         var grew = await Until(3000, async () => (after = await Js<int>(one, "innerHeight")) - before is >= 78 and <= 82);
         var same = await Js<double>(one, "performance.timeOrigin") == origin;
         Check("resize in place", kept && grew && same,
-            $"monitor 1 1280x720 → 1280x800: {(kept ? "the same surface" : "a NEW surface")}, innerHeight {before} → {after}, {(same ? "no reload" : "the page RELOADED")}");
+            $"monitor 1 1920x720 → 1920x800: {(kept ? "the same surface" : "a NEW surface")}, innerHeight {before} → {after}, {(same ? "no reload" : "the page RELOADED")}");
 
         var host = two.Host;
         await desktop.UseFakeDisplaysForTest([FakeTwo(firstHeight: 800)[0]]);
