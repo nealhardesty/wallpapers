@@ -35,7 +35,7 @@ static class Program
         {
             File.WriteAllText(Path.Combine(paths.Root, "displays.json"), Displays.ToJson(N.Monitors()));
             File.WriteAllText(Path.Combine(paths.Root, "tree.json"), DesktopShape.TreeToJson(DesktopLayer.Anonymised(DesktopLayer.Snapshot())));
-            Log.Info($"--dump-displays: wrote displays.json and tree.json to {paths.Root}");
+            Log.Info($"--dump-displays: wrote displays.json (with paths, names and keys) and tree.json to {paths.Root}");
             return 0;
         }
         if (!selfTest && !SingleInstance.TryBecomeFirst(paths.Flavor))

@@ -1,0 +1,42 @@
+{
+  "monitors": [
+    {
+      "device": "\\\\.\\DISPLAY2",
+      "bounds": {
+        "left": 3840,
+        "top": 0,
+        "right": 5760,
+        "bottom": 1080
+      },
+      "work": {
+        "left": 3840,
+        "top": 0,
+        "right": 5760,
+        "bottom": 1080
+      },
+      "dpi": 96,
+      "primary": false,
+      "path": "\\\\?\\DISPLAY#FAKE0002#1&0#{fixture}",
+      "name": "Fixture 24"
+    },
+    {
+      "device": "\\\\.\\DISPLAY1",
+      "bounds": {
+        "left": 0,
+        "top": 0,
+        "right": 3840,
+        "bottom": 2160
+      },
+      "work": {
+        "left": 0,
+        "top": 0,
+        "right": 3840,
+        "bottom": 2088
+      },
+      "dpi": 144,
+      "primary": true,
+      "path": "\\\\?\\DISPLAY#FAKE0001#1&0#{fixture}",
+      "name": "Fixture 27"
+    }
+  ]
+}

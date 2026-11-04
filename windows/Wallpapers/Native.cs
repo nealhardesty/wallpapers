@@ -24,17 +24,20 @@ static class N
     [DllImport("shcore.dll")] static extern int GetDpiForMonitor(IntPtr monitor, int type, out uint x, out uint y);
     const uint MONITORINFOF_PRIMARY = 1;
 
-    /// The live monitors, in physical px (the process is PerMonitorV2).
+    /// The live monitors, in physical px (the process is PerMonitorV2), with device paths and names when known.
     public static List<MonitorInfo> Monitors()
     {
         var list = new List<MonitorInfo>();
+        var config = DisplayConfig.ByGdiName();
         EnumDisplayMonitors(IntPtr.Zero, IntPtr.Zero, (IntPtr m, IntPtr _, ref RECT _, IntPtr _) =>
         {
             var info = new MONITORINFOEX { cbSize = Marshal.SizeOf<MONITORINFOEX>() };
             if (GetMonitorInfo(m, ref info))
             {
                 GetDpiForMonitor(m, 0, out var dpi, out _);   // MDT_EFFECTIVE_DPI
-                list.Add(new MonitorInfo(info.szDevice, info.rcMonitor.ToRect(), info.rcWork.ToRect(), (int)dpi, (info.dwFlags & MONITORINFOF_PRIMARY) != 0));
+                var known = config.TryGetValue(info.szDevice, out var c);
+                list.Add(new MonitorInfo(info.szDevice, info.rcMonitor.ToRect(), info.rcWork.ToRect(), (int)dpi, (info.dwFlags & MONITORINFOF_PRIMARY) != 0,
+                    known ? c.Path : null, known && c.Name != "" ? c.Name : null));
             }
             return true;
         }, IntPtr.Zero);

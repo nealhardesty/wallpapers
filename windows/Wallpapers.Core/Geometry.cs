@@ -17,5 +17,6 @@ public sealed record Rect(int Left, int Top, int Right, int Bottom)
     public bool Contains(int x, int y) => x >= Left && x < Right && y >= Top && y < Bottom;
 }
 
-/// One monitor as Windows reports it: its rect, its work area (less the taskbar) and its DPI.
-public sealed record MonitorInfo(string Device, Rect Bounds, Rect Work, int Dpi, bool Primary);
+/// One monitor as Windows reports it: its rect, its work area (less the taskbar) and its DPI; and, when
+/// QueryDisplayConfig knows them, its device path and friendly name (SPEC §10.25.6).
+public sealed record MonitorInfo(string Device, Rect Bounds, Rect Work, int Dpi, bool Primary, string? Path = null, string? Name = null);

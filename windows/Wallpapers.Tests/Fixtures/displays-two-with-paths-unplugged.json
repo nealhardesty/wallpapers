@@ -1,0 +1,23 @@
+{
+  "monitors": [
+    {
+      "device": "\\\\.\\DISPLAY1",
+      "bounds": {
+        "left": 0,
+        "top": 0,
+        "right": 3840,
+        "bottom": 2160
+      },
+      "work": {
+        "left": 0,
+        "top": 0,
+        "right": 3840,
+        "bottom": 2064
+      },
+      "dpi": 192,
+      "primary": true,
+      "path": "\\\\?\\DISPLAY#FAKE0001#1&0#{fixture}",
+      "name": "Fixture 27"
+    }
+  ]
+}
