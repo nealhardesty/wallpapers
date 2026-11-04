@@ -16,7 +16,7 @@ DOTNET ?= $(shell command -v dotnet 2>/dev/null || echo $(HOME)/.dotnet/dotnet)
 DOTNET_FOUND := $(shell command -v $(DOTNET) 2>/dev/null)
 export DOTNET
 
-.PHONY: help hooks open serve serve-https cert bing-json thumbnails icons screenshots extension site android-build android-install android-logcat android-emulator android-release android-keystore android-bench jellyfin-media jellyfin-fixtures jellyfin-dev jellyfin-stop jellyfin-mock mac-build mac-run mac-dev mac-test mac-install mac-uninstall mac-release mac-saver-test mac-saver-live mac-saver-log win-spike win-build win-unit win-ci win-run win-dev win-test win-log docker-build docker-run lint audit audit-staged audit-history test smoke smoke-clock smoke-live bench bench-clock ci clean
+.PHONY: help hooks open serve serve-https cert bing-json thumbnails icons screenshots extension site android-build android-install android-logcat android-emulator android-release android-keystore android-bench jellyfin-media jellyfin-fixtures jellyfin-dev jellyfin-stop jellyfin-mock mac-build mac-run mac-dev mac-test mac-install mac-uninstall mac-release mac-saver-test mac-saver-live mac-saver-log win-build win-unit win-ci win-run win-dev win-reload win-test win-log docker-build docker-run lint audit audit-staged audit-history test smoke smoke-clock smoke-live bench bench-clock ci clean
 
 help: ## List every target
 	@awk 'BEGIN {FS = ":.*## "} /^[a-zA-Z0-9_-]+:.*## / {printf "  \033[36m%-17s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -147,14 +147,14 @@ win-run: ## Build the Windows app and start it on the Windows side from WSL (you
 win-dev: ## Run the Windows app straight from this checkout's web/, with its own settings and DevTools (Reload Wallpapers in the tray after an edit)
 	@BUILD=1 windows/run.sh dev
 
+win-reload: ## Reload the running Windows app's pages after a web/ edit (the win-dev one; FLAVOR=run for the normal one)
+	@windows/run.sh reload $(or $(FLAVOR),dev)
+
 win-test: ## Run the Windows app's self-test against a throwaway settings store (about 30 s; shows a wallpaper behind your icons)
 	@BUILD=1 windows/run.sh test
 
 win-log: ## Show the Windows app's log (FLAVOR=dev or test for those; FOLLOW=1 to follow)
 	@windows/run.sh log $(or $(FLAVOR),run)
-
-win-spike: ## Windows Phase W0 spikes (throwaway, SPEC §10.25.21): build windows/spikes in WSL and run it on the Windows side (ARGS="tree", "layer --mode raised", "check", …; SPIKE_EXE=Spike.scr)
-	@DOTNET="$(DOTNET)" ARGS="$(ARGS)" SPIKE_EXE="$(SPIKE_EXE)" windows/spikes/run.sh
 
 bench: ## Every wallpaper at every tier on a simulated phone (4× slower CPU): budgets, bench/results.json, the ⚡ badges (SPEC §4.8)
 	node tools/bench.mjs

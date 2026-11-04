@@ -28,6 +28,15 @@ script because a `SendMouseInput` press steals focus). **Phase W0 is complete.
 Next: plan and build W1** (SPEC §10.25.16). New owner decision pending: **signing**, since Smart App
 Control on this PC blocks some unsigned builds (SPEC Open questions).
 
+**Update 2026-11-03 (later): W1 is built.** Plan
+`docs/superpowers/plans/2026-11-03-windows-w1-desktop-core.md`; results in SPEC
+§10.25.16 *As built*. The app (`windows/Wallpapers`, `Wallpapers.Core`,
+`Wallpapers.Tests`) runs the wallpaper behind the icons on every monitor, with
+the tray, the settings window and `make win-test` (all pass). The spikes are
+deleted. Still to do by hand: an RDP disconnect and reconnect. **Next: plan W2**
+(monitors and power, SPEC §10.25.16) with superpowers:writing-plans. Signing is
+still the owner's call.
+
 ~~**The very next step:** write the implementation plan for Phase W0.~~ Done.
 Nothing past W0 is built until W0.1 and W0.2 pass. See §5 below.
 

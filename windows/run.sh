@@ -4,6 +4,7 @@
 #   run.sh dev   the same into ...\dev, with WP_DEV=1 WP_DEBUG=1 and WP_WEB_ROOT on this checkout's web/
 #   run.sh test  the same into ...\test, run --selftest, print its report, exit with its code
 #   run.sh log [run|dev|test]   the last lines of that flavour's log (FOLLOW=1 to follow)
+#   run.sh reload [dev|run]     reload the running app's pages (after a web/ edit, for dev)
 # Extra arguments for the app: WIN_ARGS="--dump-displays". BUILD=1 builds first, and builds again when
 # Smart App Control refuses the build (every build is a new file to it; SPEC §10.25.13), up to 3 times.
 set -e
@@ -23,6 +24,18 @@ if [ "$mode" = log ]; then
   log="$(root_for "${2:-run}")/log.txt"
   [ -f "$log" ] || { echo "no log yet: $log"; exit 0; }
   if [ -n "$FOLLOW" ]; then tail -n 40 -f "$log"; else tail -n 80 "$log"; fi
+  exit 0
+fi
+
+if [ "$mode" = reload ]; then
+  flavor=${2:-dev}
+  exe="$LOCAL/Wallpapers-build/$flavor/Wallpapers.exe"
+  [ -f "$exe" ] || { echo "run.sh: nothing built for $flavor (make win-$flavor)" >&2; exit 1; }
+  # The flavour is picked by WP_DEV, as when it started, so --reload finds the right app.
+  export WSLENV="WP_DEV${WSLENV:+:$WSLENV}"
+  if [ "$flavor" = dev ]; then export WP_DEV=1; else unset WP_DEV; fi
+  "$exe" --reload
+  tail -n 1 "$(root_for "$flavor")/log.txt" | tr -d '\r'
   exit 0
 fi
 
@@ -52,7 +65,8 @@ launch() {
   # build says so here. (The real start below can't be captured: a GUI app started through
   # `cmd /c start` inherits the redirection and WSL would wait for it to exit.)
   ./Wallpapers.exe --quit > "$OUTPUT" 2>&1 || true
-  if grep -qiE "Device Guard|Application Control" "$OUTPUT"; then return 3; fi
+  # Refused builds show up as Windows' message, or (WSL interop, seen 2026-11-03) a bare EINVAL.
+  if grep -qiE "Device Guard|Application Control|Invalid argument" "$OUTPUT"; then return 3; fi
   local before status=0
   before=$(stat -c %s "$LOG" 2>/dev/null || echo 0)
   if [ "$mode" = test ]; then

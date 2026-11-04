@@ -15,7 +15,7 @@ wallpapers' only home. They run in three hosts:
    web code behind the home screen.
 4. **macOS desktop and screen saver** (`mac/`, §10.21, built).
 5. **Windows desktop, tray app and screen saver** (`windows/`, §10.25,
-   designed 2026-11-02, not built; gated by spike W0).
+   designed 2026-11-02; W0 passed, the W1 desktop core built 2026-11-03).
 
 > Status: **phases 1–9 done** (2026-10-23), except what needs the owner:
 > measurements on a real phone (6.2's numbers, 6.4a), the first signed
@@ -27,8 +27,9 @@ wallpapers' only home. They run in three hosts:
 > Phase 11 (Harvest Valley, §10.22) added the 34th wallpaper for Thanksgiving.
 > Next: Phase 10, the clock overlay (§4.9, specified 2026-10-28, not built);
 > §10 holds the other ideas.
-> Windows (§10.25) is designed and owner-approved; its first step is the W0
-> spikes, which decide whether it's built at all.
+> Windows (§10.25): the W0 spikes passed, and W1 (the desktop core: behind
+> the icons on every monitor, the tray, the settings window, the self-test)
+> was built 2026-11-03. W2 (monitors and power) is next.
 
 ---
 
@@ -170,7 +171,7 @@ wallpapers/
 ├── docs/                        # README screenshots (`make screenshots`)
 ├── android/                     # the live wallpaper app (§6): Gradle wrapper, app/ (Kotlin)
 ├── mac/                         # the macOS app and screen saver (§10.21, Swift)
-├── windows/                     # planned: the Windows app, tray and screen saver (§10.25, C#)
+├── windows/                     # the Windows app and tray (§10.25, C#): Wallpapers, Wallpapers.Core, Wallpapers.Tests
 ├── bench/                       # make bench results (results.json; android.json from a phone)
 ├── .github/workflows/ci.yml     # `make ci`; on master also `make site` → GitHub Pages; daily for bing.json
 ├── Dockerfile                   # the site in a container, served by tools/serve.mjs
@@ -3436,9 +3437,8 @@ CI `mac` job.
 One native Windows 11 app that runs the same `web/` wallpapers behind the
 desktop icons, on every monitor, controlled from a tray icon, and later as
 the screen saver: the Mac app (§10.21) for Windows, going further where
-Windows allows. **Status: designed, owner-approved; the W0 gate passed
-(W0.1 and W0.2, 2026-11-03, §10.25.21), and W0.3 and W0.4 are done too; W1
-is next.** Phase W0
+Windows allows. **Status: W0 passed (2026-11-03, §10.25.21); W1 built
+(2026-11-03, *As built* in §10.25.16); W2 next.** Phase W0
 (spikes) is the gate: if a live web page can't run behind the icons on 25H2,
 the project stops. Brainstormed and reviewed 2026-11-02; the original design
 note is `docs/superpowers/specs/2026-11-02-windows-design.md`, and this
@@ -3595,7 +3595,7 @@ windows/
     DesktopLayer.cs            finds/creates Explorer's wallpaper layer, attaches hosts, repairs Z-order (§10.25.5)
     Desktop.cs                 one Surface per monitor; rebuilds on display change (§10.25.6)
     Surface.cs                 a host HWND + its WebView2; bounds, DPI, visibility, power push
-    WebFactory.cs              the shared CoreWebView2Environment, virtual host, policies (§10.25.7)
+    WebFactory.cs              the shared CoreWebView2Environment; serves web/ and bing.json itself; policies (§10.25.14)
     BingJson.cs                answers bing.json natively, like Android/Mac
     Pointer.cs                 Raw Input → pointer events in the right page (§10.25.8)
     Coverage.cs                gathers top-level window rects per monitor (math is in Core)
@@ -3613,6 +3613,11 @@ windows/
     SaverArgs.cs               /s /p:123 /p 123 /c:456 parsing (Windows passes all of these)
     AppSettings.cs             settings.json (mode, mouse, saver choices) with defaults
     PageUrl.cs                 index.html?host=windows&display=…&insets=…&screens=…
+    DesktopShape.cs            window-tree snapshot → Raised | Classic | NotSplit | NoShell, attach target, z check
+    WebFiles.cs                a URL → a file under web/ (nothing outside it) and its content type
+    Catalog.cs                 the page's catalog for the tray, its labels, Surprise Me
+    WindowPlacement.cs         where the settings window reopens, kept on a monitor that's there
+    BingArchive.cs, RollingLog.cs, Repaint.cs, Geometry.cs
   Wallpapers.Tests/            xUnit over Core; runs in WSL and CI
   build.sh                     publish + copy web/ + version stamping (like mac/build.sh)
   release.sh                   zip, checksum, checks
@@ -4005,7 +4010,10 @@ desktop surfaces go `hidden`.
   stays blocked, and changing one log string gave a new hash that passed.
   Local builds aren't exempt (no Mark of the Web needed). So an unsigned
   release may simply not run on SAC machines, and day-to-day builds can be
-  refused at random. See Open questions.
+  refused at random. See Open questions. In W1 a refused exe run through WSL
+  interop showed only `Invalid argument` (PowerShell shows the real "An
+  Application Control policy has blocked this file"); `run.sh` treats both
+  as a refusal and builds again.
 - **Single instance:** a second launch tells the first (named pipe) to open
   Settings, and exits.
 - No admin rights anywhere. No services, no scheduled tasks, no drivers.
@@ -4053,7 +4061,8 @@ section):**
 |---|---|
 | `win-build` | `windows/build.sh`: publish win-x64 self-contained single-file to `dist/win/`, copy `web/` beside it, stamp `web/manifest.json`'s version |
 | `win-unit` | `dotnet test` over Core (runs in WSL/Linux, no Windows needed) |
-| `win-dev` | build, copy to `%LOCALAPPDATA%\Wallpapers-dev\` on the Windows side (found with `wslpath` and `cmd.exe /c echo %LOCALAPPDATA%`), and run it with `WP_WEB_ROOT` pointing at this checkout's `web/` through `\\wsl.localhost\…`, so a web edit + *Reload Wallpapers* shows at once. Uses a separate user data folder (`Wallpapers-dev`), never the installed app's |
+| `win-dev` | build, copy to `%LOCALAPPDATA%\Wallpapers-dev\` on the Windows side (found with `wslpath` and `cmd.exe /c echo %LOCALAPPDATA%`), and run it with `WP_WEB_ROOT` pointing at this checkout's `web/` through `\\wsl.localhost\…`, so a web edit + *Reload Wallpapers* shows at once. Uses a separate user data folder (`Wallpapers-dev`), never the installed app's. *As built:* the UNC path works as is (the app reads the files itself, §10.25.14); no copy needed |
+| `win-reload` | reload a running app's pages (`--reload`; the `win-dev` one by default) |
 | `win-run` | build and run the built exe (normal settings) |
 | `win-test` | `--selftest` against a throwaway user data folder (below); needs Windows (WSL interop or CI) |
 | `win-install` / `win-uninstall` | install/uninstall the built app for this Windows user |
@@ -4150,6 +4159,32 @@ Task Manager; RDP in and out; the saver from Windows' dialog; uninstall.
   run, attach, one surface per monitor in Same mode, insets, tray (pick,
   next, pause, settings, quit), settings window, bing.json, Explorer
   restart, quit cleanup, self-test checks 1–4 and 10. Web changes §7.1–7.2.
+
+  *As built (2026-11-03; plan `docs/superpowers/plans/2026-11-03-windows-w1-desktop-core.md`).*
+  Windows 11 25H2 over Remote Desktop, one monitor at 200%.
+  - **Self-test** (`make win-test`, ~27 s, all pass): layer, animates,
+    storage, pause, insets, overlay, bing.json, shell restart (simulated),
+    renderer crash (reloaded and animating in ~1.5 s), cleanup; and
+    `WIN_ARGS=--bad-web-root`. Check 8 was first run against a broken path
+    (no rebind) and failed, as it should.
+  - **By hand (owner):** the scene behind the icons with the ground above
+    the taskbar; right-click on the first try, icon drag and double-click,
+    rubber band; an Explorer restart (re-bound in ~170 ms, no reload); every
+    tray item; Quit gives back Windows' picture. By script: a pick in the
+    settings window reaches the desktop; the window reopens where it was.
+    A live RDP resize (1686 → 1844 px tall) rebuilt the surface in 0.6 s
+    with the insets right, but twice (Windows sent two bursts) and each
+    rebuild reloads the page: resizing in place belongs to W2's hot-plug
+    and DPI work. Still to do by hand: an RDP disconnect and reconnect.
+  - **Changed from the design:** the app serves its origin itself
+    (§10.25.14; the folder mapping never let `bing.json` through, which the
+    self-test found); a crash exits after its cleanup (with no wallpaper and
+    no tray left, staying would only hold the single-instance lock); Next
+    and Previous step on the first surface and tell the others (stepping
+    each would race through storage events); the panel's × or Esc closes
+    the settings window; `--reload` and `make win-reload`.
+  - **Not in W1** (as planned): the mouse (W3), Different mode and the
+    Performance menu (W2), install and Start with Windows (W4), the saver (W5).
 - **W2 Monitors and power:** Different mode and display keys, hot-plug and
   DPI, coverage pause, every power signal, Performance menu, Identify
   Monitors. Web §7.3, §7.5. Self-test 5, 7.
@@ -4233,9 +4268,11 @@ Task Manager; RDP in and out; the saver from Windows' dialog; uninstall.
 #### 10.25.21 Spike results
 
 W0.1–W0.4 each record here: Windows build, session type (console or Remote
-Desktop), monitors, what was tried, what worked, numbers. The spike code is
+Desktop), monitors, what was tried, what worked, numbers. The spike code was
 `windows/spikes/` (`make win-spike ARGS=…`; plan:
-`docs/superpowers/plans/2026-11-03-windows-w0-spikes.md`), throwaway, deleted at W1.
+`docs/superpowers/plans/2026-11-03-windows-w0-spikes.md`), throwaway, deleted at
+W1 and since replaced by `windows/Wallpapers` (it's in git history, like the
+Mac's M0).
 
 **W0.1 behind the icons: passes.** (Windows 11 25H2 build 26200, Remote
 Desktop, one monitor 2940×1686 at 200%, work area 2940×1590, picture
@@ -4343,8 +4380,8 @@ Intel Iris Xe, Direct3D 11, even over RDP; mains power; 2026-11-03)
 - **Smart App Control** (§10.25.13) blocked 2 of the ~20 spike builds; each
   was rebuilt with a trivial change and ran.
 - **Tooling gotchas:** GUI windows started from WSL can come up minimized
-  (force the window state after `Shown`); `make win-spike` skips replacing
-  the exe while one runs, so a second command uses the running build.
+  (force the window state after `Shown`); `make win-spike` skipped replacing
+  the exe while one ran, so a second command uses the running build.
 
 **W0.3 two processes, one user data folder: works; no mirror.** (same
 machine, RDP, 2026-11-03; the "saver" ran as `Spike.scr`, the same bytes as

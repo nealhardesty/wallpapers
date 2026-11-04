@@ -152,6 +152,30 @@ saver can read them. If macOS's screen saver host ever stalls the page, the
 saver reloads it, and failing that shows a clock on black rather than a broken
 screen. An update of the app updates the saver by itself.
 
+**On Windows, as your desktop background** (Windows 11, early: no installer
+yet). Build and start it from WSL with `make win-run` (it needs the .NET 10 SDK
+in WSL; see Development). The wallpaper runs live behind your desktop icons on
+every monitor, and the icons, the right-click menu and drag-selecting all work
+as before. A tray icon controls it. Windows puts new tray icons behind the **^**
+at first: drag it onto the taskbar to keep it there. Left or right click opens
+the menu:
+- pick a wallpaper (with thumbnails), **Surprise Me**, **Next** and **Previous**
+- **Pause**
+- **Settings…**: the same panel as everywhere else, in a window; a pick there
+  changes the desktop at once
+- **Troubleshooting**: **Open Log Folder**, **Reload Wallpapers**, and **Draw
+  Above Icons**, a fallback for a Windows update that breaks the layer behind
+  the icons
+
+It keeps going when Explorer restarts and when a Remote Desktop session
+resizes the screen. **Quit** gives you your own picture back. Wallpapers don't
+react to the mouse on Windows yet (that's coming: SPEC §10.25.8). The exe isn't
+signed, so **Smart App Control**, if it's on, can refuse a build by its hash.
+`make win-run` notices and builds again (each build is a new file to it).
+SmartScreen only asks about a downloaded copy (there are no Windows downloads
+yet); then it's **More info → Run anyway**. Its data
+(settings, log) is in `%LOCALAPPDATA%\Wallpapers`.
+
 **On any phone,** without installing anything: open the hosted copy and
 choose *Add to Home screen*. It opens full screen, with no browser around
 it. Hold a right-hand corner for the panel.
@@ -415,10 +439,10 @@ Run `make` to list every target.
 | `make win-build` | Build the Windows app: `dist/win/Wallpapers.exe` (self-contained, about 50 MB) with `web/` beside it; cross-compiles in WSL or Linux |
 | `make win-unit` | The Windows app's unit tests (`windows/Wallpapers.Tests`); no Windows needed |
 | `make win-run` | Build it and start it on the Windows side from WSL, with your normal settings: the wallpaper goes behind your desktop icons, a tray icon controls it |
-| `make win-dev` | Run it straight from this checkout's `web/`, with its own settings and DevTools, so edits show after *Reload Wallpapers* in the tray |
-| `make win-test` | The app's self-test against a throwaway settings store: layer, animation, settings sharing, pause, insets, Bing, Explorer restart, a renderer crash, cleanup (about 30 s) |
+| `make win-dev` | Run it straight from this checkout's `web/` (over `\\wsl.localhost`), with its own settings and DevTools, so an edit shows after `make win-reload` or *Reload Wallpapers* in the tray |
+| `make win-reload` | Reload the running app's pages after a `web/` edit: the `win-dev` one, or `FLAVOR=run` for the normal one |
+| `make win-test` | The app's self-test against a throwaway settings store: layer, animation, settings sharing, pause, insets, overlay, Bing, Explorer restart (simulated), a renderer crash, cleanup (about 30 s; `WIN_ARGS=--bad-web-root` checks the missing-files case) |
 | `make win-log` | The app's log (`FLAVOR=dev` or `test` for those; `FOLLOW=1` to follow) |
-| `make win-spike` | Temporary, for the Windows design's W0 spikes: build the spike exe in WSL and run it on the Windows side, `ARGS="tree"` etc. (SPEC §10.25.21) |
 | `make docker-build` | Build the container image `wallpapers` |
 | `make docker-run` | Run it at http://localhost:8000 (read-only, unprivileged) |
 | `make lint` | Syntax-check every script and JSON file |

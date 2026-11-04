@@ -2,7 +2,7 @@ using System.Windows.Forms;
 
 namespace Wallpapers;
 
-/// Modes (SPEC §10.25.4): the app · --quit · --settings · --dump-displays · --selftest [--bad-web-root].
+/// Modes (SPEC §10.25.4): the app · --quit · --reload · --settings · --dump-displays · --selftest [--bad-web-root].
 static class Program
 {
     [STAThread]
@@ -23,6 +23,12 @@ static class Program
         if (args.Contains("--quit"))
         {
             Log.Info($"--quit: {(SingleInstance.Send(paths.Flavor, "quit") ? "asked the running app to quit" : "nothing running")}");
+            return 0;
+        }
+        if (args.Contains("--reload"))
+        {
+            // make win-dev's partner: after a web/ edit, reload the running app's pages.
+            Log.Info($"--reload: {(SingleInstance.Send(paths.Flavor, "reload") ? "asked the running app to reload" : "nothing running")}");
             return 0;
         }
         if (args.Contains("--dump-displays"))
