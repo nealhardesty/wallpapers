@@ -53,6 +53,8 @@ sealed class Desktop : IDisposable
     public event Action? Changed;
     /// A surface's page finished loading: the tray can ask it for the catalog.
     public event Action? PageReady;
+    /// The mouse, replayed into the visible surfaces (§10.25.8).
+    public Pointer Pointer { get; }
 
     public Desktop(AppPaths paths, DesktopLayer layer, MonitorMode mode, Power power)
     {
@@ -60,6 +62,7 @@ sealed class Desktop : IDisposable
         this.layer = layer;
         this.power = power;
         Mode = mode;
+        Pointer = new Pointer(() => surfaces);
         watch.Tick += (_, _) => Watch();
         debounce.Tick += async (_, _) =>
         {
@@ -291,6 +294,7 @@ sealed class Desktop : IDisposable
         // Monitor 1 first: it's the one Next and Previous step, and the tray asks.
         surfaces.Sort((a, b) => a.Plan.Number.CompareTo(b.Plan.Number));
         FixOverlay();
+        Pointer.Update();
     }
 
     static string Size(SurfacePlan p) => $"{p.Bounds.Width}x{p.Bounds.Height}{(p.Scale != 1 ? $"@{p.Scale:0.##}" : "")}";
@@ -426,8 +430,13 @@ sealed class Desktop : IDisposable
     /// Pause, power and coverage, to every page (§10.25.9): a surface is visible when not paused, not
     /// hidden everywhere and not covered; each page gets `WP.power` with the rest. Call it whenever
     /// any of them changes. Every surface's IsVisible is set before any script is awaited, so one
-    /// slow or closing page can't hold the others in the wrong state.
-    public Task ApplyPowerAsync() => Task.WhenAll(surfaces.ToList().Select(ApplyPowerAsync));
+    /// slow or closing page can't hold the others in the wrong state, and the pointer follows at once.
+    public Task ApplyPowerAsync()
+    {
+        var told = Task.WhenAll(surfaces.ToList().Select(ApplyPowerAsync));
+        Pointer.Update();
+        return told;
+    }
 
     Task ApplyPowerAsync(Surface s)
     {
@@ -487,6 +496,7 @@ sealed class Desktop : IDisposable
         debounce.Stop();
         coverage.Dispose();
         fakeWatcher?.Dispose();
+        Pointer.Dispose();
         foreach (var s in surfaces) { s.Dispose(); layer.DestroyHost(s.Host); }
         surfaces.Clear();
         Shell.Repaint();

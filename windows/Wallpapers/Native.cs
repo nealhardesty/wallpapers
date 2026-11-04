@@ -205,4 +205,22 @@ static class N
         EnumWindows((h, _) => { if (ClassOf(h) == cls) list.Add(h); return true; }, IntPtr.Zero);
         return list;
     }
+
+    // ---- The pointer (Pointer.cs, SPEC §10.25.8) -----------------------------------------------
+    // Values from the Windows SDK headers (WinUser.h). No hook of any kind: Raw Input only.
+    public const int WM_INPUT = 0xFF;
+    public const uint RIDEV_REMOVE = 1, RIDEV_INPUTSINK = 0x100, RID_INPUT = 0x10000003, RIM_TYPEMOUSE = 0;
+    public const ushort RI_MOUSE_LEFT_BUTTON_DOWN = 1, RI_MOUSE_LEFT_BUTTON_UP = 2;
+    public const int SM_CXDOUBLECLK = 36, SM_CYDOUBLECLK = 37;
+    /// RAWINPUTHEADER on x64: DWORD dwType, DWORD dwSize, HANDLE hDevice, WPARAM wParam.
+    public const int RawInputHeaderSize = 24;
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct RAWINPUTDEVICE { public ushort UsagePage, Usage; public uint Flags; public IntPtr Target; }
+
+    [DllImport("user32.dll", SetLastError = true)] public static extern bool RegisterRawInputDevices(RAWINPUTDEVICE[] devices, uint count, uint size);
+    [DllImport("user32.dll")] public static extern uint GetRawInputData(IntPtr input, uint command, IntPtr data, ref uint size, uint headerSize);
+    [DllImport("user32.dll")] public static extern bool GetCursorPos(out POINT p);
+    [DllImport("user32.dll")] public static extern IntPtr WindowFromPoint(POINT p);
+    [DllImport("user32.dll")] public static extern uint GetDoubleClickTime();
 }

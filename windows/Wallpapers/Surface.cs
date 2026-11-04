@@ -153,6 +153,34 @@ sealed class Surface : IDisposable
 
     public void Reload() => Web?.Reload();
 
+    /// The pointer's view of it (SPEC §10.25.8): where it is, and whether it may get anything.
+    public PointerTarget Target => new(Plan.Key, Placement, Visible);
+
+    /// A real, trusted pointermove at the surface's local px (raw pixels, as its bounds are).
+    public void SendMove(int localX, int localY, bool leftDown) =>
+        SendMouse(CoreWebView2MouseEventKind.Move, leftDown ? CoreWebView2MouseEventVirtualKeys.LeftButton : CoreWebView2MouseEventVirtualKeys.None, new Point(localX, localY));
+
+    /// The cursor left this surface.
+    public void SendLeave() => SendMouse(CoreWebView2MouseEventKind.Leave, CoreWebView2MouseEventVirtualKeys.None, Point.Empty);
+
+    void SendMouse(CoreWebView2MouseEventKind kind, CoreWebView2MouseEventVirtualKeys keys, Point at)
+    {
+        if (controller == null) return;
+        // Never a button: a SendMouseInput press makes WebView2 take the foreground (W0.4).
+        try { controller.SendMouseInput(kind, keys, 0, at); }
+        catch (Exception e) when (e is COMException or InvalidOperationException) { Log.Debug($"surface {Plan.Key}: couldn't send a {kind} ({e.Message})"); }
+    }
+
+    /// A left press or release by script at a CSS point in the stage (§10.25.8): never moves the foreground.
+    public async Task SendPressAsync(bool down, double cssX, double cssY, bool doubleClick)
+    {
+        try { await EvalAsync(PointerScript.Press(down, cssX, cssY, doubleClick)); }
+        catch (Exception e) when (e is COMException or InvalidOperationException or ObjectDisposedException)
+        {
+            Log.Warn($"surface {Plan.Key}: couldn't send a {(down ? "press" : "release")} ({e.GetType().Name}: {e.Message})");
+        }
+    }
+
     void OnProcessFailed(object? sender, CoreWebView2ProcessFailedEventArgs e)
     {
         Log.Warn($"surface {Plan.Device}: {e.ProcessFailedKind} ({e.Reason}, exit {e.ExitCode})");
