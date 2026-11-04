@@ -74,6 +74,9 @@ static class N
     [DllImport("user32.dll")] public static extern IntPtr GetWindow(IntPtr h, uint cmd);
     [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr h, out RECT r);
     [DllImport("user32.dll")] public static extern bool IsWindow(IntPtr h);
+    [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+    [DllImport("user32.dll")] public static extern bool PostMessage(IntPtr h, uint msg, IntPtr w, IntPtr l);
+    public const uint WM_CLOSE = 0x10;
     [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);
     /// A second launch lets the first bring its settings window forward (Windows only lets the
     /// foreground process do that, and the second launch is it).

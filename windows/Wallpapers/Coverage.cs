@@ -71,7 +71,8 @@ sealed class Coverage : IDisposable
         soon.Start();
     }
 
-    void Read()
+    /// Read the windows now (also the self-test's way to not wait for the 2 s poll).
+    internal void Read()
     {
         soon.Stop();
         if (plans == null) return;

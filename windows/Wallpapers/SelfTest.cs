@@ -1,6 +1,8 @@
 using System.Diagnostics;
 using System.Drawing;
+using System.Globalization;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Windows.Forms;
 using Microsoft.Web.WebView2.Core;
 
@@ -125,10 +127,12 @@ sealed class SelfTest
         }
         var surfaces = desktop.Surfaces.ToList();
         // Coverage (§10.25.9) is right to hide a monitor under a maximized terminal, but the checks
-        // below count frames: off from here on, saying what it saw once its 2 s poll has seen every surface.
-        await Wait(2500);
+        // below count frames: off from here on (the coverage check turns it on for itself), saying what
+        // it saw. It last read before these surfaces were made: read now, and wait out a pending hide.
+        desktop.ReadCoverageForTest();
+        await Wait(CoverageGate.PauseAfterMs + 150);
         var covered = await desktop.CoverageOffForTest();
-        Line("INFO", "coverage", covered.Count == 0 ? "no monitor covered; off for the rest of the test" : $"covered: {string.Join(", ", covered)}; off for the rest of the test");
+        Line("INFO", "coverage", covered.Count == 0 ? "no monitor covered; off except for the coverage check" : $"covered: {string.Join(", ", covered)}; off except for the coverage check");
 
         // 1. The layer, and every host in it, right under the icons; one surface per monitor.
         var shape = layer.Shape;
@@ -170,6 +174,10 @@ sealed class SelfTest
         // path every change from the settings window takes.
         await StorageAsync(first);
 
+        // Every WP.power call from here on is kept where the power check can read it.
+        foreach (var s in surfaces)
+            await s.EvalAsync("window.__selftestPower = null; WP.power = (tell => json => { window.__selftestPower = json; return tell(json); })(WP.power)");
+
         // 4. Pause, through the path every power signal takes: hidden stops frames outright and the
         // page hears it; visible starts them again.
         await desktop.SetPausedAsync(true);
@@ -183,10 +191,18 @@ sealed class SelfTest
         Check("pause", hidden is >= 0 and <= 2 && !visibleFlag && pageHeard && resumed > 10,
             $"hidden {hidden} frames in 1.5 s (IsVisible={visibleFlag}, page {(pageHeard ? "paused" : "NOT told")}); visible {resumed}");
 
-        // 4b. The power state reached the page: over Remote Desktop its ceiling is Low (§10.25.7).
-        var power = app.Power.State;
-        var reasons = await Js<string[]>(first, "WP.player.policy.reasons") ?? [];
-        Check("power", reasons.Contains("remote desktop") == power.Remote, $"{power.Describe()}; page reasons [{string.Join(", ", reasons)}]");
+        // 5 (W2). Coverage: another window over monitor 1 hides that surface only, and closing it shows it again.
+        await CoverageAsync(surfaces);
+
+        // 4b. The power state reached every page as sent, and its policy follows: over Remote Desktop
+        // its ceiling is Low (§10.25.7).
+        await PowerAsync(surfaces);
+
+        // 7 (W2). Different mode, then a resize and an unplug that keep the page, in a fake
+        // two-monitor layout; then back to the real monitors, whose surfaces are new.
+        surfaces = await MonitorsAsync();
+        if (surfaces.Count == 0) { Line("FAIL", "real monitors again", "no surfaces"); return; }
+        first = surfaces[0];
 
         // 4c. The tray's Performance rows are real clicks; the pick reaches the page's store and the
         // status line follows the stage's own report. Auto is put back at the end.
@@ -242,17 +258,20 @@ sealed class SelfTest
     async Task PerformanceAsync(Surface first)
     {
         const string Stored = "JSON.stringify(WP.store.get('wp:performance') || {})";
-        var labels = new Dictionary<string, string>();
         foreach (var mode in new[] { "low", "medium", "high", "auto" })
         {
             app.Tray.ClickPerformanceForTest(mode);
-            var picked = await Until(3000, async () => (await Js<string>(first, Stored) ?? "").Contains($"\"mode\":\"{mode}\"") || mode == "auto" && !(await Js<string>(first, Stored) ?? "").Contains("\"mode\":\"low\""));
+            // Auto is stored as no mode at all.
+            var picked = await Until(3000, async () => await Js<string>(first, Stored) is { } stored
+                && (mode == "auto" ? !stored.Contains("\"mode\"") : stored.Contains($"\"mode\":\"{mode}\"")));
             // The stage reports once a second; the tray's line is what it last asked.
             await Wait(1300);
             var label = await Js<string>(first, "WP.player.stats && WP.player.stats.label") ?? "?";
-            labels[mode] = label;
-            Check($"performance {mode}", picked && (mode == "auto" || label.Equals(mode, StringComparison.OrdinalIgnoreCase) || app.Power.State.Remote),
-                $"store {await Js<string>(first, Stored)}; stage says {label}; tray line \"{app.Tray.PerformanceStatusForTest}\"");
+            // A pinned mode is capped by the page's power ceiling (perf.js: on battery High shows Medium).
+            var ceiling = await Js<string>(first, "WP.player.policy.ceiling") ?? "?";
+            var expected = mode == "auto" ? null : Stricter(mode, ceiling);
+            Check($"performance {mode}", picked && (expected == null || label.Equals(expected, StringComparison.OrdinalIgnoreCase)),
+                $"store {await Js<string>(first, Stored)}; stage says {label}{(expected == null ? "" : $" (expected {expected}, ceiling {ceiling})")}; tray line \"{app.Tray.PerformanceStatusForTest}\"");
         }
         var before = await Js<bool>(first, "(WP.store.get('wp:performance') || {}).batteryAware !== false");
         app.Tray.ClickPerformanceForTest(null);
@@ -260,6 +279,248 @@ sealed class SelfTest
         app.Tray.ClickPerformanceForTest(null);
         var restored = await Until(3000, async () => await Js<bool>(first, "(WP.store.get('wp:performance') || {}).batteryAware !== false") == before);
         Check("performance battery toggle", flipped && restored, $"was {before}, flipped {flipped}, restored {restored}");
+    }
+
+    static readonly string[] Tiers = ["low", "medium", "high"];
+    static string Stricter(string a, string b) => Array.IndexOf(Tiers, a) <= Array.IndexOf(Tiers, b) ? a : b;
+
+    /// The page loaded again since `origin` (a navigate or a reload), is ready, and shows `id` if given.
+    static Task<bool> LoadedAgain(Surface s, double origin, string? id = null) => Until(20000, async () =>
+        await Js<double>(s, "performance.timeOrigin") is var o && o != 0 && o != origin && await Ready(s)
+        && (id == null || await Js<string>(s, "WP.player.stage.id") == id));
+
+    static Task<bool> Shows(Surface s, string id) =>
+        Until(20000, async () => await Ready(s) && await Js<string>(s, "WP.player.stage.id") == id);
+
+    static bool SameJson(string a, string b)
+    {
+        try { return JsonNode.DeepEquals(JsonNode.Parse(a), JsonNode.Parse(b)); }
+        catch (JsonException) { return false; }
+    }
+
+    /// Coverage (§10.25.9), on for this check only: a window of another process (coverage ignores
+    /// ours) over monitor 1's work area, shown without taking focus, as a maximized window would be.
+    async Task CoverageAsync(IReadOnlyList<Surface> surfaces)
+    {
+        var desktop = app.Desktop;
+        var first = surfaces[0];
+        if (app.Power.State.HiddenEverywhere) { Line("SKIP", "coverage", $"every surface is hidden already ({app.Power.State.Describe()})"); return; }
+        await desktop.CoverageOnForTest();
+        try
+        {
+            await Wait(CoverageGate.PauseAfterMs + 150);   // a monitor something else covers hides first
+            var before = surfaces.ToDictionary(s => s, s => s.Visible);
+            var w = first.Plan.Work;
+            var start = new ProcessStartInfo(Environment.ProcessPath!) { UseShellExecute = false };
+            start.ArgumentList.Add("--cover-for-test");
+            start.ArgumentList.Add(string.Join(",", new[] { w.Left, w.Top, w.Width, w.Height }.Select(n => n.ToString(CultureInfo.InvariantCulture))));
+            using var cover = Process.Start(start)!;
+            try
+            {
+                var window = IntPtr.Zero;
+                if (!await Until(10000, () => Task.FromResult((window = VisibleWindowOf(cover.Id)) != IntPtr.Zero)))
+                {
+                    Line("FAIL", "coverage", "the covering window never showed");
+                    return;
+                }
+                var clock = Stopwatch.StartNew();
+                var hidden = await Until(2000, () => Task.FromResult(!first.Visible));
+                var hideMs = clock.ElapsedMilliseconds;
+                var others = surfaces.Skip(1).All(s => s.Visible == before[s]);
+                var focus = N.GetForegroundWindow() != window;
+                N.PostMessage(window, N.WM_CLOSE, IntPtr.Zero, IntPtr.Zero);
+                var closed = await Until(3000, () => Task.FromResult(cover.HasExited));
+                clock.Restart();
+                var shown = await Until(1000, () => Task.FromResult(first.Visible));
+                var detail = $"{(hidden ? $"hidden {hideMs} ms after the window showed" : "NOT hidden in 2 s")}; "
+                    + $"{surfaces.Count - 1} other surface(s) {(others ? "unchanged" : "CHANGED")}; focus {(focus ? "kept" : "TAKEN by the test window")}";
+                if (!before[first])
+                    Line(hidden && others && focus ? "SKIP" : "FAIL", "coverage",
+                        $"monitor 1 was already covered by another window, so uncovering can't be seen; {detail}");
+                else
+                    Check("coverage", hidden && others && focus && closed && shown,
+                        $"{detail}; {(closed ? shown ? $"visible {clock.ElapsedMilliseconds} ms after it closed" : "NOT visible 1 s after it closed" : "the window didn't close")}");
+            }
+            finally { if (!cover.HasExited) cover.Kill(); }
+        }
+        finally { await desktop.CoverageOffForTest(); }
+    }
+
+    static IntPtr VisibleWindowOf(int pid)
+    {
+        var found = IntPtr.Zero;
+        N.EnumWindows((h, _) =>
+        {
+            if (N.IsWindowVisible(h) && N.PidOf(h) == pid) { found = h; return false; }
+            return true;
+        }, IntPtr.Zero);
+        return found;
+    }
+
+    /// --cover-for-test L,T,W,H (physical px): the coverage check's window, in its own process. Plain,
+    /// not topmost, not in the taskbar, never activated; borderless so its frame is exactly the rect, as
+    /// a maximized window's is the work area. It closes itself after 20 s whatever the test does.
+    public static int Cover(string rect)
+    {
+        var r = rect.Split(',').Select(n => int.Parse(n, CultureInfo.InvariantCulture)).ToArray();
+        ApplicationConfiguration.Initialize();
+        using var form = new CoverForm(new Rectangle(r[0], r[1], r[2], r[3]));
+        using var limit = new System.Windows.Forms.Timer { Interval = 20000 };
+        limit.Tick += (_, _) => form.Close();
+        limit.Start();
+        Application.Run(form);
+        return 0;
+    }
+
+    sealed class CoverForm : Form
+    {
+        readonly Rectangle where;
+
+        public CoverForm(Rectangle where)
+        {
+            this.where = where;
+            Text = "Wallpapers self-test: covering monitor 1";
+            FormBorderStyle = FormBorderStyle.None;
+            ShowInTaskbar = false;
+            StartPosition = FormStartPosition.Manual;
+            BackColor = Color.FromArgb(40, 40, 40);
+            Bounds = where;
+        }
+
+        protected override bool ShowWithoutActivation => true;
+
+        // WinForms can rescale a form for its monitor's DPI: put it exactly there once it's up.
+        protected override void OnShown(EventArgs e)
+        {
+            base.OnShown(e);
+            N.SetWindowPos(Handle, IntPtr.Zero, where.X, where.Y, where.Width, where.Height, N.SWP_NOZORDER | N.SWP_NOACTIVATE);
+        }
+    }
+
+    /// What each page last got from WP.power is what the power state says (battery included only when
+    /// Windows reports one), and the page's policy follows it: in an RDP session and at the console.
+    async Task PowerAsync(IReadOnlyList<Surface> surfaces)
+    {
+        var bad = new List<string>();
+        var got = "";
+        string[] reasons = [];
+        foreach (var s in surfaces)
+        {
+            var want = "";
+            var ok = await Until(2000, async () =>
+            {
+                var state = app.Power.State;
+                want = PowerJson.For(state, hidden: !s.Visible);
+                got = await Js<string>(s, "JSON.stringify(window.__selftestPower)") ?? "";
+                reasons = await Js<string[]>(s, "WP.player.policy.reasons") ?? [];
+                var pause = await Js<bool>(s, "WP.player.policy.pause");
+                var battery = state.Battery is not { Charging: false } || reasons.Any(r => r is "on battery" or "battery low");
+                return SameJson(got, want) && reasons.Contains("remote desktop") == state.Remote && pause == !s.Visible && battery;
+            });
+            if (!ok) bad.Add($"{s.Plan.Device} got {got} (sent {want}), reasons [{string.Join(", ", reasons)}]");
+        }
+        Check("power", bad.Count == 0, $"{app.Power.State.Describe()}; "
+            + (bad.Count == 0 ? $"{surfaces.Count} page(s) got {got}, reasons [{string.Join(", ", reasons)}]" : string.Join("; ", bad)));
+    }
+
+    /// Two fake 1280×720 monitors at 100%, side by side; monitor 1 can be made taller.
+    static List<MonitorInfo> FakeTwo(int firstHeight = 720) =>
+        [FakeMonitor(1, new Rect(0, 0, 1280, firstHeight)), FakeMonitor(2, new Rect(1280, 0, 2560, 720))];
+
+    static MonitorInfo FakeMonitor(int n, Rect r) =>
+        new($@"\\.\DISPLAY{n}", r, r, 96, Primary: n == 1, Path: $"selftest-fake-{n}", Name: $"Self-test {n}");
+
+    /// `display=` and `resize in place` in the fake layout; then back to Same and the real monitors,
+    /// whatever happened. Returns the real monitors' (new) surfaces once they show the test wallpaper.
+    async Task<List<Surface>> MonitorsAsync()
+    {
+        var desktop = app.Desktop;
+        try
+        {
+            await desktop.UseFakeDisplaysForTest(FakeTwo());
+            var fake = desktop.Surfaces.ToList();
+            var ready = fake.Count == 2;
+            foreach (var s in fake) ready &= await Shows(s, TestWallpaper);
+            if (!ready) Line("FAIL", "display=", $"the fake layout has {fake.Count} surface(s) for 2 monitors, or one never showed {TestWallpaper}");
+            else
+            {
+                await DisplayAsync(fake);
+                await ResizeInPlaceAsync(fake);
+            }
+        }
+        finally
+        {
+            await desktop.SetModeAsync(MonitorMode.Same);
+            await desktop.UseFakeDisplaysForTest(null);
+        }
+        var surfaces = desktop.Surfaces.ToList();
+        foreach (var s in surfaces)
+            if (!await Shows(s, TestWallpaper)) Line("FAIL", "real monitors again", $"{s.Plan.Device} never showed {TestWallpaper}");
+        return surfaces;
+    }
+
+    /// Different mode (§10.25.6): each page has its own choice, kept across a reload, under its own key.
+    async Task DisplayAsync(List<Surface> fake)
+    {
+        var desktop = app.Desktop;
+        var (one, two) = (fake[0], fake[1]);
+        var shared = await Js<string>(one, "WP.store.get('wp:current')");
+        var origins = new List<double>();
+        foreach (var s in fake) origins.Add(await Js<double>(s, "performance.timeOrigin"));
+        await desktop.SetModeAsync(MonitorMode.Different);
+        var loaded = true;
+        for (var i = 0; i < fake.Count; i++) loaded &= await LoadedAgain(fake[i], origins[i]);
+        static bool HasParam(Surface s, string param) => new Uri(s.Web?.Source ?? "about:blank").Query.TrimStart('?').Split('&').Contains(param);
+        var keyed = fake.All(s => HasParam(s, $"display={s.Plan.Key}"));
+
+        await desktop.ShowAsync("snow", one.Plan.Key);
+        await desktop.ShowAsync("rain", two.Plan.Key);
+        var picked = await Shows(one, "snow") && await Shows(two, "rain");
+        origins.Clear();
+        foreach (var s in fake) { origins.Add(await Js<double>(s, "performance.timeOrigin")); s.Reload(); }
+        var kept = await LoadedAgain(one, origins[0], "snow") && await LoadedAgain(two, origins[1], "rain");
+
+        var keys = $"[{JsonSerializer.Serialize($"wp:current@{one.Plan.Key}")}, {JsonSerializer.Serialize($"wp:current@{two.Plan.Key}")}]";
+        var stored = await Js<string?[]>(one, $"{keys}.map(k => WP.store.get(k)).concat(WP.store.get('wp:current'))") ?? [];
+        var storage = stored is ["snow", "rain", var now] && now == shared;
+
+        origins.Clear();
+        foreach (var s in fake) origins.Add(await Js<double>(s, "performance.timeOrigin"));
+        await desktop.SetModeAsync(MonitorMode.Same);
+        var same = true;
+        for (var i = 0; i < fake.Count; i++) same &= await LoadedAgain(fake[i], origins[i]);
+        same &= fake.All(s => !(s.Web?.Source ?? "").Contains("display="));
+        await one.EvalAsync($"{keys}.forEach(k => localStorage.removeItem(k))");
+
+        Check("display=", loaded && keyed && picked && kept && storage && same,
+            $"{(keyed ? "each URL has its key" : $"URLs {string.Join(" ", fake.Select(s => s.Web?.Source))}")}; "
+            + $"snow and rain {(picked ? kept ? "shown, and back after a reload" : "shown, NOT back after a reload" : "NOT shown")}; "
+            + $"storage [{string.Join(", ", stored.Select(v => v ?? "null"))}] (wp:current was {shared ?? "null"}); "
+            + $"Same again {(same ? "(no display=)" : "FAILED")}");
+    }
+
+    /// A monitor resized, then another unplugged, in the fake layout (§10.25.6): the page stays.
+    async Task ResizeInPlaceAsync(List<Surface> fake)
+    {
+        var desktop = app.Desktop;
+        var (one, two) = (fake.First(s => s.Plan.Number == 1), fake.First(s => s.Plan.Number == 2));
+        var origin = await Js<double>(one, "performance.timeOrigin");
+        var before = await Js<int>(one, "innerHeight");
+        await desktop.UseFakeDisplaysForTest(FakeTwo(firstHeight: 800));
+        var kept = desktop.Surfaces.Contains(one);
+        // The page sees the fake monitor's CSS size give or take rounding (±2 px in a scaled-down fit).
+        var after = 0;
+        var grew = await Until(3000, async () => (after = await Js<int>(one, "innerHeight")) - before is >= 78 and <= 82);
+        var same = await Js<double>(one, "performance.timeOrigin") == origin;
+        Check("resize in place", kept && grew && same,
+            $"monitor 1 1280x720 → 1280x800: {(kept ? "the same surface" : "a NEW surface")}, innerHeight {before} → {after}, {(same ? "no reload" : "the page RELOADED")}");
+
+        var host = two.Host;
+        await desktop.UseFakeDisplaysForTest([FakeTwo(firstHeight: 800)[0]]);
+        var gone = !N.IsWindow(host) && desktop.Surfaces.Count == 1 && desktop.Surfaces[0] == one;
+        var stayed = await Js<double>(one, "performance.timeOrigin") == origin;
+        Check("resize in place (monitor removed)", gone && stayed,
+            $"{(gone ? "monitor 2's window is gone" : $"{desktop.Surfaces.Count} surface(s), monitor 2's window {(N.IsWindow(host) ? "STILL there" : "gone")}")}; monitor 1 {(stayed ? "didn't reload" : "RELOADED")}");
     }
 
     async Task StorageAsync(Surface desktopPage)

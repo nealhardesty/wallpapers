@@ -296,6 +296,17 @@ sealed class Desktop : IDisposable
         return ReconcileAsync(layout == null ? "self-test: real monitors" : "self-test: fake layout");
     }
 
+    /// For the self-test: coverage reads the windows now instead of at its next 2 s poll.
+    internal void ReadCoverageForTest() => coverage.Read();
+
+    /// For the self-test's coverage check: coverage decides visibility again (after CoverageOffForTest).
+    internal Task CoverageOnForTest()
+    {
+        Covered = coverage.IsCovered;
+        coverage.Read();
+        return ApplyPowerAsync();
+    }
+
     /// For the self-test: it counts frames, and the terminal it runs from may be maximized over the
     /// desktop. Returns the keys coverage had hidden.
     internal async Task<List<string>> CoverageOffForTest()

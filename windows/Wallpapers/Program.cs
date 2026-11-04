@@ -2,12 +2,14 @@ using System.Windows.Forms;
 
 namespace Wallpapers;
 
-/// Modes (SPEC §10.25.4): the app · --quit · --reload · --settings · --dump-displays · --selftest [--bad-web-root].
+/// Modes (SPEC §10.25.4): the app · --quit · --reload · --settings · --dump-displays · --selftest [--bad-web-root]
+/// (and --cover-for-test, the self-test's covering window: coverage ignores our own process's).
 static class Program
 {
     [STAThread]
     static int Main(string[] args)
     {
+        if (args is ["--cover-for-test", var rect]) return SelfTest.Cover(rect);
         var paths = AppPaths.Resolve(args);
         var selfTest = paths.Flavor == "test";
         if (selfTest)

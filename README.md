@@ -445,7 +445,7 @@ Run `make` to list every target.
 | `make win-run` | Build it and start it on the Windows side from WSL, with your normal settings: the wallpaper goes behind your desktop icons, a tray icon controls it |
 | `make win-dev` | Run it straight from this checkout's `web/` (over `\\wsl.localhost`), with its own settings and DevTools, so an edit shows after `make win-reload` or *Reload Wallpapers* in the tray |
 | `make win-reload` | Reload the running app's pages after a `web/` edit: the `win-dev` one, or `FLAVOR=run` for the normal one |
-| `make win-test` | The app's self-test against a throwaway settings store: layer, animation, settings sharing, pause, insets, overlay, Bing, Explorer restart (simulated), a renderer crash, cleanup (about 30 s; `WIN_ARGS=--bad-web-root` checks the missing-files case) |
+| `make win-test` | The app's self-test against a throwaway settings store: layer, animation, settings sharing, pause, coverage (a test window over monitor 1; skipped when something else already covers it), power reaching every page, `display=` and a resize in place (in a fake two-monitor layout), the Performance menu, insets, overlay, Bing, Explorer restart (simulated), a renderer crash, cleanup (about 45 s; `WIN_ARGS=--bad-web-root` checks the missing-files case) |
 | `make win-log` | The app's log (`FLAVOR=dev` or `test` for those; `FOLLOW=1` to follow) |
 | `make docker-build` | Build the container image `wallpapers` |
 | `make docker-run` | Run it at http://localhost:8000 (read-only, unprivileged) |
