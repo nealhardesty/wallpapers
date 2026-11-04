@@ -33,7 +33,7 @@ Control on this PC blocks some unsigned builds (SPEC Open questions).
 §10.25.16 *As built*. The app (`windows/Wallpapers`, `Wallpapers.Core`,
 `Wallpapers.Tests`) runs the wallpaper behind the icons on every monitor, with
 the tray, the settings window and `make win-test` (all pass). The spikes are
-deleted. Still to do by hand: an RDP disconnect and reconnect. **Next: plan W2**
+deleted. The owner checked an RDP reconnect and resize too. **Next: plan W2**
 (monitors and power, SPEC §10.25.16) with superpowers:writing-plans. Signing is
 still the owner's call.
 

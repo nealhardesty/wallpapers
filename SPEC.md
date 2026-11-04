@@ -4175,7 +4175,8 @@ Task Manager; RDP in and out; the saver from Windows' dialog; uninstall.
     A live RDP resize (1686 → 1844 px tall) rebuilt the surface in 0.6 s
     with the insets right, but twice (Windows sent two bursts) and each
     rebuild reloads the page: resizing in place belongs to W2's hot-plug
-    and DPI work. Still to do by hand: an RDP disconnect and reconnect.
+    and DPI work. An RDP disconnect and reconnect, and a resize, both
+    checked by the owner: the scene fills the new screen.
   - **Changed from the design:** the app serves its origin itself
     (§10.25.14; the folder mapping never let `bing.json` through, which the
     self-test found); a crash exits after its cleanup (with no wallpaper and
