@@ -14,5 +14,9 @@ public static class PageUrl
     /// Play in a Window (SPEC §10.25.8): one wallpaper, for this load only (?w= is never saved).
     public static string Play(string id) => $"{Origin}index.html?host=windows&w={Uri.EscapeDataString(id)}";
 
+    /// The screen saver (SPEC §10.25.12): `wallpaper` pins one, `display` is the monitor's key, `clock` shows the drifting clock.
+    public static string Saver(string? wallpaper, string? display, bool clock) =>
+        $"{Origin}index.html?host=windows-saver{(wallpaper == null ? "" : "&w=" + Uri.EscapeDataString(wallpaper))}{Display(display)}{(clock ? "&clock=drift" : "")}";
+
     static string Display(string? key) => key == null ? "" : "&display=" + Uri.EscapeDataString(key);
 }

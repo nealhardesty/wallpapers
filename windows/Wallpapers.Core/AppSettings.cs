@@ -11,6 +11,9 @@ public enum MonitorMode { Same, Different }
 public sealed record AppSettings(bool DrawAboveIcons = false, Rect? SettingsBounds = null, MonitorMode Monitors = MonitorMode.Same,
     bool FollowMouse = true, bool DesktopClicks = true, bool OfferInstall = true)
 {
+    /// The screen saver's options (SPEC §10.25.12).
+    public SaverSettings Saver { get; init; } = new();
+
     static readonly JsonSerializerOptions Options = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,

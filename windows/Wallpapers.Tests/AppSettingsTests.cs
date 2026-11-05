@@ -82,4 +82,25 @@ public class AppSettingsTests
         File.WriteAllText(dir.File("settings.json"), "{ \"drawAboveIcons\": true }");
         Assert.True(AppSettings.Load(dir.File("settings.json")).OfferInstall);
     }
+
+    [Fact]
+    public void Saver_DefaultsWhenMissing()
+    {
+        using var dir = new TempDir();
+        File.WriteAllText(dir.File("settings.json"), "{\"monitors\":\"different\"}");
+        Assert.Equal(new SaverSettings(), AppSettings.Load(dir.File("settings.json")).Saver);
+    }
+
+    [Fact]
+    public void Saver_RoundTrips()
+    {
+        using var dir = new TempDir();
+        var s = new AppSettings() with { Saver = new(SaverShow.Different, null, 15, true, new PreviousSaver(@"C:\Windows\System32\Ribbons.scr", "1")) };
+        s.Save(dir.File("settings.json"));
+        var text = File.ReadAllText(dir.File("settings.json"));
+        Assert.Contains("\"saver\"", text);
+        Assert.Contains("\"show\": \"different\"", text);
+        Assert.Contains("\"changeMinutes\": 15", text);
+        Assert.Equal(s, AppSettings.Load(dir.File("settings.json")));
+    }
 }

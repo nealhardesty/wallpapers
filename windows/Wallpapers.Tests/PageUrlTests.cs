@@ -21,4 +21,16 @@ public class PageUrlTests
     [Fact]
     public void Play_shows_one_wallpaper() =>
         Assert.Equal("https://wallpapers.example/index.html?host=windows&w=quest", PageUrl.Play("quest"));
+
+    [Fact]
+    public void Saver_Plain() =>
+        Assert.Equal("https://wallpapers.example/index.html?host=windows-saver", PageUrl.Saver(null, null, false));
+
+    [Fact]
+    public void Saver_All() =>
+        Assert.Equal("https://wallpapers.example/index.html?host=windows-saver&w=koi-pond&display=dell-u2720q-1&clock=drift",
+            PageUrl.Saver("koi-pond", "dell-u2720q-1", true));
+
+    [Fact]
+    public void Saver_Escapes() => Assert.EndsWith("&w=a%20b", PageUrl.Saver("a b", null, false));
 }
