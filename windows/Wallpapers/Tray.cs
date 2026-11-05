@@ -88,7 +88,11 @@ sealed class Tray : IDisposable
         });
         install = Item("Install…", () =>
         {
-            if (app.Installer?.ShowOffer(Offer.Install, app.Settings, app.SaveSettings) == true) app.Quit();
+            if (app.Installer?.ShowOffer(Offer.Install, app.Settings, app.SaveSettings, start: false) == true)
+            {
+                app.StartAfterQuit = app.Installer;
+                app.Quit();
+            }
             return Task.CompletedTask;
         });
         about = Item($"About Wallpapers {App.Version.Split('+')[0]}", () => { About(); return Task.CompletedTask; });

@@ -22,60 +22,51 @@ sealed class Install(InstallLayout layout, Action<string> log)
     /// This process runs from the install folder.
     public bool InstalledHere => layout.IsInstalledAt(Path.GetFullPath(AppContext.BaseDirectory));
 
-    /// Copies sourceDir's Wallpapers.exe and web\ into the root (staged beside the old ones and swapped last, so
-    /// a failure leaves the old install whole), then writes the Uninstall entry and the shortcut; `fresh` also
-    /// turns on Start with Windows (an update leaves the person's choice). Returns why it failed, or null.
+    /// Copies this exe (as Wallpapers.exe, whatever the download was renamed to) and sourceDir's web\ into the
+    /// root: staged beside the old ones and swapped last, the old ones moved back on any failure, so a failed
+    /// Apply leaves the old install whole. Then the Uninstall entry and the shortcut; `fresh` also turns on
+    /// Start with Windows (an update leaves the person's choice). Returns why it failed, or null; never throws.
     public string? Apply(string sourceDir, bool fresh)
     {
-        var sourceExe = Path.Combine(sourceDir, "Wallpapers.exe");
+        try { return ApplyOrThrow(sourceDir, fresh); }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or COMException or System.Security.SecurityException)
+        {
+            log($"install: {e.GetType().Name}: {e.Message}");
+            return $"couldn't finish installing: {e.Message}";
+        }
+    }
+
+    string? ApplyOrThrow(string sourceDir, bool fresh)
+    {
+        var sourceExe = Environment.ProcessPath ?? Path.Combine(sourceDir, "Wallpapers.exe");
         var sourceWeb = Path.Combine(sourceDir, "web");
         if (!Directory.Exists(sourceWeb)) return $"there is no web folder beside {sourceExe}";
         var versionText = FileVersionInfo.GetVersionInfo(sourceExe).ProductVersion;
         if (AppVersion.Parse(versionText) is not { } version) return $"can't read the version of {sourceExe}";
 
-        // The running copy holds the exe: a run-flavor app that isn't us is asked to quit first (the test
-        // layout's exe is never the one running, so only the lock matters there).
-        var deadline = DateTime.UtcNow + QuitWait;
-        if (layout.Flavor == "run" && !SingleInstance.Holds && SingleInstance.IsRunning("run"))
+        // Run from the install folder itself (--install from the installed exe): nothing to copy, and its own
+        // image is the lock, so no waiting either.
+        if (layout.IsInstalledAt(Path.GetFullPath(sourceDir))) log("install: already in place, copy skipped");
+        else
         {
-            log($"install: asking the running app to quit ({(SingleInstance.Send("run", "quit") ? "sent" : "it didn't answer")})");
-            while (SingleInstance.IsRunning("run"))
+            // The running copy holds the exe: a run-flavor app that isn't us is asked to quit first (the test
+            // layout's exe is never the one running, so only the lock matters there).
+            var deadline = DateTime.UtcNow + QuitWait;
+            if (layout.Flavor == "run" && !SingleInstance.Holds && SingleInstance.IsRunning("run"))
+            {
+                log($"install: asking the running app to quit ({(SingleInstance.Send("run", "quit") ? "sent" : "it didn't answer")})");
+                while (SingleInstance.IsRunning("run"))
+                {
+                    if (DateTime.UtcNow > deadline) return StillRunning;
+                    Thread.Sleep(200);
+                }
+            }
+            while (!CanOpenAlone(layout.Exe))
             {
                 if (DateTime.UtcNow > deadline) return StillRunning;
                 Thread.Sleep(200);
             }
-        }
-        while (!CanOpenAlone(layout.Exe))
-        {
-            if (DateTime.UtcNow > deadline) return StillRunning;
-            Thread.Sleep(200);
-        }
-
-        var newExe = layout.Exe + ".new";
-        var newWeb = layout.Web + ".new";
-        var oldWeb = layout.Web + ".old";
-        if (layout.IsInstalledAt(Path.GetFullPath(sourceDir))) log("install: already in place, copy skipped");
-        else
-        {
-            try
-            {
-                Directory.CreateDirectory(layout.Root);
-                File.Delete(newExe);
-                if (Directory.Exists(newWeb)) Directory.Delete(newWeb, true);
-                File.Copy(sourceExe, newExe);
-                CopyFolder(sourceWeb, newWeb);
-                File.Move(newExe, layout.Exe, overwrite: true);   // the step a lock would stop: nothing swapped yet
-                if (Directory.Exists(oldWeb)) Directory.Delete(oldWeb, true);
-                if (Directory.Exists(layout.Web)) Directory.Move(layout.Web, oldWeb);
-                Directory.Move(newWeb, layout.Web);
-            }
-            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
-            {
-                try { File.Delete(newExe); if (Directory.Exists(newWeb)) Directory.Delete(newWeb, true); } catch (Exception) { }
-                return $"couldn't copy: {e.Message}";
-            }
-            try { if (Directory.Exists(oldWeb)) Directory.Delete(oldWeb, true); }
-            catch (Exception e) when (e is IOException or UnauthorizedAccessException) { log($"install: old web folder left: {e.Message}"); }
+            if (CopyAndSwap(sourceExe, sourceWeb) is { } why) return why;
         }
 
         var sizeKb = (int)(new DirectoryInfo(layout.Root).EnumerateFiles("*", SearchOption.AllDirectories).Sum(f => f.Length) / 1024);
@@ -86,6 +77,66 @@ sealed class Install(InstallLayout layout, Action<string> log)
         if (fresh) SetStartWithWindows(true);
         log($"install: {layout.Root} ({(fresh ? "fresh" : "update")}) {versionText} ({sizeKb / 1024} MB)");
         return null;
+    }
+
+    /// Stages exe.new and web.new, moves the old ones to .old, the new ones in; on any failure puts the old ones
+    /// back. Returns why it failed, or null.
+    string? CopyAndSwap(string sourceExe, string sourceWeb)
+    {
+        string newExe = layout.Exe + ".new", oldExe = layout.Exe + ".old", newWeb = layout.Web + ".new", oldWeb = layout.Web + ".old";
+        try
+        {
+            Directory.CreateDirectory(layout.Root);
+            foreach (var stale in new[] { newExe, oldExe, newWeb, oldWeb }) Delete(stale);
+            File.Copy(sourceExe, newExe);
+            CopyFolder(sourceWeb, newWeb);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            Tidy(newExe, newWeb);
+            return $"couldn't copy: {e.Message}";
+        }
+
+        bool exeAside = false, webAside = false, exeIn = false;
+        try
+        {
+            if (File.Exists(layout.Exe)) { File.Move(layout.Exe, oldExe); exeAside = true; }
+            if (Directory.Exists(layout.Web)) { Directory.Move(layout.Web, oldWeb); webAside = true; }
+            File.Move(newExe, layout.Exe);
+            exeIn = true;
+            Directory.Move(newWeb, layout.Web);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            log($"install: swap failed ({e.Message}); putting the old install back");
+            Undo("the new exe", () => { if (exeIn) File.Delete(layout.Exe); });
+            Undo("the old exe", () => { if (exeAside) File.Move(oldExe, layout.Exe); });
+            Undo("the old web folder", () => { if (webAside) Directory.Move(oldWeb, layout.Web); });
+            Tidy(newExe, newWeb);
+            return $"couldn't replace the installed files: {e.Message}";
+        }
+        Tidy(oldExe, oldWeb);
+        return null;
+    }
+
+    static void Delete(string path)
+    {
+        if (File.Exists(path)) File.Delete(path);
+        else if (Directory.Exists(path)) Directory.Delete(path, true);
+    }
+
+    /// Best effort: what's left is logged, and the next Apply deletes it first.
+    void Tidy(params string[] paths)
+    {
+        foreach (var path in paths)
+            try { Delete(path); }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException) { log($"install: left {path}: {e.Message}"); }
+    }
+
+    void Undo(string what, Action step)
+    {
+        try { step(); }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { log($"install: couldn't put back {what}: {e.Message}"); }
     }
 
     /// No file there, or nobody else has it open (a running exe can't be opened for writing).
@@ -147,9 +198,9 @@ sealed class Install(InstallLayout layout, Action<string> log)
     }
 
     /// The Install or Update dialog. Returns true when it installed and started the installed exe (the caller
-    /// exits); false to carry on running from here. Just Run is remembered through `save` (by default
-    /// settings.json in the data folder).
-    public bool ShowOffer(Offer offer, AppSettings settings, Action<AppSettings>? save = null)
+    /// exits; with `start: false` the caller starts it, after its own cleanup); false to carry on running from here.
+    /// Just Run is remembered through `save` (by default settings.json in the data folder).
+    public bool ShowOffer(Offer offer, AppSettings settings, Action<AppSettings>? save = null, bool start = true)
     {
         var running = AppVersion.Parse(App.Version)?.Display ?? App.Version;
         var update = offer == Offer.Update;
@@ -195,16 +246,21 @@ sealed class Install(InstallLayout layout, Action<string> log)
             }, TaskDialogStartupLocation.CenterScreen);
             return false;
         }
-        Start();
-        return true;
+        return !start || Start();
     }
 
     /// Starts the installed exe from its own folder. A process holding the single-instance mutex lets go
-    /// first, so the installed app becomes the first one rather than a second launch.
-    public void Start()
+    /// first, so the installed app becomes the first one rather than a second launch. False when it couldn't.
+    public bool Start()
     {
         SingleInstance.Release();
-        Process.Start(new ProcessStartInfo(layout.Exe) { WorkingDirectory = layout.Root, UseShellExecute = false });
+        try { Process.Start(new ProcessStartInfo(layout.Exe) { WorkingDirectory = layout.Root, UseShellExecute = false }); }
+        catch (Exception e) when (e is System.ComponentModel.Win32Exception or IOException)
+        {
+            log($"install: couldn't start {layout.Exe}: {e.Message}");
+            return false;
+        }
         log($"install: started {layout.Exe}");
+        return true;
     }
 }

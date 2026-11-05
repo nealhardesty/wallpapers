@@ -49,8 +49,7 @@ static class Program
             {
                 var installer = new Install(layout, Log.Info);
                 if (installer.Apply(AppContext.BaseDirectory, fresh: true) is { } why) { Log.Error($"install: failed: {why}"); return 1; }
-                installer.Start();
-                return 0;
+                return installer.Start() ? 0 : 1;
             }
         }
 
@@ -79,6 +78,8 @@ static class Program
         if (args.Contains("--settings")) app.OpenSettings();
         if (selfTest) SelfTest.Start(app, badWebRoot: args.Contains("--bad-web-root"));
         Application.Run(app);
+        // The tray's Install…: the installed exe starts once this one has cleaned up (hosts, web views).
+        app.StartAfterQuit?.Start();
         return selfTest ? SelfTest.ExitCode : 0;
     }
 }

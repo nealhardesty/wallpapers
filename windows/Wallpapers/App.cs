@@ -29,6 +29,8 @@ sealed class App : ApplicationContext
     public InstallLayout? Layout { get; }
     /// The installer for this flavor's layout; null for dev.
     public Install? Installer { get; }
+    /// Set by the tray's Install…: Program starts the installed exe after Application.Run returns.
+    public Install? StartAfterQuit { get; set; }
     SettingsWindow? settingsWindow;
     PlayWindow? playWindow;
     /// Why nothing can be shown (no web root), or null.
