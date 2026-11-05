@@ -4,7 +4,9 @@ Toy animated wallpapers: snow, rain, falling leaves, fireflies, a fireplace,
 northern lights, a fish tank, a Halloween night, an advent calendar, a
 self-playing 8-bit adventure, koi, a zen garden, a night train, fireworks,
 the real satellites overhead, your own Jellyfin videos playing in an old
-TV, a harvest valley for Thanksgiving, and more: 37 in all. Each one is a full-screen canvas
+TV, a harvest valley for Thanksgiving, the weather outside, a world
+clock with the real day and night, an orrery of the solar system right now,
+and more: 37 in all. Each one is a full-screen canvas
 animation with no page around it. Most just play; some also respond to you.
 Click to feed the fish, light the jack-o'-lanterns, rake the sand, or take
 over Pixel Quest's hero with the arrow keys.
@@ -52,6 +54,15 @@ night train, fireworks (with a New Year's countdown), a lighthouse that
 keeps a real light's rhythm, every Wikipedia edit as a ripple on a pond, and
 the real satellites crossing your sky. Last, **Jellyfin** 📺 plays your own
 server's videos in a frame of your choice (see below). And for Thanksgiving, **Harvest Valley** 🌾: see below.
+
+**Weather** 🌦️ is the forecast for your place from Open-Meteo (no key),
+over a sky that is the weather outside: drifting clouds, rain or snow,
+fog, lightning, the stars and the real moon at night. As a row of day cards
+(tap one for its hours), the next 24 hours as a ribbon, or right now, large,
+every day and hour with its own little looping scene. Set a place in the
+panel (typed, or from the device); until then it shows a labelled sample,
+and offline it keeps the last forecast with how old it is. `U` switches
+°C and °F without asking the network again.
 
 The **World Clock** 🌍 shows your cities on the world as it is right now: the
 real day and night, with twilight, the sun and the moon overhead and the city
@@ -386,7 +397,7 @@ you tick it, then seven, with the rest folded away:
 feed them in settings), Murmuration (you're the falcon), Lantern Festival,
 Rainy Window (draw in the fog), Fireworks, Pixel Room (the cat and the lamp),
 Harvest Valley (shake an apple tree; tap the scarecrow, or the sky for geese),
-Satellites (what's that one?), Weather (a day's hours; tap outside to go back) and
+Satellites (what's that one?), Weather (a day's hours; tap outside to go back),
 World Clock (a city becomes home, and the map turns to it; tap it again to go back) and
 the Orrery (tap a planet for its card; drag the tilted view). Each has a setting to ignore touch. On
 Android, a quick sideways swipe changes home screens and never counts.

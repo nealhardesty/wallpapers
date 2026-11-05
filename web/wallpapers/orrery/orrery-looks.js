@@ -33,6 +33,10 @@ const OrreryLooks = (() => {
         if (close) g.closePath();
     }
 
+    // The belt's rocks are brighter at the inner scale, where they're spread
+    // over the screen instead of packed in a band.
+    const beltAlpha = app => app.fx.belt * (app.config.scale === 'inner' ? 1.5 : 1);
+
     // A circle of radius r (plane units) round the Sun, in the plane.
     function circle(app, g, r, n = 96, start = true) {
         if (start) g.beginPath();
@@ -175,7 +179,9 @@ const OrreryLooks = (() => {
     }
 
     // Names beside the planets, placed where they don't cover another name
-    // or ball: right, left, above or below, else left out.
+    // or ball, with a little air round each: right, left, above or below,
+    // then the same twice as far out, else left out (a phone's crowded
+    // middle drops a name rather than overprint it).
     function labels(app, g, scene, theme, extra) {
         if (!app.config.showLabels) return;
         const k = app.k, size = 10.5 * k, sun = scene.sun;
@@ -190,10 +196,13 @@ const OrreryLooks = (() => {
         // Nearest the Sun first: the crowded middle gets first pick.
         for (const b of [...scene.bodies].sort((p, q) => p.dist - q.dist)) {
             if (Math.hypot(b.scr.x - sun.x, b.scr.y - sun.y) < sun.px * 1.5) continue;   // in the Sun's glare at true scale
-            const text = extra ? extra(b) : b.name, w = g.measureText(text).width, h = size * 1.1, gap = b.r + 4 * k;
-            const spots = [[gap, b.r * 0.4 + 3 * k], [gap, -b.r * 0.4 - 3 * k], [-gap - w, b.r * 0.4 + 3 * k], [-gap - w, -b.r * 0.4 - 3 * k], [-w / 2, gap + h / 2], [-w / 2, -gap - h / 2]];
+            const text = extra ? extra(b) : b.name, w = g.measureText(text).width, h = size * 1.3, pad = 1.5 * k;
+            const spots = [];
+            for (const gap of [b.r + 4 * k, 2 * (b.r + 4 * k)]) {
+                spots.push([gap, b.r * 0.4 + 3 * k], [gap, -b.r * 0.4 - 3 * k], [-gap - w, b.r * 0.4 + 3 * k], [-gap - w, -b.r * 0.4 - 3 * k], [-w / 2, gap + h / 2], [-w / 2, -gap - h / 2]);
+            }
             for (const [dx, dy] of spots) {
-                const x = b.scr.x + dx, y = b.scr.y + dy, box = { x0: x - 1, x1: x + w + 1, y0: y - h / 2, y1: y + h / 2 };
+                const x = b.scr.x + dx, y = b.scr.y + dy, box = { x0: x - pad, x1: x + w + pad, y0: y - h / 2 - pad, y1: y + h / 2 + pad };
                 if (box.x0 < app.safe.left + 2 || box.x1 > app.safe.right - 2 || box.y0 < app.safe.top || box.y1 > app.safe.bottom) continue;
                 if (hits(box, placed) || hits(box, balls, b.id)) continue;
                 placed.push(box);
@@ -289,7 +298,7 @@ const OrreryLooks = (() => {
                     const size = s * (0.6 + B.b[i] * 0.7) * p.k;
                     g.rect(p.x - size / 2, p.y - size / 2, size, size);
                 }
-                g.fillStyle = `rgba(206,186,150,${(0.3 + 0.13 * bucket + 0.12 * twinkle * Math.sin(t * 0.9 + bucket * 2.1)) * app.fx.belt})`;
+                g.fillStyle = `rgba(206,186,150,${(0.3 + 0.13 * bucket + 0.12 * twinkle * Math.sin(t * 0.9 + bucket * 2.1)) * beltAlpha(app)})`;
                 g.fill();
             }
         },
@@ -475,7 +484,7 @@ const OrreryLooks = (() => {
                 app.project(xyz[i * 3], xyz[i * 3 + 1], xyz[i * 3 + 2], p);
                 g.rect(p.x - s / 2, p.y - s / 2, s * p.k, s * p.k);
             }
-            g.fillStyle = `rgba(226,186,104,${0.55 * app.fx.belt})`;
+            g.fillStyle = `rgba(226,186,104,${Math.min(1, 0.55 * beltAlpha(app))})`;
             g.fill();
         },
 
@@ -614,8 +623,13 @@ const OrreryLooks = (() => {
             g.strokeRect(s.left * d + m, s.top * d + m, (s.right - s.left) * d - 2 * m, (s.bottom - s.top) * d - 2 * m);
             g.lineWidth = 0.6 * d;
             g.strokeRect(s.left * d + m + 4 * d, s.top * d + m + 4 * d, (s.right - s.left) * d - 2 * m - 8 * d, (s.bottom - s.top) * d - 2 * m - 8 * d);
-            // The legend, where there's room beside or below the ring.
-            g.setTransform(d, 0, 0, d, 0, 0);
+        },
+
+        // The legend, where there's room beside or below the ring: drawn
+        // each frame with the overlay (a few words), so it follows the ring
+        // as the camera moves, and says "from above" only from above.
+        legend(app, g) {
+            const ink = inkOf(app), k = app.k, s = app.safe;
             const ringR = app.R * app.ringOut;
             const side = s.right - (app.cx + ringR), below = s.bottom - (app.cy + ringR);
             const ids = app.ids();
@@ -626,7 +640,6 @@ const OrreryLooks = (() => {
                 const colW = 92 * k, lineH = size * 1.6;
                 const x0 = side > 150 * k ? s.right - 24 * k - colW : (s.left + s.right) / 2 - rows[0].length * colW / 2;
                 const y0 = s.bottom - 24 * k - rows.length * lineH;
-                g.font = `italic ${size}px ${A.SERIF}`;
                 g.fillStyle = `${ink.faint}0.85)`;
                 g.textAlign = 'left';
                 rows.forEach((row, ri) => row.forEach((id, ci) => {
@@ -636,11 +649,12 @@ const OrreryLooks = (() => {
                     g.font = `italic ${size}px ${A.SERIF}`;
                     g.fillText(OrreryMath.PLANETS[id].name, x + size * 1.5, y);
                 }));
-                g.font = `italic ${size * 0.92}px ${A.SERIF}`;
-                g.fillStyle = `${ink.faint}0.6)`;
-                g.fillText('From above the ecliptic', x0, y0 - lineH * 1.1);
+                if (!app.tilted) {
+                    g.font = `italic ${size * 0.92}px ${A.SERIF}`;
+                    g.fillStyle = `${ink.faint}0.6)`;
+                    g.fillText('From above the ecliptic', x0, y0 - lineH * 1.1);
+                }
             }
-            g.setTransform(1, 0, 0, 1, 0, 0);
         },
 
         plane(app, g, scene) {
@@ -711,7 +725,7 @@ const OrreryLooks = (() => {
                 app.project(xyz[i * 3], xyz[i * 3 + 1], xyz[i * 3 + 2], p);
                 g.rect(p.x, p.y, s, s);
             }
-            g.fillStyle = `${inkOf(app).faint}${0.45 * app.fx.belt})`;
+            g.fillStyle = `${inkOf(app).faint}${0.45 * beltAlpha(app)})`;
             g.fill();
         },
 
@@ -781,15 +795,12 @@ const OrreryLooks = (() => {
         overlay(app, g, scene) {
             const ink = inkOf(app), k = app.k, th = chart.theme(app);
             const ends = sightLines(app, g, scene, (b, a) => b.id === 'sun' ? `${ink.faint}${a})` : app.config.chartPalette === 'night' ? `rgba(255,207,110,${a})` : `rgba(156,47,31,${a})`, true);
-            // Each one's glyph on the ring, where it is among the stars.
-            g.textAlign = 'center';
-            g.textBaseline = 'middle';
+            // A dot on the ring for each, where it is among the stars.
             for (const { b, end } of ends) {
-                g.font = `${10 * k}px ${A.SYMBOLS}`;
                 g.fillStyle = b.id === 'sun' ? ink.ink : ink.red;
-                g.strokeStyle = th.halo; g.lineWidth = 2.5 * k;
                 g.beginPath(); g.arc(end.x, end.y, 1.6 * k, 0, TAU); g.fill();
             }
+            chart.legend(app, g);
             labels(app, g, scene, { ...th, labelWeight: 'italic 400' });
         },
     };

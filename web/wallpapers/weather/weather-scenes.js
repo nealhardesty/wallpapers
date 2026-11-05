@@ -734,6 +734,12 @@ const WeatherScenes = (() => {
 
         // Would a frame look the same as the last? (Then it can be painted
         // once, into the sky's layer.) day: the daylight, 0 to 1.
+        // Only slow things moving (drifting clouds, fog, twinkling stars):
+        // no rain, snow or lightning, so a lower frame rate looks the same.
+        calm() {
+            return !(this.flash > 0) && ![this.rain, this.snow].some(list => list.some(p => p.live));
+        }
+
         still(day) {
             if (this.level === 'off') return true;
             if (this.flash > 0 || this.fog > 0.01 || [this.clouds, this.rain, this.snow].some(list => list.some(p => p.live))) return false;

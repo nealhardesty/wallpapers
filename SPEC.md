@@ -1957,7 +1957,7 @@ or hour.
 - **Units:** follow the locale: °F in the US, °C elsewhere, as the old
   homepage did.
 
-**As built:** three views (`view`, key V): day cards (3–10, wrapping into up to three rows on a phone; tap one for its hours, tap outside to go back), a 24-hour ribbon (smooth temperature curve, rain-chance bars, night shading from `is_day`, sunrise and sunset markers, a scene every three hours) and Now (large, with a table of wind, humidity, UV, sunrise and sunset, and a strip of the next days). Fifteen scenes, one per kind, pure functions of time over baked sprites, with night versions. The sky is the current hour's `sky()` phase and kind, crossfading over 2.5 s; over it an ambient layer (`ambient`: off, subtle, full) of soft clouds, rain, snow or hail, fog sheets, lightning, stars and the real moon phase. Cards: glass (darker over a bright sky so white text reads), solid or minimal. Always fetched in metric (10 days, so no setting needs a new request) and converted for display, so `U` switches units without the network. Cached in `host.storage` with its place; a cache for another place isn't shown; an old cache's "now" comes from its hourly forecast. Refreshed every `refreshMinutes` while frames run (so never while hidden, and once on return), retried after 5 minutes on a failure, `R` at most once a minute. States: "Sample forecast · set a place in ⚙︎ settings", the sample dimmed with "Getting the forecast…", "updated 3 h ago · offline", "Couldn't reach Open-Meteo · sample forecast"; the panel's status line says the same at more length. "Weather data by Open-Meteo.com" in the bottom corner, always. Bench (phone, 4× throttle): 4.8% Low, 7.9% Medium, 18% High.
+**As built:** three views (`view`, key V): day cards (3–10, wrapping into up to three rows on a phone; tap one for its hours, tap outside to go back), a 24-hour ribbon (smooth temperature curve, rain-chance bars, night shading from `is_day`, sunrise and sunset markers, a scene every three hours) and Now (large, with a table of wind, humidity, UV, sunrise and sunset, and a strip of the next days). Fifteen scenes, one per kind, pure functions of time over baked sprites, with night versions. A snowy day's amount is its fresh snow (`snowfall_sum`, cm or in), not its water. The sky is the current hour's `sky()` phase and kind, crossfading over 2.5 s; over it an ambient layer (`ambient`: off, subtle, full) of soft clouds, rain, snow or hail, fog sheets, lightning, stars and the real moon phase. Cards: glass (darker over a bright sky so white text reads), solid or minimal. Always fetched in metric (10 days, so no setting needs a new request) and converted for display, so `U` switches units without the network. Cached in `host.storage` with its place; a cache for another place isn't shown; an old cache's "now" comes from its hourly forecast. Refreshed every `refreshMinutes` while frames run (so never while hidden, and once on return), retried after 5 minutes on a failure, `R` at most once a minute. States: "Sample forecast · set a place in ⚙︎ settings", the sample dimmed with "Getting the forecast…", "updated 3 h ago · offline", "Couldn't reach Open-Meteo · sample forecast"; the panel's status line says the same at more length. "Weather data by Open-Meteo.com" in the bottom corner, always; the header line ("55° · Clear") sits on the same soft shade, in full white over a bright sky. Frames: 20 fps with rain, snow or lightning outside, 12 with only clouds drifting, 10 with only the scenes moving. Bench (phone, 4× throttle, the sample's clear first day): 2.7% Low, 3.9% Medium, 8.6% High (⚡); a cloudy sky is about 16% at High, rain or snow about 29%.
 
 ### 10.3 World clock (owner)
 
@@ -1987,8 +1987,16 @@ labels sit in the sky on leader lines, leaving the map clear. Four looks
 terminator) and old paper (an engraved, hatched night). The night is a smooth
 fade through civil, nautical and astronomical twilight (from the sun's
 altitude on a 1° grid, scaled up) or the three bands as polygons; city lights
-are a seeded speckle clustered round every listed city and masked by the land
-and the night. The sun's glow sits at the subsolar point, the moon at the
+are a seeded speckle clustered round every listed city, clipped to the land,
+each lit by its own sun's depth (past 4° with the bands, a smooth fade from
+−2.5° to −10° with the soft night). Three cached layers, built when the map is
+first drawn and let go while another view shows: the land (per resize and
+look), the night (darkness, hatching, lights and terminator in one canvas,
+once a minute) and the base (the background with the map band composed over
+it for the centre); they're kept at a capped scale (at most the pixel ratio,
+4096 px wide, and ~22 M pixels between them), so a 2560×1440 screen at 2×
+holds about 140 MB of canvases instead of 580, and its first frame takes
+~390 ms instead of ~690 (headless Chrome). The labels draw at full resolution. The sun's glow sits at the subsolar point, the moon at the
 sub-lunar point in its phase (`WorldClockMath.sublunar`, the low-precision
 series: within a degree or so of the eclipse of 8 April 2024 in the tests).
 Each city is a dot and a card (name, time, the weekday where it isn't home's,
@@ -2005,7 +2013,7 @@ world-cities.js for it); custom zones are `Label=Area/City`, placed at a
 listed city in that zone (else on the equator at their offset, as a ring),
 with any bad one named in the panel's status. `?date=` with `Z` pins a moment
 for the smoke checks (the June solstice, the March equinox). Bench (phone, 4×
-throttle): 0.8% Low, 1.1% Medium, 1.3% High; the night's rebuild once a minute
+throttle): 1.6% Low, 1.2% Medium, 1.1% High; the night's rebuild once a minute
 is the p95.
 
 ### 10.4 Map of where you are (owner)
@@ -3082,7 +3090,13 @@ orbits, the IAU zodiac and the seasons (`OrreryMath`, Task 5,
   lettered round the ring, ♈︎ at the J2000 equinox, planets as half-hatched
   circles with their glyphs and a red R when retrograde, the Moon in its
   phase, and lines of sight from the Earth to each planet and on to where it
-  sits on the ring.
+  sits on the ring. The legend is drawn with the overlay, so it follows the
+  ring, and says "From above the ecliptic" only from above. In the
+  compressed and inner scales a line of sight bends at the planet: the
+  radial scale keeps every direction from the Sun true, but it can't keep
+  the Earth, the planet and the sky point in line too (only `true` can), so
+  the solid line runs Earth → planet and the dotted one planet → its true
+  place on the ring.
 - **The zodiac** (`zodiac`): the thirteen IAU constellations the ecliptic
   crosses (Ophiuchus included), or the twelve equal tropical signs, whose
   boundaries are drawn 1.397°/century back from the J2000 frame. Cards name
@@ -3090,16 +3104,19 @@ orbits, the IAU zodiac and the seasons (`OrreryMath`, Task 5,
 - **The belt:** a seeded pool of 1500 main-belt rocks (Kirkwood gaps
   empty, each at its own Kepler rate, a little eccentric and inclined) and
   340 Trojans librating round Jupiter's L4 and L5; drawn count = pool ×
-  density, eased in and out. With `belt` shed (Low) a faint band (a stipple
-  on the chart) stands in.
+  density, eased in and out, half again as bright at the inner scale, where
+  it's spread over the screen. With `belt` shed (Low) a faint band (a
+  stipple on the chart) stands in.
 - **Time** (`speed`, keys `=`/`+`, `-`, `0`): live, 1 h, 1 day, 1 week,
   1 month or 1 year a second, from the date on screen; `0` goes back to now
-  and live. A toast names the speed and date. Clamped to 1000–2999 (the
-  long table's span, and `seasons()` needs four-digit years); at the end it
-  holds, with a toast. The readout: "1 day/s · 12 Mar 2031 · spring
-  equinox in 8 days" (· approximate outside 1800–2050), the Moon's phase
+  and live. A toast names the speed and date. Clamped to 1000–2999 (within
+  the long table's span, in four-digit years); at the end it holds, with a
+  toast. The readout: "1 day/s · 12 Mar 2031 · March equinox in 8 days"
+  (named by month, not season, since spring in the north is autumn in the
+  south; · approximate outside 1800–2050), the Moon's phase
   (drawn) and constellation, and which planets are retrograde.
-- **Cards:** tap a planet, the Moon or the Sun: distance from the Sun and
+- **Cards:** tap a planet, the Moon, one of Jupiter's four (on a tight
+  radius, checked before Jupiter's own) or the Sun: distance from the Sun and
   the Earth in AU and light-minutes, the constellation it's in from here,
   its elongation (evening or morning sky, or too near the Sun), retrograde
   or not, its year; Jupiter's moons and the Moon have their own. A tap on
@@ -3107,10 +3124,11 @@ orbits, the IAU zodiac and the seasons (`OrreryMath`, Task 5,
 - **Keys:** `=` `+` faster, `-` slower, `0` now, `L` look, `S` scale, `V`
   top or tilted.
 - **Cost:** live and still, one frame a minute (the readout's clock), or
-  ~7 fps of corona and belt shimmer in deep space unless motion is reduced
-  or the effects are shed; every look draws from a cached background and a
-  cached plane. Bench (phone, 4× throttle): 0.1% Low, 8.2% Medium, 15.7%
-  High. Smoke: every look and scale draws; Mars at the 2025-01-16 opposition
+  ~4 fps of corona and belt shimmer in deep space unless motion is reduced,
+  the device is on battery (the power policy's reasons) or the effects are
+  shed; every look draws from a cached background and a cached plane; a
+  drag from above (which turns nothing) asks for no frames. Bench (phone,
+  4× throttle): 0.9% Low, 5.3% Medium, 8.4% High (⚡). Smoke: every look and scale draws; Mars at the 2025-01-16 opposition
   on the Earth's ray from the Sun at every scale and view; `=`, `-`, `0` and
   the toast; far dates clamped, flagged and finite; cards; drag; a phone
   and a taskbar inset; the idle and running frame rates.

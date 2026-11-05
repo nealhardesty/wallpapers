@@ -7,7 +7,7 @@ WP.schema('weather', [
     { key: 'view', label: 'View', type: 'select', options: [['days', '🗓️ Days, as cards'], ['hours', '🕒 The next 24 hours'], ['now', '🌡️ Right now, large']],
       help: 'V switches between them. In Days, tap a card for that day hour by hour.' },
     { key: 'days', label: 'Days', type: 'range', min: 3, max: 10, step: 1, digits: 0,
-      help: 'How many day cards. They wrap into two rows on a narrow screen.' },
+      help: 'How many day cards. They wrap onto more rows on a narrow screen.' },
     { key: 'units', label: 'Units', type: 'select', options: [['auto', 'From the language (°F in the US)'], ['metric', '°C, km/h, mm'], ['imperial', '°F, mph, in']],
       help: 'U switches between them.' },
     { key: 'hour12', label: 'Clock', type: 'select', options: [['auto', 'From the language'], ['12', '12-hour (3 PM)'], ['24', '24-hour (15:00)']] },

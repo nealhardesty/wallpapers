@@ -215,9 +215,11 @@ const OrreryMath = (() => {
     }
 
     // The year's equinoxes and solstices: { march, june, september, december }.
+    // (Dates by setUTCFullYear: Date.UTC reads years 0–99 as 1900–1999.)
     function seasons(year) {
+        const utc = (month, day) => { const d = new Date(Date.UTC(2000, month, day)); d.setUTCFullYear(year); return d.getTime(); };
         const find = (month, day, target) => {
-            let lo = Date.UTC(year, month, day - 6), hi = Date.UTC(year, month, day + 6);
+            let lo = utc(month, day - 6), hi = utc(month, day + 6);
             for (let i = 0; i < 50; i++) {
                 const mid = (lo + hi) / 2;
                 if (signed(sunLongitude(new Date(mid)) - target) < 0) lo = mid; else hi = mid;

@@ -176,7 +176,7 @@ class WorldClockAnimationManager {
         this.safe = { top: ins.top, left: ins.left, right: this.W - ins.right, bottom: this.H - ins.bottom };
         // Text and markers scale with the screen, and the Size setting.
         this.k = WorldClockArt.clamp(Math.min(this.W, this.H) / 800, 0.78, 2.2) * this.config.scale;
-        this.fade = null;
+        this.fade = this.fadeCanvas = null;
         for (const view of Object.values(this.views)) view.resize();
         this.dirty = true;
     }
@@ -189,6 +189,7 @@ class WorldClockAnimationManager {
         if (changed('center')) this.home = null;   // the map eases over to the new centre
         if (changed('cities') || changed('custom') || changed('sort')) { this.resolve(); this.say(); }
         if (changed('view') || changed('mapStyle') || changed('faceStyle')) this.crossfade();
+        if (changed('view') && this.views[old.view] !== this.view) this.views[old.view]?.release?.();   // its picture is in the crossfade now
         if (changed('scale')) { this.resize(); return this.wake(); }
         for (const view of Object.values(this.views)) view.configure?.(old, config);
         this.wake();
@@ -307,7 +308,7 @@ class WorldClockAnimationManager {
         if (this.fade) this.fade.t += dt / this.fade.seconds;
         if (this.dirty || busy || this.fade) this.draw(date);
         this.dirty = false;
-        if (this.fade && this.fade.t >= 1) this.fade = null;
+        if (this.fade && this.fade.t >= 1) this.fade = this.fadeCanvas = null;
         // Calm: nothing moving, so no frames until the next second.
         if (!busy && !this.fade) this.host.idleUntil(1000 - (this.host.now().getTime() % 1000) + 8);
         this.frameId = requestAnimationFrame(t => this.frame(t));

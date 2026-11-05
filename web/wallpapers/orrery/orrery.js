@@ -24,11 +24,12 @@ const ORRERY_SCALE_NAMES = { compressed: '📏 Compressed: all eight fit', true:
 const ORRERY_PLANETS = ['mercury', 'venus', 'earth', 'mars', 'jupiter', 'saturn', 'uranus', 'neptune', 'pluto'];
 const ORRERY_GLYPHS = { sun: '☉', mercury: '☿', venus: '♀', earth: '♁', mars: '♂', jupiter: '♃', saturn: '♄', uranus: '⛢', neptune: '♆', pluto: '♇', moon: '☾' };
 // Time-lapse stays where the tables hold: Standish's long table runs
-// 3000 BC–3000 AD, and the seasons' search needs a four-digit year.
+// 3000 BC–3000 AD; 1000–2999 keeps to four-digit years in the readout.
 const ORRERY_FROM = Date.UTC(1000, 0, 1), ORRERY_UNTIL = Date.UTC(2999, 11, 31, 12);
 const ORRERY_DAY = 86400000;
 const ORRERY_LIGHT_MINUTES = 499.004784 / 60;   // per AU
-const ORRERY_SEASONS = [['march', 'spring equinox'], ['june', 'summer solstice'], ['september', 'autumn equinox'], ['december', 'winter solstice']];
+// Named by month, not season: spring in the north is autumn in the south.
+const ORRERY_SEASONS = [['march', 'March equinox'], ['june', 'June solstice'], ['september', 'September equinox'], ['december', 'December solstice']];
 // Ring poles (IAU, RA and Dec, degrees), for Saturn's and Uranus's rings.
 const ORRERY_POLES = { saturn: [40.589, 83.537], uranus: [257.311, -15.175] };
 
@@ -101,7 +102,7 @@ class OrreryAnimationManager {
         this.stopGestures?.();
         this.stopGestures = this.config.touch && !this.host.params.thumb ? this.host.gestures({
             tap: (x, y) => this.tap(x, y),
-            start: (x, y) => { this.drag = { x, y }; },
+            start: (x, y) => { if (this.tilted) this.drag = { x, y }; },   // from above, a drag turns nothing
             move: (x, y) => this.dragTo(x, y),
             end: () => { this.drag = null; this.wake(); },
         }) : null;
@@ -128,11 +129,11 @@ class OrreryAnimationManager {
     }
 
     // Where the system sits and how big: the plane's outermost ring fits the
-    // safe area's short side, above the brass look's plinth.
+    // safe area's short side, above the brass look's plinth (base × 1.1 tall).
     fit() {
         const s = this.safe, m = 12 * this.k;
         this.base = this.config.look === 'brass' ? OrreryArt.clamp((s.bottom - s.top) * 0.075, 26, 90) : 0;
-        const aw = s.right - s.left - 2 * m, ah = s.bottom - s.top - 2 * m - this.base * 0.7;
+        const aw = s.right - s.left - 2 * m, ah = s.bottom - s.top - 2 * m - (this.base ? this.base * 1.1 + 4 : 0);
         this.ringIn = 1.035;
         this.ringOut = this.config.showZodiac ? 1.12 : 1.04;
         if (!this.tilted) {
@@ -249,7 +250,7 @@ class OrreryAnimationManager {
     nextScale() { return this.cycle('scale', ORRERY_SCALE_NAMES); }
     nextView() { return this.cycle('view', { top: '⬇️ From above', tilted: '📐 Tilted' }); }
 
-    // The next equinox or solstice after `ms`: "spring equinox in 8 days".
+    // The next equinox or solstice after `ms`: "March equinox in 8 days".
     season(ms) {
         const year = new Date(ms).getUTCFullYear();
         for (const y of [year, year + 1]) {
@@ -596,8 +597,13 @@ class OrreryAnimationManager {
             const d = Math.hypot(p.x - x, p.y - y);
             if (d <= Math.max(r + 6, 16 * this.k) && d < bestD) { best = id; bestD = d; }
         };
-        for (const b of scene.bodies) consider(b.id, b.scr, b.r);
-        for (const b of scene.extras) if (b.id === 'moon') consider(b.id, b.scr, b.r + 2);
+        // Jupiter's moons first, on a tight radius, since Jupiter's own
+        // reaches over them; then the planets, the Moon and the Sun.
+        for (const b of scene.extras) if (b.small) { const d = Math.hypot(b.scr.x - x, b.scr.y - y); if (d <= b.r + 3 && d < bestD) { best = b.id; bestD = d; } }
+        if (!best) {
+            for (const b of scene.bodies) consider(b.id, b.scr, b.r);
+            for (const b of scene.extras) if (b.id === 'moon') consider(b.id, b.scr, b.r + 2);
+        }
         if (!best) consider('sun', scene.sun, scene.sun.px);
         this.selected = best === this.selected ? null : best;
         this.wake();
@@ -685,11 +691,12 @@ class OrreryAnimationManager {
         if (this.fade && this.fade.t >= 1) this.fade = null;
         const busy = moving || drifting || !!this.drag || !!this.fade || easing;
         if (!busy) {
-            // Live and still: the shimmer at a few frames a second, or
-            // nothing until the next minute.
-            const shimmer = this.config.look === 'space' && !this.host.reducedMotion && !this.host.params.thumb && (this.fx.glow > 0 || (this.fx.belt > 0 && this.beltShown > 0));
+            // Live and still: the shimmer at about four frames a second (not
+            // on battery), or nothing until the next minute.
+            const battery = (this.host.power?.reasons || []).some(r => r.includes('battery'));
+            const shimmer = this.config.look === 'space' && !this.host.reducedMotion && !this.host.params.thumb && !battery && (this.fx.glow > 0 || (this.fx.belt > 0 && this.beltShown > 0));
             const toMinute = 60000 - (this.host.now().getTime() % 60000) + 20;
-            this.host.idleUntil(shimmer ? 140 : toMinute);
+            this.host.idleUntil(shimmer ? 250 : toMinute);
         }
         this.frameId = requestAnimationFrame(t => this.frame(t));
     }
@@ -700,7 +707,7 @@ class OrreryAnimationManager {
         g.setTransform(1, 0, 0, 1, 0, 0);
         g.globalAlpha = 1;
         g.globalCompositeOperation = 'source-over';
-        g.drawImage(this.layer('background', `${this.config.look}|${this.config.chartPalette}|${this.density}|${this.base}|${this.config.scale}|${this.config.showPluto}`, lg => look.background(this, lg)), 0, 0);
+        g.drawImage(this.layer('background', `${this.config.look}|${this.config.chartPalette}|${this.density}|${this.base}`, lg => look.background(this, lg)), 0, 0);
         // The plane: orbits, the zodiac ring, a quiet belt; cached while the
         // camera is still.
         const camera = this.cameraKey();

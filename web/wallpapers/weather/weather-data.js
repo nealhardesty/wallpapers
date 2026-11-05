@@ -12,7 +12,7 @@ const WeatherData = (() => {
     const HOST = 'https://api.open-meteo.com/v1/forecast';
     const CURRENT = 'temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,is_day,wind_speed_10m,wind_direction_10m,precipitation';
     const HOURLY = 'temperature_2m,apparent_temperature,precipitation_probability,precipitation,weather_code,is_day,wind_speed_10m';
-    const DAILY = 'weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,precipitation_sum,sunrise,sunset,uv_index_max,wind_speed_10m_max';
+    const DAILY = 'weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,precipitation_sum,snowfall_sum,sunrise,sunset,uv_index_max,wind_speed_10m_max';
     const MIN = 60000, HOUR = 3600000, DAY = 86400000;
     const TWILIGHT = 40 * MIN;
 
@@ -30,7 +30,7 @@ const WeatherData = (() => {
     function unitsFor(locale) {
         const m = /^([a-z]{2,3})(?:[-_][A-Za-z]{4})?(?:[-_]([A-Za-z]{2}|\d{3}))?/i.exec(String(locale || ''));
         if (!m) return 'metric';
-        const region = m[2] ? m[2].toUpperCase() : (m[1].toLowerCase() === 'en' && /^en[-_]US$/i.test(locale) ? 'US' : '');
+        const region = m[2] ? m[2].toUpperCase() : '';
         return region === 'US' || region === 'LR' || region === 'MM' ? 'imperial' : 'metric';
     }
 
@@ -81,6 +81,8 @@ const WeatherData = (() => {
                 days: d.time.map((date, i) => ({
                     date, code: d.weather_code[i], hi: d.temperature_2m_max[i], lo: d.temperature_2m_min[i],
                     pop: d.precipitation_probability_max[i] || 0, precip: d.precipitation_sum[i],
+                    // Fresh snow in cm (precip is its water); optional, so older caches still read.
+                    snow: Array.isArray(d.snowfall_sum) && num(d.snowfall_sum[i]) ? d.snowfall_sum[i] : null,
                     sunrise: d.sunrise[i] || null, sunset: d.sunset[i] || null, uv: d.uv_index_max[i] || 0,
                     windMax: d.wind_speed_10m_max[i],
                 })),
@@ -132,7 +134,7 @@ const WeatherData = (() => {
 
     function age(fetchedAt, now) {
         const m = Math.floor((now - fetchedAt) / MIN);
-        if (m < 10) return '';
+        if (!(m >= 10)) return '';   // fresh, or no time at all (NaN)
         if (m < 60) return `updated ${m} min ago`;
         const h = Math.floor(m / 60);
         if (h < 48) return `updated ${h} h ago`;
@@ -151,18 +153,22 @@ const WeatherData = (() => {
     // A made-up 16-day forecast from the date of `now` (UTC ms), the same
     // every time, with every kind in it.
     function sample(now) {
-        const CODES = [0, 1, 2, 3, 45, 51, 61, 65, 56, 71, 75, 80, 85, 95, 96, 82];
+        // The opening days mixed, so the first screen isn't five fair days.
+        const CODES = [0, 61, 71, 95, 2, 3, 45, 51, 65, 56, 75, 80, 85, 96, 82, 1];
         const start = Math.floor(now / DAY) * DAY;
         const iso = ms => new Date(ms).toISOString().slice(0, 16);
         const h = { time: [], temperature_2m: [], apparent_temperature: [], precipitation_probability: [], precipitation: [], weather_code: [], is_day: [], wind_speed_10m: [] };
-        const d = { time: [], weather_code: [], temperature_2m_max: [], temperature_2m_min: [], precipitation_probability_max: [], precipitation_sum: [], sunrise: [], sunset: [], uv_index_max: [], wind_speed_10m_max: [] };
+        const d = { time: [], weather_code: [], temperature_2m_max: [], temperature_2m_min: [], precipitation_probability_max: [], precipitation_sum: [], snowfall_sum: [], sunrise: [], sunset: [], uv_index_max: [], wind_speed_10m_max: [] };
         for (let i = 0; i < 16; i++) {
             const t0 = start + i * DAY, code = CODES[i];
-            const hi = 14 + Math.round(8 * Math.sin(i * 0.7)), lo = hi - 8;
+            // Snow and freezing rain on cold days, the rest mild.
+            const cold = ['snow', 'heavy-snow', 'snow-showers', 'freezing-rain'].includes(kind(code));
+            const hi = cold ? 1 + i % 3 : 14 + Math.round(8 * Math.sin(i * 0.7)), lo = hi - 8;
             d.time.push(iso(t0).slice(0, 10)); d.weather_code.push(code);
             d.temperature_2m_max.push(hi); d.temperature_2m_min.push(lo);
             d.precipitation_probability_max.push(code >= 51 ? 40 + (i * 7) % 50 : 5);
             d.precipitation_sum.push(code >= 51 ? 2 + i % 5 : 0);
+            d.snowfall_sum.push(kind(code) === 'snow' || kind(code) === 'heavy-snow' || kind(code) === 'snow-showers' ? (2 + i % 5) * 0.7 : 0);
             d.sunrise.push(iso(t0 + 6.5 * HOUR)); d.sunset.push(iso(t0 + 18 * HOUR));
             d.uv_index_max.push(code < 3 ? 6 : 2); d.wind_speed_10m_max.push(10 + (i * 3) % 20);
             for (let hr = 0; hr < 24; hr++) {

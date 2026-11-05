@@ -145,6 +145,18 @@ test('seasons(2026): equinoxes and solstices within two hours of the almanac', (
     near(s.december.getTime(), at('2026-12-21T20:50:00Z').getTime(), 2 * HOUR, 'December solstice');
 });
 
+test('seasons(50): a two-digit year is that year, not 1950', () => {
+    const s = M.seasons(50);
+    for (const [key, month] of [['march', 2], ['june', 5], ['september', 8], ['december', 11]]) {
+        assert.equal(s[key].getUTCFullYear(), 50, `${key} is in ${s[key].getUTCFullYear()}`);
+        assert.equal(s[key].getUTCMonth(), month, `${key} month`);
+    }
+    // In the proleptic Gregorian calendar JS dates use, still about the 21st.
+    assert.ok(s.march.getUTCDate() >= 20 && s.march.getUTCDate() <= 22, `March equinox on the ${s.march.getUTCDate()}`);
+    // And a different instant from 1950's.
+    assert.ok(Math.abs(s.march.getTime() - M.seasons(1950).march.getTime()) > 365 * 86400000);
+});
+
 // ---- The Moon ---------------------------------------------------------------
 
 // The phase is circular (0 and 1 are both new), so distance from new is the

@@ -13,7 +13,7 @@ const W = vm.runInContext('WeatherData', context);
 
 const CURRENT = 'temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,is_day,wind_speed_10m,wind_direction_10m,precipitation';
 const HOURLY = 'temperature_2m,apparent_temperature,precipitation_probability,precipitation,weather_code,is_day,wind_speed_10m';
-const DAILY = 'weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,precipitation_sum,sunrise,sunset,uv_index_max,wind_speed_10m_max';
+const DAILY = 'weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,precipitation_sum,snowfall_sum,sunrise,sunset,uv_index_max,wind_speed_10m_max';
 
 test('request: exact URL, rounded coordinates, imperial units', () => {
     assert.equal(W.request({ lat: 12.345, lon: -0.051, days: 5, units: 'imperial' }),
@@ -74,9 +74,19 @@ test('normalize: round-trips the fields', () => {
     assert.equal(n.hours[24].time, '2026-03-02T00:00');
     assert.equal(n.days.length, 2);
     assert.deepEqual(JSON.parse(JSON.stringify(n.days[0])), {
-        date: '2026-03-01', code: 61, hi: 9, lo: 2, pop: 70, precip: 3.5,
+        date: '2026-03-01', code: 61, hi: 9, lo: 2, pop: 70, precip: 3.5, snow: null,
         sunrise: '2026-03-01T06:40', sunset: '2026-03-01T17:50', uv: 2, windMax: 20,
     });
+});
+
+test('normalize: snowfall_sum, when there, is the day\'s snow in cm', () => {
+    const f = fixture();
+    f.daily.snowfall_sum = [2.8, 0];
+    const n = W.normalize(f, 0);
+    assert.equal(n.days[0].snow, 2.8);
+    assert.equal(n.days[1].snow, 0);
+    f.daily.snowfall_sum = [null, 'x'];
+    assert.equal(W.normalize(f, 0).days[0].snow, null);
 });
 
 test('normalize: not a forecast gives null, never throws', () => {
@@ -120,6 +130,9 @@ test('age', () => {
     assert.equal(W.age(0, 25 * m), 'updated 25 min ago');
     assert.equal(W.age(0, 180 * m), 'updated 3 h ago');
     assert.equal(W.age(0, 50 * 60 * m), 'updated 2 days ago');
+    assert.equal(W.age(NaN, 50 * m), '');
+    assert.equal(W.age(0, NaN), '');
+    assert.equal(W.age(undefined, 50 * m), '');
 });
 
 test('dayLabel', () => {
@@ -139,7 +152,18 @@ test('sample: valid, deterministic, every kind', () => {
     for (const k of ['clear', 'mostly-clear', 'partly-cloudy', 'cloudy', 'fog', 'drizzle', 'rain', 'heavy-rain', 'freezing-rain', 'snow', 'heavy-snow', 'showers', 'snow-showers', 'thunder', 'hail']) {
         assert.ok(kinds.has(k), k);
     }
-    assert.deepEqual(JSON.parse(JSON.stringify(W.sample(now))), JSON.parse(JSON.stringify(s)));
+    // Deterministic: any time in the same UTC day gives the same forecast
+    // (only fetchedAt differs), and the opening days are pinned.
+    const later = W.sample(now + 10 * 3600000);
+    assert.equal(later.fetchedAt, now + 10 * 3600000);
+    assert.deepEqual(JSON.parse(JSON.stringify({ ...later, fetchedAt: 0 })), JSON.parse(JSON.stringify({ ...s, fetchedAt: 0 })));
+    assert.deepEqual([...s.days.slice(0, 5).map(d => W.kind(d.code, 1))], ['clear', 'rain', 'snow', 'thunder', 'partly-cloudy']);
+    assert.equal(s.days[0].date, '2026-03-01');
+    assert.equal(s.current.time, '2026-03-01T12:00');
+    // Snow days carry a depth; others none.
+    for (const d of s.days) assert.equal(d.snow > 0, ['snow', 'heavy-snow', 'snow-showers'].includes(W.kind(d.code, 1)), d.date);
+    // The next day is a different forecast's first day.
+    assert.equal(W.sample(now + 86400000).days[0].date, '2026-03-02');
 });
 
 test('normalize: polar day and night (no sunrise or sunset) still give a forecast', () => {
@@ -167,4 +191,5 @@ test('dayLabel falls back instead of throwing', () => {
 test('placeNow shifts UTC to the place wall clock', () => {
     assert.equal(W.placeNow(1000, 3600), 1000 + 3600000);
     assert.equal(W.placeNow(1000), 1000);
+    assert.equal(W.placeNow(Date.parse('2026-03-01T12:00:00Z'), -5 * 3600), Date.parse('2026-03-01T07:00:00Z'));
 });

@@ -11,8 +11,14 @@
 // Cost: the sky is a small cached gradient, scaled up, crossfading when it
 // changes. The forecast (cards, text, curves) is one cached layer, rebuilt
 // once a minute or when something changes; per frame only the scenes and
-// the ambient weather move, at up to 20 fps (host.idleUntil between), and
-// a still picture once a minute under reduced motion. The forecast is
+// the ambient weather move, at up to 20 fps (12 with only clouds drifting
+// outside, 10 when only the scenes move; host.idleUntil between), and a
+// still picture once a minute under reduced motion.
+//
+// Clocks: the sky, the hour and the place's day read host.now() (so ?date=
+// tests them); when to fetch, the "updated 3 h ago" line and the minute
+// tick that moves it read Date.now(), since they're about real network
+// time and fetchedAt is real time. The forecast is
 // always fetched in metric and converted for display, so switching units
 // needs no new request; it's cached in host.storage with its place.
 
@@ -321,6 +327,15 @@ class WeatherAnimationManager {
         return `${mm < 10 ? mm.toFixed(1) : Math.round(mm)} mm`;
     }
 
+    // A day's rain, or on a snowy day its fresh snow (cm, from snowfall_sum),
+    // else its water ("as water", from an older cache without snowfall).
+    fall(day, kind) {
+        if (!this.snowy(kind)) return this.amount(day.precip);
+        if (typeof day.snow !== 'number') return `${this.amount(day.precip)} as water`;
+        const cm = day.snow;
+        return this.units() === 'imperial' ? `${(cm / 2.54).toFixed(1)} in` : `${cm < 10 ? cm.toFixed(1) : Math.round(cm)} cm`;
+    }
+
     // "06:41" or "6:41 AM", from a wall-clock ISO time; short drops the AM.
     clock(iso, short = false) {
         const h = +iso.slice(11, 13), m = iso.slice(14, 16);
@@ -473,8 +488,12 @@ class WeatherAnimationManager {
                     const size = Math.max(12, 17 * k), sep = place && summary ? '   ' : '';
                     const a = this.measure(g, place + sep, size, 650), b = this.measure(g, summary, size * 0.92, 500);
                     let lx = x + body.w / 2 - (a + b) / 2;
+                    // A soft shade under the line, as under the credit: it reads on a bright sky.
+                    g.globalAlpha = 0.35;
+                    g.drawImage(WeatherScenes.shade(), lx - (a + b) * 0.12, cy + 19 * k - size * 1.35, (a + b) * 1.24, size * 2.1);
+                    g.globalAlpha = 1;
                     this.text(g, place + sep, lx, cy + 19 * k, size, { weight: 650, align: 'left' });
-                    this.text(g, summary, lx + a, cy + 19 * k, size * 0.92, { colour: WEATHER_DIM, align: 'left' });
+                    this.text(g, summary, lx + a, cy + 19 * k, size * 0.92, { colour: this.glassTint > 0.38 ? WEATHER_INK : WEATHER_DIM, align: 'left' });
                     cy += 26 * k;
                 }
                 if (this.banner) {
@@ -541,7 +560,7 @@ class WeatherAnimationManager {
         if (this.config.showWind) lines.push(`Wind ${this.wind(day.windMax)}`);
         if (this.config.showUv) lines.push(`UV ${Math.round(day.uv)}`);
         if (this.config.showSun) lines.push(this.sunText(day, true));
-        if (this.config.showPrecipAmount) lines.push(`${this.snowy(kind) ? 'Snow' : 'Rain'} ${this.amount(day.precip)}`);
+        if (this.config.showPrecipAmount) lines.push(`${this.snowy(kind) ? 'Snow' : 'Rain'} ${this.fall(day, kind)}`);
         lines.slice(0, extras).forEach((line, i) => this.text(g, line, mid, cy + (13 + i * 18) * k, 11.5 * k, { colour: WEATHER_DIM }));
     }
 
@@ -685,7 +704,7 @@ class WeatherAnimationManager {
             if (day.sunrise && day.sunset) rows.push({ label: 'Sunrise', value: this.clock(day.sunrise) }, { label: 'Sunset', value: this.clock(day.sunset) });
             else rows.push({ label: 'Sun', value: this.sunText(day) });
         }
-        if (day && cfg.showPrecipAmount) rows.push({ label: this.snowy(kind) ? 'Snow today' : 'Rain today', value: this.amount(day.precip) });
+        if (day && cfg.showPrecipAmount) rows.push({ label: this.snowy(kind) ? 'Snow today' : 'Rain today', value: this.fall(day, kind) });
         if (day) rows.push({ label: 'High · low', value: `${this.temp(day.hi)} · ${this.temp(day.lo)}` });
         const narrow = safe.w < 640 * k;
         const w = narrow ? 360 * k : 700 * k, S = narrow ? 120 * k : 176 * k, big = narrow ? 64 * k : 92 * k;
@@ -825,14 +844,18 @@ class WeatherAnimationManager {
         if (!still) this.ambient.update(dt, this.t);
         this.skyFade = still ? 1 : Math.min(1, this.skyFade + dt / 2.5);
         this.draw();
-        // Calm: at most 20 fps, or a still picture once a minute.
-        this.host.idleUntil(still ? WEATHER_MIN - Date.now() % WEATHER_MIN + 50 : Math.max(0, 50 - (performance.now() - started) - 2));
+        // At most 20 fps with rain, snow or lightning outside, 12 with only
+        // drifting clouds, 10 with nothing moving but the scenes; a still
+        // picture once a minute under reduced motion.
+        const step = this.still ? 100 : this.ambient.calm() ? 83 : 50;
+        this.host.idleUntil(still ? WEATHER_MIN - Date.now() % WEATHER_MIN + 50 : Math.max(0, step - (performance.now() - started) - 2));
         this.frameId = requestAnimationFrame(t => this.frame(t));
     }
 
     // The sky layer: the small gradient scaled up, crossfading from the
     // last one for a couple of seconds after it changes.
     paintSky() {
+        if (!this.skyCanvas) return;   // stopped: onQuality can still arrive
         const g = this.skyCanvas.getContext('2d');
         g.setTransform(1, 0, 0, 1, 0, 0);
         g.imageSmoothingEnabled = true;

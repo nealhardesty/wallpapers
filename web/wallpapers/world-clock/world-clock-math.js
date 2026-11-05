@@ -94,9 +94,10 @@ const WorldClockMath = (() => {
         const b = Math.cos(sun.lat * DEG) * Math.cos((lon - sun.lon) * DEG);
         // sin(altitude) = a sin φ + b cos φ = R cos(φ − φ0); night where it's below k.
         const R = Math.hypot(a, b);
-        if (R < 1e-12) return k > 0 ? [-90, 90] : null;
-        if (-k / R >= 1) return null;
-        const w = -k / R <= -1 ? 180 : Math.acos(-k / R) / DEG;      // half-width around the coldest latitude
+        // depth ≤ 0, so k ≤ 0 and −k/R > −1: the only empty case is −k/R ≥ 1
+        // (R ≈ 0 guarded, the sun flat on the horizon everywhere).
+        if (R < 1e-12 || -k / R >= 1) return null;
+        const w = Math.acos(-k / R) / DEG;                              // half-width around the coldest latitude
         const cold = Math.atan2(-a, -b) / DEG;                         // where R cos(φ − φ0) is least
         const lo = Math.max(-90, cold - w), hi = Math.min(90, cold + w);
         return lo <= hi ? [lo, hi] : null;

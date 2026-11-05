@@ -19,7 +19,13 @@ class WorldClockFaces {
     resize() {
         this.dials.clear();
         this.grid = null;
-        this.drawBackground();
+        this.bg = null;   // built on the next draw
+    }
+
+    // Another view is showing: let the background and the dials go.
+    release() {
+        this.bg = null;
+        this.dials.clear();
     }
 
     configure(old, config) {
@@ -243,6 +249,7 @@ class WorldClockFaces {
 
     draw(g) {
         const app = this.app, { k, dpr, config } = app, infos = app.infos;
+        if (!this.bg) this.drawBackground();
         g.setTransform(1, 0, 0, 1, 0, 0);
         g.drawImage(this.bg, 0, 0);
         g.setTransform(dpr, 0, 0, dpr, 0, 0);

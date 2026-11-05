@@ -1,18 +1,23 @@
 // World Clock's map: the world in equirectangular projection, filling the
 // width, letterboxed into the sky above and below on tall screens.
 //
-// Layers, each cached:
-//   - the background (space and stars, or the look's own), per resize;
+// Layers, each cached, built when the map is first drawn:
 //   - the land and sea, with the graticule, for the whole world from 180°W,
 //     per resize and look; drawn twice, wrapped, so any centre is a shift;
-//   - the city lights, a seeded speckle clustered round the cities and
-//     masked by the land, per resize, look and density;
 //   - the night, once a minute: the darkness (a smooth fade from a small
 //     altitude grid, or the civil, nautical and astronomical bands as
-//     polygons), the lights masked by it, the look's hatching;
-//   - the base: all of that composed for the current centre, rebuilt only
-//     when one of them or the centre changes.
+//     polygons), the look's hatching, and the city lights where it's dark
+//     enough (a seeded speckle round the cities and over the land, kept
+//     as a list per resize, look and density);
+//   - the base: the background (space and stars, or the look's own), per
+//     resize, look and density, with the map band over it composed for
+//     the current centre, rebuilt only when the night or the centre changes.
 // Each second draws the base and the labels over it.
+//
+// The three layers are kept at a capped scale (ms, at most the screen's
+// pixel ratio): soft fills and hairlines don't show it, and at full
+// resolution a 2560×1440 screen at 2× held half a gigabyte of canvases.
+// The labels draw on the screen's own canvas, at full resolution.
 
 const WORLD_CLOCK_LOOKS = {
     'night-lights': {
@@ -50,6 +55,9 @@ const WORLD_CLOCK_LOOKS = {
 };
 
 // Atlas land by latitude: ice, tundra, forest, steppe and desert, the tropics.
+// Pixels across the base, the land and the night together (about 88 MB).
+const WORLD_CLOCK_LAYER_PIXELS = 22e6;
+
 const WORLD_CLOCK_BIOMES = [[90, '#f4f6f6'], [72, '#e9ede6'], [62, '#c4d2ad'], [48, '#a9c78d'], [36, '#c9cf98'], [27, '#e5cf9c'],
     [16, '#c9cf8e'], [6, '#93c27c'], [-6, '#8dbf78'], [-18, '#bccb8a'], [-28, '#e2cd9a'], [-40, '#b3c98f'], [-56, '#cbd4b4'], [-64, '#eef1f1'], [-90, '#f6f8f8']];
 
@@ -79,7 +87,7 @@ class WorldClockMap {
             this.top = WorldClockArt.clamp(safe.top + room / 2 - middle, safe.bottom - this.mh, safe.top);
         }
         this.paths();
-        this.layers();
+        this.base = null;   // built on the next draw
     }
 
     x(lon) { return (lon + 180) / 360 * this.mw; }
@@ -114,14 +122,13 @@ class WorldClockMap {
     // ---- Cached layers ------------------------------------------------------------
 
     layers() {
-        const { dpr } = this.app;
+        const { W, H, dpr } = this.app, mw = this.mw, mh = this.mh;
+        const ms = this.ms = Math.min(dpr, 4096 / mw, Math.sqrt(WORLD_CLOCK_LAYER_PIXELS / (W * H + 2 * mw * mh)));
         const size = (c, w, h) => { if (!c || c.width !== Math.round(w) || c.height !== Math.round(h)) return WorldClockArt.canvas(w, h); c.getContext('2d').clearRect(0, 0, c.width, c.height); return c; };
-        this.landLayer = size(this.landLayer, this.mw * dpr, this.mh * dpr);
-        this.night = size(this.night, this.mw * dpr, this.mh * dpr);
-        this.dark = size(this.dark, this.mw * dpr, this.mh * dpr);
-        this.scratch = size(this.scratch, this.mw * dpr, this.mh * dpr);
-        this.base = size(this.base, this.app.W * dpr, this.app.H * dpr);
-        this.lightsLayer = null;
+        this.landLayer = size(this.landLayer, mw * ms, mh * ms);
+        this.night = size(this.night, mw * ms, mh * ms);
+        this.base = size(this.base, W * ms, H * ms);
+        this.specks = this.hatchTile = null;
         this.drawBackground();
         this.drawLand();
         this.sprites();
@@ -129,16 +136,21 @@ class WorldClockMap {
         this.stale = true;
     }
 
+    // Another view is showing: let the layers go (built again when drawn).
+    release() {
+        this.base = this.landLayer = this.night = this.specks = null;
+    }
+
     configure(old, config) {
         const changed = key => old[key] !== config[key];
-        if (changed('mapStyle') || changed('showGrid')) this.layers();
+        if (changed('mapStyle') || changed('showGrid')) this.base = null;
         else if (changed('twilight') || changed('cityLights')) this.nightAt = -1;
         this.stale = true;
     }
 
     onQuality() {
-        this.lightsLayer = null;
-        this.drawBackground();
+        this.specks = null;
+        if (this.base) this.drawBackground();
         this.nightAt = -1;
         this.stale = true;
     }
@@ -148,11 +160,11 @@ class WorldClockMap {
         this.stale = true;
     }
 
+    // The background, into the base: the map band goes over it at each compose.
     drawBackground() {
-        const { W, H, dpr } = this.app, look = this.look;
-        this.bg = this.bg && this.bg.width === Math.round(W * dpr) && this.bg.height === Math.round(H * dpr) ? this.bg : WorldClockArt.canvas(W * dpr, H * dpr);
-        const g = this.bg.getContext('2d');
-        g.setTransform(dpr, 0, 0, dpr, 0, 0);
+        const { W, H } = this.app, look = this.look, ms = this.ms;
+        const g = this.base.getContext('2d');
+        g.setTransform(ms, 0, 0, ms, 0, 0);
         g.fillStyle = look.space;
         g.fillRect(0, 0, W, H);
         const rand = WorldClockArt.random(7);
@@ -197,14 +209,14 @@ class WorldClockMap {
     }
 
     drawLand() {
-        const { dpr, k, config } = this.app, look = this.look, mw = this.mw, mh = this.mh;
+        const { k, config } = this.app, look = this.look, mw = this.mw, mh = this.mh, ms = this.ms;
         const g = this.landLayer.getContext('2d');
-        g.setTransform(dpr, 0, 0, dpr, 0, 0);
+        g.setTransform(ms, 0, 0, ms, 0, 0);
         const sea = g.createLinearGradient(0, 0, 0, mh);
         sea.addColorStop(0, look.sea[0]);
         sea.addColorStop(1, look.sea[1]);
         g.fillStyle = sea;
-        g.fillRect(0, 0, mw, mh);
+        g.fillRect(0, 0, mw + 1, mh + 1);   // past the canvas's rounding: the layer is opaque to its edge
         g.lineJoin = g.lineCap = 'round';
         const hair = Math.max(0.6, mw / 2000);
         if (look.seaGlow) {
@@ -276,10 +288,11 @@ class WorldClockMap {
         }
     }
 
-    // Small sprites: the sun's glow and its wide daylight wash.
+    // Small sprites: the sun's glow and its wide daylight wash (both drawn
+    // into the base), the home's halo (on screen).
     sprites() {
         const { k, dpr } = this.app;
-        const s = Math.round(72 * k * dpr);
+        const s = Math.round(72 * k * this.ms);
         this.sunSprite = WorldClockArt.glow(s, [[0, 'rgba(255,252,236,1)'], [0.1, 'rgba(255,240,196,0.95)'], [0.18, 'rgba(255,214,121,0.55)'], [0.45, 'rgba(255,190,90,0.14)'], [1, 'rgba(255,170,60,0)']]);
         this.homeSprite = WorldClockArt.glow(Math.round(36 * k * dpr), [[0, 'rgba(255,212,121,0.7)'], [0.35, 'rgba(255,212,121,0.25)'], [1, 'rgba(255,212,121,0)']]);
         const wash = this.look.sunGlow;
@@ -287,25 +300,20 @@ class WorldClockMap {
     }
 
     // The city lights: clusters round every listed city and a thin sprinkle
-    // over the rest of the land, masked by the land, in tenths of the screen.
-    drawLights() {
-        const { dpr } = this.app, look = this.look, mw = this.mw, mh = this.mh;
-        const c = this.lightsLayer = WorldClockArt.canvas(mw * dpr, mh * dpr), g = c.getContext('2d');
-        g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    // over the rest of the land, as specks, in tenths of the screen.
+    scatter() {
+        const look = this.look, mw = this.mw;
         const rand = WorldClockArt.random(1234);
         const gauss = () => (rand() + rand() + rand() - 1.5) * 1.15;
         const density = this.app.density, dot = Math.max(0.7, mw / 1600);
-        g.fillStyle = look.lights;
-        const speck = (lon, lat, a, r = dot) => {
-            g.globalAlpha = a * look.lightsAlpha;
-            g.fillRect(this.x(lon) - r / 2, this.y(lat) - r / 2, r, r);
-        };
+        const specks = [];
+        const speck = (lon, lat, a, r = dot) => specks.push({ lon, lat, x: this.x(lon) - r / 2, y: this.y(lat) - r / 2, r, a: a * look.lightsAlpha });
         for (const city of WORLD_CITIES) {
             const n = Math.round(26 * density);
             for (let i = 0; i < n; i++) speck(city.lon + gauss() * 2.2, city.lat + gauss() * 1.6, 0.25 + rand() * 0.6);
             speck(city.lon, city.lat, 0.95, dot * 2.2);
         }
-        const probe = this.scratch.getContext('2d');
+        const probe = this.night.getContext('2d');
         probe.setTransform(1, 0, 0, 1, 0, 0);
         for (let i = 0, n = Math.round(5200 * density); i < n; i++) {
             const lon = rand() * 360 - 180, lat = Math.asin(rand() * 2 - 1) / Math.PI * 180;
@@ -313,37 +321,38 @@ class WorldClockMap {
             if (!probe.isPointInPath(this.landPath, this.x(lon), this.y(lat), 'evenodd')) continue;
             speck(lon, lat, 0.12 + rand() * 0.4);
         }
-        g.globalAlpha = 1;
-        g.globalCompositeOperation = 'destination-in';
-        g.fill(this.landPath, 'evenodd');
-        g.globalCompositeOperation = 'source-over';
+        return specks;
     }
 
-    // The night for `date`, into this.night (and the darkness alone into
-    // this.dark, which the smoke test reads).
+    // The night for `date`, into this.night, in one canvas: the darkness;
+    // the hatching (the pattern kept where it's dark, then the darkness
+    // again under it); the lights, clipped to the land, each as bright as
+    // its own sun is deep (soft) or on past the twilight's depth (sharp);
+    // the terminator line.
     drawNight(date) {
-        const app = this.app, look = this.look, { dpr } = app, mw = this.mw, mh = this.mh;
+        const app = this.app, look = this.look, ms = this.ms, mw = this.mw;
         const sun = WorldClockMath.subsolar(date);
         const bands = app.fx('twilight');
         const soft = bands && app.config.twilight === 'soft';
         const lights = app.config.cityLights && app.fx('cityLights') && look.lights;
         const [r, gr, b] = look.night;
-        const dark = this.dark.getContext('2d');
-        dark.setTransform(1, 0, 0, 1, 0, 0);
-        dark.clearRect(0, 0, this.dark.width, this.dark.height);
-        let mask = null;
+        const S = WorldClockArt.smooth;
+        const g = this.night.getContext('2d'), w = this.night.width, h = this.night.height;
+        g.setTransform(1, 0, 0, 1, 0, 0);
+        g.globalCompositeOperation = 'source-over';
+        g.globalAlpha = 1;
+        g.clearRect(0, 0, w, h);
+        let shapes = null;
         if (soft) {
             // A smooth fade: the sun's altitude on a 1° grid, the darkness a
             // curve through the twilights, scaled up smoothly.
             const RW = 360, RH = 180;
             this.grid = this.grid || WorldClockArt.canvas(RW, RH);
-            this.gridMask = this.gridMask || WorldClockArt.canvas(RW, RH);
-            const gg = this.grid.getContext('2d'), gm = this.gridMask.getContext('2d');
-            const shade = gg.createImageData(RW, RH), lit = gm.createImageData(RW, RH);
+            const gg = this.grid.getContext('2d');
+            const shade = gg.createImageData(RW, RH);
             const sd = Math.sin(sun.lat * Math.PI / 180), cd = Math.cos(sun.lat * Math.PI / 180);
             const cosLon = new Float64Array(RW);
             for (let i = 0; i < RW; i++) cosLon[i] = Math.cos(((-180 + i + 0.5) - sun.lon) * Math.PI / 180);
-            const S = WorldClockArt.smooth;
             for (let j = 0; j < RH; j++) {
                 const lat = (90 - j - 0.5) * Math.PI / 180, sl = Math.sin(lat) * sd, cl = Math.cos(lat) * cd;
                 for (let i = 0; i < RW; i++) {
@@ -352,51 +361,42 @@ class WorldClockMap {
                     const o = (j * RW + i) * 4;
                     shade.data[o] = r; shade.data[o + 1] = gr; shade.data[o + 2] = b;
                     shade.data[o + 3] = Math.round(d * look.dark * 255);
-                    lit.data[o + 3] = Math.round(S(-2.5, -10, alt) * 255);
                 }
             }
             gg.putImageData(shade, 0, 0);
-            gm.putImageData(lit, 0, 0);
-            dark.imageSmoothingEnabled = true;
-            dark.imageSmoothingQuality = 'high';
-            dark.drawImage(this.grid, 0, 0, this.dark.width, this.dark.height);
-            mask = this.gridMask;
         } else {
             // Polygons: the night, and with the bands each twilight deeper.
-            dark.setTransform(dpr, 0, 0, dpr, 0, 0);
-            const fill = (rings, a) => {
-                dark.fillStyle = `rgba(${r},${gr},${b},${a})`;
-                dark.beginPath();
-                for (const ring of rings) ring.forEach(([lon, lat], i) => i ? dark.lineTo(this.x(lon), this.y(lat)) : dark.moveTo(this.x(lon), this.y(lat)));
-                dark.fill();
-            };
+            // Four layers that stack to about the whole darkness; all one
+            // colour, so they stack the same in any order.
             const A = look.dark;
-            if (bands) {
-                // Four layers that stack to about the whole darkness.
-                const share = [0.58, 0.3, 0.24, 0.2], total = 1 - share.reduce((p, s) => p * (1 - s), 1);
-                [0, 6, 12, 18].forEach((depth, i) => fill(depth ? WorldClockMath.twilight(date, depth, 240) : WorldClockMath.terminator(date, 240), share[i] * A / total));
-            } else fill(WorldClockMath.terminator(date, 240), A);
-            if (lights) {
-                const m = this.scratch.getContext('2d');
-                m.setTransform(dpr, 0, 0, dpr, 0, 0);
-                m.clearRect(0, 0, mw, mh);
-                m.fillStyle = '#fff';
-                m.beginPath();
-                for (const ring of WorldClockMath.twilight(date, bands ? 4 : 0.5, 240)) ring.forEach(([lon, lat], i) => i ? m.lineTo(this.x(lon), this.y(lat)) : m.moveTo(this.x(lon), this.y(lat)));
-                m.fill();
-                mask = this.scratch;
-            }
+            const share = [0.58, 0.3, 0.24, 0.2], total = 1 - share.reduce((p, s) => p * (1 - s), 1);
+            shapes = bands
+                ? [0, 6, 12, 18].map((depth, i) => [depth ? WorldClockMath.twilight(date, depth, 240) : WorldClockMath.terminator(date, 240), share[i] * A / total])
+                : [[WorldClockMath.terminator(date, 240), A]];
         }
-        const g = this.night.getContext('2d');
-        g.setTransform(1, 0, 0, 1, 0, 0);
-        g.clearRect(0, 0, this.night.width, this.night.height);
-        g.drawImage(this.dark, 0, 0);
+        const darkness = () => {
+            if (soft) {
+                g.setTransform(1, 0, 0, 1, 0, 0);
+                g.imageSmoothingEnabled = true;
+                g.imageSmoothingQuality = 'high';
+                g.drawImage(this.grid, 0, 0, w, h);
+                return;
+            }
+            g.setTransform(ms, 0, 0, ms, 0, 0);
+            for (const [rings, a] of shapes) {
+                g.fillStyle = `rgba(${r},${gr},${b},${a})`;
+                g.beginPath();
+                for (const ring of rings) ring.forEach(([lon, lat], i) => i ? g.lineTo(this.x(lon), this.y(lat)) : g.moveTo(this.x(lon), this.y(lat)));
+                g.fill();
+            }
+        };
+        darkness();
         if (look.hatch) {
             // Engraved night: diagonal hatching where it's dark.
             if (!this.hatchTile) {
-                const s = Math.max(4, Math.round(5 * dpr)), t = WorldClockArt.canvas(s, s), tg = t.getContext('2d');
+                const s = Math.max(4, Math.round(5 * ms)), t = WorldClockArt.canvas(s, s), tg = t.getContext('2d');
                 tg.strokeStyle = look.hatch;
-                tg.lineWidth = Math.max(1, dpr * 0.8);
+                tg.lineWidth = Math.max(1, ms * 0.8);
                 tg.beginPath();
                 tg.moveTo(0, s); tg.lineTo(s, 0);
                 tg.moveTo(-1, 1); tg.lineTo(1, -1);
@@ -404,33 +404,33 @@ class WorldClockMap {
                 tg.stroke();
                 this.hatchTile = t;
             }
-            const h = this.hatch = this.hatch && this.hatch.width === this.night.width && this.hatch.height === this.night.height ? this.hatch : WorldClockArt.canvas(this.night.width, this.night.height);
-            const hg = h.getContext('2d');
-            hg.globalCompositeOperation = 'source-over';
-            hg.clearRect(0, 0, h.width, h.height);
-            hg.fillStyle = hg.createPattern(this.hatchTile, 'repeat');
-            hg.fillRect(0, 0, h.width, h.height);
-            hg.globalCompositeOperation = 'destination-in';
-            hg.drawImage(this.dark, 0, 0);
-            hg.globalCompositeOperation = 'source-over';
-            g.drawImage(h, 0, 0);
+            g.setTransform(1, 0, 0, 1, 0, 0);
+            g.globalCompositeOperation = 'source-in';
+            g.fillStyle = g.createPattern(this.hatchTile, 'repeat');
+            g.fillRect(0, 0, w, h);
+            g.globalCompositeOperation = 'destination-over';
+            darkness();
+            g.globalCompositeOperation = 'source-over';
         }
-        if (lights && mask) {
-            if (!this.lightsLayer) this.drawLights();
-            const tmp = this.lit = this.lit && this.lit.width === this.night.width && this.lit.height === this.night.height ? this.lit : WorldClockArt.canvas(this.night.width, this.night.height);
-            const tg = tmp.getContext('2d');
-            tg.globalCompositeOperation = 'source-over';
-            tg.clearRect(0, 0, tmp.width, tmp.height);
-            tg.drawImage(this.lightsLayer, 0, 0);
-            tg.globalCompositeOperation = 'destination-in';
-            tg.imageSmoothingEnabled = true;
-            tg.drawImage(mask, 0, 0, tmp.width, tmp.height);
-            tg.globalCompositeOperation = 'source-over';
-            g.drawImage(tmp, 0, 0);
+        if (lights) {
+            if (!this.specks) this.specks = this.scatter();
+            const deep = bands ? 4 : 0.5;
+            g.save();
+            g.setTransform(ms, 0, 0, ms, 0, 0);
+            g.clip(this.landPath, 'evenodd');
+            g.fillStyle = look.lights;
+            for (const p of this.specks) {
+                const alt = WorldClockMath.sunAltitude(p.lat, p.lon, date, sun);
+                const on = soft ? S(-2.5, -10, alt) : alt < -deep ? 1 : 0;
+                if (!on) continue;
+                g.globalAlpha = p.a * on;
+                g.fillRect(p.x, p.y, p.r, p.r);
+            }
+            g.restore();
         }
         if (look.line) {
             // The terminator itself, dashed, without the map's edges.
-            g.setTransform(dpr, 0, 0, dpr, 0, 0);
+            g.setTransform(ms, 0, 0, ms, 0, 0);
             g.strokeStyle = look.line;
             g.lineWidth = Math.max(0.8, mw / 1600);
             g.setLineDash([mw / 260, mw / 360]);
@@ -467,28 +467,30 @@ class WorldClockMap {
 
     // ---- Drawing ------------------------------------------------------------------
 
+    // The map band over the background already in the base: the land
+    // (opaque, so it covers the last compose), the night, the sun and moon,
+    // all clipped to whole pixels so nothing builds up at the band's edges.
     composeBase(date) {
-        const app = this.app, { W, H, dpr } = app, look = this.look;
+        const app = this.app, { W } = app, look = this.look, ms = this.ms;
         if (this.nightAt !== Math.floor(date.getTime() / 60000)) this.drawNight(date);
         const g = this.base.getContext('2d');
         g.setTransform(1, 0, 0, 1, 0, 0);
         g.globalAlpha = 1;
-        g.drawImage(this.bg, 0, 0);
         const shift = W / 2 - this.x(this.centre);
-        const x0 = Math.round((((shift % this.mw) + this.mw) % this.mw) * dpr), y0 = Math.round(this.top * dpr), w = this.landLayer.width;
+        const x0 = Math.round((((shift % this.mw) + this.mw) % this.mw) * ms), y0 = Math.round(this.top * ms), w = this.landLayer.width;
+        g.save();
+        g.beginPath();
+        g.rect(0, y0, this.base.width, this.landLayer.height);
+        g.clip();
         for (const layer of [this.landLayer, this.night]) {
             g.drawImage(layer, x0, y0);
             g.drawImage(layer, x0 - w, y0);
         }
-        g.setTransform(dpr, 0, 0, dpr, 0, 0);
+        g.setTransform(ms, 0, 0, ms, 0, 0);
         // The sun overhead, with a wide wash of daylight round it; the moon.
         const wraps = (x, r, draw) => { for (const dx of [-W, 0, W]) if (x + dx > -r && x + dx < W + r) draw(x + dx); };
         const sun = app.sun || WorldClockMath.subsolar(date);
         const at = this.screen(sun.lon, sun.lat);
-        g.save();
-        g.beginPath();
-        g.rect(0, this.top, W, this.mh);
-        g.clip();
         if (this.washSprite) {
             const r = this.mw * 0.3;
             wraps(at.x, r, x => g.drawImage(this.washSprite, x - r, at.y - r, 2 * r, 2 * r));
@@ -597,9 +599,10 @@ class WorldClockMap {
     draw(g, date) {
         const app = this.app, { k, dpr } = app, look = this.look, font = this.font;
         if (this.centre === null) this.centre = app.centerLon() + (app.scroll - 0.5) * 60;
+        if (!this.base) this.layers();
         if (this.stale || this.nightAt !== Math.floor(date.getTime() / 60000)) this.composeBase(date);
         g.setTransform(1, 0, 0, 1, 0, 0);
-        g.drawImage(this.base, 0, 0);
+        g.drawImage(this.base, 0, 0, g.canvas.width, g.canvas.height);
         g.setTransform(dpr, 0, 0, dpr, 0, 0);
 
         this.hero = this.drawHero(g, date);

@@ -22,6 +22,13 @@ class WorldClockBoard {
 
     resize() { this.plan = null; }
 
+    // Another view is showing: let the board and its tiles go (a new board
+    // flips in when it's back).
+    release() {
+        this.plan = this.bg = null;
+        this.tiles.clear();
+    }
+
     // What the board's layout depends on: the rows, and the columns they
     // need now (a city rolling over to tomorrow brings the DAY column, a
     // DST change can widen UTC). Checked every second, so it never goes
