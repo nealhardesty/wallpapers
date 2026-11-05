@@ -2,7 +2,8 @@ namespace Wallpapers.Tests;
 
 public class SaverLeaseTests
 {
-    static readonly DateTime T0 = new(2026, 11, 5, 12, 0, 0, DateTimeKind.Utc);
+    // Monotonic stamps (time since boot), as Power passes them.
+    static readonly TimeSpan T0 = TimeSpan.FromHours(30);
 
     [Fact]
     public void NotActiveUntilPinged() => Assert.False(new SaverLease().Active(T0));
@@ -40,5 +41,15 @@ public class SaverLeaseTests
         l.End();
         l.Ping(T0 + TimeSpan.FromSeconds(2));
         Assert.True(l.Active(T0 + TimeSpan.FromSeconds(3)));
+    }
+
+    /// The clock it's given is the system's monotonic one, not the wall clock a user or a time sync can set back.
+    [Fact]
+    public void NowIsMonotonic()
+    {
+        var a = SaverLease.Now;
+        var b = SaverLease.Now;
+        Assert.True(b >= a);
+        Assert.Equal(Environment.TickCount64, SaverLease.Now.TotalMilliseconds, 1000.0);
     }
 }

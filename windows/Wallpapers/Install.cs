@@ -76,7 +76,11 @@ sealed class Install(InstallLayout layout, Action<string> log)
             var free = QuitAndWait("install", out var asked);
             quitTheRunningApp = asked && !SingleInstance.IsRunning("run");
             if (!free) return StillRunning;
+            // Asked before the swap: a stored 8.3 name may only resolve while the old .scr is there.
+            var selection = new SaverSelection(layout.Flavor, log);
+            var wasSelected = Saver("check", () => selection.IsSelected(layout.Saver));
             if (CopyAndSwap(sourceExe, sourceWeb) is { } why) return why;
+            if (wasSelected) Saver("keep", () => { selection.KeepSelected(layout.Saver); return true; });
         }
 
         var sizeKb = (int)(new DirectoryInfo(layout.Root).EnumerateFiles("*", SearchOption.AllDirectories).Sum(f => f.Length) / 1024);
@@ -163,6 +167,17 @@ sealed class Install(InstallLayout layout, Action<string> log)
         }
         Tidy(oldExe, oldScr, oldWeb);
         return null;
+    }
+
+    /// The saver selection around an update is best effort: a registry failure is logged, and the install stands.
+    bool Saver(string what, Func<bool> step)
+    {
+        try { return step(); }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or System.Security.SecurityException)
+        {
+            log($"install: saver selection ({what}): {e.Message}");
+            return false;
+        }
     }
 
     const string ScrInUse = "Wallpapers.scr is in use (the screen saver may be running); try again when it has stopped";

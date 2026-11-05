@@ -328,9 +328,13 @@ sealed class SelfTest
             File.WriteAllText(marker, "old");
             File.WriteAllText(layout.Saver, "old");
             why = installer.Apply(AppContext.BaseDirectory, fresh: false);
+            // Ours stays the saver, and the value Windows will run still names a file (the new .scr's 8.3 name, say).
+            var stored = SaverValue(SaverRegistry.ExeValue);
+            var storedOk = stored != null && File.Exists(stored) && selection.IsSelected(layout.Saver);
             Check("update", why == null && !File.Exists(marker) && File.Exists(layout.Exe) && ScrMatches() && Run() == null
-                && Entry("InstallDate") != null && Entry("DisplayVersion") != null && Leftovers().Count == 0,
-                why ?? $"marker {(File.Exists(marker) ? "STILL THERE" : "gone")}, {Scr()}, run value {(Run() == null ? "absent" : "PRESENT")}"
+                && Entry("InstallDate") != null && Entry("DisplayVersion") != null && Leftovers().Count == 0 && storedOk,
+                why ?? $"marker {(File.Exists(marker) ? "STILL THERE" : "gone")}, {Scr()}, run value {(Run() == null ? "absent" : "PRESENT")}, "
+                    + $"saver {(storedOk ? "still ours" : $"{stored ?? "none"} {(stored != null && File.Exists(stored) ? "" : "NOT ON DISK")}")}"
                     + (Leftovers() is { Count: > 0 } l ? $", LEFT {string.Join(", ", l)}" : ""));
 
             long before = new FileInfo(layout.Exe).Length;
@@ -1064,6 +1068,7 @@ sealed class SelfTest
             await SaverInputAsync("key", w => N.PostMessage(w, N.WM_KEYDOWN, N.VK_SPACE, IntPtr.Zero));
             await SaverInputAsync("click", w => N.PostMessage(w, N.WM_LBUTTONDOWN, 1, LParam(100, 100)));
             await SaverWatchdogAsync();
+            await SaverFaultAsync();
         }
         finally { app.SaveSettings(app.Settings with { Saver = before }); }
     }
@@ -1165,6 +1170,33 @@ sealed class SelfTest
                 $"{Describe(s)}; {(fallback ? "seen in fallback" : "NEVER in fallback")}; {(exited ? "a key ended it" : "a key did NOT end it")}");
         }
         finally { if (!child.HasExited) child.Kill(); }
+    }
+
+    /// --saver-fault: an exception nothing filters for. The first window's start throws once and the second
+    /// still starts (both draw); WebView2's environment failing so leaves the clock on every window, not black.
+    async Task SaverFaultAsync()
+    {
+        SaverState? w = null, e = null;
+        bool bothDraw, exitedW, clocks, exitedE;
+        using (var child = StartSaver(2, "--saver-fault window"))
+            try
+            {
+                bothDraw = await Until(20000, () => Task.FromResult((w = ReadState(child)) is { Windows.Count: 2 } s && s.Windows.All(x => x.Frames > 0)), 250);
+                foreach (var h in SaverWindows(child)) { N.PostMessage(h, N.WM_KEYDOWN, N.VK_SPACE, IntPtr.Zero); break; }
+                exitedW = await Until(3000, () => Task.FromResult(child.HasExited), 100);
+            }
+            finally { if (!child.HasExited) child.Kill(); }
+        using (var child = StartSaver(2, "--saver-fault webview2"))
+            try
+            {
+                clocks = await Until(10000, () => Task.FromResult((e = ReadState(child)) is { Windows.Count: 2 } s && s.Windows.All(x => x.Fallback)), 250);
+                foreach (var h in SaverWindows(child)) { N.PostMessage(h, N.WM_KEYDOWN, N.VK_SPACE, IntPtr.Zero); break; }
+                exitedE = await Until(3000, () => Task.FromResult(child.HasExited), 100);
+            }
+            finally { if (!child.HasExited) child.Kill(); }
+        Check("saver start fault", bothDraw && clocks && exitedW && exitedE,
+            $"a window's start threw: {(bothDraw ? "both still draw" : "NOT both drawing")} ({Describe(w)}); "
+            + $"the environment threw: {(clocks ? "the clock on both" : "NOT the clock on both")} ({Describe(e)}); {(exitedW && exitedE ? "a key ended each" : "a key did NOT end one")}");
     }
 
     /// A stand-in for Windows' dialog: never activated, out of the taskbar. Its little monitor is a 152×112 child

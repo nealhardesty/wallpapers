@@ -90,6 +90,7 @@ sealed class SaverWindow : Form
         try
         {
             await s.StartAsync(env, session.Paths, session.Bing, Url);
+            if (session.TakeWindowFault()) throw new NotSupportedException("--saver-fault window");
             // Chromium's input window must not take the mouse moves and clicks that end the saver.
             WebFactory.MakeOverlaysClickThrough(env);
             if (surface == s) await ApplyPowerAsync();

@@ -36,7 +36,9 @@ sealed class SaverPreview : Control
         Application.ThreadException += (_, e) => { Log.Error($"saver: preview: crash: {e.Exception}"); Environment.Exit(1); };
         using var preview = new SaverPreview(paths, parent);
         preview.CreateControl();
-        _ = preview.StartAsync();
+        // A fault none of StartAsync's handlers filter for still ends in the icon, not a black little monitor.
+        _ = preview.StartAsync().ContinueWith(t => preview.Fail($"{t.Exception!.InnerException?.GetType().Name}: {t.Exception.InnerException?.Message}"),
+            CancellationToken.None, TaskContinuationOptions.OnlyOnFaulted, TaskScheduler.FromCurrentSynchronizationContext());
         Application.Run();
         Log.Info("saver: preview ended");
         return 0;

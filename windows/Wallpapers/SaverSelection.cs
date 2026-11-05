@@ -62,6 +62,18 @@ sealed class SaverSelection(string flavor, Action<string> log)
         SetActive(restore.Active == "1");
     }
 
+    /// After an update replaced the .scr (ours was the saver before): when the value no longer names a file
+    /// that is ours (an 8.3 name can go with the old file), the new file's short path is written again.
+    /// Nothing else changes, and only under this flavour's key.
+    public void KeepSelected(string saverPath)
+    {
+        using var key = Registry.CurrentUser.CreateSubKey(SaverRegistry.KeyFor(flavor));
+        if (key.GetValue(SaverRegistry.ExeValue) is string stored && File.Exists(stored) && SaverRegistry.IsOurs(stored, saverPath, LongPath)) return;
+        var value = N.ShortPath(saverPath) ?? saverPath;
+        key.SetValue(SaverRegistry.ExeValue, value, RegistryValueKind.String);
+        log($"saver: still ours after the update, now {value}");
+    }
+
     /// Minutes of idle before the saver starts, or null when unset or unreadable.
     public int? TimeoutMinutes()
     {

@@ -18,6 +18,9 @@ sealed class SaverSession : ApplicationContext
     public bool Real { get; }
     /// Test flavour: the watchdog's -1 every tick (--saver-stall).
     public bool Stall { get; }
+    /// Test flavour, --saver-fault webview2|window: the environment fails, or the first window's start throws once,
+    /// with an exception none of the expected handlers filter for.
+    string? fault;
     public CoreWebView2Environment? Environment { get; private set; }
     public BingJson Bing { get; } = new();
     /// Nothing can be seen (locked, display off, asleep, disconnected): the pages pause and the watchdog waits.
@@ -44,6 +47,7 @@ sealed class SaverSession : ApplicationContext
         var harness = test ? Harness(args) : null;
         Real = harness == null;
         Stall = test && args.Contains("--saver-stall");
+        fault = test && Array.IndexOf(args, "--saver-fault") is var f and >= 0 && f + 1 < args.Length ? args[f + 1] : null;
         writeState = test || Log.Verbose;
         rotation.Interval = test && Number(args, "--saver-change-ms") is { } ms ? ms : Settings.ChangeMinutes * 60_000;
         N.GetCursorPos(out start);
@@ -83,15 +87,17 @@ sealed class SaverSession : ApplicationContext
         var problem = Paths.CheckWebRoot();
         if (problem == null)
         {
-            try
+            // Whatever it fails with: an unexpected fault must still end in the clock, never black windows.
+            var creating = fault == "webview2"
+                ? Task.FromException<CoreWebView2Environment>(new NotSupportedException("--saver-fault webview2"))
+                : WebFactory.CreateAsync(Paths);
+            await Task.WhenAny(creating);
+            if (creating.IsCompletedSuccessfully)
             {
-                Environment = await WebFactory.CreateAsync(Paths);
+                Environment = creating.Result;
                 Log.Info($"saver: webview2 runtime {Environment.BrowserVersionString}");
             }
-            catch (Exception e) when (e is WebView2RuntimeNotFoundException or COMException or ArgumentException)
-            {
-                problem = $"no WebView2 ({e.GetType().Name}: {e.Message})";
-            }
+            else problem = $"no WebView2 ({Fault(creating)})";
         }
         if (ended) return;
         if (problem != null)
@@ -101,7 +107,24 @@ sealed class SaverSession : ApplicationContext
             WriteState();
             return;
         }
-        foreach (var w in windows) await w.StartAsync();
+        // Each on its own: one that throws mustn't leave the monitors after it black. Its own watchdog is
+        // already running (StartAsync starts it first) and takes it on from there.
+        foreach (var w in windows)
+        {
+            var starting = w.StartAsync();
+            await Task.WhenAny(starting);
+            if (!starting.IsCompletedSuccessfully) Log.Error($"saver: {w.Plan.Key}: couldn't start ({Fault(starting)}); its watchdog takes over");
+        }
+    }
+
+    static string Fault(Task t) => t.Exception?.InnerException is { } e ? $"{e.GetType().Name}: {e.Message}" : "cancelled";
+
+    /// --saver-fault window: true once, for the first window to start its page.
+    public bool TakeWindowFault()
+    {
+        if (fault != "window") return false;
+        fault = null;
+        return true;
     }
 
     /// What a saver page loads (the preview's too, without the clock): Same shows the desktop's choice (its own

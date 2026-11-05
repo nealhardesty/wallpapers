@@ -56,7 +56,7 @@ sealed class Power : IDisposable
     /// Our saver is up (its pipe ping, every 4 s): hidden at once, not at the next poll.
     public void SaverPing()
     {
-        saverLease.Ping(DateTime.UtcNow);
+        saverLease.Ping(SaverLease.Now);
         Set(State with { SaverRunning = true });
     }
 
@@ -71,7 +71,7 @@ sealed class Power : IDisposable
     PowerState Polled(PowerState s)
     {
         var fullscreen = N.SHQueryUserNotificationState(out var quns) == 0 && quns is N.QUNS_RUNNING_D3D_FULL_SCREEN or N.QUNS_PRESENTATION_MODE;
-        var saver = (N.SystemParametersInfo(N.SPI_GETSCREENSAVERRUNNING, 0, out var running, 0) && running != 0) || saverLease.Active(DateTime.UtcNow);
+        var saver = (N.SystemParametersInfo(N.SPI_GETSCREENSAVERRUNNING, 0, out var running, 0) && running != 0) || saverLease.Active(SaverLease.Now);
         s = s with { FullscreenApp = fullscreen, SaverRunning = saver, Remote = N.GetSystemMetrics(N.SM_REMOTESESSION) != 0 };
         return N.SessionState() is { } session ? s with { Locked = session.Locked, Disconnected = session.Disconnected } : s;
     }

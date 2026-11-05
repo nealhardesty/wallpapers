@@ -4163,7 +4163,8 @@ desktop surfaces go `hidden`.
   something). After a reload or recreate the window's kept pick is shown again.
 - **The desktop's saver flag is a lease.** The saver sends `saver-on` over the
   pipe at once and every **4 s**; the app treats the saver as running for
-  **10 s** after the last ping (`SaverLease`), or while Windows says it is.
+  **10 s** after the last ping (`SaverLease`, on the monotonic clock
+  `Environment.TickCount64`, so a wall clock set back can't stretch it), or while Windows says it is.
   `saver-off` is queued behind any ping on its way. A saver that dies leaves the
   desktop hidden for at most 10 s.
 - **Watchdog timings.** Every 4 s (1 s, 3 retry ticks in the test flavour) the
@@ -4175,10 +4176,13 @@ desktop surfaces go `hidden`.
   display off).
 - **Fallback clock.** Native: the time in the user's format, white, Segoe UI
   Light at a sixth of the height, on black, moving to a random spot each
-  minute. It is also what shows with no WebView2 runtime or a bad web root.
+  minute. It is also what shows with no WebView2 runtime or a bad web root, and
+  when creating the WebView2 environment fails in any other way. Each window
+  starts on its own: one whose start throws is logged (`couldn't start …; its
+  watchdog takes over`) and the windows after it still start.
 - **`/p`.** `SaverPreview` makes a child window of Windows' preview host and
-  draws a live `Surface` at 0.5 `RasterizationScale`; if that can't start it
-  paints the app icon on black. It exits when the parent goes (500 ms poll, and
+  draws a live `Surface` at 0.5 `RasterizationScale`; if that can't start
+  (whatever it throws) it paints the app icon on black. It exits when the parent goes (500 ms poll, and
   on `WM_DESTROY`). No pinging, input or watchdog.
 - **`/c`.** Sends `saver-options` over the pipe to the running app (after
   `AllowSetForegroundWindow`), or starts `Wallpapers.exe --saver-options` beside
@@ -4189,7 +4193,8 @@ desktop surfaces go `hidden`.
   `SystemParametersInfo`; it returns the saver it replaced, which
   `SaverControl` keeps as `Before` only when it isn't ours. A group policy
   (`Software\Policies\Microsoft\Windows\Control Panel\Desktop`, HKCU and HKLM)
-  disables the item and its tooltip says why. Only the `run` flavour touches the
+  disables the item and its tooltip says why (while ours is selected, Use stays
+  enabled so it can still be unticked). Only the `run` flavour touches the
   real `Control Panel\Desktop`; `test` and `dev` write
   `Software\Wallpapers-<flavor>\…`.
 
@@ -4199,7 +4204,7 @@ desktop surfaces go `hidden`.
   .NET included, ~52 MB unpacked) and `web\`. Run `Wallpapers.exe` from
   anywhere: if it isn't installed, it offers **Install** (copy to
   `%LOCALAPPDATA%\Programs\Wallpapers`, a Start menu
-  shortcut (`Wallpapers.scr` joins in W5), an `HKCU\…\Uninstall` entry so it's in Settings → Apps, and
+  shortcut, `Wallpapers.scr` (W5, below), an `HKCU\…\Uninstall` entry so it's in Settings → Apps, and
   *Start with Windows* ticked), or **Just Run** from where it is.
 - **Updates:** running a newer exe offers to replace the installed one
   (compared by version), restarting the app.
@@ -4310,7 +4315,11 @@ desktop surfaces go `hidden`.
   or a different length (`EnsureSaver`). `RestoreSaver` is real: it reads
   `settings.json`'s `Saver`, and if `SCRNSAVE.EXE` is ours puts back the saved
   `Before` (deleting the value when there was none); it runs first in the
-  removal plan, and a failure is named in the result as "screen saver".
+  removal plan, and a failure is named in the result as "screen saver". An
+  update notes whether ours was selected before the swap; if so and the stored
+  `SCRNSAVE.EXE` no longer names our file afterwards (an 8.3 name that went with
+  the old `.scr`), `SaverSelection.KeepSelected` writes the new short path
+  (this flavour's key only; best effort, logged).
 - **About** is a TaskDialog: version, WebView2 runtime, data folder, wallpapers
   folder, `Installed in <root>` or `Running from … (not installed)`; **Close**,
   **Uninstall…** (installed only) and **Project Page** (opens the homepage,
@@ -4373,11 +4382,10 @@ section):**
 | `win-reload` | reload a running app's pages (`--reload`; the `win-dev` one by default) |
 | `win-run` | build and run the built exe (normal settings) |
 | `win-test` | `--selftest` against a throwaway user data folder (below); needs Windows (WSL interop or CI) |
-| `win-saver` | *As built (W5):* `BUILD=1 windows/run.sh saver` copies `dist/win` to `Wallpapers-build\run` like `win-run`, runs `Wallpapers.exe /s` (your settings, read-only) full screen, waits for that one process (Start-Process, so WSL's pipes aren't inherited), then prints the last 40 lines of `saver-log.txt`. `windows/run.sh log saver` (`make win-log FLAVOR=saver`) shows that log. It takes over the owner's screen: run it only when you mean to |
+| `win-saver` | *As built (W5):* `BUILD=1 windows/run.sh saver` copies `dist/win` to its own `Wallpapers-build\saver` (so it quits nothing: the app you're running stays, and stands aside while the saver runs, as for a real one), runs `Wallpapers.exe /s` (your settings, read-only) full screen, waits for that one process (Start-Process, so WSL's pipes aren't inherited; its error output is where a refused build shows, since the usual `--quit` probe would stop the running app), then prints the last 40 lines of `saver-log.txt`. `windows/run.sh log saver` (`make win-log FLAVOR=saver`) shows that log. It takes over the owner's screen: run it only when you mean to |
 | `win-install` / `win-uninstall` | install/uninstall the built app for this Windows user. *As built:* `windows/run.sh install` copies `dist/win` to `Wallpapers-build\install`, runs `--install` there and waits on that one process (started straight from WSL the installed app would inherit WSL's pipes); `win-uninstall` runs the installed exe's `--uninstall --keep-settings` (`DELETE_SETTINGS=1` adds `--delete-settings`). With nothing installed it says so and exits 0 |
 | `win-test-zip` | the same `--selftest` against the app inside `dist/wallpapers-windows-<version>.zip`, unzipped to `dist/win-zip/`: what ships is what's tested. Works from WSL or Git Bash (`run.sh` takes `DIST=`; `cygpath` on Git Bash) |
 | `win-sign-tools` | installs `osslsigncode` (apt, sudo) if missing; CI runs it before a signed release |
-| `win-saver` | run the built `.scr /s` for 15 s and print its log |
 | `win-log` | tail the log |
 | `win-sign` | `windows/sign.sh dist/win/Wallpapers.exe`: Azure Trusted Signing through jsign 7.6 (pinned sha256, cached under `dist/wallpapers-tools` or `$XDG_CACHE_HOME`; token by Entra client credentials). All six `WALLPAPERS_SIGN_*` variables set signs; none prints `unsigned (no WALLPAPERS_SIGN_* variables)`; a partial set exits 1 naming the missing ones. `win-release` calls it after the build, runs `osslsigncode verify` against Microsoft's root certificate (downloaded, sha256-pinned) if it signed, and ends `…, signed` or `…, unsigned`. `sign.sh --fetch` downloads and checks jsign and the root without secrets. **The token is jsign's `--storepass`, so it appears in jsign's argv (the process list) while signing**: fine on a CI runner, noted for a shared machine. **The signed path (token, sign, `osslsigncode verify`) has not run yet**: there are no secrets; only the unsigned path, a partial-set failure and `--fetch` were exercised |
 | `win-release` | `windows/release.sh`: build, check, `dist/wallpapers-windows-<version>.zip` + `.sha256`. *Built ahead of W4 (owner, 2026-11-03):* the `ci` job runs it on every push and uploads `wallpapers-windows`; the `release` job attaches it. The installer and the `win` job came in W4 (below) |
@@ -4442,12 +4450,14 @@ is never touched. Details that matter:
    three steps; `/p` into a test parent.
    *As built (W5):* check 9 is the lines `saver run`, `saver overlay`,
    `saver rotation`, `saver input (move)`, `saver hides the desktop`,
-   `saver input (key)`, `saver input (click)`, `saver watchdog`, `saver preview`,
+   `saver input (key)`, `saver input (click)`, `saver watchdog`, `saver start fault`, `saver preview`,
    `saver options (/c)` and `saver menu`, plus `saver selection` and the
    `.scr` / `uninstall restores the saver` additions to the install lines. The
    self-test runs the saver **only in harness windows** (`--saver-window`: 480×270
    windows inside the work area, not topmost, cursor shown, never activated,
-   deactivation ignored; `--saver-change-ms`, `--saver-stall`), so it never takes
+   deactivation ignored; `--saver-change-ms`, `--saver-stall`, `--saver-fault window|webview2`: the first
+   window's start or the WebView2 environment throws an exception no handler filters for, and the other
+   window still draws, or every window shows the clock), so it never takes
    the screen, and it selects the saver **only in a scratch key**
    (`Software\Wallpapers-test\…`, deleted at the start and the end; it refuses to
    run if the key would be the real `Control Panel\Desktop`). The tray menu check
@@ -5001,7 +5011,7 @@ Task Manager; RDP in and out; the saver from Windows' dialog; uninstall.
   check, so a newer download offers Update while the installed app runs.
   Apply stages and swaps with rollback; a failed update restarts the old copy
   (not on the StillRunning timeout). Stage 2 refuses any root that isn't the
-  run or test install folder. `Wallpapers.scr` waits for W5. The `win` job
+  run or test install folder. `Wallpapers.scr` came in W5 (done, §10.25.13). The `win` job
   tests the Linux-built zip rather than building again; a failed Windows
   self-test drops the Windows zip from that release with a warning. The
   self-test's fake monitors fit at about 0.75 (WebView2 renders no smaller
@@ -5026,7 +5036,8 @@ Task Manager; RDP in and out; the saver from Windows' dialog; uninstall.
   loading the pick directly.
 - The fallback is a native clock on black that moves each minute.
 - The desktop's saver flag is a 10 s lease renewed by 4 s pings, so a saver that
-  dies can't leave the desktop hidden.
+  dies can't leave the desktop hidden. The lease is timed on the monotonic clock
+  (`Environment.TickCount64`), so a wall clock set back can't hold it either.
 - `saver-log.txt` is separate from `log.txt`.
 - Harness windows never activate and ignore deactivation; a real run activates
   the first window and ends on deactivation.

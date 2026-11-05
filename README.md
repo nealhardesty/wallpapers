@@ -238,11 +238,13 @@ has:
 Windows' own *Screen Saver Settings* dialog lists *Wallpapers*, shows a live
 preview, and its **Settings…** button opens the same options in a small window.
 A key, a click or moving the mouse ends the saver, on every monitor; *On resume,
-display logon screen* works as for any saver. The desktop pauses while it runs.
+display logon screen* should work as for any saver (Windows handles it; not yet
+checked by hand). The desktop pauses while it runs.
 If the page ever stalls, the saver reloads it and, failing that, shows a clock on
 black. Untick **Use Wallpapers…** (or uninstall) and your old saver comes back.
-The saver is a second copy of the exe, about 52 MB more on disk; Smart App
-Control and SmartScreen treat `Wallpapers.scr` the same as `Wallpapers.exe`.
+The saver is a second copy of the exe, about 52 MB more on disk. Smart App
+Control and SmartScreen should treat `Wallpapers.scr` as they do `Wallpapers.exe`
+(the same file; not yet checked by hand).
 A group policy that sets the screen saver wins, and the menu says so. Its log is
 `%LOCALAPPDATA%\Wallpapers\saver-log.txt`.
 
@@ -512,7 +514,7 @@ Run `make` to list every target.
 | `make win-run` | Build it and start it on the Windows side from WSL, with your normal settings: the wallpaper goes behind your desktop icons, a tray icon controls it (a running installed copy quits first; it comes back at the next sign-in) |
 | `make win-install` | Build it and install it for this Windows user: `%LOCALAPPDATA%\Programs\Wallpapers`, a Start menu shortcut, an entry in Settings → Apps, Start with Windows. No admin rights; a running copy quits first |
 | `make win-uninstall` | Remove the installed app: the folder, the shortcut, the Apps entry and Start with Windows. Your settings stay (`DELETE_SETTINGS=1` removes them too); the steps are logged in `%TEMP%\Wallpapers-uninstall.log` |
-| `make win-saver` | Build it and run the screen saver (`Wallpapers.exe /s`) full screen with your settings, until you press a key or move the mouse, then print the end of `saver-log.txt` (`make win-log FLAVOR=saver` shows it any time). It takes over every monitor |
+| `make win-saver` | Build it and run the screen saver (`Wallpapers.exe /s`) full screen with your settings, until you press a key or move the mouse, then print the end of `saver-log.txt` (`make win-log FLAVOR=saver` shows it any time). It takes over every monitor. It runs from its own folder (`Wallpapers-build\saver`), so the app you're running keeps running and stands aside while the saver shows, as for a real one |
 | `make win-sign` | Sign `dist/win/Wallpapers.exe` with Azure Trusted Signing through a pinned, sha256-checked jsign (see Releasing); prints `unsigned` when no `WALLPAPERS_SIGN_*` variable is set |
 | `make win-sign-tools` | Install `osslsigncode` (Debian/Ubuntu, through `apt` and `sudo`), which `make win-release` needs to verify a signed exe; CI runs it before a signed release |
 | `make win-dev` | Run it straight from this checkout's `web/` (over `\\wsl.localhost`), with its own settings and DevTools, so an edit shows after `make win-reload` or *Reload Wallpapers* in the tray |

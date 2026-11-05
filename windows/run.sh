@@ -5,7 +5,8 @@
 #   run.sh test  the same into ...\test, run --selftest, print its report, exit with its code
 #   run.sh install    the same into ...\install, then --install it (%LOCALAPPDATA%\Programs\Wallpapers; a running copy quits first)
 #   run.sh uninstall  the installed copy's --uninstall --keep-settings (DELETE_SETTINGS=1: --delete-settings)
-#   run.sh saver      the same into ...\run, run `Wallpapers.exe /s` (your settings, read-only) full screen until you end it, then the end of saver-log.txt
+#   run.sh saver      the same into ...\saver, run `Wallpapers.exe /s` (your settings, read-only) full screen until you end it, then the end of
+#                     saver-log.txt; the running app is left running (it stands aside while the saver runs, as for a real one)
 #   run.sh log [run|dev|test|saver]   the last lines of that flavour's log (FOLLOW=1 to follow); saver: the saver's own saver-log.txt
 #   run.sh reload [dev|run]     reload the running app's pages (after a web/ edit, for dev)
 # Extra arguments for the app: WIN_ARGS="--dump-displays". WP_FAKE_DISPLAYS=<displays JSON> (a WSL path,
@@ -68,7 +69,6 @@ if [ "$mode" = reload ]; then
 fi
 
 BIN="$LOCAL/Wallpapers-build/$mode"
-[ "$mode" = saver ] && BIN="$LOCAL/Wallpapers-build/run"
 mkdir -p "$BIN"
 export WSLENV="WP_DEV:WP_DEBUG:WP_WEB_ROOT:WP_FAKE_DISPLAYS/p${WSLENV:+:$WSLENV}"
 if [ "$mode" = dev ]; then
@@ -88,8 +88,9 @@ launch() {
   src=$(cd "$DIST" && pwd)
   cd "$BIN"
   # A running copy of this flavour locks its exe: ask it to quit, then wait for the file to come free.
+  # Not for the saver: its folder is its own, and --quit would stop the run flavour's app wherever it runs from.
   if [ -f Wallpapers.exe ]; then
-    ./Wallpapers.exe --quit >/dev/null 2>&1 || true
+    [ "$mode" = saver ] || ./Wallpapers.exe --quit >/dev/null 2>&1 || true
     for _ in $(seq 1 20); do (: >> Wallpapers.exe) 2>/dev/null && break; sleep 0.5; done
   fi
   if command -v rsync >/dev/null; then
@@ -101,8 +102,9 @@ launch() {
   fi
   # Probe the new exe with a command that exits at once (nothing is running now): a refused
   # build says so here. (The real start below can't be captured: a GUI app started through
-  # `cmd /c start` inherits the redirection and WSL would wait for it to exit.)
-  ./Wallpapers.exe --quit > "$OUTPUT" 2>&1 || true
+  # `cmd /c start` inherits the redirection and WSL would wait for it to exit.) The saver skips it
+  # (the app may be running), and its Start-Process below says so instead.
+  [ "$mode" = saver ] || ./Wallpapers.exe --quit > "$OUTPUT" 2>&1 || true
   # Refused builds show up as Windows' message, or (WSL interop, seen 2026-11-03) a bare EINVAL.
   if grep -qiE "Device Guard|Application Control|Invalid argument" "$OUTPUT"; then return 3; fi
   local before status=0
@@ -121,8 +123,11 @@ launch() {
   fi
   if [ "$mode" = saver ]; then
     # Wait for the saver itself (a Start-Process wait on that one process, so WSL's pipes aren't inherited).
+    # Its output is captured: Start-Process's error is where a refused build shows.
     echo "run.sh: the saver is running full screen; press a key or move the mouse to end it"
-    "$PS" -NoProfile -Command "\$p = Start-Process -FilePath '$(win_path "$BIN/Wallpapers.exe")' -WorkingDirectory '$(win_path "$BIN")' -ArgumentList '/s' -PassThru; \$null = \$p.Handle; \$p.WaitForExit(); exit \$p.ExitCode" < /dev/null || status=$?
+    "$PS" -NoProfile -Command "\$p = Start-Process -FilePath '$(win_path "$BIN/Wallpapers.exe")' -WorkingDirectory '$(win_path "$BIN")' -ArgumentList '/s' -PassThru; \$null = \$p.Handle; \$p.WaitForExit(); exit \$p.ExitCode" < /dev/null > "$OUTPUT" 2>&1 || status=$?
+    tr -d '\r' < "$OUTPUT"
+    if grep -qiE "Device Guard|Application Control" "$OUTPUT"; then return 3; fi
     echo "run.sh: the saver ended (exit $status); the end of $LOG:"
     tail -n 40 "$LOG" 2>/dev/null | tr -d '\r' || true
     return 0

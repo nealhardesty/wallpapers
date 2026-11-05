@@ -101,12 +101,18 @@ sealed class SaverOptionsWindow : Form
         app.Saver.Set(app.Saver.Settings with { Show = SaverShow.One, Wallpaper = id ?? app.Saver.Settings.Wallpaper });
     }
 
-    /// A change, then every control again from what's true now (a refused change shows as it was).
+    /// A change, then every control again from what's true now (a refused change shows as it was). SaverControl
+    /// says its own failures; what could still come through (the registry, a process start, a window going
+    /// mid-change) is logged here. Anything else is a bug, and goes to Application.ThreadException as elsewhere.
     void Do(string what, Action action)
     {
         if (filling) return;
         try { action(); }
-        catch (Exception e) { Log.Warn($"saver options: {what}: {e.GetType().Name}: {e.Message}"); }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or System.Security.SecurityException
+            or System.ComponentModel.Win32Exception or InvalidOperationException or ObjectDisposedException or COMException)
+        {
+            Log.Warn($"saver options: {what}: {e.GetType().Name}: {e.Message}");
+        }
         if (!IsDisposed) Fill();
     }
 
@@ -118,8 +124,9 @@ sealed class SaverOptionsWindow : Form
             var saver = app.Saver;
             var s = saver.Settings;
             var why = saver.WhyNot();
-            use.Checked = saver.Selected;
-            use.Enabled = why == null;
+            var selected = saver.Selected;
+            use.Checked = selected;
+            use.Enabled = why == null || selected;   // ours selected can always be unticked
             whyNot.Text = why ?? "";
             whyNot.Visible = why != null;
             Pick(startAfter, saver.StartAfter);

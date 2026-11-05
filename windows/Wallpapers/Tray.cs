@@ -196,8 +196,9 @@ sealed class Tray : IDisposable
         if (disposed) return;
         var saver = app.Saver;
         var why = saver.WhyNot();
-        saverUse.Checked = saver.Selected;
-        saverUse.Enabled = why == null;
+        var selected = saver.Selected;
+        saverUse.Checked = selected;
+        saverUse.Enabled = why == null || selected;   // ours selected can always be unticked
         saverUse.ToolTipText = why;
         var after = saver.StartAfter;
         foreach (var (minutes, row) in startAfterRows) row.Checked = after == minutes;
