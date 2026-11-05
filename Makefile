@@ -16,7 +16,7 @@ DOTNET ?= $(shell command -v dotnet 2>/dev/null || echo $(HOME)/.dotnet/dotnet)
 DOTNET_FOUND := $(shell command -v $(DOTNET) 2>/dev/null)
 export DOTNET
 
-.PHONY: help hooks open serve serve-https cert bing-json thumbnails icons screenshots extension site android-build android-install android-logcat android-emulator android-release android-keystore android-bench jellyfin-media jellyfin-fixtures jellyfin-dev jellyfin-stop jellyfin-mock mac-build mac-run mac-dev mac-test mac-install mac-uninstall mac-release mac-saver-test mac-saver-live mac-saver-log win-build win-release win-sign win-unit win-ci win-run win-dev win-reload win-test win-install win-uninstall win-log docker-build docker-run lint audit audit-staged audit-history test smoke smoke-clock smoke-live bench bench-clock ci clean
+.PHONY: help hooks open serve serve-https cert bing-json thumbnails icons screenshots extension site android-build android-install android-logcat android-emulator android-release android-keystore android-bench jellyfin-media jellyfin-fixtures jellyfin-dev jellyfin-stop jellyfin-mock mac-build mac-run mac-dev mac-test mac-install mac-uninstall mac-release mac-saver-test mac-saver-live mac-saver-log win-build win-release win-sign win-unit win-ci win-run win-dev win-reload win-test win-test-zip win-install win-uninstall win-log docker-build docker-run lint audit audit-staged audit-history test smoke smoke-clock smoke-live bench bench-clock ci clean
 
 help: ## List every target
 	@awk 'BEGIN {FS = ":.*## "} /^[a-zA-Z0-9_-]+:.*## / {printf "  \033[36m%-17s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -158,6 +158,14 @@ win-reload: ## Reload the running Windows app's pages after a web/ edit (the win
 
 win-test: ## Run the Windows app's self-test against a throwaway settings store: layer, pause, coverage, power, the pointer, monitors, performance, Explorer restart, cleanup (about 50 s; shows a wallpaper behind your icons)
 	@BUILD=1 windows/run.sh test
+
+win-test-zip: ## Self-test the app inside dist/wallpapers-windows-<version>.zip (the zip CI ships; needs Windows: Git Bash or WSL)
+	@zip="dist/wallpapers-windows-$$(node -p "require('./web/manifest.json').version").zip"; \
+	[ -f "$$zip" ] || { echo "win-test-zip: no $$zip (make win-release, or download CI's wallpapers-windows artifact into dist/)" >&2; exit 1; }; \
+	rm -rf dist/win-zip && mkdir -p dist/win-zip; \
+	if command -v unzip >/dev/null; then unzip -q "$$zip" -d dist/win-zip; \
+	else powershell.exe -NoProfile -Command "Expand-Archive -LiteralPath '$$zip' -DestinationPath 'dist/win-zip'"; fi; \
+	DIST=dist/win-zip/Wallpapers windows/run.sh test
 
 win-install: ## Build the Windows app and install it for this Windows user (%LOCALAPPDATA%\Programs\Wallpapers, Start menu, Settings → Apps, Start with Windows); quits a running copy first
 	@BUILD=1 windows/run.sh install

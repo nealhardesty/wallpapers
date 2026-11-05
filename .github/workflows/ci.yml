@@ -26,9 +26,29 @@ jobs:
         with:
           dotnet-version: 10.0.x
       - run: make ci
+      # Signing (SPEC §10.25.13) only on a tag, and only once the six
+      # WALLPAPERS_SIGN_* secrets exist: release.sh verifies a signed exe with
+      # osslsigncode. Without them the build is unsigned and says so.
+      - name: Install the signature checker (signed releases only)
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          SIGNING: ${{ secrets.WALLPAPERS_SIGN_ENDPOINT != '' }}
+        run: |
+          if [ "$SIGNING" = true ]; then
+            sudo apt-get update -qq && sudo apt-get install -y -qq osslsigncode
+          else
+            echo "no WALLPAPERS_SIGN_* secrets: the Windows app ships unsigned"
+          fi
       # Cross-compiles the Windows app on Linux on every push, checks it and zips it
-      # (SPEC §10.25.15); the release job attaches that zip.
+      # (SPEC §10.25.15); the win job self-tests that zip and the release job attaches it.
       - run: make win-release
+        env:
+          WALLPAPERS_SIGN_ENDPOINT: ${{ startsWith(github.ref, 'refs/tags/v') && secrets.WALLPAPERS_SIGN_ENDPOINT || '' }}
+          WALLPAPERS_SIGN_ACCOUNT: ${{ startsWith(github.ref, 'refs/tags/v') && secrets.WALLPAPERS_SIGN_ACCOUNT || '' }}
+          WALLPAPERS_SIGN_PROFILE: ${{ startsWith(github.ref, 'refs/tags/v') && secrets.WALLPAPERS_SIGN_PROFILE || '' }}
+          WALLPAPERS_SIGN_TENANT: ${{ startsWith(github.ref, 'refs/tags/v') && secrets.WALLPAPERS_SIGN_TENANT || '' }}
+          WALLPAPERS_SIGN_CLIENT_ID: ${{ startsWith(github.ref, 'refs/tags/v') && secrets.WALLPAPERS_SIGN_CLIENT_ID || '' }}
+          WALLPAPERS_SIGN_CLIENT_SECRET: ${{ startsWith(github.ref, 'refs/tags/v') && secrets.WALLPAPERS_SIGN_CLIENT_SECRET || '' }}
       - uses: actions/upload-artifact@v7
         with:
           name: wallpapers-extension
@@ -83,12 +103,55 @@ jobs:
             dist/wallpapers-mac-*.zip
             dist/wallpapers-mac-*.zip.sha256
 
+  # The Windows app's self-test (SPEC §10.25.15) against the zip the ci job
+  # built on Linux, so what is tested is what ships. Git Bash runs make.
+  win:
+    needs: ci
+    if: github.event_name != 'schedule'
+    runs-on: windows-2025
+    timeout-minutes: 15
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: wallpapers-windows
+          path: dist
+      - name: Make
+        run: make --version >/dev/null 2>&1 || choco install make -y --no-progress
+      - name: WebView2 runtime
+        shell: pwsh
+        run: |
+          $key = 'HKLM:\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}'
+          if (-not (Test-Path $key)) {
+            Write-Output 'WebView2 runtime missing: installing the Evergreen runtime'
+            $setup = Join-Path $env:RUNNER_TEMP 'MicrosoftEdgeWebview2Setup.exe'
+            Invoke-WebRequest -Uri 'https://go.microsoft.com/fwlink/p/?LinkId=2124703' -OutFile $setup
+            Start-Process -FilePath $setup -ArgumentList '/silent', '/install' -Wait
+          }
+          Write-Output "WebView2 runtime $((Get-ItemProperty $key).pv)"
+      - name: Self-test the zip
+        run: |
+          echo "SELFTEST_DIR=$LOCALAPPDATA\Wallpapers-test" >> "$GITHUB_ENV"
+          make win-test-zip
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: wallpapers-windows-selftest
+          path: |
+            ${{ env.SELFTEST_DIR }}/selftest.txt
+            ${{ env.SELFTEST_DIR }}/log.txt
+          if-no-files-found: warn
+
   # Tag vX.Y.Z (matching web/manifest.json's version) to publish. The
   # keystore lives only in the repo's secrets (SPEC §6.6).
   release:
-    needs: [ci, android, mac]
-    # The Mac build is the newest and least proven: if it fails, the Android
-    # app and the extension still ship, and a warning says what's missing.
+    needs: [ci, android, mac, win]
+    # The Mac build and the Windows self-test are the newest and least proven:
+    # if either fails, the Android app and the extension still ship, and a
+    # warning says what's missing.
     if: ${{ !cancelled() && startsWith(github.ref, 'refs/tags/v') && needs.ci.result == 'success' && needs.android.result == 'success' }}
     runs-on: ubuntu-latest
     permissions:
@@ -131,12 +194,17 @@ jobs:
         if: needs.mac.result != 'success'
         run: |
           echo "::warning::the Mac build ${{ needs.mac.result }}; releasing without it"
-      # Built and checked by the ci job, which this job needs to have passed.
+      # Built and checked by the ci job, self-tested on Windows by the win job.
       - name: Fetch the Windows app
+        if: needs.win.result == 'success'
         uses: actions/download-artifact@v8
         with:
           name: wallpapers-windows
           path: dist
+      - name: Say so if the Windows app is missing
+        if: needs.win.result != 'success'
+        run: |
+          echo "::warning::the Windows self-test ${{ needs.win.result }}; releasing without the Windows app"
       - name: Publish the release
         env:
           GH_TOKEN: ${{ github.token }}

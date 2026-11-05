@@ -1,6 +1,6 @@
 #!/bin/bash
-# Runs the built Windows app from WSL (SPEC §10.25.15):
-#   run.sh run   copy dist/win to %LOCALAPPDATA%\Wallpapers-build\run and start it (normal settings; --just-run, no install offer)
+# Runs the built Windows app from WSL or Git Bash (SPEC §10.25.15):
+#   run.sh run   copy $DIST (default dist/win) to %LOCALAPPDATA%\Wallpapers-build\run and start it (normal settings; --just-run, no install offer)
 #   run.sh dev   the same into ...\dev, with WP_DEV=1 WP_DEBUG=1 and WP_WEB_ROOT on this checkout's web/
 #   run.sh test  the same into ...\test, run --selftest, print its report, exit with its code
 #   run.sh install    the same into ...\install, then --install it (%LOCALAPPDATA%\Programs\Wallpapers; a running copy quits first)
@@ -11,16 +11,30 @@
 # translated; keep it under /mnt/c so Windows sees edits to it) lays the surfaces out as that file says,
 # in ordinary windows (§10.25.15). BUILD=1 builds first, and builds again when
 # Smart App Control refuses the build (every build is a new file to it; SPEC §10.25.13), up to 3 times.
+# DIST=<folder> runs that folder's Wallpapers.exe instead (make win-test-zip: the unzipped release);
+# BUILD is ignored then, since a build would only replace dist/win.
 set -e
 cd "$(dirname "$0")/.."
 mode=${1:-run}
-CMD=/mnt/c/Windows/System32/cmd.exe
-PS=/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe
-LAD=$("$CMD" /c echo %LOCALAPPDATA% 2>/dev/null | tr -d '\r')
+if [ -n "$DIST" ]; then BUILD=; else DIST=dist/win; fi
+if [ -d /mnt/c/Windows ]; then
+  # WSL: Windows' tools by their full paths, %LOCALAPPDATA% asked of cmd.exe.
+  CMD=/mnt/c/Windows/System32/cmd.exe
+  PS=/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe
+  LAD=$("$CMD" /c echo %LOCALAPPDATA% 2>/dev/null | tr -d '\r')
+  unix_path() { wslpath "$1"; }
+  win_path() { wslpath -w "$1"; }
+else
+  # Git Bash (the CI runner): Windows' tools are on PATH and %LOCALAPPDATA% is in the environment.
+  PS=$(command -v powershell.exe)
+  LAD=$LOCALAPPDATA
+  unix_path() { cygpath -u "$1"; }
+  win_path() { cygpath -w "$1"; }
+fi
 # WSL interop can fail for a moment ("Exec format error"); an empty answer would put the Windows-side
 # folders inside this checkout, so stop instead.
 case "$LAD" in [A-Za-z]:\\*) ;; *) echo "run.sh: couldn't reach Windows (%LOCALAPPDATA% came back '$LAD'); try again" >&2; exit 1 ;; esac
-LOCAL=$(wslpath "$LAD")
+LOCAL=$(unix_path "$LAD")
 
 root_for() { case "$1" in dev) echo "$LOCAL/Wallpapers-dev" ;; test) echo "$LOCAL/Wallpapers-test" ;; *) echo "$LOCAL/Wallpapers" ;; esac; }
 
@@ -56,7 +70,7 @@ BIN="$LOCAL/Wallpapers-build/$mode"
 mkdir -p "$BIN"
 export WSLENV="WP_DEV:WP_DEBUG:WP_WEB_ROOT:WP_FAKE_DISPLAYS/p${WSLENV:+:$WSLENV}"
 if [ "$mode" = dev ]; then
-  export WP_DEV=1 WP_DEBUG=1 WP_WEB_ROOT="$(wslpath -w "$PWD/web")"
+  export WP_DEV=1 WP_DEBUG=1 WP_WEB_ROOT="$(win_path "$PWD/web")"
 fi
 LOG="$(root_for "$mode")/log.txt"
 OUTPUT=$(mktemp)
@@ -66,14 +80,22 @@ REPO=$PWD
 # Copy the build over and start it. Returns 3 when Windows refused the exe.
 launch() {
   cd "$REPO"
-  [ -f dist/win/Wallpapers.exe ] || { echo "run.sh: build first (make win-build)" >&2; return 1; }
+  [ -f "$DIST/Wallpapers.exe" ] || { echo "run.sh: no $DIST/Wallpapers.exe (make win-build)" >&2; return 1; }
+  local src
+  src=$(cd "$DIST" && pwd)
   cd "$BIN"
   # A running copy of this flavour locks its exe: ask it to quit, then wait for the file to come free.
   if [ -f Wallpapers.exe ]; then
     ./Wallpapers.exe --quit >/dev/null 2>&1 || true
     for _ in $(seq 1 20); do (: >> Wallpapers.exe) 2>/dev/null && break; sleep 0.5; done
   fi
-  rsync -a --delete "$REPO/dist/win/" "$BIN/"
+  if command -v rsync >/dev/null; then
+    rsync -a --delete "$src/" "$BIN/"
+  else
+    # Git Bash has no rsync: empty the folder, then copy.
+    find "$BIN" -mindepth 1 -delete
+    cp -a "$src/." "$BIN/"
+  fi
   # Probe the new exe with a command that exits at once (nothing is running now): a refused
   # build says so here. (The real start below can't be captured: a GUI app started through
   # `cmd /c start` inherits the redirection and WSL would wait for it to exit.)
@@ -85,7 +107,7 @@ launch() {
   if [ "$mode" = install ]; then
     # Through Start-Process and a wait on that process alone: the installed app it starts must not
     # inherit WSL's pipes, or this script would wait until that app quit.
-    "$PS" -NoProfile -Command "\$p = Start-Process -FilePath '$(wslpath -w "$BIN/Wallpapers.exe")' -WorkingDirectory '$(wslpath -w "$BIN")' -ArgumentList '--install' -PassThru; \$null = \$p.Handle; \$p.WaitForExit(); exit \$p.ExitCode" < /dev/null || status=$?
+    "$PS" -NoProfile -Command "\$p = Start-Process -FilePath '$(win_path "$BIN/Wallpapers.exe")' -WorkingDirectory '$(win_path "$BIN")' -ArgumentList '--install' -PassThru; \$null = \$p.Handle; \$p.WaitForExit(); exit \$p.ExitCode" < /dev/null || status=$?
     if [ $status != 0 ]; then
       echo "run.sh: --install failed (exit $status):" >&2
       tail -n 5 "$LOG" | tr -d '\r' >&2
@@ -95,6 +117,7 @@ launch() {
     return 0
   fi
   if [ "$mode" = test ]; then
+    echo "run.sh: self-testing $DIST/Wallpapers.exe"
     # shellcheck disable=SC2086
     ./Wallpapers.exe --selftest $WIN_ARGS || status=$?
   else
@@ -103,7 +126,7 @@ launch() {
     # --just-run: a build run from here never offers to install (make win-install does that).
     local args="'--just-run',"
     for a in $WIN_ARGS; do args="$args'$a',"; done
-    "$PS" -NoProfile -Command "Start-Process -FilePath '$(wslpath -w "$BIN/Wallpapers.exe")' -WorkingDirectory '$(wslpath -w "$BIN")'${args:+ -ArgumentList ${args%,}}" < /dev/null
+    "$PS" -NoProfile -Command "Start-Process -FilePath '$(win_path "$BIN/Wallpapers.exe")' -WorkingDirectory '$(win_path "$BIN")'${args:+ -ArgumentList ${args%,}}" < /dev/null
   fi
   if [ "$mode" = test ]; then
     local report

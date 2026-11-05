@@ -479,6 +479,7 @@ Run `make` to list every target.
 | `make win-dev` | Run it straight from this checkout's `web/` (over `\\wsl.localhost`), with its own settings and DevTools, so an edit shows after `make win-reload` or *Reload Wallpapers* in the tray |
 | `make win-reload` | Reload the running app's pages after a `web/` edit: the `win-dev` one, or `FLAVOR=run` for the normal one |
 | `make win-test` | The app's self-test against a throwaway settings store: layer, animation, settings sharing, pause, the pointer (a move, a tap and a double-click at the right CSS px, icons and hidden surfaces ignored, the toggles, the bare-desktop classifier against your real icons, a tap on fake monitor 2), coverage (a test window over monitor 1; skipped when something else already covers it), power reaching every page, `display=` and a resize in place (in a fake two-monitor layout), the Performance menu, insets, overlay, Bing, Explorer restart (simulated), a renderer crash, cleanup, then install, update (also with the exe held open) and uninstall into a throwaway `Wallpapers-test` install (never your real one) (about 70 s; `WIN_ARGS=--bad-web-root` checks the missing-files case) |
+| `make win-test-zip` | The same self-test against the app inside `dist/wallpapers-windows-<version>.zip` (from `make win-release`, or CI's `wallpapers-windows` artifact saved into `dist/`), unzipped to `dist/win-zip/`: what ships is what's tested. CI's `win` job runs it on a Windows runner (Git Bash or WSL) |
 | `WP_FAKE_DISPLAYS=<file>` with `make win-run` or `make win-dev` | Lay the surfaces out as a recorded monitor layout says (a JSON file under `/mnt/c`, made with `WIN_ARGS=--dump-displays make win-run`), each in an ordinary window, to try Different mode, per-monitor menus and hot-plug (edit the file) on one screen |
 | `make win-log` | The app's log (`FLAVOR=dev` or `test` for those; `FOLLOW=1` to follow) |
 | `make docker-build` | Build the container image `wallpapers` |
@@ -540,7 +541,11 @@ browser features only work on secure pages.
    runs CI, the Android build and the Mac build, and uploads the zip as the
    `wallpapers-mac` artifact, without publishing anything. Every CI run also
    uploads the Windows zip as the `wallpapers-windows` artifact. It's unsigned:
-   see the Windows install notes.
+   see the Windows install notes. CI then self-tests that same zip on a Windows
+   runner (`make win-test-zip` in the `win` job; its report is the
+   `wallpapers-windows-selftest` artifact). Like the Mac's, it doesn't block: a
+   release whose Windows self-test fails goes out without the Windows app, and
+   the run shows a warning saying so.
 6. The Windows app is unsigned by default, and `make win-release` ends its last
    line with `signed` or `unsigned` to say which. Unsigned means SmartScreen
    shows "Windows protected your PC" on a downloaded copy (*More info* →
