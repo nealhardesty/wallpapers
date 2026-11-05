@@ -23,6 +23,7 @@ WP.costs = {
     'neko': 1,
     'night-train': 1,
     'northern-lights': 1,
+    'orrery': 1,
     'parallax-clouds': 1,
     'pixel-room': 1,
     'quest': 1,
@@ -33,6 +34,8 @@ WP.costs = {
     'stained-glass': 1,
     'starfield': 1,
     'synthwave': 1,
+    'weather': 1,
     'wiki-pond': 1,
+    'world-clock': 1,
     'zen-garden': 1
 };

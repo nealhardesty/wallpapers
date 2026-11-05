@@ -30,7 +30,10 @@
         element.onload = element.onerror = resolve;
         document.head.append(element);
     });
+    // settingsScripts (catalog): data the schema is built from, such as World
+    // Clock's cities, loaded first.
     const load = id => loaded[id] ??= (async () => {
+        for (const file of WP.entry(id)?.settingsScripts || []) await script(`wallpapers/${file}`);
         for (const file of ['defaults.js', 'settings.js']) await script(`wallpapers/${id}/${file}`);
     })();
 

@@ -70,6 +70,44 @@ function marineJson(sea) {
         hourly: { time: hours, wave_height: hours.map(() => height), wave_period: hours.map(() => period), wave_direction: hours.map(() => 290) } };
 }
 
+// Weather's forecast, made up, in Open-Meteo's shape: ten days from today
+// (UTC) at a made-up place, every kind of weather across the days and
+// hours, rain right now. `bad` is an answer that isn't a forecast.
+const WEATHER_PLACE = { lat: 1.5, lon: 2.5, label: 'Fixtureville', source: 'typed' };
+function weatherJson(bad) {
+    if (bad) return { error: true, reason: 'Fixture: not a forecast' };
+    const DAY = 86400000, HOUR = 3600000, at = Date.now(), start = Math.floor(at / DAY) * DAY;
+    const iso = ms => new Date(ms).toISOString().slice(0, 16);
+    const DAYS = [61, 95, 71, 0, 45, 2, 3, 51, 66, 96];
+    const HOURS = [0, 1, 2, 3, 45, 51, 56, 61, 65, 71, 75, 80, 85, 95, 96];
+    const hourly = { time: [], temperature_2m: [], apparent_temperature: [], precipitation_probability: [], precipitation: [], weather_code: [], is_day: [], wind_speed_10m: [] };
+    const daily = { time: [], weather_code: [], temperature_2m_max: [], temperature_2m_min: [], precipitation_probability_max: [], precipitation_sum: [], snowfall_sum: [], sunrise: [], sunset: [], uv_index_max: [], wind_speed_10m_max: [] };
+    for (let d = 0; d < 10; d++) {
+        const t0 = start + d * DAY, hi = 12 + (d * 5) % 9, lo = hi - 7, wet = DAYS[d] >= 51;
+        daily.time.push(iso(t0).slice(0, 10)); daily.weather_code.push(DAYS[d]);
+        daily.temperature_2m_max.push(hi); daily.temperature_2m_min.push(lo);
+        daily.precipitation_probability_max.push(wet ? 55 + d * 4 : 10); daily.precipitation_sum.push(wet ? 4.2 : 0);
+        daily.snowfall_sum.push(DAYS[d] === 71 ? 3.1 : 0);
+        daily.sunrise.push(iso(t0 + 6.75 * HOUR)); daily.sunset.push(iso(t0 + 17.5 * HOUR));
+        daily.uv_index_max.push(3 + d % 5); daily.wind_speed_10m_max.push(14 + d * 2);
+        for (let h = 0; h < 24; h++) {
+            const temp = lo + (hi - lo) * Math.max(0, Math.sin((h - 6) / 24 * 2 * Math.PI));
+            hourly.time.push(iso(t0 + h * HOUR)); hourly.temperature_2m.push(Math.round(temp * 10) / 10);
+            hourly.apparent_temperature.push(Math.round((temp - 2) * 10) / 10);
+            hourly.precipitation_probability.push(wet ? (h * 13) % 90 : (h * 7) % 20); hourly.precipitation.push(wet ? 0.3 : 0);
+            hourly.weather_code.push(HOURS[(d + Math.floor(h / 3)) % HOURS.length]);
+            hourly.is_day.push(h >= 7 && h < 18 ? 1 : 0); hourly.wind_speed_10m.push(10 + h % 7);
+        }
+    }
+    const hour = new Date(at).getUTCHours();
+    return {
+        latitude: 1.5, longitude: 2.5, timezone: 'GMT', utc_offset_seconds: 0,
+        current: { time: iso(Math.floor(at / HOUR) * HOUR), temperature_2m: 9.4, apparent_temperature: 6.8, relative_humidity_2m: 82, weather_code: 63,
+            is_day: hour >= 7 && hour < 18 ? 1 : 0, wind_speed_10m: 18, wind_direction_10m: 225, precipitation: 0.6 },
+        hourly, daily,
+    };
+}
+
 // Wiki Pond's recent-changes stream, made up: invented titles and users,
 // never a recording of the live stream. Some events are for other wikis, a
 // bot, a canary, a new page and a new account, so the filters get a workout.
@@ -97,7 +135,8 @@ let cdp;
 // Problems for the test in progress, whether it may use Bing's fixtures, and
 // whether they come with CORS headers (the extension mustn't need them).
 // `offline` fails the wallpapers' own hosts quietly (an offline device);
-// `marine` picks Lighthouse's fixture; `hold` keeps Wiki Pond's stream open;
+// `marine` picks Lighthouse's fixture; `forecast: 'bad'` makes Weather's not a
+// forecast; `hold` keeps Wiki Pond's stream open;
 // `jellyfin` is a fixture server (tools/jellyfin-mock.mjs) at jellyfin.invalid.
 let current = { network: false, cors: true, problems: [], requests: [] };
 // Every wallpaper's declared hosts, from the catalog once it's loaded.
@@ -112,7 +151,8 @@ function listen() {
     cdp.on('Runtime.exceptionThrown', ({ exceptionDetails: d }) => record(`exception: ${d.exception?.description || d.text}`));
     cdp.on('Runtime.consoleAPICalled', ({ type, args }) => type === 'error' && record(`console.error: ${args.map(a => a.value ?? a.description).join(' ')}`));
     // An offline device's failed requests are expected, not errors.
-    cdp.on('Log.entryAdded', ({ entry: e }) => e.level === 'error' && !(current.offline && (e.source === 'network' || declared(e.url || ''))) && record(`log: ${e.text} ${e.url || ''}`));
+    // So are a fixture server's deliberate 503s.
+    cdp.on('Log.entryAdded', ({ entry: e }) => e.level === 'error' && !((current.offline || current.forecast === '503') && (e.source === 'network' || declared(e.url || ''))) && record(`log: ${e.text} ${e.url || ''}`));
     cdp.on('Runtime.executionContextCreated', ({ context }) => {
         if (context.auxData?.isDefault) contexts.set(context.auxData.frameId, context.id);
     });
@@ -133,6 +173,10 @@ function listen() {
         });
         if (current.network && url.startsWith('https://www.bing.com/HPImageArchive')) return fulfil(Buffer.from(JSON.stringify(BING_JSON)), 'application/json');
         if (current.network && url.startsWith('https://www.bing.com/th')) return fulfil(PIXEL, 'image/png');
+        // Open-Meteo down (503), or slow (an answer held back: the first fetch stays on its way).
+        if (current.network && current.forecast === '503' && url.startsWith('https://api.open-meteo.com/v1/forecast?')) return reply('Fetch.fulfillRequest', { requestId, responseCode: 503, body: '', responseHeaders: [{ name: 'Access-Control-Allow-Origin', value: '*' }] });
+        if (current.network && current.forecast === 'hold' && url.startsWith('https://api.open-meteo.com/v1/forecast?')) return;
+        if (current.network && url.startsWith('https://api.open-meteo.com/v1/forecast?')) return fulfil(Buffer.from(JSON.stringify(weatherJson(current.forecast === 'bad'))), 'application/json');
         if (current.network && url.startsWith('https://marine-api.open-meteo.com/v1/marine?')) return fulfil(Buffer.from(JSON.stringify(marineJson(current.marine))), 'application/json');
         // `hold` leaves the stream hanging open, as a quiet live one would be.
         if (current.network && current.hold && url === 'https://stream.wikimedia.org/v2/stream/recentchange') return;
@@ -1050,6 +1094,531 @@ const STAGE_CHECKS = {
         }],
     ],
     // SPEC §9 Phase 9, against the fixture server (tools/jellyfin-mock.mjs).
+    // §10.2: every state draws a real sky and says what it is; the views,
+    // a phone, the night, a tap for a day's hours.
+    weather: [
+        ['the fixture forecast: live, cached, every kind, no "updated" line', async () => {
+            current.network = true;
+            await fresh(`${WEB}/stage.html?w=weather`, { 'wp:location': WEATHER_PLACE });
+            if (!await waitFor(() => evaluate("WP.stage.ready && WP.stage.manager.state === 'live'"))) return record(`never went live (${await evaluate('WP.stage.manager?.state')})`);
+            const s = await counts("({ banner: m.banner, kinds: new Set(m.forecast.hours.map(h => WeatherData.kind(h.code))).size, cached: !!localStorage.getItem('wp:weather:forecast'), status: m.status })");
+            if (s.banner) record(`a fresh forecast shows "${s.banner}"`);
+            if (s.kinds !== 15) record(`${s.kinds} kinds in the fixture's hours, want all 15`);
+            if (!s.cached) record('the forecast was not cached');
+            // A snowy day's amount is its fresh snow (3.1 cm in the fixture), not its water.
+            const snow = await counts(`(d => [m.fall(d, 'snow'), m.units()])(m.forecast.days.find(d => WeatherData.kind(d.code) === 'snow'))`);
+            if (snow[0] !== (snow[1] === 'imperial' ? '1.2 in' : '3.1 cm')) record(`snow day: ${snow[0]} (${snow[1]})`);
+            if (!s.status.startsWith('✓ The forecast for Fixtureville')) record(`panel status: ${s.status}`);
+            if (await evaluate(DRAWN) < 2) record('nothing drawn');
+            const asked = current.requests.filter(url => url.startsWith('https://api.open-meteo.com/'));
+            if (asked.length !== 1 || !asked[0].includes('latitude=1.5&longitude=2.5')) record(`asked Open-Meteo ${asked.length}× (${asked[0]})`);
+            return true;
+        }],
+        ['no place: the sample, labelled, and nothing asked', async () => {
+            await fresh(`${WEB}/stage.html?w=weather`);
+            await waitFor(() => evaluate('WP.stage.ready'));
+            await sleep(600);
+            const s = await counts('({ state: m.state, banner: m.banner, sample: !!m.forecast.sample, status: m.status })');
+            if (s.state !== 'sample' || !s.sample || !s.banner.startsWith('Sample forecast · set a place')) record(`no place: ${JSON.stringify(s)}`);
+            if (!s.status.includes('📍 Location')) record(`panel status: ${s.status}`);
+            if (current.requests.some(url => url.startsWith('https://'))) record('asked the network without a place');
+            if (await evaluate(DRAWN) < 2) record('nothing drawn');
+            return true;
+        }],
+        ['offline, or a bad answer, with nothing cached: the sample, "Couldn\'t reach"', async () => {
+            for (const how of ['offline', 'bad', '503']) {
+                current = { ...current, network: how !== 'offline', offline: how === 'offline', forecast: how };
+                await fresh(`${WEB}/stage.html?w=weather`, { 'wp:location': WEATHER_PLACE });
+                if (!await waitFor(() => evaluate("WP.stage.ready && WP.stage.manager.state === 'error'"))) record(`${how}: state ${await evaluate('WP.stage.manager?.state')}`);
+                const s = await counts('({ banner: m.banner, sample: !!m.forecast.sample })');
+                if (!s.sample || !s.banner.startsWith('Couldn\'t reach Open-Meteo')) record(`${how}: ${JSON.stringify(s)}`);
+                if (await evaluate(DRAWN) < 2) record(`${how}: nothing drawn`);
+            }
+            current.forecast = null;
+            return true;
+        }],
+        ['an answer held back: the sample, dimmed, "Getting the forecast…"', async () => {
+            current = { ...current, network: true, offline: false, forecast: 'hold' };
+            await fresh(`${WEB}/stage.html?w=weather`, { 'wp:location': WEATHER_PLACE });
+            await waitFor(() => evaluate('WP.stage.ready'));
+            await sleep(800);
+            const s = await counts('({ state: m.state, banner: m.banner, sample: !!m.forecast.sample, fetching: !!m.fetching, status: m.status })');
+            if (s.state !== 'loading' || !s.sample || s.banner !== 'Getting the forecast…' || !s.fetching) record(`held back: ${JSON.stringify(s)}`);
+            if (await evaluate(DRAWN) < 2) record('loading: nothing drawn');
+            await shoot('weather-loading');
+            current.forecast = null;
+            return true;
+        }],
+        ['one good load, then offline: the cache, "updated 3 h ago · offline"', async () => {
+            current.network = true;
+            await fresh(`${WEB}/stage.html?w=weather`, { 'wp:location': WEATHER_PLACE });
+            if (!await waitFor(() => evaluate("WP.stage.ready && WP.stage.manager.state === 'live'"))) return record('never went live');
+            await evaluate(`(k => { const v = JSON.parse(localStorage.getItem(k)); v.forecast.fetchedAt -= 3 * 3600000; localStorage.setItem(k, JSON.stringify(v)); })('wp:weather:forecast')`);
+            current.offline = true;
+            await cdp.send('Page.navigate', { url: `${WEB}/stage.html?w=weather` });
+            if (!await waitFor(() => evaluate("WP.stage.ready && WP.stage.manager.state === 'offline'"))) return record(`state ${await evaluate('WP.stage.manager?.state')}`);
+            const s = await counts('({ banner: m.banner, sample: !!m.forecast.sample })');
+            if (s.sample || s.banner !== 'updated 3 h ago · offline') record(`offline: ${JSON.stringify(s)}`);
+            // A cache for somewhere else isn't shown.
+            await evaluate(`localStorage.setItem('wp:location', JSON.stringify({ lat: -40.5, lon: 100.5, label: 'Elsewhere', source: 'typed' }))`);
+            await cdp.send('Page.navigate', { url: `${WEB}/stage.html?w=weather` });
+            await waitFor(() => evaluate('WP.stage.ready'));
+            await sleep(400);
+            if (!await evaluate('WP.stage.manager.forecast.sample')) record('showed another place\'s cached forecast');
+            return true;
+        }],
+        ['V cycles days, hours and now, each drawn', async () => {
+            await bootStage('w=weather');
+            const seen = [await evaluate('WP.stage.manager.layout.view')];
+            for (let i = 0; i < 3; i++) {
+                await press('v');
+                await sleep(300);
+                seen.push(await evaluate('WP.stage.manager.layout.view'));
+                if (await evaluate(DRAWN) < 2) record(`${seen.at(-1)}: nothing drawn`);
+                if (!await evaluate('WP.stage.manager.scenes.length')) record(`${seen.at(-1)}: no scenes`);
+            }
+            if (seen.join() !== 'days,hours,now,days') record(`views went ${seen.join(' → ')}`);
+            // A quality change that lands after stop() finds no canvas, and says nothing.
+            const late = await evaluate(`(() => { const m = WP.stage.manager; m.stop(); try { m.onQuality(WP.host.quality); return 'ok'; } catch (e) { return String(e); } })()`);
+            if (late !== 'ok') record(`onQuality after stop: ${late}`);
+            return true;
+        }],
+        ['a phone with a gesture bar: cards wrap, nothing under the inset', async () => {
+            await cdp.send('Emulation.setDeviceMetricsOverride', { width: 412, height: 915, deviceScaleFactor: 2.625, mobile: true });
+            for (const view of ['days', 'hours', 'now']) {
+                await stageWith('weather', { configVersion: 1, view }, '&insets=0,0,48,0');
+                await sleep(300);
+                const l = await counts('({ rows: m.layout.rows, bottom: m.layout.bottom, box: m.layout.box, H: innerHeight, W: innerWidth })');
+                if (view === 'days' && l.rows < 2) record(`5 cards in ${l.rows} row on a phone`);
+                if (l.bottom > l.H - 48) record(`${view}: drawn down to ${l.bottom.toFixed(0)}, under the 48 px inset (${l.H})`);
+                if (l.box.x < 0 || l.box.x + l.box.w > l.W) record(`${view}: wider than the screen`);
+            }
+            const { data } = await cdp.send('Page.captureScreenshot', { format: 'png' });
+            writeFileSync(join(SHOTS, 'weather-phone.png'), Buffer.from(data, 'base64'));
+            await cdp.send('Emulation.clearDeviceMetricsOverride');
+            return true;
+        }],
+        ['?date= at night gives the night sky, at noon the day', async () => {
+            const sky = {};
+            for (const [name, time] of [['night', '23:30'], ['noon', '12:00']]) {
+                await bootStage(`w=weather&date=2026-11-05T${time}`);
+                await sleep(400);
+                sky[name] = { phase: await evaluate('WP.stage.manager.skyState.phase'), colour: await evaluate(AVERAGE) };
+            }
+            const light = c => c[0] + c[1] + c[2];
+            if (sky.night.phase !== 'night' || sky.noon.phase !== 'day') record(`phases: ${sky.night.phase} at night, ${sky.noon.phase} at noon`);
+            if (!(light(sky.noon.colour) > light(sky.night.colour) * 2)) record(`noon ${sky.noon.colour} is not brighter than night ${sky.night.colour}`);
+            return true;
+        }],
+        ['a tap on a day shows its hours; a tap outside goes back', async () => {
+            await bootStage('w=weather');
+            const card = await evaluate('WP.stage.manager.layout.hits[1]');
+            await mouse('mousePressed', card.x + card.w / 2, card.y + card.h / 2);
+            await mouse('mouseReleased', card.x + card.w / 2, card.y + card.h / 2);
+            await sleep(200);
+            const open = await counts('({ view: m.layout.view, date: m.selected?.date, hours: m.scenes.length })');
+            if (open.view !== 'hours' || open.date !== card.date || !open.hours) record(`after a tap: ${JSON.stringify(open)}`);
+            await mouse('mousePressed', 4, 4);
+            await mouse('mouseReleased', 4, 4);
+            await sleep(200);
+            if (await evaluate('WP.stage.manager.layout.view') !== 'days') record('a tap outside did not go back');
+            return true;
+        }],
+    ],
+    'world-clock': [
+        ['V cycles the map, the faces and the board, each drawn', async () => {
+            await bootStage('w=world-clock&date=2026-11-05T17:50');
+            const seen = [await evaluate('WP.stage.manager.layout.view')];
+            for (let i = 0; i < 3; i++) {
+                await press('v');
+                await sleep(1800);   // past the crossfade, and the board's flaps
+                const view = await evaluate('WP.stage.manager.layout.view');
+                seen.push(view);
+                if (await evaluate(DRAWN) < 2) record(`${view}: nothing drawn`);
+                if (i < 2) await shoot(`world-clock-${view}`);
+            }
+            if (seen.join() !== 'map,faces,board,map') record(`views went ${seen.join(' → ')}`);
+            return true;
+        }],
+        ['every map look draws; L steps through them', async () => {
+            for (const look of ['atlas', 'blueprint', 'paper']) {
+                await stageWith('world-clock', { configVersion: 1, mapStyle: look }, '&date=2026-11-05T17:50');
+                await sleep(400);
+                if (await evaluate(DRAWN) < 2) record(`${look}: nothing drawn`);
+                await shoot(`world-clock-${look}`);
+            }
+            await bootStage('w=world-clock');
+            const looks = [];
+            for (let i = 0; i < 4; i++) { await press('l'); looks.push(await evaluate('WP.stage.manager.config.mapStyle')); }
+            if (looks.join() !== 'atlas,blueprint,paper,night-lights') record(`L went ${looks.join(' → ')}`);
+            // Low: no twilight bands and no city lights, still a whole night.
+            await bootStage('w=world-clock&tier=low&date=2026-11-05T17:50');
+            await sleep(400);
+            if (await counts(`m.fx('twilight') || m.fx('cityLights')`)) record('Low kept its effects');
+            if (await evaluate(DRAWN) < 2) record('Low: nothing drawn');
+            await shoot('world-clock-low');
+            return true;
+        }],
+        ['the June solstice: the far north in daylight, the far south in night', async () => {
+            // Without the city lights, the night layer is the darkness alone.
+            await stageWith('world-clock', { configVersion: 1, cityLights: false }, '&date=2026-06-21T12:00:00Z');
+            await sleep(300);
+            // The darkness's alpha along the top and bottom rows of the map.
+            const rows = await evaluate(`(() => {
+                const c = WP.stage.manager.views.map.night, p = document.createElement('canvas');
+                p.width = c.width; p.height = c.height;
+                const g = p.getContext('2d', { willReadFrequently: true });
+                g.drawImage(c, 0, 0);
+                const row = y => { const d = g.getImageData(0, y, c.width, 1).data; let s = 0; for (let i = 3; i < d.length; i += 4) s += d[i]; return s / c.width; };
+                return { north: row(2), south: row(c.height - 3) };
+            })()`);
+            if (!(rows.north < 8)) record(`the far north is dark (alpha ${rows.north.toFixed(1)})`);
+            if (!(rows.south > 120)) record(`the far south isn't dark (alpha ${rows.south.toFixed(1)})`);
+            // And on screen: the top of the map brighter than its bottom.
+            const lit = await evaluate(`(() => {
+                const m = WP.stage.manager.views.map, c = document.querySelector('canvas'), d = WP.stage.manager.dpr;
+                const p = document.createElement('canvas'); p.width = c.width; p.height = c.height;
+                const g = p.getContext('2d', { willReadFrequently: true }); g.drawImage(c, 0, 0);
+                const at = y => { const px = g.getImageData(0, Math.round(y * d), c.width, 1).data; let s = 0; for (let i = 0; i < px.length; i += 4) s += px[i] + px[i + 1] + px[i + 2]; return s / c.width; };
+                return { north: at(m.top + 2), south: at(m.top + m.mh - 3) };
+            })()`);
+            if (!(lit.north > lit.south * 1.5)) record(`on screen the north (${lit.north.toFixed(0)}) isn't lit against the south (${lit.south.toFixed(0)})`);
+            return true;
+        }],
+        ['city lights only on the night side, each by its own sun', async () => {
+            await stageWith('world-clock', { configVersion: 1 }, '&date=2026-11-05T22:50:00Z');
+            await sleep(400);
+            const lights = await counts(`(() => {
+                const map = m.views.map, c = map.night, ms = map.ms, date = WP.host.now(), sun = WorldClockMath.subsolar(date);
+                const p = document.createElement('canvas'); p.width = c.width; p.height = c.height;
+                const g = p.getContext('2d', { willReadFrequently: true }); g.drawImage(c, 0, 0);
+                const data = g.getImageData(0, 0, c.width, c.height).data;
+                const [r0] = map.look.night;
+                const at = s => { const x = Math.floor((s.x + s.r / 2) * ms), y = Math.floor((s.y + s.r / 2) * ms); return x < 0 || y < 0 || x >= c.width || y >= c.height ? null : (y * c.width + x) * 4; };
+                let day = 0, dayLit = 0, night = 0, nightLit = 0;
+                // The cities' own bright specks (the large ones), well inside the day or the night.
+                for (const s of map.specks || []) {
+                    if (s.a < 0.9) continue;
+                    const alt = WorldClockMath.sunAltitude(s.lat, s.lon, date, sun), o = at(s);
+                    if (o === null) continue;
+                    if (alt > 5) { day++; if (data[o + 3] > 0) dayLit++; }
+                    if (alt < -20) { night++; if (data[o] > r0 + 60) nightLit++; }
+                }
+                return { day, dayLit, night, nightLit, specks: (map.specks || []).length };
+            })()`);
+            if (!lights.specks) record('no city lights at all');
+            if (lights.day < 5 || lights.night < 5) record(`too few cities to judge: ${JSON.stringify(lights)}`);
+            if (lights.dayLit) record(`${lights.dayLit} of ${lights.day} cities in daylight are lit`);
+            if (lights.nightLit < lights.night * 0.8) record(`only ${lights.nightLit} of ${lights.night} cities deep in the night are lit`);
+            return true;
+        }],
+        ['the March equinox: the night\'s edges are near-vertical', async () => {
+            for (const twilight of ['sharp', 'soft']) {
+                await stageWith('world-clock', { configVersion: 1, twilight, cityLights: false }, '&date=2026-03-20T14:46:00Z');
+                await sleep(300);
+                const edges = await evaluate(`(() => {
+                    const c = WP.stage.manager.views.map.night, p = document.createElement('canvas');
+                    p.width = c.width; p.height = c.height;
+                    const g = p.getContext('2d', { willReadFrequently: true });
+                    g.drawImage(c, 0, 0);
+                    let top = 0;
+                    const d = g.getImageData(0, Math.round(c.height / 2), c.width, 1).data;
+                    for (let i = 3; i < d.length; i += 4) top = Math.max(top, d[i]);
+                    // Where each row crosses into the night (west) and out of it (east).
+                    return [60, 30, 0, -30, -60].map(lat => {
+                        const y = Math.round((90 - lat) / 180 * c.height), row = g.getImageData(0, y, c.width, 1).data, cut = top * ${twilight === 'sharp' ? 0.2 : 0.5};
+                        const cross = [];
+                        for (let x = 1; x < c.width; x++) if ((row[x * 4 + 3] > cut) !== (row[x * 4 - 1] > cut)) cross.push(x / c.width);
+                        return cross;
+                    });
+                })()`);
+                if (edges.some(e => e.length !== 2)) { record(`${twilight}: edges per row ${edges.map(e => e.length).join()}`); continue; }
+                for (const side of [0, 1]) {
+                    const xs = edges.map(e => e[side]), spread = Math.max(...xs) - Math.min(...xs);
+                    if (spread > (twilight === 'sharp' ? 0.006 : 0.03)) record(`${twilight}: the ${side ? 'eastern' : 'western'} edge leans (${(spread * 100).toFixed(1)}% of the width)`);
+                }
+                const width = edges[2][1] - edges[2][0];
+                if (Math.abs(width - 0.5) > (twilight === 'sharp' ? 0.01 : 0.06)) record(`${twilight}: the night is ${(width * 100).toFixed(0)}% of the world`);
+            }
+            return true;
+        }],
+        ['a custom Fixture=Asia/Kathmandu shows UTC+5:45; a bad zone is in the panel\'s status', async () => {
+            await stageWith('world-clock', { configVersion: 1, custom: 'Fixture=Asia/Kathmandu' });
+            await sleep(300);
+            const card = await counts(`m.layout.cards.find(c => c.text.startsWith('Fixture'))?.text`);
+            if (!card || !card.includes('UTC+5:45')) record(`the Fixture card says ${card}`);
+            for (const view of ['faces', 'board']) {
+                await stageWith('world-clock', { configVersion: 1, view, custom: 'Fixture=Asia/Kathmandu' });
+                await sleep(2500);
+                const text = await counts(view === 'faces' ? `m.layout.faces.find(f => f.text.startsWith('Fixture'))?.text` : `m.layout.shown.find(r => r.startsWith('FIXTURE'))`);
+                if (!text || !text.includes('5:45')) record(`${view}: the Fixture row says ${JSON.stringify(text)}`);
+            }
+            await fresh(`${WEB}/index.html?w=world-clock&panel=open`, { 'wp:world-clock': { configVersion: 1, custom: 'Fixture=Asia/Kathmandu, Nowhere=Mars/Olympus' } });
+            const status = await waitFor(() => evaluate(`document.querySelector('#panel .setting-status[data-name=custom]:not([hidden])')?.textContent`), 6000);
+            if (!status || !status.includes('Mars/Olympus')) record(`panel status: ${JSON.stringify(status)}`);
+            return true;
+        }],
+        ['a phone with a gesture bar, a taskbar: everything above the inset', async () => {
+            const phone = { width: 412, height: 915, deviceScaleFactor: 2.625, mobile: true };
+            for (const [size, viewport] of [['phone', phone], ['desktop', null]]) {
+                for (const view of ['map', 'faces', 'board']) {
+                    if (viewport) await cdp.send('Emulation.setDeviceMetricsOverride', viewport);
+                    else await cdp.send('Emulation.clearDeviceMetricsOverride');
+                    await stageWith('world-clock', { configVersion: 1, view, cities: ['local', 'utc', 'new-york', 'london', 'tokyo', 'sydney', 'kolkata', 'sao-paulo'] }, '&insets=0,0,48,0&date=2026-11-05T17:50');
+                    await sleep(view === 'board' ? 2500 : 400);
+                    const l = await counts('({ bottom: m.layout.bottom, H: innerHeight, W: innerWidth, cards: m.layout.cards, board: m.layout.board })');
+                    if (!(l.bottom > 0)) record(`${size} ${view}: nothing laid out`);
+                    if (l.bottom > l.H - 48) record(`${size} ${view}: drawn down to ${l.bottom.toFixed(0)}, under the 48 px inset (${l.H})`);
+                    for (const c of l.cards || []) if (c.x < 0 || c.x + c.w > l.W + 0.5 || c.y < 0) record(`${size}: ${c.id}'s label is off screen`);
+                    if (l.board && (l.board.x < 0 || l.board.x + l.board.w > l.W)) record(`${size}: the board is wider than the screen`);
+                    if (size === 'phone') await shoot(`world-clock-phone-${view}`);
+                }
+            }
+            await cdp.send('Emulation.clearDeviceMetricsOverride');
+            return true;
+        }],
+        ['still, it idles: about a frame a second on every view', async () => {
+            for (const view of ['map', 'faces', 'board']) {
+                await stageWith('world-clock', { configVersion: 1, view, seconds: view === 'faces' });
+                await sleep(view === 'board' ? 3000 : 1200);
+                const fps = await stageFps(4000);
+                if (fps > 1.6 || fps < 0.5) record(`${view}: ${fps.toFixed(2)} fps while still`);
+            }
+            return true;
+        }],
+        ['the board gains its DAY column when a city rolls over to tomorrow', async () => {
+            // Seen from New York at 09:55, Tokyo is at 23:55 the same day: no DAY column.
+            await cdp.send('Emulation.setTimezoneOverride', { timezoneId: 'America/New_York' });
+            try {
+                await stageWith('world-clock', { configVersion: 1, view: 'board' }, '&date=2026-11-05T14:55:00Z');
+                await sleep(2500);
+                const before = await counts('m.views.board.plan.columns.map(c => c.key).join()');
+                if (before.includes('day')) record(`before midnight in Tokyo the board has ${before}`);
+                // Ten minutes on: Tokyo is in tomorrow.
+                await evaluate('(now => { WP.host.now = () => new Date(now().getTime() + 600000); })(WP.host.now); WP.stage.manager.wake()');
+                if (!await waitFor(() => counts(`m.views.board.plan.columns.some(c => c.key === 'day') && m.layout.rows.some(r => r.startsWith('TOKYO') && r.includes('FRI'))`), 4000)) {
+                    record(`after Tokyo's midnight: ${JSON.stringify(await counts('({ columns: m.views.board.plan.columns.map(c => c.key), rows: m.layout.rows })'))}`);
+                }
+            } finally {
+                await cdp.send('Emulation.setTimezoneOverride', { timezoneId: '' });
+            }
+            return true;
+        }],
+        ['a tap on a city makes it home, and the map recentres there; M steps the centre', async () => {
+            await bootStage('w=world-clock&date=2026-11-05T17:50');
+            await sleep(300);
+            const card = await counts(`m.layout.cards.find(c => c.id === 'tokyo')`);
+            if (!card) return record('no Tokyo card');
+            await mouse('mousePressed', card.x + card.w / 2, card.y + card.h / 2);
+            await mouse('mouseReleased', card.x + card.w / 2, card.y + card.h / 2);
+            await waitFor(() => counts('Math.abs(m.views.map.centre - 139.69) < 0.1'), 4000);
+            const after = await counts('({ home: m.home, centre: m.views.map.centre, highlighted: m.infos.find(i => i.home)?.id })');
+            if (after.home !== 'tokyo' || after.highlighted !== 'tokyo' || Math.abs(after.centre - 139.69) > 0.1) record(`after a tap: ${JSON.stringify(after)}`);
+            await shoot('world-clock-tokyo');
+            await press('m');
+            if (!await waitFor(() => counts(`m.config.center === 'greenwich' && !m.home && Math.abs(m.views.map.centre) < 0.1`), 4000)) record(`M: ${JSON.stringify(await counts('({ center: m.config.center, centre: m.views.map.centre })'))}`);
+            return true;
+        }],
+    ],
+    // The Orrery (SPEC §10.26): the real sky in three looks, time-lapse,
+    // cards, and a still picture that costs nothing.
+    orrery: [
+        ['each look draws, tilted too; L steps through them', async () => {
+            for (const [name, settings] of [['space', {}], ['brass', { look: 'brass' }], ['chart', { look: 'chart' }], ['chart-night', { look: 'chart', chartPalette: 'night' }],
+                ['tilted', { view: 'tilted' }], ['brass-tilted', { look: 'brass', view: 'tilted' }], ['inner', { scale: 'inner' }], ['true', { scale: 'true', showPluto: true }]]) {
+                await stageWith('orrery', { configVersion: 1, ...settings }, '&date=2026-11-05T21:00');
+                await sleep(500);
+                if (await evaluate(DRAWN) < 2) record(`${name}: nothing drawn`);
+                const bad = await counts(`Object.entries(m.debugPositions().bodies).filter(([, p]) => ![p.x, p.y, p.r].every(Number.isFinite)).map(([id]) => id)`);
+                if (bad.length) record(`${name}: not finite: ${bad.join()}`);
+                await shoot(`orrery-${name}`);
+            }
+            await bootStage('w=orrery');
+            const looks = [];
+            for (let i = 0; i < 3; i++) { await press('l'); looks.push(await counts('m.config.look')); }
+            if (looks.join() !== 'brass,chart,space') record(`L went ${looks.join(' → ')}`);
+            const scales = [];
+            for (let i = 0; i < 3; i++) { await press('s'); scales.push(await counts('m.config.scale')); }
+            if (scales.join() !== 'true,inner,compressed') record(`S went ${scales.join(' → ')}`);
+            return true;
+        }],
+        ['Mars at opposition (2025-01-16): on the Earth\'s ray from the Sun, at every scale', async () => {
+            for (const settings of [{}, { scale: 'true' }, { scale: 'inner' }, { look: 'brass' }, { view: 'tilted', drift: false }]) {
+                await stageWith('orrery', { configVersion: 1, ...settings }, '&date=2025-01-16T12:00:00Z');
+                await sleep(300);
+                const p = await counts('m.debugPositions()');
+                const angle = id => Math.atan2(p.bodies[id].y - p.sun.y, p.bodies[id].x - p.sun.x) * 180 / Math.PI;
+                const off = Math.abs(((angle('mars') - angle('earth')) % 360 + 540) % 360 - 180);
+                const farther = Math.hypot(p.bodies.mars.x - p.sun.x, p.bodies.mars.y - p.sun.y) > Math.hypot(p.bodies.earth.x - p.sun.x, p.bodies.earth.y - p.sun.y);
+                if (off > 2 || !farther) record(`${JSON.stringify(settings)}: Mars is ${off.toFixed(2)}° off the Earth's ray${farther ? '' : ', and nearer the Sun'}`);
+                if (!settings.scale && !settings.look && !settings.view) {
+                    const retro = await counts(`m.scene.bodies.find(b => b.id === 'mars').retro`);
+                    if (!retro) record('Mars at opposition is not retrograde');
+                }
+            }
+            return true;
+        }],
+        ['= speeds up with a toast and the date runs; - slows; 0 is now again', async () => {
+            await fresh(`${WEB}/index.html?w=orrery`);
+            await waitFor(() => evaluate('WP.player?.stage?.ready'));
+            await sleep(400);
+            await press('=');
+            const toast = await waitFor(() => evaluate(`document.getElementById('toast').classList.contains('show') && document.getElementById('toast').textContent`), 2000);
+            if (!toast || !toast.includes('1 h/s')) record(`no speed toast (got ${JSON.stringify(toast)})`);
+            await bootStage('w=orrery');
+            await sleep(300);
+            const start = await counts('m.sim');
+            await press('=');
+            await press('+');
+            const said = await counts('({ speed: m.config.speed, said: m.said })');
+            if (said.speed !== 'day' || !said.said?.includes('1 day/s')) record(`= = gave ${JSON.stringify(said)}`);
+            await sleep(1500);
+            const run = await counts('({ sim: m.sim, line: m.debugPositions().readout[0] })');
+            const days = (run.sim - start) / 86400000;
+            if (days < 0.8 || days > 3) record(`1.5 s at 1 day/s moved ${days.toFixed(2)} days`);
+            if (!/^1 day\/s · .+ · (March|June|September|December) (equinox|solstice)/.test(run.line)) record(`readout: ${run.line}`);
+            await sleep(1200);
+            if (await counts('m.debugPositions().readout[0]') === run.line && await counts('m.sim') === run.sim) record('the date readout stood still');
+            await press('-');
+            if (await counts('m.config.speed') !== 'hour') record('- did not slow to 1 h/s');
+            await press('0');
+            const back = await counts('({ speed: m.config.speed, gap: Math.abs(m.sim - WP.host.now().getTime()), said: m.said })');
+            if (back.speed !== 'live' || back.gap > 5000 || !back.said.includes('now')) record(`0 gave ${JSON.stringify(back)}`);
+            return true;
+        }],
+        ['far dates: clamped to 1000–3000, flagged approximate, never NaN', async () => {
+            await bootStage('w=orrery&date=1650-06-01T00:00:00Z');
+            await sleep(300);
+            const early = await counts('({ line: m.debugPositions().readout[0], finite: Object.values(m.debugPositions().bodies).every(p => Number.isFinite(p.x + p.y)) })');
+            if (!early.line.includes('approximate') || !early.finite) record(`1650: ${JSON.stringify(early)}`);
+            // A clock in the first century (the long table's clamp starts at 1000).
+            await evaluate('WP.host.now = () => new Date(-61e12); WP.stage.manager.wake()');
+            await sleep(300);
+            if (await counts('new Date(m.sim).getUTCFullYear()') !== 1000) record(`a first-century clock gave ${await counts('new Date(m.sim).toISOString()')}`);
+            await stageWith('orrery', { configVersion: 1, speed: 'year' });
+            await evaluate('WP.stage.manager.sim = Date.UTC(2999, 11, 1)');
+            await sleep(1500);
+            const end = await counts('({ year: new Date(m.sim).getUTCFullYear(), finite: Object.values(m.debugPositions().bodies).every(p => Number.isFinite(p.x + p.y)), line: m.debugPositions().readout[0] })');
+            if (end.year !== 2999 || !end.finite || !end.line.includes('approximate')) record(`at the end of the tables: ${JSON.stringify(end)}`);
+            return true;
+        }],
+        ['a tap on a planet shows its card; on empty space it goes', async () => {
+            await bootStage('w=orrery&date=2026-11-05T21:00');
+            await sleep(300);
+            for (const id of ['mars', 'jupiter', 'earth']) {
+                const p = await counts(`m.debugPositions().bodies.${id}`);
+                await mouse('mousePressed', p.x, p.y);
+                await mouse('mouseReleased', p.x, p.y);
+                await sleep(200);
+                const card = await counts('m.debugPositions().card');
+                if (!card || !card.title.includes(id[0].toUpperCase() + id.slice(1))) { record(`${id}: card ${JSON.stringify(card)}`); continue; }
+                const text = card.lines.join(' | ');
+                if (!/AU from the Sun · [\d.]+ light-minutes/.test(text)) record(`${id}: no distance from the Sun: ${text}`);
+                if (id !== 'earth' && !/AU from the Earth/.test(text)) record(`${id}: no distance from the Earth: ${text}`);
+                if (id !== 'earth' && !/In our sky: [A-Z]/.test(text)) record(`${id}: no constellation: ${text}`);
+                if (id !== 'earth' && !/Retrograde|Moving east/.test(text)) record(`${id}: no motion: ${text}`);
+                if (card.x < 0 || card.y < 0 || card.x + card.w > 1280 || card.y + card.h > 800) record(`${id}: the card is off screen`);
+                if (id === 'mars') await shoot('orrery-card');
+            }
+            // Jupiter's moons, close by Jupiter: the moon's card, not Jupiter's.
+            for (const id of ['callisto', 'io']) {
+                const p = await counts(`m.debugPositions().bodies.${id}`);
+                if (!p) { record(`${id}: not drawn`); continue; }
+                await mouse('mousePressed', p.x, p.y);
+                await mouse('mouseReleased', p.x, p.y);
+                await sleep(200);
+                const card = await counts('m.debugPositions().card');
+                if (!card || !card.title.includes('a moon of Jupiter') || !card.title.toLowerCase().startsWith(id)) record(`${id}: card ${JSON.stringify(card?.title)}`);
+                else if (!/Round Jupiter every [\d.]+ days/.test(card.lines.join(' | '))) record(`${id}: ${card.lines.join(' | ')}`);
+            }
+            await mouse('mousePressed', 30, 760);
+            await mouse('mouseReleased', 30, 760);
+            await sleep(200);
+            if (await counts('m.selected')) record('a tap on empty space kept the card');
+            return true;
+        }],
+        ['a drag turns the tilted camera; from above it asks for no frames', async () => {
+            await stageWith('orrery', { configVersion: 1 });
+            await sleep(300);
+            await cdp.send('Input.dispatchMouseEvent', { type: 'mousePressed', x: 700, y: 500, button: 'left', clickCount: 1 });
+            await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 760, y: 480, button: 'left', buttons: 1 });
+            await sleep(100);
+            if (await counts('!!m.drag')) record('a drag from above holds a drag (and full frame rate)');
+            await cdp.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: 760, y: 480, button: 'left', clickCount: 1 });
+            await stageWith('orrery', { configVersion: 1, view: 'tilted', drift: false });
+            await sleep(300);
+            const before = await counts('({ az: m.camera.az, el: m.camera.el })');
+            await drag([[700, 500], [760, 480], [820, 460], [880, 440]]);
+            const after = await counts('({ az: m.camera.az, el: m.camera.el })');
+            if (Math.abs(after.az - before.az) < 20) record(`the camera turned ${(after.az - before.az).toFixed(1)}°`);
+            return true;
+        }],
+        ['a phone and a taskbar: the ring fits the short side, above the inset', async () => {
+            const phone = { width: 412, height: 915, deviceScaleFactor: 2.625, mobile: true };
+            try {
+                for (const [size, viewport] of [['phone', phone], ['wide', { width: 1600, height: 600, deviceScaleFactor: 1, mobile: false }]]) {
+                    await cdp.send('Emulation.setDeviceMetricsOverride', viewport);
+                    for (const settings of [{}, { look: 'brass' }, { view: 'tilted' }, { look: 'chart' }]) {
+                        await stageWith('orrery', { configVersion: 1, ...settings }, '&insets=0,0,48,0&date=2026-11-05T21:00');
+                        await sleep(400);
+                        const p = await counts('({ ...m.debugPositions(), W: innerWidth, H: innerHeight, plinth: m.base * 1.1 })');
+                        const r = p.ring, name = `${size} ${JSON.stringify(settings)}`;
+                        if (settings.look === 'brass' && r.y1 > p.H - 48 - p.plinth) record(`${name}: the ring reaches ${r.y1.toFixed(0)}, into the plinth at ${(p.H - 48 - p.plinth).toFixed(0)}`);
+                        if (r.x0 < 0 || r.x1 > p.W || r.y0 < 0 || r.y1 > p.H - 48) record(`${name}: the ring ${r.x0.toFixed(0)}–${r.x1.toFixed(0)} × ${r.y0.toFixed(0)}–${r.y1.toFixed(0)} leaves ${p.W}×${p.H - 48}`);
+                        const short = Math.min(p.W, p.H - 48), across = Math.max(r.x1 - r.x0, r.y1 - r.y0);
+                        if (!settings.view && across < short * 0.85) record(`${name}: the ring spans ${across.toFixed(0)} of ${short}`);
+                        if (size === 'phone' && !settings.look) await shoot(`orrery-phone${settings.view ? '-tilted' : ''}`);
+                    }
+                }
+            } finally { await cdp.send('Emulation.clearDeviceMetricsOverride'); }
+            return true;
+        }],
+        ['on battery the corona\'s shimmer stops: a frame a minute', async () => {
+            await fresh(`${WEB}/index.html?w=orrery&tier=medium`);
+            if (!await waitFor(() => inStage('WP.stage?.ready'))) return record('never ready');
+            const fps = async () => { const a = await inStage('WP.host.frames.count'); await sleep(3000); return (await inStage('WP.host.frames.count') - a) / 3; };
+            await sleep(1200);
+            const plugged = await fps();
+            if (plugged < 2) record(`plugged in, the shimmer ran at ${plugged.toFixed(1)} fps`);
+            await evaluate(`WP.power({ battery: { charging: false, level: 0.6 } })`);
+            await sleep(800);
+            const battery = await fps();
+            const reasons = await inStage('WP.host.power.reasons.join()');
+            if (!reasons.includes('battery')) record(`the stage's power reasons: ${reasons}`);
+            if (battery > 0.7) record(`on battery: ${battery.toFixed(1)} fps (want the once-a-minute idle)`);
+            await evaluate(`WP.power({ battery: { charging: true, level: 0.6 } })`);
+            return true;
+        }],
+        ['still and live it idles; time-lapse and drift run', async () => {
+            const cases = [
+                ['live, on Low', '&tier=low', {}, 0, 0.6],
+                ['live, brass', '', { look: 'brass' }, 0, 0.6],
+                ['live, the corona\'s shimmer', '&tier=medium', {}, 2, 9],
+                ['a day a second', '&tier=medium', { speed: 'day' }, 10, 40],
+                ['tilted, drifting', '&tier=medium', { view: 'tilted' }, 10, 40],
+            ];
+            for (const [name, query, settings, low, high] of cases) {
+                await stageWith('orrery', { configVersion: 1, ...settings }, query);
+                await sleep(1200);
+                const fps = await stageFps(3000);
+                if (fps < low || fps > high) record(`${name}: ${fps.toFixed(1)} fps (want ${low}–${high})`);
+            }
+            await cdp.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] });
+            try {
+                await stageWith('orrery', { configVersion: 1 }, '&tier=medium');
+                await sleep(1200);
+                const fps = await stageFps(3000);
+                if (fps > 0.6) record(`reduced motion: ${fps.toFixed(1)} fps`);
+            } finally { await cdp.send('Emulation.setEmulatedMedia', { features: [] }); }
+            // Low sheds the corona's glow and the belt's rocks, and still draws.
+            await bootStage('w=orrery&tier=low');
+            await sleep(400);
+            if (await counts(`m.wants('glow') || m.wants('belt')`)) record('Low kept its effects');
+            if (await evaluate(DRAWN) < 2) record('Low: nothing drawn');
+            await shoot('orrery-low');
+            return true;
+        }],
+    ],
     jellyfin: [
         ['fresh: the idle test card, and nothing asked of any server', async () => {
             jellyfinServer();

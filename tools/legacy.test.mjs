@@ -14,6 +14,7 @@ load('wallpapers/catalog.js');
 load('core/legacy.js');
 const WP = context.WP;
 for (const entry of WP.catalog) {
+    for (const file of entry.settingsScripts || []) load(`wallpapers/${file}`);
     for (const file of ['defaults.js', 'settings.js']) {
         if (existsSync(join(WEB, 'wallpapers', entry.id, file))) load(`wallpapers/${entry.id}/${file}`);
     }
@@ -72,7 +73,7 @@ test('legacy: the chosen wallpaper and advent\'s memory come over; links stay be
     assert.equal(report.current, 'fishtank');
     assert.deepEqual(report.leftBehind.sort(), ['hide mode', 'links']);
     assert.ok(!Object.keys(entries).some(key => /link/i.test(key)), 'links are never imported');
-    assert.equal(run({ wallpaperPreference: 'weather' }).entries['wp:current'], undefined, 'unknown ids are ignored');
+    assert.equal(run({ wallpaperPreference: 'clocks' }).entries['wp:current'], undefined, 'unknown ids are ignored');
 });
 
 test('legacy: the homepage\'s quest wins over the standalone page\'s', () => {

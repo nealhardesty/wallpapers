@@ -4,7 +4,9 @@ Toy animated wallpapers: snow, rain, falling leaves, fireflies, a fireplace,
 northern lights, a fish tank, a Halloween night, an advent calendar, a
 self-playing 8-bit adventure, koi, a zen garden, a night train, fireworks,
 the real satellites overhead, your own Jellyfin videos playing in an old
-TV, a harvest valley for Thanksgiving, and more: 34 in all. Each one is a full-screen canvas
+TV, a harvest valley for Thanksgiving, the weather outside, a world
+clock with the real day and night, an orrery of the solar system right now,
+and more: 37 in all. Each one is a full-screen canvas
 animation with no page around it. Most just play; some also respond to you.
 Click to feed the fish, light the jack-o'-lanterns, rake the sand, or take
 over Pixel Quest's hero with the arrow keys.
@@ -34,7 +36,7 @@ Click one to see it live.
 | [<img src="web/wallpapers/synthwave/thumb.webp" width="200" alt="Synthwave">](https://nealhardesty.github.io/wallpapers/?w=synthwave)<br>🌇 Synthwave | [<img src="web/wallpapers/zen-garden/thumb.webp" width="200" alt="Zen Garden">](https://nealhardesty.github.io/wallpapers/?w=zen-garden)<br>🪨 Zen Garden | [<img src="web/wallpapers/koi-pond/thumb.webp" width="200" alt="Koi Pond">](https://nealhardesty.github.io/wallpapers/?w=koi-pond)<br>🎏 Koi Pond | [<img src="web/wallpapers/murmuration/thumb.webp" width="200" alt="Murmuration">](https://nealhardesty.github.io/wallpapers/?w=murmuration)<br>🐦 Murmuration |
 | [<img src="web/wallpapers/lanterns/thumb.webp" width="200" alt="Lantern Festival">](https://nealhardesty.github.io/wallpapers/?w=lanterns)<br>🏮 Lantern Festival | [<img src="web/wallpapers/rainy-window/thumb.webp" width="200" alt="Rainy Window">](https://nealhardesty.github.io/wallpapers/?w=rainy-window)<br>🪟 Rainy Window | [<img src="web/wallpapers/night-train/thumb.webp" width="200" alt="Night Train">](https://nealhardesty.github.io/wallpapers/?w=night-train)<br>🚆 Night Train | [<img src="web/wallpapers/fireworks/thumb.webp" width="200" alt="Fireworks">](https://nealhardesty.github.io/wallpapers/?w=fireworks)<br>🎆 Fireworks |
 | [<img src="web/wallpapers/lighthouse/thumb.webp" width="200" alt="Lighthouse">](https://nealhardesty.github.io/wallpapers/?w=lighthouse)<br>🌊 Lighthouse | [<img src="web/wallpapers/wiki-pond/thumb.webp" width="200" alt="Wiki Pond">](https://nealhardesty.github.io/wallpapers/?w=wiki-pond)<br>🪷 Wiki Pond | [<img src="web/wallpapers/satellites/thumb.webp" width="200" alt="Satellites">](https://nealhardesty.github.io/wallpapers/?w=satellites)<br>🛰️ Satellites | [<img src="web/wallpapers/jellyfin/thumb.webp" width="200" alt="Jellyfin">](https://nealhardesty.github.io/wallpapers/?w=jellyfin)<br>📺 Jellyfin |
-| [<img src="web/wallpapers/harvest/thumb.webp" width="200" alt="Harvest Valley">](https://nealhardesty.github.io/wallpapers/?w=harvest)<br>🌾 Harvest Valley | | | |
+| [<img src="web/wallpapers/harvest/thumb.webp" width="200" alt="Harvest Valley">](https://nealhardesty.github.io/wallpapers/?w=harvest)<br>🌾 Harvest Valley | [<img src="web/wallpapers/weather/thumb.webp" width="200" alt="Weather">](https://nealhardesty.github.io/wallpapers/?w=weather)<br>🌦️ Weather | [<img src="web/wallpapers/world-clock/thumb.webp" width="200" alt="World Clock">](https://nealhardesty.github.io/wallpapers/?w=world-clock)<br>🌍 World Clock | [<img src="web/wallpapers/orrery/thumb.webp" width="200" alt="Orrery">](https://nealhardesty.github.io/wallpapers/?w=orrery)<br>🪐 Orrery |
 
 The **Fireplace** 🔥 burns wood you'd recognise: furrowed oak, papery birch,
 scaly pine or bleached driftwood (following its Wood Type), round or split,
@@ -52,6 +54,33 @@ night train, fireworks (with a New Year's countdown), a lighthouse that
 keeps a real light's rhythm, every Wikipedia edit as a ripple on a pond, and
 the real satellites crossing your sky. Last, **Jellyfin** 📺 plays your own
 server's videos in a frame of your choice (see below). And for Thanksgiving, **Harvest Valley** 🌾: see below.
+
+**Weather** 🌦️ is the forecast for your place from Open-Meteo (no key),
+over a sky that is the weather outside: drifting clouds, rain or snow,
+fog, lightning, the stars and the real moon at night. As a row of day cards
+(tap one for its hours), the next 24 hours as a ribbon, or right now, large,
+every day and hour with its own little looping scene. Set a place in the
+panel (typed, or from the device); until then it shows a labelled sample,
+and offline it keeps the last forecast with how old it is. `U` switches
+°C and °F without asking the network again.
+
+The **World Clock** 🌍 shows your cities on the world as it is right now: the
+real day and night, with twilight, the sun and the moon overhead and the city
+lights coming on, in four looks (night lights, atlas, blueprint, old paper).
+Or as analog faces, each dial that city's sky, or as a split-flap departures
+board that flips as the minutes turn. Pick cities in the panel, or add any
+time zone as `Label=Area/City`. No network, no location: "Here" is your
+device's time zone.
+
+The **Orrery** 🪐 is the solar system as it is right now, computed in code:
+the eight planets (and Pluto, if you like), the Moon in its real phase,
+Jupiter's four moons, the asteroid belt and Jupiter's Trojans. In deep
+space, as an antique brass machine with turning gears, or as an ink star
+chart with lines of sight showing where each planet is in tonight's sky.
+Compressed, true or inner-planet distances, from above or tilted (drag to
+turn it). `=` runs time forward up to a year a second, `0` comes back to
+now. Tap a planet for how far it is, where it is among the stars, and
+whether it's retrograde.
 
 Also: **Seasonal** 📅 picks by month (the default), **Blank** ⬛ is just
 black, and the **Bing Image of the Day** 🖼️ shows Bing's photo with its
@@ -359,19 +388,27 @@ you tick it, then seven, with the rest folded away:
   one · Rainy Window `W` wipe · Fireworks Space or `L` launch, `G` finale ·
   Lighthouse `L` next light, `S` sea state · Satellites `N` next station pass ·
   Harvest Valley `G` wait for the Great Pumpkin, `H` call the geese, `W` a gust,
-  `M` what the moon is doing.
+  `M` what the moon is doing · Weather `V` next view (days, hours, now), `U` °C or °F,
+  `R` refresh now · World Clock `V` next view (map, faces, board), `M` centre
+  the map on the next place, `L` next map look · Orrery `=`/`+` faster, `-` slower,
+  `0` back to now, `L` look, `S` scale, `V` from above or tilted.
 
 **Touch and drag:** tap or drag on Zen Garden (rake), Koi Pond (ripples;
 feed them in settings), Murmuration (you're the falcon), Lantern Festival,
 Rainy Window (draw in the fog), Fireworks, Pixel Room (the cat and the lamp),
-Harvest Valley (shake an apple tree; tap the scarecrow, or the sky for geese)
-and Satellites (what's that one?). Each has a setting to ignore touch. On
+Harvest Valley (shake an apple tree; tap the scarecrow, or the sky for geese),
+Satellites (what's that one?), Weather (a day's hours; tap outside to go back),
+World Clock (a city becomes home, and the map turns to it; tap it again to go back) and
+the Orrery (tap a planet for its card; drag the tilted view). Each has a setting to ignore touch. On
 Android, a quick sideways swipe changes home screens and never counts.
 
-**Online, but never blank:** Satellites (CelesTrak's orbits), Wiki Pond
-(Wikipedia's live edits) and Lighthouse (Open-Meteo's swell, only with Live
-Swell on) need no keys and draw their own scene offline. Satellites asks
-where you are, in its settings: type a town, or allow your location. It's
+**Online, but never blank:** Weather (Open-Meteo's forecast), Satellites
+(CelesTrak's orbits), Wiki Pond (Wikipedia's live edits) and Lighthouse
+(Open-Meteo's swell, only with Live Swell on) need no keys and draw their own
+scene offline. Weather shows a labelled sample forecast until it knows where
+you are, and the last forecast it got, with its age, when it's offline.
+Weather and Satellites ask where you are, in their settings: type a town, or
+allow your location. It's
 rounded to about 10 km and stays in your browser.
 
 ![Pixel Quest, mid-adventure](docs/quest.webp)
@@ -480,6 +517,7 @@ Run `make` to list every target.
 | `make cert` | Make a fresh self-signed certificate in `.cert/` (localhost and your LAN addresses) |
 | `make bing-json` | Fetch Bing's last eight images of the day into `web/bing.json`, so the Bing wallpaper works when served |
 | `make thumbnails` | Re-render the panel's wallpaper thumbnails (they're committed: review the changes) |
+| `make world-land` | Regenerate World Clock's coastline, `web/wallpapers/world-clock/world-land.js`, from Natural Earth's 1:110m land (downloads it; `LAND=<file>` to use a copy you have). Committed; the same input gives the same file |
 | `make icons` | Render `web/icons/icon.svg` to the PNG icons the extension and web app need (committed) |
 | `make screenshots` | Re-render the README's screenshots in `docs/` (committed: review the changes) |
 | `make extension` | Build the Chrome extension: `dist/extension/` to load unpacked, and a zip |

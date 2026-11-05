@@ -93,7 +93,7 @@
                 extras.push({ control, ...extra });
                 continue;
             }
-            const id = `setting-${control.key}-${group}`;
+            const id = `setting-${control.key}-${group}-${rows.length}`;   // unique, though several controls may share a key (World Clock's cities)
             const label = h('label', { for: id }, text(control.label));
             const reset = h('button', {
                 class: 'setting-reset', type: 'button', hidden: true,

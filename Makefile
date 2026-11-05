@@ -16,7 +16,7 @@ DOTNET ?= $(shell command -v dotnet 2>/dev/null || echo $(HOME)/.dotnet/dotnet)
 DOTNET_FOUND := $(shell command -v $(DOTNET) 2>/dev/null)
 export DOTNET
 
-.PHONY: help hooks open serve serve-https cert bing-json thumbnails icons screenshots extension site android-build android-install android-logcat android-emulator android-release android-keystore android-bench jellyfin-media jellyfin-fixtures jellyfin-dev jellyfin-stop jellyfin-mock mac-build mac-run mac-dev mac-test mac-install mac-uninstall mac-release mac-saver-test mac-saver-live mac-saver-log win-build win-release win-sign win-sign-tools win-unit win-ci win-run win-dev win-reload win-test win-test-zip win-install win-uninstall win-saver win-log docker-build docker-run lint audit audit-staged audit-history test smoke smoke-clock smoke-live bench bench-clock ci clean
+.PHONY: help hooks open serve serve-https cert bing-json thumbnails world-land icons screenshots extension site android-build android-install android-logcat android-emulator android-release android-keystore android-bench jellyfin-media jellyfin-fixtures jellyfin-dev jellyfin-stop jellyfin-mock mac-build mac-run mac-dev mac-test mac-install mac-uninstall mac-release mac-saver-test mac-saver-live mac-saver-log win-build win-release win-sign win-sign-tools win-unit win-ci win-run win-dev win-reload win-test win-test-zip win-install win-uninstall win-saver win-log docker-build docker-run lint audit audit-staged audit-history test smoke smoke-clock smoke-live bench bench-clock ci clean
 
 help: ## List every target
 	@awk 'BEGIN {FS = ":.*## "} /^[a-zA-Z0-9_-]+:.*## / {printf "  \033[36m%-17s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -45,6 +45,9 @@ bing-json: ## Fetch Bing's last eight images of the day into web/bing.json (for 
 
 thumbnails: ## Regenerate the panel's wallpaper thumbnails (committed; review the changes)
 	@node tools/thumbnails.mjs
+
+world-land: ## Regenerate World Clock's coastline from Natural Earth's 1:110m land (downloads it; LAND=<file> to use a copy; committed)
+	@node tools/world-land.mjs $(LAND)
 
 icons: ## Render web/icons/icon.svg to the extension's and web app's PNGs (committed)
 	@node tools/icons.mjs

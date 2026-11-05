@@ -11,30 +11,33 @@ wallpapers' only home. They run in three hosts:
    panel opened by a key.
 2. **Chrome new tab**: the same page, loaded through a Chrome extension
    (or as the browser homepage URL).
-3. **Android live wallpaper**: a future app in `android/` that runs the same
-   web code behind the home screen.
+3. **Android live wallpaper** (`android/`, built): the same web code behind
+   the home screen.
 4. **macOS desktop and screen saver** (`mac/`, §10.21, built).
 5. **Windows desktop, tray app and screen saver** (`windows/`, §10.25,
    designed 2026-11-02; W0 passed, W1–W5 built by 2026-11-05: the app, the
-   installer, the zip and the screen saver; by-hand passes and the first release
-   pending the owner).
+   installer, the zip and the screen saver; first released in v0.11.0
+   (2026-11-05); the owner's by-hand passes and W6, the two-monitor pass, remain).
 
 > Status: **phases 1–9 done** (2026-10-23), except what needs the owner:
 > measurements on a real phone (6.2's numbers, 6.4a), the first signed
 > release (6.6), the switch-over itself (7.2), and trying Phase 8's touch
 > and location, and Jellyfin, on a phone. The player, the stage, the panel
-> and all 34 wallpapers run from `web/index.html`, as a Chrome new-tab extension, on
+> and all 37 wallpapers run from `web/index.html`, as a Chrome new-tab extension, on
 > GitHub Pages at https://nealhardesty.github.io/wallpapers/, and as an
 > Android live wallpaper. Every wallpaper is tiered and within budget.
 > Phase 11 (Harvest Valley, §10.22) added the 34th wallpaper for Thanksgiving.
-> Next: Phase 10, the clock overlay (§4.9, specified 2026-10-28, not built);
-> §10 holds the other ideas.
+> Weather (§10.2), World Clock (§10.3) and the Orrery (§10.26) were built
+> 2026-11-05, making 37.
+> Phase 10, the clock overlay (§4.9), was built 2026-10-28; §10 holds the
+> other ideas.
 > Windows (§10.25): the W0 spikes passed, and W1 (the desktop core: behind
 > the icons on every monitor, the tray, the settings window, the self-test)
 > was built 2026-11-03. W2 (monitors and power), W3 (the mouse) and W4
 > (install, update, uninstall, the zip and the CI `win` job) were built
-> 2026-11-04. W5 (the screen saver) was built 2026-11-05; the owner's by-hand
-> pass (§10.25.16) and the first release wait for the owner.
+> 2026-11-04. W5 (the screen saver) was built 2026-11-05, and v0.11.0, the
+> first release with the Windows app, went out the same day (PR #9 merged). The
+> owner's by-hand passes (§10.25.16) and W6 (two monitors) remain.
 
 ---
 
@@ -50,7 +53,8 @@ wallpapers' only home. They run in three hosts:
   are self-contained and work offline, from `file://`, from
   `chrome-extension://` and from Android assets. Wallpapers that are online
   by nature declare it (`network`, §4.1). Today that is the Bing image of
-  the day (§4.6); a weather-forecast wallpaper is planned. Every online
+  the day (§4.6), the weather forecast, the satellites and the wave
+  and edit streams. Every online
   wallpaper must:
   - show a sensible offline or error state, never a blank screen or a spinner
   - list the hosts it talks to, which feed the audit allowlist, the
@@ -119,6 +123,14 @@ Added for Thanksgiving, drawn in code (design in §10.22):
 | id | Files | Size | Notes |
 |---|---|---|---|
 | `harvest` | harvest-sky.js, harvest-art.js, harvest-actors.js, harvest.js | ~3k lines | Interactive (tap a tree, the scarecrow, the sky); pure sky and astronomy (`HarvestSky`), unit-tested; follows `host.now()`; keys G, H, W, M |
+
+Added in November 2026, drawn in code (design in §10.2):
+
+| id | Files | Size | Notes |
+|---|---|---|---|
+| `weather` | weather-data.js, weather-scenes.js, weather.js | ~1.9k lines | Network: `api.open-meteo.com` (+ the panel's geocoder); needs location; a labelled sample offline; pure data rules (`WeatherData`), unit-tested; interactive (tap a day); keys V, U, R |
+| `world-clock` | world-land.js (generated), world-cities.js, world-clock-math.js, world-clock-art.js, world-clock-map.js, world-clock-faces.js, world-clock-board.js, world-clock.js | ~2.3k lines | No network; Natural Earth land (public domain); the sun, moon, terminator and zones (`WorldClockMath`), unit-tested; follows `host.now()`; interactive (tap a city); keys V, M, L |
+| `orrery` | orrery-math.js, orrery-art.js, orrery-looks.js, orrery.js | ~2.3k lines | No network; Standish's Keplerian elements, the Moon, Jupiter's four, the zodiac and the seasons (`OrreryMath`), unit-tested; follows `host.now()` or time-lapse; interactive (tap a planet, drag the tilted view); keys = + − 0 L S V (§10.26) |
 
 About 1.7 MB of JavaScript in total. **Not imported:** links, weather, clocks,
 search/omniprompt, custom links, status bar, Docker/nginx, the homepage's
@@ -239,7 +251,11 @@ building on it.
 order: `id`, `name`, `icon`, `scripts`, `make(host)`, an optional
 `prepare(manager, host)` hook (run before `init()`), `background`,
 `interactive`, `motion` (`'slow'` gets the slow fps cap), `network`
-(hosts), `cost`, `disabled` (why), and `pseudo` (Seasonal). It's one small
+(hosts), `cost`, `disabled` (why), `pseudo` (Seasonal), and
+`settingsScripts` (data its `settings.js` is built from, loaded before it in
+the panel and the tests: World Clock's cities). A script path may leave the
+wallpaper's folder (`'../core/clockface.js'`): the stage loads
+`wallpapers/<path>`. It's one small
 file, so the player can show names and icons without loading any wallpaper
 code, and the stage loads only the chosen wallpaper's `defaults.js` and
 scripts.
@@ -322,7 +338,7 @@ Phase 4 and 6 take it:
   |---|---|
   | `w=<id>` | Show this wallpaper instead of the saved one, e.g. `index.html?w=fishtank`. An unknown id is ignored, with a console warning |
   | `panel=open` | Open the switcher and settings panel on load (closes as usual with `,` or `Esc`) |
-  | `date=YYYY-MM-DD`, `theme=<id>` | Passed to the wallpaper as `host.params`. Advent uses them for time travel and themes, e.g. `?w=advent&date=2026-12-25` |
+  | `date=YYYY-MM-DD`, `theme=<id>` | Passed to the wallpaper as `host.params`. Advent uses them for time travel and themes, e.g. `?w=advent&date=2026-12-25`. A time may follow (`T23:59` or `T23:59:50`), in local time, or in UTC with a `Z` (`2026-06-21T12:00:00Z`) |
   | `tier=low\|medium\|high` | Pin a performance tier for this load (§4.8), e.g. to see Low on a desktop |
   | `host=android`, `hud=1`, `thumb=1` | Host simulation (§4.3), performance HUD (§4.8), thumbnail mode (§4.7). The Windows app passes `host=windows` (and its saver `host=windows-saver`, W5) |
   | `insets=t,r,b,l` | CSS px kept clear on each edge, on any host (the Windows app passes its taskbar), e.g. `?w=harvest&insets=0,0,48,0`. Malformed values fall back to the host's default (48 px at the bottom on Android, else 0) |
@@ -787,6 +803,9 @@ and the commits.
 | lighthouse | `spray`, `glints` (medium) | Rain, ships, clouds, spray × density; sky, headland and beam sprite baked per resize; onScroll moves the camera |
 | wiki-pond | — | Ripple pool 60 + 140 × density, 8/s × (0.4 + 0.6 × density); pond baked; listens in bursts on Android |
 | satellites | — | Stars × density; sky and ground one layer every 30 s; positions once a second, interpolated; idle until the next second when nothing's up; onScroll |
+| weather | — | Sky a quarter-size gradient on its own layer, painted only when it changes; the forecast one cached layer, rebuilt once a minute; clouds, rain, snow × density, pooled; with nothing moving in the sky, only the scenes' squares repaint; ≤ 20 fps through idleUntil, once a minute under reduced motion |
+| world-clock | `cityLights`, `twilight` (medium) | Background, land and graticule per resize and look; the night once a minute (a 1° altitude grid scaled up, or polygons), lights masked into it; a composed base per centre; once a second, idle between; only recentring, flaps and crossfades take more frames; stars and city lights × density |
+| orrery | `glow`, `belt` (medium) | Starfield, paper or study per resize and look; the plane (orbits, zodiac ring, a quiet belt band) cached per camera; sprites per size bucket (planets, gears); live and still it draws once a minute, with the corona and the belt shimmering at ~7 fps in deep space unless motion is reduced or the effects are shed; belt rocks × density, eased; time-lapse and drift at the slow-motion rate |
 | harvest | `mist`, `beams` (medium) | Land is one baked layer per resize; trees, leaves, apples, geese and clouds are baked sprites; the world is washed once per frame with the hour's light; leaves, apples, smoke, sparks and flocks × density; squirrels × (0.5 + 0.5 density) |
 
 #### In the panel
@@ -1832,7 +1851,7 @@ Built differently from the plan, on the spike's evidence:
 
 ### Phase 10: Clock overlay (owner, 2026-10-28)
 
-Designed in §4.9; none of it is built. Each task is done only when `make ci`
+Designed in §4.9; built 2026-10-28. Each task is done only when `make ci`
 passes, and the visible ones have been looked at in `dist/smoke/` and at
 `?tier=low` and `?host=android`. Each is a commit.
 
@@ -1938,6 +1957,8 @@ or hour.
 - **Units:** follow the locale: °F in the US, °C elsewhere, as the old
   homepage did.
 
+**As built:** three views (`view`, key V): day cards (3–10, wrapping into up to three rows on a phone; tap one for its hours, tap outside to go back), a 24-hour ribbon (smooth temperature curve, rain-chance bars, night shading from `is_day`, sunrise and sunset markers, a scene every three hours) and Now (large, with a table of wind, humidity, UV, sunrise and sunset, and a strip of the next days). Fifteen scenes, one per kind, pure functions of time over baked sprites, with night versions. A snowy day's amount is its fresh snow (`snowfall_sum`, cm or in), not its water. The sky is the current hour's `sky()` phase and kind, crossfading over 2.5 s; over it an ambient layer (`ambient`: off, subtle, full) of soft clouds, rain, snow or hail, fog sheets, lightning, stars and the real moon phase. Cards: glass (darker over a bright sky so white text reads), solid or minimal. Always fetched in metric (10 days, so no setting needs a new request) and converted for display, so `U` switches units without the network. Cached in `host.storage` with its place; a cache for another place isn't shown; an old cache's "now" comes from its hourly forecast. Refreshed every `refreshMinutes` while frames run (so never while hidden, and once on return), retried after 5 minutes on a failure, `R` at most once a minute. States: "Sample forecast · set a place in ⚙︎ settings", the sample dimmed with "Getting the forecast…", "updated 3 h ago · offline", "Couldn't reach Open-Meteo · sample forecast"; the panel's status line says the same at more length. "Weather data by Open-Meteo.com" in the bottom corner, always; the header line ("55° · Clear") sits on the same soft shade, in full white over a bright sky. Frames: 20 fps with rain, snow or lightning outside, 12 with only clouds drifting, 10 with only the scenes moving. Bench (phone, 4× throttle, the sample's clear first day): 2.7% Low, 3.9% Medium, 8.6% High (⚡); a cloudy sky is about 16% at High, rain or snow about 29%, so the catalog says `cost: 'medium'`.
+
 ### 10.3 World clock (owner)
 
 Several timezones, plus the local one. (The clock overlay, §4.9, is a
@@ -1956,6 +1977,50 @@ wallpaper. Its zone list and `format` could feed this later.)
   under ~50 KB.
 - **Cost:** redraws once a second, idle in between. Close to free, and a
   showcase for idle frames.
+
+**As built (November 2026):** three views (`view`, key V). **The map**: the
+world filling the width, centred on Here (its zone's listed city, else its offset's longitude),
+Greenwich, the Pacific or any chosen city (key M), letterboxed into stars on
+tall screens; on a phone the home's time is large in the sky above and the
+labels sit in the sky on leader lines, leaving the map clear. Four looks
+(key L): night lights, atlas (land coloured by latitude), blueprint (a dashed
+terminator) and old paper (an engraved, hatched night). The night is a smooth
+fade through civil, nautical and astronomical twilight (from the sun's
+altitude on a 1° grid, scaled up) or the three bands as polygons; city lights
+are a seeded speckle clustered round every listed city, clipped to the land,
+each lit by its own sun's depth (past 4° with the bands, a smooth fade from
+−2.5° to −10° with the soft night). Three cached layers, built when the map is
+first drawn and let go while another view shows: the land (per resize and
+look), the night (darkness, hatching, lights and terminator in one canvas,
+once a minute) and the base (the background with the map band composed over
+it for the centre); they're kept at a capped scale (at most the pixel ratio,
+4096 px wide, and ~22 M pixels between them), so a 2560×1440 screen at 2×
+holds about 140 MB of canvases instead of 580, and its first frame takes
+~390 ms instead of ~690 (headless Chrome). The labels draw at full resolution.
+The slow work runs outside the frames: the layers and the night on start,
+resize and a settings change, and the minute's rebuild on a timer just past
+the minute (a one-pixel read makes the deferred drawing happen there, not
+in the next frame's `drawImage`). A frame a second that took 20–100 ms once
+a minute read to Auto's governor as too heavy (its p90 over 2 s is just
+those two frames), so it stepped down and crossfaded at full rate. The sun's glow sits at the subsolar point, the moon at the
+sub-lunar point in its phase (`WorldClockMath.sublunar`, the low-precision
+series: within a degree or so of the eclipse of 8 April 2024 in the tests).
+Each city is a dot and a card (name, time, the weekday where it isn't home's,
+offset, ☀/twilight/☾), laid out greedily round its dot, compact when space
+runs out, keeping last time's spot. Tap a city and it's home for the session
+(highlighted, the others' weekdays against it) and the map eases round to it;
+tap it again to go back. **Faces**: a grid with the column count that gives
+the biggest dials; each dial is that city's sky from the sun's altitude
+there, with stars at night and a sun or moon at six; classic, modern or
+minimal. **The board**: split flaps, a row per city, columns dropped on narrow
+screens and re-laid out the second a city rolls into another day (the DAY column) or an offset widens; a digit steps through the digits between, a new board flips in from
+blank. Cities are chips per region in the panel (`settingsScripts` loads
+world-cities.js for it); custom zones are `Label=Area/City`, placed at a
+listed city in that zone (else on the equator at their offset, as a ring),
+with any bad one named in the panel's status. `?date=` with `Z` pins a moment
+for the smoke checks (the June solstice, the March equinox). Bench (phone, 4×
+throttle): 1.6% Low, 1.2% Medium, 1.1% High; the night's rebuild once a minute
+is the p95.
 
 ### 10.4 Map of where you are (owner)
 
@@ -1986,7 +2051,7 @@ Street, terrain or satellite, centred on the current position.
 - `prefers-reduced-motion`: slow, calm defaults (was "later, maybe").
 - *Suggestions:*
   - an **orrery**: the solar system as it is right now, computed in code,
-    no network
+    no network. *Built (November 2026): §10.26.*
   - a **moon and sky**: tonight's real moon phase and the bright planets
   - an **ISS tracker**: folded into §10.20 Satellites
   - a **lava lamp**: metaballs; cheap with idle-free slow motion
@@ -2985,6 +3050,95 @@ server and stay on screen only, as `textContent`. Logs never include the
 server address, token or titles. The smoke run's mock server uses
 made-up titles such as "Test Pattern No. 3".
 
+### 10.26 Orrery (`orrery`, from §10.5, November 2026)
+
+The solar system as it is right now (from `host.now()`), or in time-lapse,
+computed in code with no network: Standish's Keplerian elements (JPL;
+Table 1 for 1800–2050, Tables 2a/2b outside it), Kepler's equation by
+Newton, the Moon from a short Meeus series, Jupiter's four on circular
+orbits, the IAU zodiac and the seasons (`OrreryMath`, Task 5,
+`tools/orrery.test.mjs`).
+
+**As built (November 2026):**
+
+- **Files:** `orrery-math.js` (the sky), `orrery-art.js` (every baked sprite
+  and layer: shaded planets lit from +x and turned to the Sun, the corona and
+  its streamers, ivory and brass balls, toothed gear wheels in three metals,
+  the starfield with its Milky Way, parchment and night paper, the study and
+  the walnut plinth), `orrery-looks.js` (the three looks), `orrery.js` (the
+  manager: time, the scale, the camera, the scene, cards, keys, idling).
+- **Geometry:** positions are J2000 heliocentric AU. A radial scale maps
+  them to plane units and leaves every direction alone, so an opposition is
+  a straight line through the Sun at any scale: `compressed` (r ∝ a^0.45,
+  all eight fit), `true` (linear; the inner planets disappear into the
+  Sun's glare, which is the point), `inner` (r^0.6 out to 3.35 AU, Mercury
+  to the belt). Brass adds a hub offset so the gear train has room. The
+  planets' sizes are exaggerated (∝ radius^0.38 × `planetSize`).
+- **Camera:** `top` (ecliptic north up, the equinox to the right) or
+  `tilted`: perspective from 25° above the plane (50° on a tall screen),
+  drifting 1.2°/s with `drift`, dragged by hand (azimuth and elevation,
+  8°–90°), nudged by Android's home-screen scroll. Both fit the outermost
+  ring to the safe area's short side, above `host.insets.bottom` (and the
+  brass plinth). Flat things lying on the plane (ring lettering, gears) are
+  drawn through the local affine of the projection, so they lie down in the
+  tilted view and turn upright where they'd read upside down.
+- **The looks** (`look`, key L): *space*: stars, a baked corona with two
+  counter-turning streamer sprites, planets with night sides and polar-view
+  bands, Saturn's and Uranus's rings in their real orientation (from the IAU
+  poles, split behind and in front of the ball), halos (`glow`), comet-like
+  trails, the belt. *brass*: an engraved brass zodiac ring with glyphs and
+  degree ticks, a brass Sun on its pillar, four concentric wheels (bronze,
+  brass, steel) each turning with its planet's arm and three pinions meshing
+  the other way, arms from the hub at stepped heights with posts up to ivory
+  balls, counterweights, the Moon on its own small arm, wire rings, a walnut
+  plinth. *chart*: ink on parchment or night (`chartPalette`), a ruled
+  border, a glyph legend where there's room, 1° ticks, the constellations
+  lettered round the ring, ♈︎ at the J2000 equinox, planets as half-hatched
+  circles with their glyphs and a red R when retrograde, the Moon in its
+  phase, and lines of sight from the Earth to each planet and on to where it
+  sits on the ring. The legend is drawn with the overlay, so it follows the
+  ring, and says "From above the ecliptic" only from above. In the
+  compressed and inner scales a line of sight bends at the planet: the
+  radial scale keeps every direction from the Sun true, but it can't keep
+  the Earth, the planet and the sky point in line too (only `true` can), so
+  the solid line runs Earth → planet and the dotted one planet → its true
+  place on the ring.
+- **The zodiac** (`zodiac`): the thirteen IAU constellations the ecliptic
+  crosses (Ophiuchus included), or the twelve equal tropical signs, whose
+  boundaries are drawn 1.397°/century back from the J2000 frame. Cards name
+  the constellation, and the sign too when signs are chosen.
+- **The belt:** a seeded pool of 1500 main-belt rocks (Kirkwood gaps
+  empty, each at its own Kepler rate, a little eccentric and inclined) and
+  340 Trojans librating round Jupiter's L4 and L5; drawn count = pool ×
+  density, eased in and out, half again as bright at the inner scale, where
+  it's spread over the screen. With `belt` shed (Low) a faint band (a
+  stipple on the chart) stands in.
+- **Time** (`speed`, keys `=`/`+`, `-`, `0`): live, 1 h, 1 day, 1 week,
+  1 month or 1 year a second, from the date on screen; `0` goes back to now
+  and live. A toast names the speed and date. Clamped to 1000–2999 (within
+  the long table's span, in four-digit years); at the end it holds, with a
+  toast. The readout: "1 day/s · 12 Mar 2031 · March equinox in 8 days"
+  (named by month, not season, since spring in the north is autumn in the
+  south; · approximate outside 1800–2050), the Moon's phase
+  (drawn) and constellation, and which planets are retrograde.
+- **Cards:** tap a planet, the Moon, one of Jupiter's four (on a tight
+  radius, checked before Jupiter's own) or the Sun: distance from the Sun and
+  the Earth in AU and light-minutes, the constellation it's in from here,
+  its elongation (evening or morning sky, or too near the Sun), retrograde
+  or not, its year; Jupiter's moons and the Moon have their own. A tap on
+  empty space closes it; `touch` off ignores taps and drags.
+- **Keys:** `=` `+` faster, `-` slower, `0` now, `L` look, `S` scale, `V`
+  top or tilted.
+- **Cost:** live and still, one frame a minute (the readout's clock), or
+  ~4 fps of corona and belt shimmer in deep space unless motion is reduced,
+  the device is on battery (the power policy's reasons) or the effects are
+  shed; every look draws from a cached background and a cached plane; a
+  drag from above (which turns nothing) asks for no frames. Bench (phone,
+  4× throttle): 0.9% Low, 5.3% Medium, 8.4% High (⚡). Smoke: every look and scale draws; Mars at the 2025-01-16 opposition
+  on the Earth's ray from the Sun at every scale and view; `=`, `-`, `0` and
+  the toast; far dates clamped, flagged and finite; cards; drag; a phone
+  and a taskbar inset; the idle and running frame rates.
+
 ---
 
 ## Open questions
@@ -3063,7 +3217,7 @@ the import.
 | Settings in that origin's `localStorage` | Import (below) | ✓ |
 | A Chrome new-tab extension asking for storage, geolocation and three hosts | One host (Bing), no other permissions, a pinned ID (§5) | ✓ fewer permissions |
 | Docker and nginx | The container, `make serve`, GitHub Pages | ✓ |
-| Links, weather, search, clocks | Left behind by decision; weather and a world clock are ideas 10.2 and 10.3 | — |
+| Links, weather, search, clocks | Left behind by decision; weather and a world clock were built later (§10.2, §10.3) | — |
 
 **Moving settings** (`core/legacy.js`, loaded only on Import): the README's
 console snippet saves the old wallpaper keys (never the links) as
@@ -4809,8 +4963,8 @@ Task Manager; RDP in and out; the saver from Windows' dialog; uninstall.
   `update (busy exe)` and `uninstall` against the test layout. The real
   install and uninstall ran by `make win-install` / `win-uninstall` on the
   owner's PC (Settings kept, byte-identical); the `win` job passed on
-  `windows-2025` (run 3 of 3, 1m14s). **Nothing is tagged or released: the
-  first release (v0.11.0, §10.25.20) waits for the owner's OK.**
+  `windows-2025` (run 3 of 3, 1m14s). (At W4 nothing was tagged; v0.11.0 was
+  released after W5, 2026-11-05.)
   - **Still to check by hand (owner, at the console, then over RDP).** Agents
     can't click the tray, Settings → Apps or the taskbar, so none of this was
     done; record the results here.
@@ -4930,7 +5084,7 @@ Task Manager; RDP in and out; the saver from Windows' dialog; uninstall.
         runs from Windows' dialog on this PC (a separate file, a separate hash
         from the exe's).
     16. *The release (the controller bumps and tags; the owner verifies).*
-        `version` goes to 0.11.0 and `v0.11.0` is tagged after the owner's OK;
+        `version` went to 0.11.0 and `v0.11.0` was tagged 2026-11-05 (done);
         download `wallpapers-windows-0.11.0.zip` from the release, check the
         `.sha256`, and repeat W4 item 1, then 1 to 5 above, from that download.
   - **Changed from the design:** `/c` brings up the app's own options window
@@ -5056,7 +5210,8 @@ Task Manager; RDP in and out; the saver from Windows' dialog; uninstall.
   that release with a warning, as the Mac's does. If the runner proves flaky,
   switching to advice is one `if` in `ci.yml`.
 - The exe stays self-contained (~52 MB).
-- The first release, v0.11.0, waits for the owner's explicit OK.
+- The first release, v0.11.0, waited for the owner's explicit OK (given with
+  W5; released 2026-11-05).
 
 #### 10.25.21 Spike results
 

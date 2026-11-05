@@ -117,6 +117,13 @@ test('clock: a date and time start at that moment, and tick past midnight', () =
     assert.equal(WP.parseDate('2026-12-31T24:00'), null);
 });
 
+test('clock: a time with Z is that moment in UTC, wherever the test runs', () => {
+    assert.equal(WP.parseDate('2026-06-21T12:00:00Z').getTime(), Date.UTC(2026, 5, 21, 12));
+    assert.equal(WP.parseDate('2026-03-20T14:46Z').getTime(), Date.UTC(2026, 2, 20, 14, 46));
+    assert.equal(WP.parseDate('2026-02-30T12:00Z'), null);
+    assert.equal(WP.parseDate('2026-06-21Z'), null, 'a Z needs a time');
+});
+
 test('settings: stored overrides merge over defaults', () => {
     const merged = WP.mergeSettings(defaults, { configVersion: 2, count: 20 });
     assert.deepEqual(plain(merged), { configVersion: 2, count: 20, colours: ['red', 'blue'], on: true });
@@ -264,7 +271,7 @@ test('catalog: unique ids, and every script and defaults file exists', () => {
     const ids = WP.catalog.map(entry => entry.id);
     assert.equal(new Set(ids).size, ids.length);
     for (const entry of WP.catalog.filter(e => !e.pseudo && e.scripts.length)) {
-        for (const script of entry.scripts) assert.ok(existsSync(join(WEB, 'wallpapers', script)), script);
+        for (const script of [...entry.scripts, ...entry.settingsScripts || []]) assert.ok(existsSync(join(WEB, 'wallpapers', script)), script);
         assert.ok(existsSync(join(WEB, 'wallpapers', entry.id, 'defaults.js')), `${entry.id}/defaults.js`);
     }
 });
@@ -293,6 +300,7 @@ test('network: every online wallpaper\'s hosts are on the audit allowlist', () =
 function schemaFor(id) {
     const sandbox = vm.createContext({ URLSearchParams, Date });
     vm.runInContext(readFileSync(join(WEB, 'core/wp.js'), 'utf8'), sandbox);
+    for (const file of WP.entry(id)?.settingsScripts || []) vm.runInContext(readFileSync(join(WEB, 'wallpapers', file), 'utf8'), sandbox);
     vm.runInContext(readFileSync(join(WEB, 'wallpapers', id, 'defaults.js'), 'utf8'), sandbox);
     vm.runInContext(readFileSync(join(WEB, 'wallpapers', id, 'settings.js'), 'utf8'), sandbox);
     return { schema: sandbox.WP.schemaOf(id), defaults: sandbox.WP.defaultsOf(id) };

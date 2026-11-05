@@ -29,10 +29,12 @@ const OVERRIDES = {
     satellites: { configVersion: 1, facing: 'east' },
     girih: { configVersion: 1, baseTiling: '3.12.12', scale: 340 },
     'stained-glass': { configVersion: 1, light: 'afternoon' },
+    orrery: { configVersion: 1, view: 'tilted', drift: false, showInfo: false, showLabels: false, planetSize: 1.4 },
 };
 // URL parameters for a better picture: satellites as its sample station
-// passes overhead before dawn (thumb mode never fetches, so it's the sample).
-const PARAMS = { satellites: '&date=2026-10-14T04:47:15', 'pixel-room': '&date=2026-10-22T18:20', 'rainy-window': '&date=2026-10-22T21:00', harvest: '&date=2026-11-20T15:50', neko: '&date=2026-06-10T12:00' };
+// passes overhead before dawn, weather's sample at a golden dusk (thumb mode never fetches, so it's the sample),
+// World Clock near the June solstice, Europe in its long evening; the Orrery tilted, on a fixed night.
+const PARAMS = { satellites: '&date=2026-10-14T04:47:15', 'pixel-room': '&date=2026-10-22T18:20', 'rainy-window': '&date=2026-10-22T21:00', harvest: '&date=2026-11-20T15:50', neko: '&date=2026-06-10T12:00', weather: '&date=2026-11-05T17:50', 'world-clock': '&date=2026-06-21T19:30:00Z', orrery: '&date=2026-11-05T21:00' };
 SETTLE_MS.fireworks = 2600;
 SETTLE_MS.harvest = 4000;
 
