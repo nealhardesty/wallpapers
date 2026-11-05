@@ -29,6 +29,7 @@ export const URL_ALLOW = {
     'web/wallpapers/bing/': ['www.bing.com', 'bing.com', 'corsproxy.io', 'api.allorigins.win', 'cors-anywhere.herokuapp.com'],
     'web/wallpapers/lighthouse/': ['marine-api.open-meteo.com'],
     'web/wallpapers/wiki-pond/': ['stream.wikimedia.org'],
+    'web/wallpapers/weather/': ['api.open-meteo.com', 'geocoding-api.open-meteo.com'],
 };
 
 const FILE_EXTENSIONS = /^(png|jpe?g|gif|webp|svg|ico|js|mjs|cjs|css|html?|json|md|txt)$/i;
