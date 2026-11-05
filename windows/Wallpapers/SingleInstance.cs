@@ -11,8 +11,33 @@ static class SingleInstance
 
     public static bool TryBecomeFirst(string flavor)
     {
-        mutex = new Mutex(true, $@"Local\{Name(flavor)}", out var first);
+        mutex = new Mutex(true, MutexName(flavor), out var first);
+        if (first) Holds = true;
         return first;
+    }
+
+    static string MutexName(string flavor) => $@"Local\{Name(flavor)}";
+
+    /// This process is the first one (it holds the mutex).
+    public static bool Holds { get; private set; }
+
+    /// Some process of that flavor holds (or still has open) the mutex.
+    public static bool IsRunning(string flavor)
+    {
+        if (!Mutex.TryOpenExisting(MutexName(flavor), out var other)) return false;
+        other.Dispose();
+        return true;
+    }
+
+    /// Lets go of the mutex, so an exe started now becomes the first (an install handing over to the
+    /// installed copy). The pipe stays until this process exits; the new one's listener retries.
+    public static void Release()
+    {
+        if (!Holds || mutex == null) return;
+        mutex.ReleaseMutex();
+        mutex.Dispose();
+        mutex = null;
+        Holds = false;
     }
 
     /// Commands arrive on the calling thread's synchronization context (the UI thread).

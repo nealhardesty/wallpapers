@@ -6,12 +6,14 @@ cd "$(dirname "$0")/.."
 DOTNET=${DOTNET:-dotnet}
 OUT=dist/win
 VERSION=$(node -p "require('./web/manifest.json').version")
+# The project page (About, Settings → Apps), stamped in here so no C# names it.
+HOMEPAGE=$(node -p "require('./web/manifest.json').homepage_url")
 # The build stamp makes every build's exe unique: Smart App Control judges unsigned exes by hash,
 # so a refused build is fixed by building again (SPEC §10.25.13).
 STAMP=$(date -u +%Y%m%d%H%M%S)
 rm -rf "$OUT"
 "$DOTNET" publish windows/Wallpapers -c Release -o "$OUT" --nologo -v q -clp:NoSummary \
-  -p:Version="$VERSION" -p:InformationalVersion="$VERSION+$STAMP"
+  -p:Version="$VERSION" -p:InformationalVersion="$VERSION+$STAMP" -p:Homepage="$HOMEPAGE"
 rm -f "$OUT"/*.pdb "$OUT"/*.xml
 # The same web/ the other hosts ship, less the web manifests and bing.json (the app answers it natively).
 rsync -a --exclude bing.json --exclude manifest.json --exclude app.webmanifest web/ "$OUT/web/"

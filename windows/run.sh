@@ -1,6 +1,6 @@
 #!/bin/bash
 # Runs the built Windows app from WSL (SPEC §10.25.15):
-#   run.sh run   copy dist/win to %LOCALAPPDATA%\Wallpapers-build\run and start it (normal settings)
+#   run.sh run   copy dist/win to %LOCALAPPDATA%\Wallpapers-build\run and start it (normal settings; --just-run, no install offer)
 #   run.sh dev   the same into ...\dev, with WP_DEV=1 WP_DEBUG=1 and WP_WEB_ROOT on this checkout's web/
 #   run.sh test  the same into ...\test, run --selftest, print its report, exit with its code
 #   run.sh log [run|dev|test]   the last lines of that flavour's log (FOLLOW=1 to follow)
@@ -77,7 +77,8 @@ launch() {
   else
     # ShellExecute (Start-Process), so the app inherits none of WSL interop's pipes: with
     # `cmd /c start` it would, and this script would wait until the app quit.
-    local args=""
+    # --just-run: a build run from here never offers to install (make win-install does that).
+    local args="'--just-run',"
     for a in $WIN_ARGS; do args="$args'$a',"; done
     "$PS" -NoProfile -Command "Start-Process -FilePath '$(wslpath -w "$BIN/Wallpapers.exe")' -WorkingDirectory '$(wslpath -w "$BIN")'${args:+ -ArgumentList ${args%,}}" < /dev/null
   fi

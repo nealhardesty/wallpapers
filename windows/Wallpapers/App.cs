@@ -10,12 +10,25 @@ sealed class App : ApplicationContext
     public static string Version { get; } =
         typeof(App).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "?";
 
+    /// The project's page, stamped in by build.sh from web/manifest.json; null in a build without it.
+    public static string? Homepage { get; } =
+        typeof(App).Assembly.GetCustomAttributes<AssemblyMetadataAttribute>().FirstOrDefault(a => a.Key == "Homepage")?.Value is { Length: > 0 } url ? url : null;
+
+    /// Where this flavor installs (SPEC §10.25.13): run and test; dev never installs.
+    public static InstallLayout? LayoutFor(string flavor) => flavor is "run" or "test"
+        ? InstallLayout.For(flavor, Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData))
+        : null;
+
     public AppPaths Paths { get; }
     public AppSettings Settings { get; private set; }
     public DesktopLayer Layer { get; }
     public Power Power { get; } = new();
     public Desktop Desktop { get; }
     public Tray Tray { get; }
+    public InstallLayout? Layout { get; }
+    /// The installer for this flavor's layout; null for dev.
+    public Install? Installer { get; }
     SettingsWindow? settingsWindow;
     PlayWindow? playWindow;
     /// Why nothing can be shown (no web root), or null.
@@ -26,6 +39,8 @@ sealed class App : ApplicationContext
     {
         Paths = paths;
         Settings = AppSettings.Load(paths.SettingsFile);
+        Layout = LayoutFor(paths.Flavor);
+        if (Layout != null) Installer = new Install(Layout, Log.Info);
         Log.Info($"Wallpapers {Version} ({paths.Flavor}) data={paths.Root} web={paths.WebRoot}");
         Application.ThreadException += (_, e) => Crash(e.Exception);
         AppDomain.CurrentDomain.UnhandledException += (_, e) => Crash(e.ExceptionObject as Exception);

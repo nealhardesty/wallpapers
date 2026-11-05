@@ -2,14 +2,15 @@ using System.Windows.Forms;
 
 namespace Wallpapers;
 
-/// Modes (SPEC §10.25.4): the app · --quit · --reload · --settings · --dump-displays · --selftest [--bad-web-root]
-/// (and --cover-for-test, the self-test's covering window: coverage ignores our own process's).
+/// Modes (SPEC §10.25.4): the app [--just-run] · --install · --quit · --reload · --settings · --dump-displays ·
+/// --selftest [--bad-web-root] (and --cover-for-test, the self-test's covering window: coverage ignores our own process's).
 static class Program
 {
     [STAThread]
     static int Main(string[] args)
     {
         if (args is ["--cover-for-test", var rect]) return SelfTest.Cover(rect);
+        var install = InstallArgs.Parse(args);
         var paths = AppPaths.Resolve(args);
         var selfTest = paths.Flavor == "test";
         if (selfTest)
@@ -40,6 +41,30 @@ static class Program
             Log.Info($"--dump-displays: wrote displays.json (with paths, names and keys) and tree.json to {paths.Root}");
             return 0;
         }
+        if (install.Mode == InstallMode.Install)
+        {
+            // Quiet: make win-install, or a script. Only the normal flavor installs.
+            if (App.LayoutFor(paths.Flavor) is not { } layout || selfTest) Log.Info($"install: ignored ({paths.Flavor})");
+            else
+            {
+                var installer = new Install(layout, Log.Info);
+                if (installer.Apply(AppContext.BaseDirectory, fresh: true) is { } why) { Log.Error($"install: failed: {why}"); return 1; }
+                installer.Start();
+                return 0;
+            }
+        }
+
+        ApplicationConfiguration.Initialize();
+        // The offer comes before the single-instance check: a newer download offers Update while the
+        // installed app runs, and Install or Update quits whichever copy holds the mutex.
+        if (paths.Flavor == "run" && App.LayoutFor(paths.Flavor) is { } runLayout)
+        {
+            var installer = new Install(runLayout, Log.Info);
+            var settings = AppSettings.Load(paths.SettingsFile);
+            var offer = installer.OfferToShow(settings, install.JustRun);
+            if (offer != Offer.None && installer.ShowOffer(offer, settings)) return 0;
+        }
+
         if (!selfTest && !SingleInstance.TryBecomeFirst(paths.Flavor))
         {
             // A second launch (the Start menu, make win-run twice) opens the first one's settings.
@@ -48,7 +73,6 @@ static class Program
             return 0;
         }
 
-        ApplicationConfiguration.Initialize();
         // App starts the pipe listener, which posts commands to this thread before Application.Run.
         SynchronizationContext.SetSynchronizationContext(new WindowsFormsSynchronizationContext());
         var app = new App(paths);

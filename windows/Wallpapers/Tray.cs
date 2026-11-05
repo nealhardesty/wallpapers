@@ -19,7 +19,7 @@ sealed class Tray : IDisposable
     readonly App app;
     readonly NotifyIcon icon;
     readonly ContextMenuStrip menu = new();
-    readonly ToolStripMenuItem header, wallpaper, surprise, next, previous, pause, follow, clicks, play, same, different, identify, settings, reload, drawAbove, devTools, about, quit;
+    readonly ToolStripMenuItem header, wallpaper, surprise, next, previous, pause, follow, clicks, play, same, different, identify, settings, reload, drawAbove, devTools, startWithWindows, install, about, quit;
     readonly Dictionary<string, Bitmap> thumbs = [];          // 128×72 from the page, by id
     readonly Dictionary<string, Bitmap> scaledThumbs = [];    // at the menu's device size
     readonly HashSet<string> balloonsShown = [];
@@ -79,6 +79,18 @@ sealed class Tray : IDisposable
         drawAbove = Item("Draw Above Icons", () => { ToggleDrawAbove(); return Task.CompletedTask; });
         devTools = Item("Developer Tools", () => { app.Desktop.Surfaces.FirstOrDefault()?.Web?.OpenDevToolsWindow(); return Task.CompletedTask; });
         devTools.Visible = Log.Verbose;
+        // Installed: Start with Windows. Not installed (the run flavor): Install…, the offer again.
+        startWithWindows = Item("Start with Windows", () =>
+        {
+            app.Installer?.SetStartWithWindows(!app.Installer.StartsWithWindows());
+            SyncInstall();
+            return Task.CompletedTask;
+        });
+        install = Item("Install…", () =>
+        {
+            if (app.Installer?.ShowOffer(Offer.Install, app.Settings, app.SaveSettings) == true) app.Quit();
+            return Task.CompletedTask;
+        });
         about = Item($"About Wallpapers {App.Version.Split('+')[0]}", () => { About(); return Task.CompletedTask; });
         quit = Item("Quit", () => { app.Quit(); return Task.CompletedTask; });
 
@@ -90,10 +102,11 @@ sealed class Tray : IDisposable
         menu.Items.AddRange([
             header, wallpaper, surprise, next, previous, new ToolStripSeparator(),
             pause, follow, clicks, play, new ToolStripSeparator(),
-            monitors, performanceMenu, settings, troubleshooting, about, quit,
+            monitors, performanceMenu, settings, new ToolStripSeparator(),
+            startWithWindows, install, troubleshooting, about, quit,
         ]);
         menu.Renderer = new RadioRenderer();   // its submenus draw with their owner's renderer
-        menu.Opening += (_, _) => { Sync(); Run("refresh", RefreshAsync); };
+        menu.Opening += (_, _) => { Sync(); SyncInstall(); Run("refresh", RefreshAsync); };
 
         icon = new NotifyIcon { Icon = LoadIcon(SystemInformation.SmallIconSize), Text = "Wallpapers", ContextMenuStrip = menu, Visible = true };
         icon.MouseUp += (_, e) => { if (e.Button == MouseButtons.Left) ShowMenu(); };
@@ -109,7 +122,18 @@ sealed class Tray : IDisposable
         app.Desktop.Changed += () => { Sync(); SayProblems(); };
         app.Desktop.PageReady += () => Run("refresh", RefreshAsync);
         Sync();
+        SyncInstall();
         SayProblems();
+    }
+
+    /// The install row, from the registry and where we run (read when the menu opens, not on every Sync).
+    void SyncInstall()
+    {
+        var installer = app.Installer;
+        var here = installer?.InstalledHere == true;
+        startWithWindows.Visible = here;
+        startWithWindows.Checked = here && installer!.StartsWithWindows();
+        install.Visible = !here && app.Paths.Flavor == "run";
     }
 
     public bool Visible => !disposed && icon.Visible;
