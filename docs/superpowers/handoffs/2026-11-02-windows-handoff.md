@@ -61,6 +61,20 @@ and in fake layouts. **Pending:** the by-hand pass. **Next: W4, install and
 release** (SPEC §10.25.16): plan it with superpowers:writing-plans. Not pushed
 yet when this was written.
 
+**Update 2026-11-04 (latest): W4 is built** (install and release). Plan
+`docs/superpowers/plans/2026-11-04-windows-w4-install-release.md`; what was built
+is in SPEC §10.25.13 *As built*, the targets and the CI `win` job in §10.25.15,
+and the owner's by-hand checklist in §10.25.16's W4 *As built*. Done: Install /
+Update / Just Run, Start with Windows, the Start menu shortcut, the Settings →
+Apps entry, uninstall (stage 2 from `%TEMP%`), About, `make win-install` and
+`win-uninstall`, optional Azure Trusted Signing (`windows/sign.sh`, unrun
+against the service), and the `win` job that self-tests the shipped zip.
+Owner decisions (2026-11-04): ship unsigned first, sign before telling anyone;
+no online update check; a failed Windows self-test drops the Windows zip.
+**Pending:** the by-hand checklist, and **the owner's OK to cut v0.11.0** (bump
+the version, tag, push the tag: nothing is tagged yet). **Next: W5, the screen
+saver** (SPEC §10.25.12), then the W6 two-monitor pass.
+
 ~~**The very next step:** write the implementation plan for Phase W0.~~ Done.
 Nothing past W0 is built until W0.1 and W0.2 pass. See §5 below.
 

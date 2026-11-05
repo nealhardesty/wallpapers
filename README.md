@@ -152,12 +152,23 @@ saver can read them. If macOS's screen saver host ever stalls the page, the
 saver reloads it, and failing that shows a clock on black rather than a broken
 screen. An update of the app updates the saver by itself.
 
-**On Windows, as your desktop background** (Windows 11, early: no installer
-yet). Download `wallpapers-windows-<version>.zip` from the latest
-[release](https://github.com/nealhardesty/wallpapers/releases) (check it against
-the `.sha256` beside it), unzip it anywhere you like to keep it, and run
-`Wallpapers\Wallpapers.exe`. Or build and start it from WSL with `make win-run`
-(it needs the .NET 10 SDK in WSL; see Development). The wallpaper runs live behind your desktop icons on
+**On Windows, as your desktop background** (Windows 11). Download
+`wallpapers-windows-<version>.zip` from the latest
+[release](https://github.com/nealhardesty/wallpapers/releases), check it against
+the `.sha256` beside it, unzip it, and run `Wallpapers.exe`. It asks once:
+**Install** copies the app to `%LOCALAPPDATA%\Programs\Wallpapers` (no admin
+rights), adds *Wallpapers* to the Start menu and to Settings → Apps, and makes it
+start with Windows; **Just Run** runs it from where it is and doesn't ask again
+(the tray's **Install…** is still there if you change your mind). To update, run
+a newer download: it offers to **Update** the installed copy in place (the old
+one quits, your settings stay) and starts the new one. **Start with Windows** is
+a tick in the tray menu. To remove it, use Settings → Apps → *Wallpapers* →
+Uninstall, or **About → Uninstall…** in the tray; it asks whether to keep your
+settings (`%LOCALAPPDATA%\Wallpapers`, kept unless you say otherwise). The app
+never checks for updates by itself and makes no network calls of its own: the
+About dialog's **Project Page** opens the releases page in your browser. Or
+build and start it from WSL with `make win-run` (it needs the .NET 10 SDK in WSL;
+see Development). The wallpaper runs live behind your desktop icons on
 every monitor, and the icons, the right-click menu and drag-selecting all work
 as before. A tray icon controls it. Windows puts new tray icons behind the **^**
 at first: drag it onto the taskbar to keep it there. Left or right click opens
@@ -178,6 +189,7 @@ the menu:
   Battery**, with a line saying what it is doing now
 - **Settings…**: the same panel as everywhere else, in a window; a pick there
   changes the desktop at once
+- **Start with Windows** (installed) or **Install…** (running from elsewhere)
 - **Troubleshooting**: **Open Log Folder**, **Reload Wallpapers**, and **Draw
   Above Icons**, a fallback for a Windows update that breaks the layer behind
   the icons

@@ -15,7 +15,8 @@ wallpapers' only home. They run in three hosts:
    web code behind the home screen.
 4. **macOS desktop and screen saver** (`mac/`, §10.21, built).
 5. **Windows desktop, tray app and screen saver** (`windows/`, §10.25,
-   designed 2026-11-02; W0 passed, the W1 desktop core built 2026-11-03).
+   designed 2026-11-02; W0 passed, W1–W4 built by 2026-11-04: the app, the
+   installer and the zip; first release pending owner OK; the saver is W5).
 
 > Status: **phases 1–9 done** (2026-10-23), except what needs the owner:
 > measurements on a real phone (6.2's numbers, 6.4a), the first signed
@@ -29,7 +30,10 @@ wallpapers' only home. They run in three hosts:
 > §10 holds the other ideas.
 > Windows (§10.25): the W0 spikes passed, and W1 (the desktop core: behind
 > the icons on every monitor, the tray, the settings window, the self-test)
-> was built 2026-11-03. W2 (monitors and power) is next.
+> was built 2026-11-03. W2 (monitors and power), W3 (the mouse) and W4
+> (install, update, uninstall, the zip and the CI `win` job) were built
+> 2026-11-04. W5 (the screen saver) is next; the first release waits for the
+> owner's OK.
 
 ---
 
@@ -3023,14 +3027,16 @@ New questions go here, each with a recommendation.
 - **Windows: sound on the desktop** (§10.25.9). *Recommendation:* muted, with
   *Allow Sound* in the tray, off by default. Matters once Jellyfin arrives.
 - **Windows: signing, now that Smart App Control is in play** (§10.25.13,
-  found in W0.2). The owner's PC enforces SAC, which blocks unsigned builds
+  found in W0.2). **Decided 2026-11-04 (§10.25.20): ship unsigned first, set
+  up Azure Trusted Signing before telling anyone else; the wiring exists and
+  signs once the six secrets are set.** The owner's PC enforces SAC, which blocks unsigned builds
   by hash with no override (2 of ~20 spike builds). "Signing later" may have
   to become "signing before W4", or SAC goes off on this PC (Windows can
   only turn it back on with a reset). *Recommendation:* Azure Trusted Signing
   (publicly trusted, inexpensive) for releases; during W1–W3, a build that's
   refused gets a version bump and is rebuilt. **Owner decision.**
 - **Windows: one ~52 MB self-contained exe, or require the .NET runtime?**
-  (§10.25.13). *Recommendation:* self-contained: nothing to install first,
+  (§10.25.13). **Decided: self-contained (2026-11-04).** *Recommendation:* self-contained: nothing to install first,
   and the `.scr` copy just works. Size is the cost.
 - **Jellyfin on GitHub Pages:** settled by spike 9.0. After Chrome's local
   network prompt, Pages reaches an https server, or an http one addressed
@@ -3443,8 +3449,8 @@ desktop icons, on every monitor, controlled from a tray icon, and later as
 the screen saver: the Mac app (§10.21) for Windows, going further where
 Windows allows. **Status: W0 passed (2026-11-03, §10.25.21); W1 built
 (2026-11-03, *As built* in §10.25.16); W2 built (2026-11-04; by-hand console
-pass pending); W3 built (2026-11-04; by-hand console pass pending); W4
-next.** Phase W0
+pass pending); W3 built (2026-11-04; by-hand console pass pending); W4 built
+(2026-11-04; by-hand pass pending, checklist in §10.25.16); W5 next.** Phase W0
 (spikes) is the gate: if a live web page can't run behind the icons on 25H2,
 the project stops. Brainstormed and reviewed 2026-11-02; the original design
 note is `docs/superpowers/specs/2026-11-02-windows-design.md`, and this
@@ -3611,7 +3617,8 @@ windows/
     SettingsWindow.cs          the panel in a normal window (§10.25.11)
     PlayWindow.cs              a wallpaper in a normal focused window, for keyboard games (§10.25.8)
     Saver/                     /s full-screen windows, /p preview, /c options, watchdog (§10.25.12)
-    Install.cs                 per-user install, Run key, Uninstall entry, saver selection (§10.25.13)
+    Install.cs                 per-user install and update, Run key, Uninstall entry, uninstall stage 2, the offer (§10.25.13)
+    ShellLink.cs               the Start menu shortcut (IShellLinkW by hand-written COM)
     Native.cs                  P/Invoke
     SelfTest.cs                --selftest (§10.25.15)
     app.manifest               PerMonitorV2 DPI, Windows 8–11 compatibility, asInvoker
@@ -3627,10 +3634,13 @@ windows/
     WebFiles.cs                a URL → a file under web/ (nothing outside it) and its content type
     Catalog.cs                 the page's catalog for the tray, its labels, Surprise Me
     WindowPlacement.cs         where the settings window reopens, kept on a monitor that's there
+    Install*.cs, AppVersion.cs  install folder, shortcut, Run and Uninstall values per flavour; versions and the offer; the uninstall plan; install modes (§10.25.13)
     BingArchive.cs, RollingLog.cs, Repaint.cs, Geometry.cs
   Wallpapers.Tests/            xUnit over Core; runs in WSL and CI
   build.sh                     publish + copy web/ + version stamping (like mac/build.sh)
-  release.sh                   zip, checksum, checks
+  release.sh                   zip, checksum, checks; calls sign.sh
+  sign.sh                      optional Azure Trusted Signing through jsign (§10.25.15)
+  run.sh                       win-run/dev/test/install/uninstall launcher (WSL or Git Bash)
 ```
 
 **Host kind:** `?host=windows` (and `?host=windows-saver`). The page code stays
@@ -4122,8 +4132,8 @@ desktop surfaces go `hidden`.
 - **The download** is a zip: `Wallpapers.exe` (self-contained, single-file,
   .NET included, ~52 MB unpacked) and `web\`. Run `Wallpapers.exe` from
   anywhere: if it isn't installed, it offers **Install** (copy to
-  `%LOCALAPPDATA%\Programs\Wallpapers`, create `Wallpapers.scr`, a Start menu
-  shortcut, an `HKCU\…\Uninstall` entry so it's in Settings → Apps, and
+  `%LOCALAPPDATA%\Programs\Wallpapers`, a Start menu
+  shortcut (`Wallpapers.scr` joins in W5), an `HKCU\…\Uninstall` entry so it's in Settings → Apps, and
   *Start with Windows* ticked), or **Just Run** from where it is.
 - **Updates:** running a newer exe offers to replace the installed one
   (compared by version), restarting the app.
@@ -4151,6 +4161,85 @@ desktop surfaces go `hidden`.
 - **Single instance:** a second launch tells the first (named pipe) to open
   Settings, and exits.
 - No admin rights anywhere. No services, no scheduled tasks, no drivers.
+
+*As built (W4, 2026-11-04; plan `docs/superpowers/plans/2026-11-04-windows-w4-install-release.md`).*
+- **Files.** `Install.cs` (`Install(layout, log)`: `Apply`, the offer, stage 1
+  and 2 of uninstall), `ShellLink.cs` (`IShellLinkW` by hand-written COM, on an
+  STA thread, so the self-test can call it from anywhere), Core's
+  `InstallLayout` (`For(flavor, localAppData, roamingAppData)`, Windows paths
+  joined with `\` so Linux tests agree), `AppVersion`, `InstallOffer`,
+  `InstallSpecs` (the Run value, shortcut and Uninstall entry as data) and
+  `InstallArgs`. The `run` flavour installs to `%LOCALAPPDATA%\Programs\Wallpapers`
+  (`Wallpapers.exe`, `web\`); the `test` flavour adds `-test` to the folder,
+  the shortcut, the Run value and the key, and shows as `Wallpapers (test)`;
+  `dev` never installs or offers. The shortcut is
+  `%APPDATA%\Microsoft\Windows\Start Menu\Programs\Wallpapers.lnk`, the Run
+  value is `Wallpapers`, the key is `HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\Wallpapers`
+  (DisplayName, DisplayVersion, Publisher, DisplayIcon, InstallLocation,
+  InstallDate, `UninstallString` = `"<exe>" --uninstall`, `QuietUninstallString` =
+  that plus `--keep-settings`, NoModify, NoRepair, EstimatedSize,
+  URLInfoAbout). Everything is under `HKCU` and the user's profile: no UAC,
+  `asInvoker` stays.
+- **The offer.** Run flavour, not `--just-run`, not already running from the
+  install folder: not installed and not declined before → *Install* / *Just
+  Run*; installed and this exe newer → *Update* / *Just Run*; installed and the
+  same or older → no dialog (one log line), run. Versions compare
+  `major.minor.patch` numerically, then the `+` build stamp (`build.sh`'s
+  `InformationalVersion`); the dialog drops the stamp (so a local rebuild reads
+  "Update 0.10.3 → 0.10.3"). *Just Run* is remembered (`settings.json`
+  `"offerInstall": false`) and an update is still offered after it; closing
+  the dialog with X or Esc asks again next time. `run.sh`'s `run` and `dev`
+  pass `--just-run`, so developing never offers. The offer runs **before** the
+  single-instance check, so a newer download offers Update while the installed
+  app runs; the same or an older exe falls through to the second-instance path
+  (the first app opens Settings).
+- **Apply (install and update).** Checks the source has `web\` and a version,
+  asks a running app to quit over the pipe (run flavour) and waits up to 15 s
+  for the mutex and for the exe's lock, then **stages and swaps**: copies to
+  `Wallpapers.exe.new` and `web.new`, swaps the exe first (the step a lock
+  stops), then `web` → `web.old`, `web.new` → `web`, deletes `web.old`. Any
+  failure rolls back to the old install, cleans the staged items, and **starts
+  the old copy again**, except on the StillRunning timeout (the app never quit,
+  so there is nothing to restart; the dialog says to quit it from the tray).
+  Then the Uninstall entry, the shortcut, and for a fresh install only the Run
+  value (an update leaves the user's *Start with Windows* choice alone). `--install`
+  run from the installed exe skips the copy. Settings are never copied or
+  removed. `Apply` never throws; it returns the reason.
+- **Start with Windows** is the Run value, ticked from the registry each time
+  the tray opens (no registry read per page event). Not installed: the row
+  becomes **Install…**, which hands over: it releases the mutex, starts the
+  installed exe and quits.
+- **Uninstall.** `--uninstall` (stage 1) deletes stale
+  `%TEMP%\Wallpapers-uninstall-*.exe`, copies the running exe to
+  `%TEMP%\Wallpapers-uninstall-<stamp>.exe` and starts it with
+  `--uninstall-stage2 "<root>"` (working directory `%TEMP%`, so nothing holds the
+  root), then exits. **Stage 2 acts only on the run or test install folder**:
+  any other root logs `that isn't an install folder; nothing removed` and exits
+  1, so a command line can't point it at another folder. It asks *Keep My
+  Settings* / *Delete My Settings Too* / *Cancel* (unless `--keep-settings` or
+  `--delete-settings`), quits the running app, removes the Run value, the
+  Uninstall key, the shortcut and the folder (and `%LOCALAPPDATA%\Wallpapers`
+  when told; folders retry for ~3 s because WebView2 helpers linger), logs
+  every step to `%TEMP%\Wallpapers-uninstall.log`, shows a result dialog when
+  it asked, and deletes its own copy through a hidden `cmd` after a ping delay.
+  A step that fails doesn't stop the others and is named in the result.
+  `RestoreSaver()` is an empty hook for W5. `Wallpapers.scr` is **not created
+  until W5**: an `.scr` that doesn't handle `/s` would start the whole app from
+  Windows' screen saver dialog.
+- **About** is a TaskDialog: version, WebView2 runtime, data folder, wallpapers
+  folder, `Installed in <root>` or `Running from … (not installed)`; **Close**,
+  **Uninstall…** (installed only) and **Project Page** (opens the homepage,
+  which `build.sh` stamps into the exe from `web/manifest.json`'s
+  `homepage_url`; it is never written in C#; the dialog stays open).
+- **No online update check.** An update is a newer download run by hand. The
+  app makes no network call to install or update, and no telemetry.
+- **Sizes.** The installed folder is about 53 MB (EstimatedSize 54441 KB for
+  0.10.3). The exe is compressed inside the single file, so `strings` on
+  `Wallpapers.exe` doesn't find the homepage; read the Uninstall entry's
+  `URLInfoAbout`, or `strings` the `obj` DLL.
+- **Signing** is optional and off until the secrets exist (§10.25.15,
+  Open questions). Unsigned, a downloaded copy shows SmartScreen, and Smart App
+  Control can refuse a hash.
 
 #### 10.25.14 Web view details (`WebFactory.cs`)
 
@@ -4199,11 +4288,13 @@ section):**
 | `win-reload` | reload a running app's pages (`--reload`; the `win-dev` one by default) |
 | `win-run` | build and run the built exe (normal settings) |
 | `win-test` | `--selftest` against a throwaway user data folder (below); needs Windows (WSL interop or CI) |
-| `win-install` / `win-uninstall` | install/uninstall the built app for this Windows user |
+| `win-install` / `win-uninstall` | install/uninstall the built app for this Windows user. *As built:* `windows/run.sh install` copies `dist/win` to `Wallpapers-build\install`, runs `--install` there and waits on that one process (started straight from WSL the installed app would inherit WSL's pipes); `win-uninstall` runs the installed exe's `--uninstall --keep-settings` (`DELETE_SETTINGS=1` adds `--delete-settings`). With nothing installed it says so and exits 0 |
+| `win-test-zip` | the same `--selftest` against the app inside `dist/wallpapers-windows-<version>.zip`, unzipped to `dist/win-zip/`: what ships is what's tested. Works from WSL or Git Bash (`run.sh` takes `DIST=`; `cygpath` on Git Bash) |
+| `win-sign-tools` | installs `osslsigncode` (apt, sudo) if missing; CI runs it before a signed release |
 | `win-saver` | run the built `.scr /s` for 15 s and print its log |
 | `win-log` | tail the log |
-| `win-sign` | `windows/sign.sh dist/win/Wallpapers.exe`: Azure Trusted Signing through jsign 7.6 (pinned sha256, cached under `dist/wallpapers-tools` or `$XDG_CACHE_HOME`; token by Entra client credentials). All six `WALLPAPERS_SIGN_*` variables set signs; none prints `unsigned (no WALLPAPERS_SIGN_* variables)`; a partial set exits 1 naming the missing ones. `win-release` calls it after the build, runs `osslsigncode verify` if it signed, and ends `…, signed` or `…, unsigned` |
-| `win-release` | `windows/release.sh`: build, check, `dist/wallpapers-windows-<version>.zip` + `.sha256`. *Built ahead of W4 (owner, 2026-11-03):* the `ci` job runs it on every push and uploads `wallpapers-windows`; the `release` job attaches it. The installer and the `win` job stay in W4 |
+| `win-sign` | `windows/sign.sh dist/win/Wallpapers.exe`: Azure Trusted Signing through jsign 7.6 (pinned sha256, cached under `dist/wallpapers-tools` or `$XDG_CACHE_HOME`; token by Entra client credentials). All six `WALLPAPERS_SIGN_*` variables set signs; none prints `unsigned (no WALLPAPERS_SIGN_* variables)`; a partial set exits 1 naming the missing ones. `win-release` calls it after the build, runs `osslsigncode verify` against Microsoft's root certificate (downloaded, sha256-pinned) if it signed, and ends `…, signed` or `…, unsigned`. `sign.sh --fetch` downloads and checks jsign and the root without secrets. **The token is jsign's `--storepass`, so it appears in jsign's argv (the process list) while signing**: fine on a CI runner, noted for a shared machine. **The signed path (token, sign, `osslsigncode verify`) has not run yet**: there are no secrets; only the unsigned path, a partial-set failure and `--fetch` were exercised |
+| `win-release` | `windows/release.sh`: build, check, `dist/wallpapers-windows-<version>.zip` + `.sha256`. *Built ahead of W4 (owner, 2026-11-03):* the `ci` job runs it on every push and uploads `wallpapers-windows`; the `release` job attaches it. The installer and the `win` job came in W4 (below) |
 
 `make ci` stays as it is, except `win-unit` joins it when `dotnet` is on the
 PATH (skipped with a note otherwise, so contributors without .NET aren't
@@ -4220,7 +4311,11 @@ non-zero on failure):
 check. About 45 s. *W3 adds* the pointer checks: `pointer move`, `pointer
 tap`, `pointer double click`, `pointer icon`, `pointer hidden`, `pointer
 toggles`, `pointer classify` and `pointer (fake monitor 2)`; the run is now
-about 50 s. Details that matter:
+about 50 s. *W4 adds* `install`, `update`, `update (busy exe)` and `uninstall`
+(after `cleanup`, since they need no surfaces; the busy-exe check takes about
+15 s, the wait it proves). They use the **test layout only**, refuse to run
+against any other, and remove everything in a `finally`, so the real install
+is never touched. Details that matter:
 - The pointer checks never synthesize input: they feed the forwarder
   (`Pointer.FeedForTest`) and classify real points without clicking
   (`ClassifyForTest`). The built-in fake layout is **two 1920×720 monitors**,
@@ -4268,13 +4363,34 @@ stability; saver argument forms; page URL encoding.
 
 **CI:**
 - `ci` (Ubuntu): `make win-build` and `make win-unit` (cross-compile proves
-  it builds on every push).
-- New `win` job on `windows-2025`: `make win-test`, `make win-release`,
-  upload `wallpapers-windows` artifact. *Unverified:* that the hosted runner
-  has an Explorer desktop for the layer; if not, `--selftest --no-desktop`
-  runs every check but 1 and 8 in a normal window, and those two are covered
-  by hand.
-- `release` job: attaches the zip and checksum, non-blocking like the Mac's.
+  it builds on every push), `make win-release`, and the `wallpapers-windows`
+  artifact. On tags, `make win-release` also gets the six `WALLPAPERS_SIGN_*`
+  secrets (`make win-sign-tools` installs `osslsigncode` first, only when the
+  secrets exist).
+- *As built (W4):* the `win` job (`windows-2025`, `needs: ci`, 15 min limit,
+  Git Bash) **downloads that zip and runs `make win-test-zip`** on it; it
+  doesn't build again, so what ships is what was tested. It uploads
+  `wallpapers-windows-selftest` (the report and the log). **Runner facts
+  (image `windows-2025-vs2026` 20261030):** it has an Explorer desktop
+  (`layer` passes as *Raised*, so `--no-desktop` isn't needed), GNU make is
+  preinstalled (a `choco install make` fallback never ran), the WebView2
+  runtime is preinstalled (156.0; a step installs it only when missing and
+  prints its version), and the screen is a fixed **1024×768** at scale 1 that
+  `Set-DisplayResolution` refuses to enlarge. `pointer classify` SKIPs there
+  (every icon is covered). The job takes about 75 s.
+- `release` job: `needs: [ci, android, mac, win]`; it attaches the zip and
+  checksum only when `needs.win.result == 'success'`, otherwise it prints a
+  warning and releases without the Windows app, as it does for a failed Mac
+  build (§10.25.20).
+- **Fake monitors and WebView2's scale floor.** WebView2 renders no smaller
+  than about 0.5 `RasterizationScale`, so a fake layout fitted below that
+  maps pointers wrongly (the checks measured the floor, not the app). The
+  self-test keeps the built-in 1920×720 pair while `FakeLayout.Fit` for it
+  (5% margin, both limits) is in [0.5, 1), and otherwise sizes the pair to fit
+  at about 0.75 (648×360 on the runner; 1920×720 on the owner's RDP screen at
+  0.727). `pointer (fake monitor 2)` SKIPs when the measured scale is ≥ 0.99 or
+  < 0.5, so it can never pass vacuously at 1. `pointer classify` SKIPs when only
+  icons or only bare desktop were in view.
 
 **Planning for two monitors before testing on them (owner: test later, plan
 now).** Development mostly happens over Remote Desktop, which shows one
@@ -4573,7 +4689,74 @@ Task Manager; RDP in and out; the saver from Windows' dialog; uninstall.
     monitor) can't catch a plan-scale bug in the self-test.
 - **W4 Install and release:** self-installer, Start with Windows, updates,
   uninstall, Start menu, `win-release`, CI `win` job, README sections, SPEC
-  updates (this section's status, the intro's host list, §10.25.3's layout). The first release ships here, without the saver.
+  updates (this section's status, the intro's host list, §10.25.4's layout).
+  The first release ships here, without the saver.
+
+  *As built (2026-11-04; plan
+  `docs/superpowers/plans/2026-11-04-windows-w4-install-release.md`).* What was
+  built and how is in §10.25.13 *As built* (install, update, Start with
+  Windows, uninstall, About), §10.25.15 (the `win-*` targets, signing, the CI
+  `win` job and its runner) and §10.25.20. `make win-unit` passes 193 tests
+  (166 at W3; 27 new). `make win-test` passes over RDP, including `install`, `update`,
+  `update (busy exe)` and `uninstall` against the test layout. The real
+  install and uninstall ran by `make win-install` / `win-uninstall` on the
+  owner's PC (Settings kept, byte-identical); the `win` job passed on
+  `windows-2025` (run 3 of 3, 1m14s). **Nothing is tagged or released: the
+  first release (v0.11.0, §10.25.20) waits for the owner's OK.**
+  - **Still to check by hand (owner, at the console, then over RDP).** Agents
+    can't click the tray, Settings → Apps or the taskbar, so none of this was
+    done; record the results here.
+    1. *Download path.* Copy `dist/wallpapers-windows-<version>.zip` to
+       Downloads in Windows, unzip, run `Wallpapers.exe`: SmartScreen (or
+       Smart App Control) says what the README says; the Install dialog;
+       *Install*: the app runs installed, the Start menu has *Wallpapers*,
+       Settings → Apps lists *Wallpapers <version>* with the icon and the size
+       (about 53 MB).
+    2. *Start with Windows.* Sign out and in (or restart): the wallpaper is
+       back within ~10 s of the desktop; `make win-log` shows the start and,
+       if Explorer was late, the layer retry. Untick it in the tray, sign out
+       and in: it doesn't start; tick it back. (Ticking and unticking the row
+       was never clicked; the Run value itself was proven by `win-install` and
+       the self-test.)
+    3. *Start menu while running.* Click *Wallpapers* in the Start menu:
+       Settings opens, no second app.
+    4. *About.* Tray → About: the dialog says `Installed in …` and has
+       *Close*, *Uninstall…* and *Project Page* (screenshot it). *Project Page*
+       opens the project's page (the releases) in the browser and About stays open.
+       *Uninstall…* runs end to end (item 6's checks).
+    5. *Update.* Bump `version` in `web/manifest.json` locally, `make
+       win-release`, unzip elsewhere, run it: the Update dialog names both
+       versions; *Update*: the app comes back with the new version in About,
+       settings and the current wallpaper intact, *Start with Windows* as it
+       was. Run the older unzipped exe: no dialog, Settings opens. Put the
+       manifest version back.
+    6. *Just Run and the tray's Install….* `make win-uninstall`, run the
+       unzipped exe, *Just Run*: it runs from Downloads; start it again: no
+       dialog; the tray shows *Install…*; install from there (the hand-over:
+       the installed copy starts, this one quits; the log may show one
+       `pipe: All pipe instances are busy` retry, harmless).
+    7. *Quiet install in place.* From the installed exe run `Wallpapers.exe
+       --install`: no dialog, the install is refreshed in place (no copy,
+       entry and shortcut rewritten), the app restarts.
+    8. *Uninstall from Settings → Apps* while the app runs: the dialog, *Keep My
+       Settings*: everything goes, settings stay; reinstall and uninstall with
+       *Delete My Settings Too*: `%LOCALAPPDATA%\Wallpapers` is gone too.
+       `%TEMP%` has no `Wallpapers-uninstall-*.exe` left.
+    9. *Sign out and in* with the app installed and running: it comes back; no
+       second instance; the Settings → Apps entry is still right.
+    10. *Smart App Control.* Note whether the unsigned release exe runs on this
+        PC (the hash is new) and keep the Code Integrity event id if it is
+        refused, for the signing decision.
+    11. *The first release (owner's step, after the OK).* Bump `version`
+        (0.11.0), commit, `git tag v0.11.0 && git push --tags`; CI's `win` job
+        passes; the release carries `wallpapers-windows-0.11.0.zip` and
+        `.sha256`; download it on the console PC and repeat item 1 from the real
+        release.
+  - **Changed from the design:** `Wallpapers.scr` is named but not created
+    until W5; the install offer runs before the single-instance check; apply
+    stages and swaps with rollback; the CI `win` job tests the Linux-built zip
+    instead of building again; WebView2's 0.5 scale floor shaped the fake
+    monitors (§10.25.15).
 - **W5 Screen saver (last, owner):** `/s /p /c`, selection and timeout,
   choices, clock, watchdog, saver ↔ app pipe; uninstall restores Windows'
   saver. Self-test 9. Ships in the next release.
@@ -4648,6 +4831,30 @@ Task Manager; RDP in and out; the saver from Windows' dialog; uninstall.
 - Self-contained single-file exe (~52 MB, 52,154,922 bytes at W3) rather than requiring the .NET
   runtime; per-user install, no admin.
 - `make ci` runs `win-unit` only when `dotnet` is installed.
+- W4 (2026-11-04): the install offer runs **before** the single-instance
+  check, so a newer download offers Update while the installed app runs.
+  Apply stages and swaps with rollback; a failed update restarts the old copy
+  (not on the StillRunning timeout). Stage 2 refuses any root that isn't the
+  run or test install folder. `Wallpapers.scr` waits for W5. The `win` job
+  tests the Linux-built zip rather than building again; a failed Windows
+  self-test drops the Windows zip from that release with a warning. The
+  self-test's fake monitors fit at about 0.75 (WebView2 renders no smaller
+  than ~0.5 scale). The installed size is about 53 MB. The jsign token is in
+  jsign's argv while signing. The signed path hasn't run.
+
+**Owner decisions taken 2026-11-04 (W4):**
+- Ship unsigned first; set up Azure Trusted Signing before telling anyone else
+  about the app (Smart App Control and SmartScreen both pass once signed;
+  `winget` becomes possible). Until then the README says SmartScreen asks
+  *Run anyway* and a Smart App Control PC may refuse the hash.
+- No online update check: no network, no telemetry. About → Project Page opens
+  the releases page. A weekly check would be a declared network use, W6+ if
+  wanted.
+- A failed Windows self-test on the hosted runner drops the Windows zip from
+  that release with a warning, as the Mac's does. If the runner proves flaky,
+  switching to advice is one `if` in `ci.yml`.
+- The exe stays self-contained (~52 MB).
+- The first release, v0.11.0, waits for the owner's explicit OK.
 
 #### 10.25.21 Spike results
 
