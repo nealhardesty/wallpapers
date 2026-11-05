@@ -16,7 +16,16 @@ sealed class Surface : IDisposable
     public HostPlacement Placement { get; private set; }
     public IntPtr Host { get; private set; }
     public CoreWebView2? Web => controller?.CoreWebView2;
-    public bool Visible => controller?.IsVisible ?? false;
+    /// False once its browser process is gone too (the read throws then, until Desktop rebuilds it):
+    /// the pointer reads this on every move.
+    public bool Visible
+    {
+        get
+        {
+            try { return controller?.IsVisible ?? false; }
+            catch (Exception e) when (e is COMException or InvalidOperationException) { return false; }
+        }
+    }
     /// The browser process is gone: this surface can't recover by itself; Desktop rebuilds it.
     public event Action<Surface>? Lost;
     /// The page finished loading (first load and every reload): it can answer scripts now.

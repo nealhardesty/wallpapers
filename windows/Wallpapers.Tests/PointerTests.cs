@@ -3,26 +3,30 @@ namespace Wallpapers.Tests;
 public class PointerTests
 {
     [Theory]
-    [InlineData("SysListView32")]
-    [InlineData("SHELLDLL_DefView")]
-    [InlineData("Progman")]
-    [InlineData("WorkerW")]
-    [InlineData("WallpapersHost")]
-    public void Desktop_classes_and_the_host_are_desktop(string cls) => Assert.True(HitTest.IsDesktop(cls));
+    [InlineData("SysListView32", "SHELLDLL_DefView")]
+    [InlineData("SHELLDLL_DefView", "Progman")]
+    [InlineData("SHELLDLL_DefView", "WorkerW")]
+    [InlineData("Progman", "")]
+    [InlineData("WorkerW", "")]
+    [InlineData("WallpapersHost", "WorkerW")]
+    public void Desktop_classes_and_the_host_are_desktop(string cls, string parent) => Assert.True(HitTest.IsDesktop(cls, parent));
 
     [Theory]
-    [InlineData("Chrome_WidgetWin_1")]
-    [InlineData("CabinetWClass")]
-    [InlineData("Shell_TrayWnd")]
-    public void Other_classes_are_not_desktop(string cls) => Assert.False(HitTest.IsDesktop(cls));
+    [InlineData("Chrome_WidgetWin_1", "")]
+    [InlineData("CabinetWClass", "")]
+    [InlineData("Shell_TrayWnd", "")]
+    [InlineData("SysListView32", "RegEdit_RegEdit")]
+    [InlineData("SysListView32", "")]
+    public void Other_classes_are_not_desktop(string cls, string parent) => Assert.False(HitTest.IsDesktop(cls, parent));
 
     [Fact]
     public void Kind_is_other_off_the_desktop_icon_on_a_list_item_else_bare()
     {
-        Assert.Equal(HitKind.Other, HitTest.Kind("CabinetWClass", null));
-        Assert.Equal(HitKind.Icon, HitTest.Kind("SysListView32", true));
-        Assert.Equal(HitKind.Bare, HitTest.Kind("SysListView32", false));
-        Assert.Equal(HitKind.Bare, HitTest.Kind("Progman", null));
+        Assert.Equal(HitKind.Other, HitTest.Kind("CabinetWClass", "", null));
+        Assert.Equal(HitKind.Other, HitTest.Kind("SysListView32", "RegEdit_RegEdit", true));
+        Assert.Equal(HitKind.Icon, HitTest.Kind("SysListView32", "SHELLDLL_DefView", true));
+        Assert.Equal(HitKind.Bare, HitTest.Kind("SysListView32", "SHELLDLL_DefView", false));
+        Assert.Equal(HitKind.Bare, HitTest.Kind("Progman", "", null));
     }
 
     static IReadOnlyList<SurfacePlan> Plan(string fixture) => Layout.Plan(Displays.FromJson(Fixture.Read(fixture)));

@@ -51,7 +51,8 @@ sealed class Pointer : IDisposable
     string? over;
     (int X, int Y) last = (int.MinValue, int.MinValue);
     int clicks, rawMoves, pollMoves, sent;
-    bool disposed;
+    /// Volatile: the worker reads it, so it doesn't post to a message loop that has ended.
+    volatile bool disposed;
 
     public Pointer(Func<IReadOnlyList<Surface>> surfaces)
     {
@@ -217,7 +218,10 @@ sealed class Pointer : IDisposable
         {
             if (job.Probe is { } probe) { probe.TrySetResult(Classify(job.X, job.Y)); continue; }
             var (kind, ms) = !job.Down ? (HitKind.Other, 0.0) : job.Kind is { } fed ? (fed, 0.0) : Classify(job.X, job.Y);
-            ui.Post(_ => { if (job.Down) OnDown(job, kind, ms); else OnUp(job); }, null);
+            if (disposed) continue;
+            // Quit can still end the message loop between the check and the post.
+            try { ui.Post(_ => { if (job.Down) OnDown(job, kind, ms); else OnUp(job); }, null); }
+            catch (InvalidOperationException) { }
         }
         if (automation != null) Marshal.FinalReleaseComObject(automation);
     }
@@ -254,8 +258,9 @@ sealed class Pointer : IDisposable
     (HitKind Kind, double UiaMs) Classify(int x, int y)
     {
         var p = new N.POINT { X = x, Y = y };
-        var cls = N.ClassOf(N.WindowFromPoint(p));
-        if (!HitTest.IsDesktop(cls)) return (HitKind.Other, 0);
+        var hwnd = N.WindowFromPoint(p);
+        var (cls, parent) = (N.ClassOf(hwnd), N.ClassOf(N.GetParent(hwnd)));
+        if (!HitTest.IsDesktop(cls, parent)) return (HitKind.Other, 0);
         var clock = Stopwatch.StartNew();
         bool? listItem = null;
         N.IUIAutomationElement? element = null;
@@ -271,7 +276,7 @@ sealed class Pointer : IDisposable
         }
         catch (Exception e) { Log.Debug($"pointer: UI Automation at ({x},{y}) failed ({e.GetType().Name}: {e.Message}); bare"); }
         finally { if (element != null) Marshal.ReleaseComObject(element); }
-        return (HitTest.Kind(cls, listItem), clock.Elapsed.TotalMilliseconds);
+        return (HitTest.Kind(cls, parent, listItem), clock.Elapsed.TotalMilliseconds);
     }
 
     void OnDown(Job job, HitKind kind, double uiaMs)
@@ -281,9 +286,11 @@ sealed class Pointer : IDisposable
         if (tracker.Pressed != null) Release(tracker.Up(job.X, job.Y, job.T), job.Click - 1, "missed");
         var verdict = kind.ToString().ToLowerInvariant();
         var uia = uiaMs > 0 ? $" uia {uiaMs:0} ms" : "";
-        // Its verdict came too late (UI Automation stalled): dropped, so its up finds nothing pressed.
+        // Its verdict came too late (UI Automation stalled): dropped, so its up finds nothing pressed,
+        // and it breaks the double-click pair like any press that isn't forwarded.
         if (clock.ElapsedMilliseconds - job.T > StaleMs)
         {
+            tracker.Down(null, HitKind.Other, job.X, job.Y, job.T);
             Log.Debug($"pointer: click #{job.Click} down {verdict} (stale, {clock.ElapsedMilliseconds - job.T} ms old){uia}");
             return;
         }
@@ -309,18 +316,20 @@ sealed class Pointer : IDisposable
         if (r == null) return;
         Log.Debug($"pointer: click #{click} up → {r.Key} ({r.At.CssX:0},{r.At.CssY:0}){(r.DoubleClick ? " dblclick" : "")}{(why != null ? $" ({why})" : "")}");
         if (SurfaceFor(r.Key) is { } s) _ = s.SendPressAsync(false, r.At.CssX, r.At.CssY, r.DoubleClick);
+        // With Follow off no later move will say the cursor went elsewhere: a drag's moves put it there.
+        if (!Follow) { Leave(); over = null; }
     }
 
     // ---- For the self-test ------------------------------------------------------------------
 
     /// The same path as the mouse from the throttle and the tracker on, without Raw Input or UIA: a move
-    /// (down null; kind ignored), or a left press or release whose verdict is `kind`. Nothing while off.
+    /// (down null; kind ignored), or a left press or release whose verdict is `kind`. No gates of its own:
+    /// off, or with a toggle off, the shared path (Deliver, OnDown) must drop it.
     internal void FeedForTest(bool? down, int x, int y, HitKind kind = HitKind.Bare)
     {
-        if (!Active) return;
+        if (disposed) return;
         var now = clock.ElapsedMilliseconds;
         if (down is not { } d) { Move(x, y, now); return; }
-        if (!Clicks) return;
         queue.Add(d ? new Job(++clicks, true, x, y, now, kind) : new Job(clicks, false, x, y, now, null));
     }
 

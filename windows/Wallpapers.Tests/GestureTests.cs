@@ -107,6 +107,15 @@ public class GestureTests
     }
 
     [Fact]
+    public void A_press_off_every_surface_breaks_the_pair()
+    {
+        var g = Tracker();
+        Assert.False(Click(g, T1, 100, 100, 0));
+        Assert.Null(g.Down(null, HitKind.Other, 100, 100, 100));
+        Assert.False(Click(g, T1, 100, 100, 200));
+    }
+
+    [Fact]
     public void Script_dispatches_the_right_events_in_order()
     {
         var down = PointerScript.Press(true, 400, 300);

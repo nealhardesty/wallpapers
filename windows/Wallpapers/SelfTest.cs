@@ -289,12 +289,13 @@ sealed class SelfTest
 
     // ---- The pointer (§10.25.8) ---------------------------------------------------------------
 
-    /// What a stage heard since its probe was last emptied: real moves (SendMouseInput), host.gestures
-    /// taps and the last dblclick, in CSS px.
-    sealed record Heard(int Moves, double[]? Last, double[][] Taps, double[]? Dbl)
+    /// What a stage heard since its probe was last emptied: real moves (SendMouseInput), presses
+    /// (pointerdown: only ever by script), host.gestures taps and the last dblclick, in CSS px. A press
+    /// is the proof that a click got through: the real cursor's moves (Follow on) can turn a tap into a drag.
+    sealed record Heard(int Moves, double[]? Last, int Downs, double[][] Taps, double[]? Dbl)
     {
         public override string ToString() =>
-            $"moves {Moves} last {At(Last)}, taps [{string.Join(" ", Taps.Select(At))}], dblclick {At(Dbl)}";
+            $"moves {Moves} last {At(Last)}, downs {Downs}, taps [{string.Join(" ", Taps.Select(At))}], dblclick {At(Dbl)}";
     }
 
     static string At(double[]? p) => p is [var x, var y] ? $"({x:0.#},{y:0.#})" : "none";
@@ -306,11 +307,12 @@ sealed class SelfTest
           const w = {{Stage}};
           if (!w || !w.WP || !w.WP.host) return false;
           const fresh = !w.__pt;
-          w.__pt = { moves: 0, last: null, taps: [], dbl: null };
+          w.__pt = { moves: 0, last: null, downs: 0, taps: [], dbl: null };
           if (fresh) {
             w.WP.host.gestures({ tap: (x, y) => w.__pt.taps.push([x, y]) });
             w.document.addEventListener('pointermove', e => { w.__pt.moves++; w.__pt.last = [e.clientX, e.clientY]; });
             w.document.addEventListener('dblclick', e => w.__pt.dbl = [e.clientX, e.clientY]);
+            w.document.addEventListener('pointerdown', () => w.__pt.downs++);
           }
           return true;
         })()
@@ -380,7 +382,7 @@ sealed class SelfTest
             await TapAsync(x, y);
             await Wait(500);
             h = await HeardAsync(first);
-            var nothing = before != null && h != null && h.Moves == before.Moves && h.Taps.Length == before.Taps.Length;
+            var nothing = before != null && h != null && h.Moves == before.Moves && h.Downs == before.Downs && h.Taps.Length == before.Taps.Length;
             await desktop.SetPausedAsync(false);
             var on = pointer.Active;
             Check("pointer hidden", off && nothing && on,
@@ -408,7 +410,7 @@ sealed class SelfTest
             var clicksOff = !pointer.Clicks && !app.Settings.DesktopClicks && !Saved(st => st.DesktopClicks);
             await TapAsync(x, y);
             await Wait(500);
-            var blocked = (h = await HeardAsync(first)) is { Taps.Length: 0 };
+            var blocked = (h = await HeardAsync(first)) is { Downs: 0, Taps.Length: 0 };
             notes.Add($"clicks off {(clicksOff ? "saved" : "NOT saved")}, a tap {(blocked ? "not delivered" : $"DELIVERED ({h})")}");
             app.Tray.ClickPointerForTest("clicks");
             var clicksOn = pointer.Clicks && app.Settings.DesktopClicks && Saved(st => st.DesktopClicks);
@@ -463,6 +465,7 @@ sealed class SelfTest
         try { icons = listView != IntPtr.Zero && N.IsWindowVisible(listView) ? await Task.Run(() => IconRects(listView)) : []; }
         catch (COMException e) { Line("FAIL", Name, $"UI Automation couldn't list the icons ({e.Message})"); return; }
         var allIcons = icons.Count;
+        if (allIcons == 0) { Line("SKIP", Name, "no desktop icons"); return; }
         var points = new List<(int X, int Y, HitKind Want)>();
         foreach (var r in icons)
         {

@@ -7,14 +7,17 @@ public static class HitTest
 {
     public const string HostClass = "WallpapersHost";
 
-    static readonly HashSet<string> Desktop = ["SysListView32", "SHELLDLL_DefView", "Progman", "WorkerW", HostClass];
+    static readonly HashSet<string> Desktop = ["SHELLDLL_DefView", "Progman", "WorkerW", HostClass];
 
-    public static bool IsDesktop(string windowClass) => Desktop.Contains(windowClass);
+    /// The desktop's windows, and a SysListView32 only inside SHELLDLL_DefView (other apps' lists, such
+    /// as Regedit's, are that class too).
+    public static bool IsDesktop(string windowClass, string parentClass) =>
+        windowClass == "SysListView32" ? parentClass == "SHELLDLL_DefView" : Desktop.Contains(windowClass);
 
-    /// Off the desktop classes: Other (UIA is never asked). On them: an icon when UIA says list item,
+    /// Off the desktop's windows: Other (UIA is never asked). On them: an icon when UIA says list item,
     /// else bare, including when UIA failed.
-    public static HitKind Kind(string windowClass, bool? uiaListItem) =>
-        !IsDesktop(windowClass) ? HitKind.Other : uiaListItem == true ? HitKind.Icon : HitKind.Bare;
+    public static HitKind Kind(string windowClass, string parentClass, bool? uiaListItem) =>
+        !IsDesktop(windowClass, parentClass) ? HitKind.Other : uiaListItem == true ? HitKind.Icon : HitKind.Bare;
 }
 
 public sealed record PointerTarget(string Key, HostPlacement Placement, bool Visible);

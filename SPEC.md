@@ -3029,7 +3029,7 @@ New questions go here, each with a recommendation.
   only turn it back on with a reset). *Recommendation:* Azure Trusted Signing
   (publicly trusted, inexpensive) for releases; during W1–W3, a build that's
   refused gets a version bump and is rebuilt. **Owner decision.**
-- **Windows: one ~70 MB self-contained exe, or require the .NET runtime?**
+- **Windows: one ~52 MB self-contained exe, or require the .NET runtime?**
   (§10.25.13). *Recommendation:* self-contained: nothing to install first,
   and the `.scr` copy just works. Size is the cost.
 - **Jellyfin on GitHub Pages:** settled by spike 9.0. After Chrome's local
@@ -3894,10 +3894,13 @@ page, as the Mac does with its global monitor.
   Any UIA failure counts the press as **bare** (owner's call).
 - **A press whose verdict arrives more than ~1 s after it is dropped as
   stale** (debug log `(stale, N ms old)`), so a hung Explorer can't replay old
-  clicks. A new down first releases a still-pressed surface (a missed up). A
+  clicks, and breaks the double-click pair like any press that isn't
+  forwarded. A new down first releases a still-pressed surface (a missed up). A
   gesture ends (the release is sent) when its pressed surface is hidden, and
   hidden surfaces get no moves or `Leave`. A drag's moves go to the pressed
-  surface even off it, with `buttons 1`.
+  surface even off it, with `buttons 1`; with *Follows the Mouse* off the
+  release is followed by a `Leave`. A surface whose browser process has died
+  reads as not visible until it is rebuilt.
 - **Double click:** `GetDoubleClickTime()` and `SM_CXDOUBLECLK/SM_CYDOUBLECLK`
   read when the pointer starts: a second bare press within that time, on the
   same surface, within half the distance each way, adds `dblclick`
@@ -4117,7 +4120,7 @@ desktop surfaces go `hidden`.
 #### 10.25.13 Install, start, uninstall (`Install.cs`)
 
 - **The download** is a zip: `Wallpapers.exe` (self-contained, single-file,
-  .NET included, ~70 MB unpacked) and `web\`. Run `Wallpapers.exe` from
+  .NET included, ~52 MB unpacked) and `web\`. Run `Wallpapers.exe` from
   anywhere: if it isn't installed, it offers **Install** (copy to
   `%LOCALAPPDATA%\Programs\Wallpapers`, create `Wallpapers.scr`, a Start menu
   shortcut, an `HKCU\…\Uninstall` entry so it's in Settings → Apps, and
@@ -4221,8 +4224,10 @@ about 50 s. Details that matter:
   (`Pointer.FeedForTest`) and classify real points without clicking
   (`ClassifyForTest`). The built-in fake layout is **two 1920×720 monitors**,
   so over RDP the fit factor is not 1 and a plan-scale bug shows. `pointer
-  classify` needs some icons or bare desktop in view: it SKIPs when the
-  desktop is covered, and over RDP; PASS reads `n of n right; uia median …`.
+  classify` needs desktop icons, and some of them or bare desktop in view:
+  it SKIPs when the desktop has no icons or every point is covered (as it
+  usually is over RDP, where the maximized terminal fills the one monitor;
+  nothing else about RDP skips it); PASS reads `n of n right; uia median …`.
 - `coverage` starts `Wallpapers.exe --cover-for-test <monitor 1 work area>`
   (a borderless, non-activating window, not a real maximize, so it takes no
   focus from whoever is working), checks that only monitor 1 hides, that the
@@ -4554,8 +4559,8 @@ Task Manager; RDP in and out; the saver from Windows' dialog; uninstall.
     14. *`make win-test` at the console,* with part of the desktop uncovered
         (terminal restored or moved off part of monitor 1): `PASS pointer
         classify  n of n right; uia median <40 ms` with real icons (it only
-        SKIPs over RDP or when everything is covered; on FAIL read the
-        `wrong:` list), `pointer tap` with `focus kept`. At the console the
+        SKIPs with no desktop icons or when every point is covered, as the
+        maximized terminal does over RDP; on FAIL read the `wrong:` list), `pointer tap` with `focus kept`. At the console the
         fake fit factor is about 0.95 and the real scale may differ from
         200%.
     15. *Numbers to record here:* the app's CPU with the mouse busy (Task
@@ -4639,7 +4644,7 @@ Task Manager; RDP in and out; the saver from Windows' dialog; uninstall.
   7); Play in a Window is unmuted; a UI Automation failure on a desktop
   window counts the press as bare.
 - Desktop web views are muted by default.
-- Self-contained single-file exe (~70 MB) rather than requiring the .NET
+- Self-contained single-file exe (~52 MB, 52,154,922 bytes at W3) rather than requiring the .NET
   runtime; per-user install, no admin.
 - `make ci` runs `win-unit` only when `dotnet` is installed.
 
