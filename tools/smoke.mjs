@@ -152,7 +152,10 @@ function listen() {
     cdp.on('Runtime.consoleAPICalled', ({ type, args }) => type === 'error' && record(`console.error: ${args.map(a => a.value ?? a.description).join(' ')}`));
     // An offline device's failed requests are expected, not errors.
     // So are a fixture server's deliberate 503s.
-    cdp.on('Log.entryAdded', ({ entry: e }) => e.level === 'error' && !((current.offline || current.forecast === '503') && (e.source === 'network' || declared(e.url || ''))) && record(`log: ${e.text} ${e.url || ''}`));
+    // A declared service failing (offline, a fixture 503, or on the live run the real service having a bad
+    // moment, as celestrak.org does) is the wallpaper's offline case, which its checks cover; not a failure.
+    const outage = e => e.source === 'network' && declared(e.url || '');
+    cdp.on('Log.entryAdded', ({ entry: e }) => e.level === 'error' && !((current.offline || current.forecast === '503') && (e.source === 'network' || declared(e.url || ''))) && !(LIVE && outage(e)) && record(`log: ${e.text} ${e.url || ''}`));
     cdp.on('Runtime.executionContextCreated', ({ context }) => {
         if (context.auxData?.isDefault) contexts.set(context.auxData.frameId, context.id);
     });
@@ -1936,9 +1939,12 @@ const STAGE_CHECKS = {
     ],
 };
 
-// Checks whose fixture server is plain http, which an https page (the live
-// site) may not reach: they run only locally.
-const LOCAL_ONLY = new Set(['jellyfin']);
+// Checks that only make sense against fixtures run only locally: Jellyfin's
+// fixture server is plain http, which an https page (the live site) may not
+// reach, and Weather's checks assert a made-up forecast and simulated outages,
+// while the live run sends Open-Meteo's requests to the real service. The live
+// run still boots each of them, with real network.
+const LOCAL_ONLY = new Set(['jellyfin', 'weather']);
 
 async function stageChecks(id) {
     const { check, failed } = checker();
@@ -2026,6 +2032,9 @@ async function playerSuite(catalog) {
     });
 
     await check('] switches, persists and drops ?w= from the URL', async () => {
+        // Its own start, not whatever page the checks before it left.
+        await fresh(`${WEB}/index.html?w=rain`);
+        if (await playerReady() !== 'rain') return record('rain not shown');
         await cdp.send('Input.dispatchKeyEvent', { type: 'keyDown', key: ']', text: ']' });
         await cdp.send('Input.dispatchKeyEvent', { type: 'keyUp', key: ']' });
         const shown = await waitFor(async () => { const id = await evaluate('WP.player.stage.ready && WP.player.stage.id'); return id && id !== 'rain' && id; });
