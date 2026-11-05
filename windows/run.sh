@@ -127,7 +127,7 @@ launch() {
     echo "run.sh: the saver is running full screen; press a key or move the mouse to end it"
     "$PS" -NoProfile -Command "\$p = Start-Process -FilePath '$(win_path "$BIN/Wallpapers.exe")' -WorkingDirectory '$(win_path "$BIN")' -ArgumentList '/s' -PassThru; \$null = \$p.Handle; \$p.WaitForExit(); exit \$p.ExitCode" < /dev/null > "$OUTPUT" 2>&1 || status=$?
     tr -d '\r' < "$OUTPUT"
-    if grep -qiE "Device Guard|Application Control" "$OUTPUT"; then return 3; fi
+    if grep -qiE "Device Guard|Application Control|Invalid argument" "$OUTPUT"; then return 3; fi
     echo "run.sh: the saver ended (exit $status); the end of $LOG:"
     tail -n 40 "$LOG" 2>/dev/null | tr -d '\r' || true
     return 0

@@ -103,7 +103,7 @@ sealed class SaverOptionsWindow : Form
 
     /// A change, then every control again from what's true now (a refused change shows as it was). SaverControl
     /// says its own failures; what could still come through (the registry, a process start, a window going
-    /// mid-change) is logged here. Anything else is a bug, and goes to Application.ThreadException as elsewhere.
+    /// mid-change) is logged here.
     void Do(string what, Action action)
     {
         if (filling) return;
@@ -113,6 +113,10 @@ sealed class SaverOptionsWindow : Form
         {
             Log.Warn($"saver options: {what}: {e.GetType().Name}: {e.Message}");
         }
+        // Tray.Run's sanctioned exception to the type-filter rule: a control's action must never reach
+        // Application.ThreadException, whose crash cleanup would take the tray and the wallpaper down.
+        catch (Exception e) when (!IsDisposed) { Log.Warn($"saver options: {what}: {e.GetType().Name}: {e.Message}"); }
+        catch (Exception) { }
         if (!IsDisposed) Fill();
     }
 
