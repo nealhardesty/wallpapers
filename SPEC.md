@@ -3443,7 +3443,8 @@ desktop icons, on every monitor, controlled from a tray icon, and later as
 the screen saver: the Mac app (§10.21) for Windows, going further where
 Windows allows. **Status: W0 passed (2026-11-03, §10.25.21); W1 built
 (2026-11-03, *As built* in §10.25.16); W2 built (2026-11-04; by-hand console
-pass pending); W3 next.** Phase W0
+pass pending); W3 built (2026-11-04; by-hand console pass pending); W4
+next.** Phase W0
 (spikes) is the gate: if a live web page can't run behind the icons on 25H2,
 the project stops. Brainstormed and reviewed 2026-11-02; the original design
 note is `docs/superpowers/specs/2026-11-02-windows-design.md`, and this
@@ -3864,6 +3865,73 @@ page, as the Mac does with its global monitor.
   silent and the cursor moves: fish still follow. Clicks are lost until
   focus moves (clicking the desktop moves it anyway). Accepted.
 
+*As built (W3, 2026-11-04; plan
+`docs/superpowers/plans/2026-11-04-windows-w3-interactivity.md`).*
+- **Where:** `Pointer.cs` (the hidden top-level `WallpapersPointer` window,
+  `WM_INPUT`, the classifier worker, delivery), `Core/Pointer.cs` (`HitTest`,
+  `PointerMap`, `MoveThrottle`, `CursorSource`), `Core/Gesture.cs`
+  (`GestureTracker`, `DoubleClickRule`, `PointerScript`), `Surface.SendMove`,
+  `SendLeave` and `SendPressAsync`, `PlayWindow.cs`. No hook anywhere;
+  `SetForegroundWindow` is never called; no button ever goes through
+  `SendMouseInput`.
+- **Moves:** coalesced to one per **16 ms** (the latest position is flushed
+  when a burst ends), to the visible surface under the cursor, over app
+  windows too; `Leave` when the cursor leaves a surface. A position counts as
+  a move when `GetCursorPos` changed, not by `lLastX/Y` (RDP's mouse is
+  absolute). Local px = physical − `Placement.Screen` origin, CSS = local ÷
+  that surface's `RasterizationScale`: one rule for real monitors (mixed DPI)
+  and fake layouts (the fit factor is in the scale).
+- **Clicks:** left down/up go through **one queue to one MTA worker**
+  (`pointer-uia`), so a down and its up reach the page in order or not at all.
+  Only when `WindowFromPoint` is a desktop class (`HitTest.IsDesktop`) is UI
+  Automation asked. **It is hand-written COM to UIAutomationCore, not WPF**
+  (controller ruling in Task 4's fix): `CUIAutomation8`
+  (`e22ad333-b25f-460c-83d0-0581107395c9`) with 500 ms connection and
+  transaction timeouts through `IUIAutomation2`, falling back to
+  `CUIAutomation` (no timeouts, logged); `ElementFromPoint`, then
+  `CurrentControlType == 50007` (`ListItem`) is an icon. `UseWPF` would have
+  cost 23 MB (the exe went 52.1 → 75.9 MB); the exe stays 52,154,922 bytes.
+  Any UIA failure counts the press as **bare** (owner's call).
+- **A press whose verdict arrives more than ~1 s after it is dropped as
+  stale** (debug log `(stale, N ms old)`), so a hung Explorer can't replay old
+  clicks. A new down first releases a still-pressed surface (a missed up). A
+  gesture ends (the release is sent) when its pressed surface is hidden, and
+  hidden surfaces get no moves or `Leave`. A drag's moves go to the pressed
+  surface even off it, with `buttons 1`.
+- **Double click:** `GetDoubleClickTime()` and `SM_CXDOUBLECLK/SM_CYDOUBLECLK`
+  read when the pointer starts: a second bare press within that time, on the
+  same surface, within half the distance each way, adds `dblclick`
+  (`detail: 2`) to its release; a double resets the pair. The Fish Tank
+  therefore gets its glass tap and two foods.
+- **Raw input** is registered only while the toggles allow it and some surface
+  is visible (log `pointer: on …` / `pointer: off (no visible surface | both
+  toggles off)`); the 33 ms poll counts a sample only when raw input has been
+  silent for 250 ms.
+- **Settings:** `settings.json` gains `followMouse` and `desktopClicks`
+  (default true; old files read as true), the two tray rows after *Pause*.
+- **Play in a Window:** `index.html?host=windows&w=<id>`, a normal, focused,
+  resizable window (title `Wallpapers · <name>`, centred on the monitor
+  asked), unmuted (owner's call). The page has no corner buttons (§10.25.7
+  item 7); `,` and `f` work. Current behaviour: a pick or `n`/`p` inside it
+  writes the shared `wp:current`, so in Same mode it changes the desktop, as
+  the settings window does. A Play window is ours (by pid), so it never pauses
+  a desktop surface by coverage, even maximized over it.
+- **Verified (by script or self-test, over RDP at 200% and in the fake
+  layout):** `Pointer.FeedForTest` probes landed at (400, 300) on the real
+  surface and on fake monitor 2, with the foreground never ours;
+  `ClassifyForTest` on fake hosts took 1.5–19.8 ms (the first call includes
+  creating `CUIAutomation8`); the Play window opened three times (title,
+  centring, unmuted, renderer count back after close); deliberate-failure
+  runs (Task 7: a broken `Plan.Scale` path failed `pointer (fake monitor 2)`
+  at the tap, which is why the built-in fake layout is now two 1920×720
+  monitors: at 1280×720 the RDP fit factor was exactly 1 and the bug hid).
+- **Not verified:** real mouse input of any kind; an icon verdict from UIA on
+  real icons (every icon was under the owner's maximized terminal, so
+  `pointer classify` reported UIA correctly not asked); the stale drop (it
+  needs a hung Explorer); the app's CPU with the mouse busy (owner, Task
+  Manager: *pending (by hand)*); UIA timings against real icons (*pending
+  (by hand)*; W0.4 measured median 10 ms, p95 37 ms on the desktop).
+
 #### 10.25.9 Visibility and power (`Power.cs`, `Coverage.cs`)
 
 Everything becomes `WP.power({...})` on each page, as on Mac and Android,
@@ -4145,7 +4213,16 @@ non-zero on failure):
 `performance` low/medium/high/auto, `performance battery toggle`,
 `bing.json`, `shell restart (simulated)`, `renderer crash`,
 `power after reload`, `cleanup`, and with `--bad-web-root` the `web root`
-check. About 45 s. Details that matter:
+check. About 45 s. *W3 adds* the pointer checks: `pointer move`, `pointer
+tap`, `pointer double click`, `pointer icon`, `pointer hidden`, `pointer
+toggles`, `pointer classify` and `pointer (fake monitor 2)`; the run is now
+about 50 s. Details that matter:
+- The pointer checks never synthesize input: they feed the forwarder
+  (`Pointer.FeedForTest`) and classify real points without clicking
+  (`ClassifyForTest`). The built-in fake layout is **two 1920×720 monitors**,
+  so over RDP the fit factor is not 1 and a plan-scale bug shows. `pointer
+  classify` needs some icons or bare desktop in view: it SKIPs when the
+  desktop is covered, and over RDP; PASS reads `n of n right; uia median …`.
 - `coverage` starts `Wallpapers.exe --cover-for-test <monitor 1 work area>`
   (a borderless, non-activating window, not a real maximize, so it takes no
   focus from whoever is working), checks that only monitor 1 hides, that the
@@ -4402,6 +4479,92 @@ Task Manager; RDP in and out; the saver from Windows' dialog; uninstall.
     coverage window is a separate process, not a real maximize.
 - **W3 Interactivity (required):** Raw Input, bare-desktop clicks, delivery,
   the two tray toggles, Play in a Window. Self-test 6.
+
+  *As built (2026-11-04; plan
+  `docs/superpowers/plans/2026-11-04-windows-w3-interactivity.md`).* What was
+  built and how is in §10.25.8 *As built*. Checked over Remote Desktop (one
+  monitor at 200%) and in the fake two-monitor layout; no real mouse was
+  used. `make win-unit` 166 tests, `make win-test` all pass (~50 s), `make ci`
+  green.
+  - **Still to check by hand (owner, at the console with two monitors, then
+    over RDP).** Watch `make win-log FLAVOR=run FOLLOW=1` (normal app,
+    `make win-run`); the debug lines below need `make win-dev` and
+    `make win-log FLAVOR=dev FOLLOW=1`.
+    1. *Neko.* Pick Neko: the cat runs to the cursor wherever it goes, over
+       app windows too, and keeps following with a window focused.
+       `pointer: moves/s raw=… sent=…` is non-zero within a minute. A click
+       on bare desktop tosses yarn there (`down bare → m-… (x,y)`, `up`).
+    2. *Fish Tank.* Click bare desktop: food drops under the cursor (at 250%
+       and at 150%). Double-click bare desktop: the glass is tapped (the fish
+       startle) *and* two foods drop; the second `up` logs `dblclick`.
+       Right-click: Explorer's menu opens the first time, no food.
+       Middle-click: nothing.
+    3. *Icons.* Click an icon (selected, no food, log `down icon (not
+       forwarded)` and no `up`); double-click an icon (it opens, no food, no
+       glass tap); drag an icon onto bare desktop (it moves, no food);
+       rubber-band from bare desktop across icons (icons selected; one down,
+       one up, no tap; the drag's moves show `buttons 1`, e.g. the Fish
+       Tank's current pushes the plants).
+    4. *Apps and the taskbar.* Click in a window, on the taskbar, on Start:
+       nothing forwarded (no `down` line). Move the mouse over a maximized
+       window on monitor 2 while monitor 1 is uncovered: monitor 1's page gets
+       nothing, monitor 2's is hidden (covered) so nothing either;
+       un-maximize: moves resume at once.
+    5. *Two monitors.* Different mode, Neko on monitor 2 and the Fish Tank on
+       monitor 1: Neko follows only on monitor 2 (it never crosses, §10.25.20
+       item 8); a click on each monitor lands in that monitor's page at the
+       right spot. Mixed scales: the food drops under the cursor on both.
+    6. *Elevated.* Open Task Manager (Ctrl+Shift+Esc) and keep it focused,
+       move over the desktop: fish still follow (`moves/s raw=0 poll=…
+       sent=…`; afterwards `raw=…` again); a bare click while it is focused
+       does nothing (accepted, no click invented); click the desktop once
+       and clicks work again.
+    7. *Focus.* After a bare click, type an arrow key: the desktop's icon
+       selection moves (the key never reached us; the foreground is never
+       ours in the log).
+    8. *Toggles.* Untick *Wallpaper Follows the Mouse*: fish stop following,
+       clicks still feed. Untick *Clicks on the Desktop Play*: no food (no
+       `down bare` line). Both off: `pointer: off (both toggles off)`, and
+       Task Manager shows the app at 0.x% while the mouse is busy. Both on:
+       `pointer: on`. Quit and start: the ticks are kept.
+    9. *Hidden.* Pause from the tray, then Resume: `pointer: off (no visible
+       surface)`, then `pointer: on`. Win+L and unlock: the same. A maximized
+       window over the only monitor: the same pair. (Over a drag started
+       before it hides: the release is sent, nothing is stuck.)
+    10. *Draw Above Icons.* With it ticked: bare clicks feed, icon clicks
+        don't; untick.
+    11. *Play in a Window.* `make win-run`, pick Pixel Quest, tray → *Play in
+        a Window…*: opens focused and centred, titled `Wallpapers · Pixel
+        Quest`, in the taskbar and Alt-Tab. Arrows move the hero, Space,
+        `n`, `?` (help) work; `,` opens the panel in the window; `f` fills
+        the screen (borderless, over the taskbar) and `f` again restores its
+        frame and size (also from a maximized window: it should return
+        maximized, not borderless). Sound is audible there while the desktop
+        stays silent. Close it: the desktop is unchanged and the log has
+        `play: closed`. In Different mode *Monitor 2 ▸ Play in a Window…*
+        opens monitor 2's wallpaper, and asking from another row re-points
+        the same window; on mixed DPI the window's size is right on the
+        target monitor. Quit with the window open: it closes. Known: a pick
+        inside it writes `wp:current` (Same mode changes the desktop).
+    12. *RDP.* Items 1–2 over Remote Desktop (one monitor at 200%, 32 Hz):
+        moves arrive (`sent=…`), clicks land where clicked; the app's CPU
+        stays under 2% with the mouse busy.
+    13. *Touch,* if a touchscreen is at hand: a tap on bare desktop feeds; a
+        drag is a drag.
+    14. *`make win-test` at the console,* with part of the desktop uncovered
+        (terminal restored or moved off part of monitor 1): `PASS pointer
+        classify  n of n right; uia median <40 ms` with real icons (it only
+        SKIPs over RDP or when everything is covered; on FAIL read the
+        `wrong:` list), `pointer tap` with `focus kept`. At the console the
+        fake fit factor is about 0.95 and the real scale may differ from
+        200%.
+    15. *Numbers to record here:* the app's CPU with the mouse busy (Task
+        Manager) and UIA timings against real icons (`uia N ms` in the
+        `pointer: click #n` lines, `pointer classify`'s median): *pending
+        (by hand)*.
+  - **Known limits:** with an elevated window focused there are no clicks
+    (§10.25.8); a fake layout whose fit factor is 1 (a 3840-wide 100%
+    monitor) can't catch a plan-scale bug in the self-test.
 - **W4 Install and release:** self-installer, Start with Windows, updates,
   uninstall, Start menu, `win-release`, CI `win` job, README sections, SPEC
   updates (this section's status, the intro's host list, §10.25.3's layout). The first release ships here, without the saver.
@@ -4472,6 +4635,9 @@ Task Manager; RDP in and out; the saver from Windows' dialog; uninstall.
 - Covered = 97% of a monitor's work area; pause after 300 ms.
 - Moves are forwarded even over app windows; clicks only on bare desktop,
   left button only; keys never (Play in a Window instead).
+- W3 (owner, 2026-11-04): no corner buttons on windows hosts (§10.25.7 item
+  7); Play in a Window is unmuted; a UI Automation failure on a desktop
+  window counts the press as bare.
 - Desktop web views are muted by default.
 - Self-contained single-file exe (~70 MB) rather than requiring the .NET
   runtime; per-user install, no admin.
@@ -4532,7 +4698,8 @@ wallpaper `.jpg`, 2026-11-03)
   taskbar instead (a jump list opened), with no host attached as well, so the
   automated menu check is advisory; the owner's by-eye check is the real one.
   `UseWPF` (for UI Automation) cross-compiles fine in WSL; implicit usings then
-  drop `System.IO`.
+  drop `System.IO`. *(W3 didn't ship it: it adds 23 MB; UI Automation is
+  hand-written COM, §10.25.8.)*
 - Still to check: the console session (not RDP) and two monitors (W6, or
   RDP's *Use all my monitors* earlier).
 

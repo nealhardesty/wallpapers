@@ -50,6 +50,17 @@ wallpaper hidden. **Next: plan and build W3** (interactivity: Raw Input,
 desktop clicks, Play in a Window; SPEC §10.25.8 and §10.25.16). Signing is
 still the owner's call.
 
+**Update 2026-11-04 (later): W3 is built** (interactivity). Plan
+`docs/superpowers/plans/2026-11-04-windows-w3-interactivity.md`; what was built
+is in SPEC §10.25.8 *As built*, and the owner's by-hand checklist (console with
+two monitors, then RDP; `make win-test` at the console so `pointer classify` can
+pass) in §10.25.16's W3 *As built*. Done: Raw Input pointer, bare-desktop clicks
+(UI Automation by hand-written COM, exe still ~52 MB), double-click, the two tray
+toggles, Play in a Window; `make win-unit` 166 and `make win-test` pass over RDP
+and in fake layouts. **Pending:** the by-hand pass. **Next: W4, install and
+release** (SPEC §10.25.16): plan it with superpowers:writing-plans. Not pushed
+yet when this was written.
+
 ~~**The very next step:** write the implementation plan for Phase W0.~~ Done.
 Nothing past W0 is built until W0.1 and W0.2 pass. See §5 below.
 

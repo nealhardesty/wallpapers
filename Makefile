@@ -153,7 +153,7 @@ win-dev: ## Run the Windows app straight from this checkout's web/, with its own
 win-reload: ## Reload the running Windows app's pages after a web/ edit (the win-dev one; FLAVOR=run for the normal one)
 	@windows/run.sh reload $(or $(FLAVOR),dev)
 
-win-test: ## Run the Windows app's self-test against a throwaway settings store: layer, pause, coverage, power, monitors, performance, Explorer restart, cleanup (about 45 s; shows a wallpaper behind your icons)
+win-test: ## Run the Windows app's self-test against a throwaway settings store: layer, pause, coverage, power, the pointer, monitors, performance, Explorer restart, cleanup (about 50 s; shows a wallpaper behind your icons)
 	@BUILD=1 windows/run.sh test
 
 win-log: ## Show the Windows app's log (FLAVOR=dev or test for those; FOLLOW=1 to follow)

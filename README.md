@@ -195,9 +195,14 @@ Energy Saver on and over Remote Desktop. On a laptop with two graphics chips,
 it uses the one Windows picks; to force the power-saving one, add
 `Wallpapers.exe` in Settings → System → Display → Graphics. **Quit** gives you your own picture back. Wallpapers that
 react to the mouse do on the desktop too: they follow it everywhere, even over
-your windows, and a click plays only on bare desktop (never on an icon or a
-window). Keys never reach the desktop (typing there jumps between icons): use
-**Play in a Window**. The exe isn't
+your windows, and a left click plays only on bare desktop (never on an icon or
+a window; right and middle clicks never). Keys never reach the desktop (typing
+there jumps between icons): use **Play in a Window**. While an administrator
+window (Task Manager, an installer) has focus Windows withholds the mouse from
+the app: the wallpaper still follows it, at about 30 times a second, but clicks
+don't play until you click the desktop once. The two tray toggles turn the
+following and the clicks off, and with both off the app doesn't listen to the
+mouse at all. The exe isn't
 signed, so **Smart App Control**, if it's on, can refuse a build by its hash.
 `make win-run` notices and builds again (each build is a new file to it).
 SmartScreen asks about a downloaded copy: **More info → Run anyway**. (Or
