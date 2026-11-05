@@ -121,6 +121,12 @@ Added for Thanksgiving, drawn in code (design in §10.22):
 |---|---|---|---|
 | `harvest` | harvest-sky.js, harvest-art.js, harvest-actors.js, harvest.js | ~3k lines | Interactive (tap a tree, the scarecrow, the sky); pure sky and astronomy (`HarvestSky`), unit-tested; follows `host.now()`; keys G, H, W, M |
 
+Added in November 2026, drawn in code (design in §10.2):
+
+| id | Files | Size | Notes |
+|---|---|---|---|
+| `weather` | weather-data.js, weather-scenes.js, weather.js | ~1.9k lines | Network: `api.open-meteo.com` (+ the panel's geocoder); needs location; a labelled sample offline; pure data rules (`WeatherData`), unit-tested; interactive (tap a day); keys V, U, R |
+
 About 1.7 MB of JavaScript in total. **Not imported:** links, weather, clocks,
 search/omniprompt, custom links, status bar, Docker/nginx, the homepage's
 `config.js`, `script.js`, `manifest.json` (its `key` pins the private
@@ -788,6 +794,7 @@ and the commits.
 | lighthouse | `spray`, `glints` (medium) | Rain, ships, clouds, spray × density; sky, headland and beam sprite baked per resize; onScroll moves the camera |
 | wiki-pond | — | Ripple pool 60 + 140 × density, 8/s × (0.4 + 0.6 × density); pond baked; listens in bursts on Android |
 | satellites | — | Stars × density; sky and ground one layer every 30 s; positions once a second, interpolated; idle until the next second when nothing's up; onScroll |
+| weather | — | Sky a quarter-size gradient on its own layer, painted only when it changes; the forecast one cached layer, rebuilt once a minute; clouds, rain, snow × density, pooled; with nothing moving in the sky, only the scenes' squares repaint; ≤ 20 fps through idleUntil, once a minute under reduced motion |
 | harvest | `mist`, `beams` (medium) | Land is one baked layer per resize; trees, leaves, apples, geese and clouds are baked sprites; the world is washed once per frame with the hour's light; leaves, apples, smoke, sparks and flocks × density; squirrels × (0.5 + 0.5 density) |
 
 #### In the panel
@@ -1938,6 +1945,8 @@ or hour.
   blank screen.
 - **Units:** follow the locale: °F in the US, °C elsewhere, as the old
   homepage did.
+
+**As built:** three views (`view`, key V): day cards (3–10, wrapping into up to three rows on a phone; tap one for its hours, tap outside to go back), a 24-hour ribbon (smooth temperature curve, rain-chance bars, night shading from `is_day`, sunrise and sunset markers, a scene every three hours) and Now (large, with a table of wind, humidity, UV, sunrise and sunset, and a strip of the next days). Fifteen scenes, one per kind, pure functions of time over baked sprites, with night versions. The sky is the current hour's `sky()` phase and kind, crossfading over 2.5 s; over it an ambient layer (`ambient`: off, subtle, full) of soft clouds, rain, snow or hail, fog sheets, lightning, stars and the real moon phase. Cards: glass (darker over a bright sky so white text reads), solid or minimal. Always fetched in metric (10 days, so no setting needs a new request) and converted for display, so `U` switches units without the network. Cached in `host.storage` with its place; a cache for another place isn't shown; an old cache's "now" comes from its hourly forecast. Refreshed every `refreshMinutes` while frames run (so never while hidden, and once on return), retried after 5 minutes on a failure, `R` at most once a minute. States: "Sample forecast · set a place in ⚙︎ settings", the sample dimmed with "Getting the forecast…", "updated 3 h ago · offline", "Couldn't reach Open-Meteo · sample forecast"; the panel's status line says the same at more length. "Weather data by Open-Meteo.com" in the bottom corner, always. Bench (phone, 4× throttle): 4.8% Low, 7.9% Medium, 18% High.
 
 ### 10.3 World clock (owner)
 

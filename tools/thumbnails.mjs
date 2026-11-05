@@ -31,8 +31,8 @@ const OVERRIDES = {
     'stained-glass': { configVersion: 1, light: 'afternoon' },
 };
 // URL parameters for a better picture: satellites as its sample station
-// passes overhead before dawn (thumb mode never fetches, so it's the sample).
-const PARAMS = { satellites: '&date=2026-10-14T04:47:15', 'pixel-room': '&date=2026-10-22T18:20', 'rainy-window': '&date=2026-10-22T21:00', harvest: '&date=2026-11-20T15:50', neko: '&date=2026-06-10T12:00' };
+// passes overhead before dawn, weather's sample at a golden dusk (thumb mode never fetches, so it's the sample).
+const PARAMS = { satellites: '&date=2026-10-14T04:47:15', 'pixel-room': '&date=2026-10-22T18:20', 'rainy-window': '&date=2026-10-22T21:00', harvest: '&date=2026-11-20T15:50', neko: '&date=2026-06-10T12:00', weather: '&date=2026-11-05T17:50' };
 SETTLE_MS.fireworks = 2600;
 SETTLE_MS.harvest = 4000;
 

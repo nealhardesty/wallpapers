@@ -70,6 +70,43 @@ function marineJson(sea) {
         hourly: { time: hours, wave_height: hours.map(() => height), wave_period: hours.map(() => period), wave_direction: hours.map(() => 290) } };
 }
 
+// Weather's forecast, made up, in Open-Meteo's shape: ten days from today
+// (UTC) at a made-up place, every kind of weather across the days and
+// hours, rain right now. `bad` is an answer that isn't a forecast.
+const WEATHER_PLACE = { lat: 1.5, lon: 2.5, label: 'Fixtureville', source: 'typed' };
+function weatherJson(bad) {
+    if (bad) return { error: true, reason: 'Fixture: not a forecast' };
+    const DAY = 86400000, HOUR = 3600000, at = Date.now(), start = Math.floor(at / DAY) * DAY;
+    const iso = ms => new Date(ms).toISOString().slice(0, 16);
+    const DAYS = [61, 95, 71, 0, 45, 2, 3, 51, 66, 96];
+    const HOURS = [0, 1, 2, 3, 45, 51, 56, 61, 65, 71, 75, 80, 85, 95, 96];
+    const hourly = { time: [], temperature_2m: [], apparent_temperature: [], precipitation_probability: [], precipitation: [], weather_code: [], is_day: [], wind_speed_10m: [] };
+    const daily = { time: [], weather_code: [], temperature_2m_max: [], temperature_2m_min: [], precipitation_probability_max: [], precipitation_sum: [], sunrise: [], sunset: [], uv_index_max: [], wind_speed_10m_max: [] };
+    for (let d = 0; d < 10; d++) {
+        const t0 = start + d * DAY, hi = 12 + (d * 5) % 9, lo = hi - 7, wet = DAYS[d] >= 51;
+        daily.time.push(iso(t0).slice(0, 10)); daily.weather_code.push(DAYS[d]);
+        daily.temperature_2m_max.push(hi); daily.temperature_2m_min.push(lo);
+        daily.precipitation_probability_max.push(wet ? 55 + d * 4 : 10); daily.precipitation_sum.push(wet ? 4.2 : 0);
+        daily.sunrise.push(iso(t0 + 6.75 * HOUR)); daily.sunset.push(iso(t0 + 17.5 * HOUR));
+        daily.uv_index_max.push(3 + d % 5); daily.wind_speed_10m_max.push(14 + d * 2);
+        for (let h = 0; h < 24; h++) {
+            const temp = lo + (hi - lo) * Math.max(0, Math.sin((h - 6) / 24 * 2 * Math.PI));
+            hourly.time.push(iso(t0 + h * HOUR)); hourly.temperature_2m.push(Math.round(temp * 10) / 10);
+            hourly.apparent_temperature.push(Math.round((temp - 2) * 10) / 10);
+            hourly.precipitation_probability.push(wet ? (h * 13) % 90 : (h * 7) % 20); hourly.precipitation.push(wet ? 0.3 : 0);
+            hourly.weather_code.push(HOURS[(d + Math.floor(h / 3)) % HOURS.length]);
+            hourly.is_day.push(h >= 7 && h < 18 ? 1 : 0); hourly.wind_speed_10m.push(10 + h % 7);
+        }
+    }
+    const hour = new Date(at).getUTCHours();
+    return {
+        latitude: 1.5, longitude: 2.5, timezone: 'GMT', utc_offset_seconds: 0,
+        current: { time: iso(Math.floor(at / HOUR) * HOUR), temperature_2m: 9.4, apparent_temperature: 6.8, relative_humidity_2m: 82, weather_code: 63,
+            is_day: hour >= 7 && hour < 18 ? 1 : 0, wind_speed_10m: 18, wind_direction_10m: 225, precipitation: 0.6 },
+        hourly, daily,
+    };
+}
+
 // Wiki Pond's recent-changes stream, made up: invented titles and users,
 // never a recording of the live stream. Some events are for other wikis, a
 // bot, a canary, a new page and a new account, so the filters get a workout.
@@ -97,7 +134,8 @@ let cdp;
 // Problems for the test in progress, whether it may use Bing's fixtures, and
 // whether they come with CORS headers (the extension mustn't need them).
 // `offline` fails the wallpapers' own hosts quietly (an offline device);
-// `marine` picks Lighthouse's fixture; `hold` keeps Wiki Pond's stream open;
+// `marine` picks Lighthouse's fixture; `forecast: 'bad'` makes Weather's not a
+// forecast; `hold` keeps Wiki Pond's stream open;
 // `jellyfin` is a fixture server (tools/jellyfin-mock.mjs) at jellyfin.invalid.
 let current = { network: false, cors: true, problems: [], requests: [] };
 // Every wallpaper's declared hosts, from the catalog once it's loaded.
@@ -133,6 +171,7 @@ function listen() {
         });
         if (current.network && url.startsWith('https://www.bing.com/HPImageArchive')) return fulfil(Buffer.from(JSON.stringify(BING_JSON)), 'application/json');
         if (current.network && url.startsWith('https://www.bing.com/th')) return fulfil(PIXEL, 'image/png');
+        if (current.network && url.startsWith('https://api.open-meteo.com/v1/forecast?')) return fulfil(Buffer.from(JSON.stringify(weatherJson(current.forecast === 'bad'))), 'application/json');
         if (current.network && url.startsWith('https://marine-api.open-meteo.com/v1/marine?')) return fulfil(Buffer.from(JSON.stringify(marineJson(current.marine))), 'application/json');
         // `hold` leaves the stream hanging open, as a quiet live one would be.
         if (current.network && current.hold && url === 'https://stream.wikimedia.org/v2/stream/recentchange') return;
@@ -1050,6 +1089,118 @@ const STAGE_CHECKS = {
         }],
     ],
     // SPEC §9 Phase 9, against the fixture server (tools/jellyfin-mock.mjs).
+    // §10.2: every state draws a real sky and says what it is; the views,
+    // a phone, the night, a tap for a day's hours.
+    weather: [
+        ['the fixture forecast: live, cached, every kind, no "updated" line', async () => {
+            current.network = true;
+            await fresh(`${WEB}/stage.html?w=weather`, { 'wp:location': WEATHER_PLACE });
+            if (!await waitFor(() => evaluate("WP.stage.ready && WP.stage.manager.state === 'live'"))) return record(`never went live (${await evaluate('WP.stage.manager?.state')})`);
+            const s = await counts("({ banner: m.banner, kinds: new Set(m.forecast.hours.map(h => WeatherData.kind(h.code))).size, cached: !!localStorage.getItem('wp:weather:forecast'), status: m.status })");
+            if (s.banner) record(`a fresh forecast shows "${s.banner}"`);
+            if (s.kinds !== 15) record(`${s.kinds} kinds in the fixture's hours, want all 15`);
+            if (!s.cached) record('the forecast was not cached');
+            if (!s.status.startsWith('✓ The forecast for Fixtureville')) record(`panel status: ${s.status}`);
+            if (await evaluate(DRAWN) < 2) record('nothing drawn');
+            const asked = current.requests.filter(url => url.startsWith('https://api.open-meteo.com/'));
+            if (asked.length !== 1 || !asked[0].includes('latitude=1.5&longitude=2.5')) record(`asked Open-Meteo ${asked.length}× (${asked[0]})`);
+            return true;
+        }],
+        ['no place: the sample, labelled, and nothing asked', async () => {
+            await fresh(`${WEB}/stage.html?w=weather`);
+            await waitFor(() => evaluate('WP.stage.ready'));
+            await sleep(600);
+            const s = await counts('({ state: m.state, banner: m.banner, sample: !!m.forecast.sample, status: m.status })');
+            if (s.state !== 'sample' || !s.sample || !s.banner.startsWith('Sample forecast · set a place')) record(`no place: ${JSON.stringify(s)}`);
+            if (!s.status.includes('📍 Location')) record(`panel status: ${s.status}`);
+            if (current.requests.some(url => url.startsWith('https://'))) record('asked the network without a place');
+            if (await evaluate(DRAWN) < 2) record('nothing drawn');
+            return true;
+        }],
+        ['offline, or a bad answer, with nothing cached: the sample, "Couldn\'t reach"', async () => {
+            for (const how of ['offline', 'bad']) {
+                current = { ...current, network: how === 'bad', offline: how === 'offline', forecast: how };
+                await fresh(`${WEB}/stage.html?w=weather`, { 'wp:location': WEATHER_PLACE });
+                if (!await waitFor(() => evaluate("WP.stage.ready && WP.stage.manager.state === 'error'"))) record(`${how}: state ${await evaluate('WP.stage.manager?.state')}`);
+                const s = await counts('({ banner: m.banner, sample: !!m.forecast.sample })');
+                if (!s.sample || !s.banner.startsWith('Couldn\'t reach Open-Meteo')) record(`${how}: ${JSON.stringify(s)}`);
+                if (await evaluate(DRAWN) < 2) record(`${how}: nothing drawn`);
+            }
+            return true;
+        }],
+        ['one good load, then offline: the cache, "updated 3 h ago · offline"', async () => {
+            current.network = true;
+            await fresh(`${WEB}/stage.html?w=weather`, { 'wp:location': WEATHER_PLACE });
+            if (!await waitFor(() => evaluate("WP.stage.ready && WP.stage.manager.state === 'live'"))) return record('never went live');
+            await evaluate(`(k => { const v = JSON.parse(localStorage.getItem(k)); v.forecast.fetchedAt -= 3 * 3600000; localStorage.setItem(k, JSON.stringify(v)); })('wp:weather:forecast')`);
+            current.offline = true;
+            await cdp.send('Page.navigate', { url: `${WEB}/stage.html?w=weather` });
+            if (!await waitFor(() => evaluate("WP.stage.ready && WP.stage.manager.state === 'offline'"))) return record(`state ${await evaluate('WP.stage.manager?.state')}`);
+            const s = await counts('({ banner: m.banner, sample: !!m.forecast.sample })');
+            if (s.sample || s.banner !== 'updated 3 h ago · offline') record(`offline: ${JSON.stringify(s)}`);
+            // A cache for somewhere else isn't shown.
+            await evaluate(`localStorage.setItem('wp:location', JSON.stringify({ lat: -40.5, lon: 100.5, label: 'Elsewhere', source: 'typed' }))`);
+            await cdp.send('Page.navigate', { url: `${WEB}/stage.html?w=weather` });
+            await waitFor(() => evaluate('WP.stage.ready'));
+            await sleep(400);
+            if (!await evaluate('WP.stage.manager.forecast.sample')) record('showed another place\'s cached forecast');
+            return true;
+        }],
+        ['V cycles days, hours and now, each drawn', async () => {
+            await bootStage('w=weather');
+            const seen = [await evaluate('WP.stage.manager.layout.view')];
+            for (let i = 0; i < 3; i++) {
+                await press('v');
+                await sleep(300);
+                seen.push(await evaluate('WP.stage.manager.layout.view'));
+                if (await evaluate(DRAWN) < 2) record(`${seen.at(-1)}: nothing drawn`);
+                if (!await evaluate('WP.stage.manager.scenes.length')) record(`${seen.at(-1)}: no scenes`);
+            }
+            if (seen.join() !== 'days,hours,now,days') record(`views went ${seen.join(' → ')}`);
+            return true;
+        }],
+        ['a phone with a gesture bar: cards wrap, nothing under the inset', async () => {
+            await cdp.send('Emulation.setDeviceMetricsOverride', { width: 412, height: 915, deviceScaleFactor: 2.625, mobile: true });
+            for (const view of ['days', 'hours', 'now']) {
+                await stageWith('weather', { configVersion: 1, view }, '&insets=0,0,48,0');
+                await sleep(300);
+                const l = await counts('({ rows: m.layout.rows, bottom: m.layout.bottom, box: m.layout.box, H: innerHeight, W: innerWidth })');
+                if (view === 'days' && l.rows < 2) record(`5 cards in ${l.rows} row on a phone`);
+                if (l.bottom > l.H - 48) record(`${view}: drawn down to ${l.bottom.toFixed(0)}, under the 48 px inset (${l.H})`);
+                if (l.box.x < 0 || l.box.x + l.box.w > l.W) record(`${view}: wider than the screen`);
+            }
+            const { data } = await cdp.send('Page.captureScreenshot', { format: 'png' });
+            writeFileSync(join(SHOTS, 'weather-phone.png'), Buffer.from(data, 'base64'));
+            await cdp.send('Emulation.clearDeviceMetricsOverride');
+            return true;
+        }],
+        ['?date= at night gives the night sky, at noon the day', async () => {
+            const sky = {};
+            for (const [name, time] of [['night', '23:30'], ['noon', '12:00']]) {
+                await bootStage(`w=weather&date=2026-11-05T${time}`);
+                await sleep(400);
+                sky[name] = { phase: await evaluate('WP.stage.manager.skyState.phase'), colour: await evaluate(AVERAGE) };
+            }
+            const light = c => c[0] + c[1] + c[2];
+            if (sky.night.phase !== 'night' || sky.noon.phase !== 'day') record(`phases: ${sky.night.phase} at night, ${sky.noon.phase} at noon`);
+            if (!(light(sky.noon.colour) > light(sky.night.colour) * 2)) record(`noon ${sky.noon.colour} is not brighter than night ${sky.night.colour}`);
+            return true;
+        }],
+        ['a tap on a day shows its hours; a tap outside goes back', async () => {
+            await bootStage('w=weather');
+            const card = await evaluate('WP.stage.manager.layout.hits[1]');
+            await mouse('mousePressed', card.x + card.w / 2, card.y + card.h / 2);
+            await mouse('mouseReleased', card.x + card.w / 2, card.y + card.h / 2);
+            await sleep(200);
+            const open = await counts('({ view: m.layout.view, date: m.selected?.date, hours: m.scenes.length })');
+            if (open.view !== 'hours' || open.date !== card.date || !open.hours) record(`after a tap: ${JSON.stringify(open)}`);
+            await mouse('mousePressed', 4, 4);
+            await mouse('mouseReleased', 4, 4);
+            await sleep(200);
+            if (await evaluate('WP.stage.manager.layout.view') !== 'days') record('a tap outside did not go back');
+            return true;
+        }],
+    ],
     jellyfin: [
         ['fresh: the idle test card, and nothing asked of any server', async () => {
             jellyfinServer();

@@ -1,0 +1,33 @@
+// Settings for Weather, as the panel shows them (SPEC §4.4). The values and
+// their defaults live in defaults.js. The status line (no key) is the
+// running wallpaper's: where its forecast came from.
+WP.schema('weather', [
+    { type: 'status', name: 'forecast' },
+    { group: '🌦️ Forecast' },
+    { key: 'view', label: 'View', type: 'select', options: [['days', '🗓️ Days, as cards'], ['hours', '🕒 The next 24 hours'], ['now', '🌡️ Right now, large']],
+      help: 'V switches between them. In Days, tap a card for that day hour by hour.' },
+    { key: 'days', label: 'Days', type: 'range', min: 3, max: 10, step: 1, digits: 0,
+      help: 'How many day cards. They wrap into two rows on a narrow screen.' },
+    { key: 'units', label: 'Units', type: 'select', options: [['auto', 'From the language (°F in the US)'], ['metric', '°C, km/h, mm'], ['imperial', '°F, mph, in']],
+      help: 'U switches between them.' },
+    { key: 'hour12', label: 'Clock', type: 'select', options: [['auto', 'From the language'], ['12', '12-hour (3 PM)'], ['24', '24-hour (15:00)']] },
+    { group: '🎨 Look' },
+    { key: 'ambient', label: 'Weather in the sky', type: 'select', options: [['subtle', '🌤️ Subtle'], ['full', '⛈️ Full'], ['off', '◻️ Off (just the sky)']],
+      help: 'The clouds, rain, snow, fog and lightning outside, drawn over the sky behind the forecast.' },
+    { key: 'card', label: 'Cards', type: 'select', options: [['glass', '🪟 Frosted glass'], ['solid', '⬛ Solid'], ['minimal', '✏️ Minimal (no panel)']] },
+    { key: 'position', label: 'Position', type: 'select', options: [['center', 'Centre'], ['bottom', 'Bottom'], ['top', 'Top']] },
+    { key: 'scale', label: 'Size', type: 'range', min: 0.6, max: 1.6, step: 0.05, unit: '×', digits: 2 },
+    { group: 'ℹ️ Details' },
+    { key: 'showFeels', label: 'Feels like', type: 'toggle' },
+    { key: 'showWind', label: 'Wind', type: 'toggle' },
+    { key: 'showHumidity', label: 'Humidity', type: 'toggle' },
+    { key: 'showUv', label: 'UV index', type: 'toggle' },
+    { key: 'showSun', label: 'Sunrise and sunset', type: 'toggle' },
+    { key: 'showPrecipAmount', label: 'Rain and snow amounts', type: 'toggle' },
+    { key: 'showPlace', label: 'The place’s name', type: 'toggle' },
+    { key: 'showUpdated', label: 'When it was updated', type: 'toggle', help: 'Shown once the forecast is ten minutes old, and always when it’s offline.' },
+    { group: '⚙️ Advanced', advanced: true },
+    { key: 'refreshMinutes', label: 'Check for a new forecast', type: 'select', options: [[15, 'Every 15 minutes'], [30, 'Every 30 minutes'], [60, 'Every hour']],
+      help: 'Only while it’s on screen. Open-Meteo updates its models about once an hour.' },
+    { key: 'touch', label: 'Tap a day for its hours', type: 'toggle', help: 'Off ignores touch entirely.' },
+]);

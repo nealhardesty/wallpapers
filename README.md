@@ -34,7 +34,7 @@ Click one to see it live.
 | [<img src="web/wallpapers/synthwave/thumb.webp" width="200" alt="Synthwave">](https://nealhardesty.github.io/wallpapers/?w=synthwave)<br>🌇 Synthwave | [<img src="web/wallpapers/zen-garden/thumb.webp" width="200" alt="Zen Garden">](https://nealhardesty.github.io/wallpapers/?w=zen-garden)<br>🪨 Zen Garden | [<img src="web/wallpapers/koi-pond/thumb.webp" width="200" alt="Koi Pond">](https://nealhardesty.github.io/wallpapers/?w=koi-pond)<br>🎏 Koi Pond | [<img src="web/wallpapers/murmuration/thumb.webp" width="200" alt="Murmuration">](https://nealhardesty.github.io/wallpapers/?w=murmuration)<br>🐦 Murmuration |
 | [<img src="web/wallpapers/lanterns/thumb.webp" width="200" alt="Lantern Festival">](https://nealhardesty.github.io/wallpapers/?w=lanterns)<br>🏮 Lantern Festival | [<img src="web/wallpapers/rainy-window/thumb.webp" width="200" alt="Rainy Window">](https://nealhardesty.github.io/wallpapers/?w=rainy-window)<br>🪟 Rainy Window | [<img src="web/wallpapers/night-train/thumb.webp" width="200" alt="Night Train">](https://nealhardesty.github.io/wallpapers/?w=night-train)<br>🚆 Night Train | [<img src="web/wallpapers/fireworks/thumb.webp" width="200" alt="Fireworks">](https://nealhardesty.github.io/wallpapers/?w=fireworks)<br>🎆 Fireworks |
 | [<img src="web/wallpapers/lighthouse/thumb.webp" width="200" alt="Lighthouse">](https://nealhardesty.github.io/wallpapers/?w=lighthouse)<br>🌊 Lighthouse | [<img src="web/wallpapers/wiki-pond/thumb.webp" width="200" alt="Wiki Pond">](https://nealhardesty.github.io/wallpapers/?w=wiki-pond)<br>🪷 Wiki Pond | [<img src="web/wallpapers/satellites/thumb.webp" width="200" alt="Satellites">](https://nealhardesty.github.io/wallpapers/?w=satellites)<br>🛰️ Satellites | [<img src="web/wallpapers/jellyfin/thumb.webp" width="200" alt="Jellyfin">](https://nealhardesty.github.io/wallpapers/?w=jellyfin)<br>📺 Jellyfin |
-| [<img src="web/wallpapers/harvest/thumb.webp" width="200" alt="Harvest Valley">](https://nealhardesty.github.io/wallpapers/?w=harvest)<br>🌾 Harvest Valley | | | |
+| [<img src="web/wallpapers/harvest/thumb.webp" width="200" alt="Harvest Valley">](https://nealhardesty.github.io/wallpapers/?w=harvest)<br>🌾 Harvest Valley | [<img src="web/wallpapers/weather/thumb.webp" width="200" alt="Weather">](https://nealhardesty.github.io/wallpapers/?w=weather)<br>🌦️ Weather | | |
 
 The **Fireplace** 🔥 burns wood you'd recognise: furrowed oak, papery birch,
 scaly pine or bleached driftwood (following its Wood Type), round or split,
@@ -359,19 +359,23 @@ you tick it, then seven, with the rest folded away:
   one · Rainy Window `W` wipe · Fireworks Space or `L` launch, `G` finale ·
   Lighthouse `L` next light, `S` sea state · Satellites `N` next station pass ·
   Harvest Valley `G` wait for the Great Pumpkin, `H` call the geese, `W` a gust,
-  `M` what the moon is doing.
+  `M` what the moon is doing · Weather `V` next view (days, hours, now), `U` °C or °F,
+  `R` refresh now.
 
 **Touch and drag:** tap or drag on Zen Garden (rake), Koi Pond (ripples;
 feed them in settings), Murmuration (you're the falcon), Lantern Festival,
 Rainy Window (draw in the fog), Fireworks, Pixel Room (the cat and the lamp),
-Harvest Valley (shake an apple tree; tap the scarecrow, or the sky for geese)
-and Satellites (what's that one?). Each has a setting to ignore touch. On
+Harvest Valley (shake an apple tree; tap the scarecrow, or the sky for geese),
+Satellites (what's that one?) and Weather (a day's hours; tap outside to go back). Each has a setting to ignore touch. On
 Android, a quick sideways swipe changes home screens and never counts.
 
-**Online, but never blank:** Satellites (CelesTrak's orbits), Wiki Pond
-(Wikipedia's live edits) and Lighthouse (Open-Meteo's swell, only with Live
-Swell on) need no keys and draw their own scene offline. Satellites asks
-where you are, in its settings: type a town, or allow your location. It's
+**Online, but never blank:** Weather (Open-Meteo's forecast), Satellites
+(CelesTrak's orbits), Wiki Pond (Wikipedia's live edits) and Lighthouse
+(Open-Meteo's swell, only with Live Swell on) need no keys and draw their own
+scene offline. Weather shows a labelled sample forecast until it knows where
+you are, and the last forecast it got, with its age, when it's offline.
+Weather and Satellites ask where you are, in their settings: type a town, or
+allow your location. It's
 rounded to about 10 km and stays in your browser.
 
 ![Pixel Quest, mid-adventure](docs/quest.webp)

@@ -33,6 +33,7 @@ WP.costs = {
     'stained-glass': 1,
     'starfield': 1,
     'synthwave': 1,
+    'weather': 2,
     'wiki-pond': 1,
     'zen-garden': 1
 };
