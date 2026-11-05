@@ -23,6 +23,7 @@ WP.costs = {
     'neko': 1,
     'night-train': 1,
     'northern-lights': 1,
+    'orrery': 2,
     'parallax-clouds': 1,
     'pixel-room': 1,
     'quest': 1,

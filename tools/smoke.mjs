@@ -1368,6 +1368,170 @@ const STAGE_CHECKS = {
             return true;
         }],
     ],
+    // The Orrery (SPEC §10.26): the real sky in three looks, time-lapse,
+    // cards, and a still picture that costs nothing.
+    orrery: [
+        ['each look draws, tilted too; L steps through them', async () => {
+            for (const [name, settings] of [['space', {}], ['brass', { look: 'brass' }], ['chart', { look: 'chart' }], ['chart-night', { look: 'chart', chartPalette: 'night' }],
+                ['tilted', { view: 'tilted' }], ['brass-tilted', { look: 'brass', view: 'tilted' }], ['inner', { scale: 'inner' }], ['true', { scale: 'true', showPluto: true }]]) {
+                await stageWith('orrery', { configVersion: 1, ...settings }, '&date=2026-11-05T21:00');
+                await sleep(500);
+                if (await evaluate(DRAWN) < 2) record(`${name}: nothing drawn`);
+                const bad = await counts(`Object.entries(m.debugPositions().bodies).filter(([, p]) => ![p.x, p.y, p.r].every(Number.isFinite)).map(([id]) => id)`);
+                if (bad.length) record(`${name}: not finite: ${bad.join()}`);
+                await shoot(`orrery-${name}`);
+            }
+            await bootStage('w=orrery');
+            const looks = [];
+            for (let i = 0; i < 3; i++) { await press('l'); looks.push(await counts('m.config.look')); }
+            if (looks.join() !== 'brass,chart,space') record(`L went ${looks.join(' → ')}`);
+            const scales = [];
+            for (let i = 0; i < 3; i++) { await press('s'); scales.push(await counts('m.config.scale')); }
+            if (scales.join() !== 'true,inner,compressed') record(`S went ${scales.join(' → ')}`);
+            return true;
+        }],
+        ['Mars at opposition (2025-01-16): on the Earth\'s ray from the Sun, at every scale', async () => {
+            for (const settings of [{}, { scale: 'true' }, { scale: 'inner' }, { look: 'brass' }, { view: 'tilted', drift: false }]) {
+                await stageWith('orrery', { configVersion: 1, ...settings }, '&date=2025-01-16T12:00:00Z');
+                await sleep(300);
+                const p = await counts('m.debugPositions()');
+                const angle = id => Math.atan2(p.bodies[id].y - p.sun.y, p.bodies[id].x - p.sun.x) * 180 / Math.PI;
+                const off = Math.abs(((angle('mars') - angle('earth')) % 360 + 540) % 360 - 180);
+                const farther = Math.hypot(p.bodies.mars.x - p.sun.x, p.bodies.mars.y - p.sun.y) > Math.hypot(p.bodies.earth.x - p.sun.x, p.bodies.earth.y - p.sun.y);
+                if (off > 2 || !farther) record(`${JSON.stringify(settings)}: Mars is ${off.toFixed(2)}° off the Earth's ray${farther ? '' : ', and nearer the Sun'}`);
+                if (!settings.scale && !settings.look && !settings.view) {
+                    const retro = await counts(`m.scene.bodies.find(b => b.id === 'mars').retro`);
+                    if (!retro) record('Mars at opposition is not retrograde');
+                }
+            }
+            return true;
+        }],
+        ['= speeds up with a toast and the date runs; - slows; 0 is now again', async () => {
+            await fresh(`${WEB}/index.html?w=orrery`);
+            await waitFor(() => evaluate('WP.player?.stage?.ready'));
+            await sleep(400);
+            await press('=');
+            const toast = await waitFor(() => evaluate(`document.getElementById('toast').classList.contains('show') && document.getElementById('toast').textContent`), 2000);
+            if (!toast || !toast.includes('1 h/s')) record(`no speed toast (got ${JSON.stringify(toast)})`);
+            await bootStage('w=orrery');
+            await sleep(300);
+            const start = await counts('m.sim');
+            await press('=');
+            await press('+');
+            const said = await counts('({ speed: m.config.speed, said: m.said })');
+            if (said.speed !== 'day' || !said.said?.includes('1 day/s')) record(`= = gave ${JSON.stringify(said)}`);
+            await sleep(1500);
+            const run = await counts('({ sim: m.sim, line: m.debugPositions().readout[0] })');
+            const days = (run.sim - start) / 86400000;
+            if (days < 0.8 || days > 3) record(`1.5 s at 1 day/s moved ${days.toFixed(2)} days`);
+            if (!/^1 day\/s · .+ · (spring|summer|autumn|winter) (equinox|solstice)/.test(run.line)) record(`readout: ${run.line}`);
+            await sleep(1200);
+            if (await counts('m.debugPositions().readout[0]') === run.line && await counts('m.sim') === run.sim) record('the date readout stood still');
+            await press('-');
+            if (await counts('m.config.speed') !== 'hour') record('- did not slow to 1 h/s');
+            await press('0');
+            const back = await counts('({ speed: m.config.speed, gap: Math.abs(m.sim - WP.host.now().getTime()), said: m.said })');
+            if (back.speed !== 'live' || back.gap > 5000 || !back.said.includes('now')) record(`0 gave ${JSON.stringify(back)}`);
+            return true;
+        }],
+        ['far dates: clamped to 1000–3000, flagged approximate, never NaN', async () => {
+            await bootStage('w=orrery&date=1650-06-01T00:00:00Z');
+            await sleep(300);
+            const early = await counts('({ line: m.debugPositions().readout[0], finite: Object.values(m.debugPositions().bodies).every(p => Number.isFinite(p.x + p.y)) })');
+            if (!early.line.includes('approximate') || !early.finite) record(`1650: ${JSON.stringify(early)}`);
+            // A clock in the first century (seasons() can't do two-digit years).
+            await evaluate('WP.host.now = () => new Date(-61e12); WP.stage.manager.wake()');
+            await sleep(300);
+            if (await counts('new Date(m.sim).getUTCFullYear()') !== 1000) record(`a first-century clock gave ${await counts('new Date(m.sim).toISOString()')}`);
+            await stageWith('orrery', { configVersion: 1, speed: 'year' });
+            await evaluate('WP.stage.manager.sim = Date.UTC(2999, 11, 1)');
+            await sleep(1500);
+            const end = await counts('({ year: new Date(m.sim).getUTCFullYear(), finite: Object.values(m.debugPositions().bodies).every(p => Number.isFinite(p.x + p.y)), line: m.debugPositions().readout[0] })');
+            if (end.year !== 2999 || !end.finite || !end.line.includes('approximate')) record(`at the end of the tables: ${JSON.stringify(end)}`);
+            return true;
+        }],
+        ['a tap on a planet shows its card; on empty space it goes', async () => {
+            await bootStage('w=orrery&date=2026-11-05T21:00');
+            await sleep(300);
+            for (const id of ['mars', 'jupiter', 'earth']) {
+                const p = await counts(`m.debugPositions().bodies.${id}`);
+                await mouse('mousePressed', p.x, p.y);
+                await mouse('mouseReleased', p.x, p.y);
+                await sleep(200);
+                const card = await counts('m.debugPositions().card');
+                if (!card || !card.title.includes(id[0].toUpperCase() + id.slice(1))) { record(`${id}: card ${JSON.stringify(card)}`); continue; }
+                const text = card.lines.join(' | ');
+                if (!/AU from the Sun · [\d.]+ light-minutes/.test(text)) record(`${id}: no distance from the Sun: ${text}`);
+                if (id !== 'earth' && !/AU from the Earth/.test(text)) record(`${id}: no distance from the Earth: ${text}`);
+                if (id !== 'earth' && !/In our sky: [A-Z]/.test(text)) record(`${id}: no constellation: ${text}`);
+                if (id !== 'earth' && !/Retrograde|Moving east/.test(text)) record(`${id}: no motion: ${text}`);
+                if (card.x < 0 || card.y < 0 || card.x + card.w > 1280 || card.y + card.h > 800) record(`${id}: the card is off screen`);
+                if (id === 'mars') await shoot('orrery-card');
+            }
+            await mouse('mousePressed', 30, 760);
+            await mouse('mouseReleased', 30, 760);
+            await sleep(200);
+            if (await counts('m.selected')) record('a tap on empty space kept the card');
+            return true;
+        }],
+        ['a drag turns the tilted camera', async () => {
+            await stageWith('orrery', { configVersion: 1, view: 'tilted', drift: false });
+            await sleep(300);
+            const before = await counts('({ az: m.camera.az, el: m.camera.el })');
+            await drag([[700, 500], [760, 480], [820, 460], [880, 440]]);
+            const after = await counts('({ az: m.camera.az, el: m.camera.el })');
+            if (Math.abs(after.az - before.az) < 20) record(`the camera turned ${(after.az - before.az).toFixed(1)}°`);
+            return true;
+        }],
+        ['a phone and a taskbar: the ring fits the short side, above the inset', async () => {
+            const phone = { width: 412, height: 915, deviceScaleFactor: 2.625, mobile: true };
+            try {
+                for (const [size, viewport] of [['phone', phone], ['wide', { width: 1600, height: 600, deviceScaleFactor: 1, mobile: false }]]) {
+                    await cdp.send('Emulation.setDeviceMetricsOverride', viewport);
+                    for (const settings of [{}, { look: 'brass' }, { view: 'tilted' }, { look: 'chart' }]) {
+                        await stageWith('orrery', { configVersion: 1, ...settings }, '&insets=0,0,48,0&date=2026-11-05T21:00');
+                        await sleep(400);
+                        const p = await counts('({ ...m.debugPositions(), W: innerWidth, H: innerHeight })');
+                        const r = p.ring, name = `${size} ${JSON.stringify(settings)}`;
+                        if (r.x0 < 0 || r.x1 > p.W || r.y0 < 0 || r.y1 > p.H - 48) record(`${name}: the ring ${r.x0.toFixed(0)}–${r.x1.toFixed(0)} × ${r.y0.toFixed(0)}–${r.y1.toFixed(0)} leaves ${p.W}×${p.H - 48}`);
+                        const short = Math.min(p.W, p.H - 48), across = Math.max(r.x1 - r.x0, r.y1 - r.y0);
+                        if (!settings.view && across < short * 0.85) record(`${name}: the ring spans ${across.toFixed(0)} of ${short}`);
+                        if (size === 'phone' && !settings.look) await shoot(`orrery-phone${settings.view ? '-tilted' : ''}`);
+                    }
+                }
+            } finally { await cdp.send('Emulation.clearDeviceMetricsOverride'); }
+            return true;
+        }],
+        ['still and live it idles; time-lapse and drift run', async () => {
+            const cases = [
+                ['live, on Low', '&tier=low', {}, 0, 0.6],
+                ['live, brass', '', { look: 'brass' }, 0, 0.6],
+                ['live, the corona\'s shimmer', '&tier=medium', {}, 2, 9],
+                ['a day a second', '&tier=medium', { speed: 'day' }, 10, 40],
+                ['tilted, drifting', '&tier=medium', { view: 'tilted' }, 10, 40],
+            ];
+            for (const [name, query, settings, low, high] of cases) {
+                await stageWith('orrery', { configVersion: 1, ...settings }, query);
+                await sleep(1200);
+                const fps = await stageFps(3000);
+                if (fps < low || fps > high) record(`${name}: ${fps.toFixed(1)} fps (want ${low}–${high})`);
+            }
+            await cdp.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] });
+            try {
+                await stageWith('orrery', { configVersion: 1 }, '&tier=medium');
+                await sleep(1200);
+                const fps = await stageFps(3000);
+                if (fps > 0.6) record(`reduced motion: ${fps.toFixed(1)} fps`);
+            } finally { await cdp.send('Emulation.setEmulatedMedia', { features: [] }); }
+            // Low sheds the corona's glow and the belt's rocks, and still draws.
+            await bootStage('w=orrery&tier=low');
+            await sleep(400);
+            if (await counts(`m.wants('glow') || m.wants('belt')`)) record('Low kept its effects');
+            if (await evaluate(DRAWN) < 2) record('Low: nothing drawn');
+            await shoot('orrery-low');
+            return true;
+        }],
+    ],
     jellyfin: [
         ['fresh: the idle test card, and nothing asked of any server', async () => {
             jellyfinServer();

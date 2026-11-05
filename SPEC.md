@@ -127,6 +127,7 @@ Added in November 2026, drawn in code (design in §10.2):
 |---|---|---|---|
 | `weather` | weather-data.js, weather-scenes.js, weather.js | ~1.9k lines | Network: `api.open-meteo.com` (+ the panel's geocoder); needs location; a labelled sample offline; pure data rules (`WeatherData`), unit-tested; interactive (tap a day); keys V, U, R |
 | `world-clock` | world-land.js (generated), world-cities.js, world-clock-math.js, world-clock-art.js, world-clock-map.js, world-clock-faces.js, world-clock-board.js, world-clock.js | ~2.3k lines | No network; Natural Earth land (public domain); the sun, moon, terminator and zones (`WorldClockMath`), unit-tested; follows `host.now()`; interactive (tap a city); keys V, M, L |
+| `orrery` | orrery-math.js, orrery-art.js, orrery-looks.js, orrery.js | ~2.3k lines | No network; Standish's Keplerian elements, the Moon, Jupiter's four, the zodiac and the seasons (`OrreryMath`), unit-tested; follows `host.now()` or time-lapse; interactive (tap a planet, drag the tilted view); keys = + − 0 L S V (§10.26) |
 
 About 1.7 MB of JavaScript in total. **Not imported:** links, weather, clocks,
 search/omniprompt, custom links, status bar, Docker/nginx, the homepage's
@@ -801,6 +802,7 @@ and the commits.
 | satellites | — | Stars × density; sky and ground one layer every 30 s; positions once a second, interpolated; idle until the next second when nothing's up; onScroll |
 | weather | — | Sky a quarter-size gradient on its own layer, painted only when it changes; the forecast one cached layer, rebuilt once a minute; clouds, rain, snow × density, pooled; with nothing moving in the sky, only the scenes' squares repaint; ≤ 20 fps through idleUntil, once a minute under reduced motion |
 | world-clock | `cityLights`, `twilight` (medium) | Background, land and graticule per resize and look; the night once a minute (a 1° altitude grid scaled up, or polygons), lights masked into it; a composed base per centre; once a second, idle between; only recentring, flaps and crossfades take more frames; stars and city lights × density |
+| orrery | `glow`, `belt` (medium) | Starfield, paper or study per resize and look; the plane (orbits, zodiac ring, a quiet belt band) cached per camera; sprites per size bucket (planets, gears); live and still it draws once a minute, with the corona and the belt shimmering at ~7 fps in deep space unless motion is reduced or the effects are shed; belt rocks × density, eased; time-lapse and drift at the slow-motion rate |
 | harvest | `mist`, `beams` (medium) | Land is one baked layer per resize; trees, leaves, apples, geese and clouds are baked sprites; the world is washed once per frame with the hour's light; leaves, apples, smoke, sparks and flocks × density; squirrels × (0.5 + 0.5 density) |
 
 #### In the panel
@@ -2032,7 +2034,7 @@ Street, terrain or satellite, centred on the current position.
 - `prefers-reduced-motion`: slow, calm defaults (was "later, maybe").
 - *Suggestions:*
   - an **orrery**: the solar system as it is right now, computed in code,
-    no network
+    no network. *Built (November 2026): §10.26.*
   - a **moon and sky**: tonight's real moon phase and the bright planets
   - an **ISS tracker**: folded into §10.20 Satellites
   - a **lava lamp**: metaballs; cheap with idle-free slow motion
@@ -3030,6 +3032,85 @@ default is to spend as little as possible.
 server and stay on screen only, as `textContent`. Logs never include the
 server address, token or titles. The smoke run's mock server uses
 made-up titles such as "Test Pattern No. 3".
+
+### 10.26 Orrery (`orrery`, from §10.5, November 2026)
+
+The solar system as it is right now (from `host.now()`), or in time-lapse,
+computed in code with no network: Standish's Keplerian elements (JPL;
+Table 1 for 1800–2050, Tables 2a/2b outside it), Kepler's equation by
+Newton, the Moon from a short Meeus series, Jupiter's four on circular
+orbits, the IAU zodiac and the seasons (`OrreryMath`, Task 5,
+`tools/orrery.test.mjs`).
+
+**As built (November 2026):**
+
+- **Files:** `orrery-math.js` (the sky), `orrery-art.js` (every baked sprite
+  and layer: shaded planets lit from +x and turned to the Sun, the corona and
+  its streamers, ivory and brass balls, toothed gear wheels in three metals,
+  the starfield with its Milky Way, parchment and night paper, the study and
+  the walnut plinth), `orrery-looks.js` (the three looks), `orrery.js` (the
+  manager: time, the scale, the camera, the scene, cards, keys, idling).
+- **Geometry:** positions are J2000 heliocentric AU. A radial scale maps
+  them to plane units and leaves every direction alone, so an opposition is
+  a straight line through the Sun at any scale: `compressed` (r ∝ a^0.45,
+  all eight fit), `true` (linear; the inner planets disappear into the
+  Sun's glare, which is the point), `inner` (r^0.6 out to 3.35 AU, Mercury
+  to the belt). Brass adds a hub offset so the gear train has room. The
+  planets' sizes are exaggerated (∝ radius^0.38 × `planetSize`).
+- **Camera:** `top` (ecliptic north up, the equinox to the right) or
+  `tilted`: perspective from 25° above the plane (50° on a tall screen),
+  drifting 1.2°/s with `drift`, dragged by hand (azimuth and elevation,
+  8°–90°), nudged by Android's home-screen scroll. Both fit the outermost
+  ring to the safe area's short side, above `host.insets.bottom` (and the
+  brass plinth). Flat things lying on the plane (ring lettering, gears) are
+  drawn through the local affine of the projection, so they lie down in the
+  tilted view and turn upright where they'd read upside down.
+- **The looks** (`look`, key L): *space*: stars, a baked corona with two
+  counter-turning streamer sprites, planets with night sides and polar-view
+  bands, Saturn's and Uranus's rings in their real orientation (from the IAU
+  poles, split behind and in front of the ball), halos (`glow`), comet-like
+  trails, the belt. *brass*: an engraved brass zodiac ring with glyphs and
+  degree ticks, a brass Sun on its pillar, four concentric wheels (bronze,
+  brass, steel) each turning with its planet's arm and three pinions meshing
+  the other way, arms from the hub at stepped heights with posts up to ivory
+  balls, counterweights, the Moon on its own small arm, wire rings, a walnut
+  plinth. *chart*: ink on parchment or night (`chartPalette`), a ruled
+  border, a glyph legend where there's room, 1° ticks, the constellations
+  lettered round the ring, ♈︎ at the J2000 equinox, planets as half-hatched
+  circles with their glyphs and a red R when retrograde, the Moon in its
+  phase, and lines of sight from the Earth to each planet and on to where it
+  sits on the ring.
+- **The zodiac** (`zodiac`): the thirteen IAU constellations the ecliptic
+  crosses (Ophiuchus included), or the twelve equal tropical signs, whose
+  boundaries are drawn 1.397°/century back from the J2000 frame. Cards name
+  the constellation, and the sign too when signs are chosen.
+- **The belt:** a seeded pool of 1500 main-belt rocks (Kirkwood gaps
+  empty, each at its own Kepler rate, a little eccentric and inclined) and
+  340 Trojans librating round Jupiter's L4 and L5; drawn count = pool ×
+  density, eased in and out. With `belt` shed (Low) a faint band (a stipple
+  on the chart) stands in.
+- **Time** (`speed`, keys `=`/`+`, `-`, `0`): live, 1 h, 1 day, 1 week,
+  1 month or 1 year a second, from the date on screen; `0` goes back to now
+  and live. A toast names the speed and date. Clamped to 1000–2999 (the
+  long table's span, and `seasons()` needs four-digit years); at the end it
+  holds, with a toast. The readout: "1 day/s · 12 Mar 2031 · spring
+  equinox in 8 days" (· approximate outside 1800–2050), the Moon's phase
+  (drawn) and constellation, and which planets are retrograde.
+- **Cards:** tap a planet, the Moon or the Sun: distance from the Sun and
+  the Earth in AU and light-minutes, the constellation it's in from here,
+  its elongation (evening or morning sky, or too near the Sun), retrograde
+  or not, its year; Jupiter's moons and the Moon have their own. A tap on
+  empty space closes it; `touch` off ignores taps and drags.
+- **Keys:** `=` `+` faster, `-` slower, `0` now, `L` look, `S` scale, `V`
+  top or tilted.
+- **Cost:** live and still, one frame a minute (the readout's clock), or
+  ~7 fps of corona and belt shimmer in deep space unless motion is reduced
+  or the effects are shed; every look draws from a cached background and a
+  cached plane. Bench (phone, 4× throttle): 0.1% Low, 8.2% Medium, 15.7%
+  High. Smoke: every look and scale draws; Mars at the 2025-01-16 opposition
+  on the Earth's ray from the Sun at every scale and view; `=`, `-`, `0` and
+  the toast; far dates clamped, flagged and finite; cards; drag; a phone
+  and a taskbar inset; the idle and running frame rates.
 
 ---
 
