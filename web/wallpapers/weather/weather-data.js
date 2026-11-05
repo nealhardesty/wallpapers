@@ -19,6 +19,7 @@ const WeatherData = (() => {
     const round1 = x => (Math.round(x * 10) / 10).toFixed(1);
 
     function request({ lat, lon, days, units }) {
+        if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
         const n = Math.max(2, Math.min(16, Math.round(days) || 0));
         let u = '&wind_speed_unit=kmh';
         if (units === 'imperial') u = '&temperature_unit=fahrenheit&wind_speed_unit=mph&precipitation_unit=inch';
@@ -47,7 +48,7 @@ const WeatherData = (() => {
         for (const k of numeric) {
             if (!block[k].every(v => num(v) || (nullable.includes(k) && v === null))) return null;
         }
-        for (const k of strings) if (!block[k].every(str)) return null;
+        for (const k of strings) if (!block[k].every(v => str(v) || (nullable.includes(k) && (v === null || v === '')))) return null;
         return n;
     }
 
@@ -80,7 +81,7 @@ const WeatherData = (() => {
                 days: d.time.map((date, i) => ({
                     date, code: d.weather_code[i], hi: d.temperature_2m_max[i], lo: d.temperature_2m_min[i],
                     pop: d.precipitation_probability_max[i] || 0, precip: d.precipitation_sum[i],
-                    sunrise: d.sunrise[i], sunset: d.sunset[i], uv: d.uv_index_max[i] || 0,
+                    sunrise: d.sunrise[i] || null, sunset: d.sunset[i] || null, uv: d.uv_index_max[i] || 0,
                     windMax: d.wind_speed_10m_max[i],
                 })),
             };
@@ -142,7 +143,9 @@ const WeatherData = (() => {
         if (isoDate === todayIso) return 'Today';
         const a = Date.parse(isoDate + 'T00:00:00Z'), t = Date.parse(todayIso + 'T00:00:00Z');
         if (a - t === DAY) return 'Tomorrow';
-        return new Intl.DateTimeFormat(locale || 'en', { weekday: 'short', timeZone: 'UTC' }).format(new Date(a));
+        if (!Number.isFinite(a)) return String(isoDate);
+        const fmt = loc => new Intl.DateTimeFormat(loc, { weekday: 'short', timeZone: 'UTC' }).format(new Date(a));
+        try { return fmt(locale || 'en'); } catch (e) { return fmt('en'); }
     }
 
     // A made-up 16-day forecast from the date of `now` (UTC ms), the same

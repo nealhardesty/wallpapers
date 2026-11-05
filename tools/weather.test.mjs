@@ -141,3 +141,30 @@ test('sample: valid, deterministic, every kind', () => {
     }
     assert.deepEqual(JSON.parse(JSON.stringify(W.sample(now))), JSON.parse(JSON.stringify(s)));
 });
+
+test('normalize: polar day and night (no sunrise or sunset) still give a forecast', () => {
+    const f = fixture();
+    f.daily.sunrise = [null, ''];
+    f.daily.sunset = ['', null];
+    const n = W.normalize(f, 0);
+    assert.ok(n);
+    assert.equal(n.days[0].sunrise, null);
+    assert.equal(n.days[1].sunset, null);
+    assert.equal(W.sky(Date.parse('2026-06-01T02:00:00Z'), { ...n.days[0], isDay: 1 }).phase, 'day');
+    assert.equal(W.sky(Date.parse('2026-12-01T12:00:00Z'), { ...n.days[1], isDay: 0 }).phase, 'night');
+});
+
+test('request refuses non-finite coordinates', () => {
+    assert.equal(W.request({ lat: NaN, lon: 1, days: 3, units: 'metric' }), null);
+    assert.equal(W.request({ lat: 1, lon: undefined, days: 3, units: 'metric' }), null);
+});
+
+test('dayLabel falls back instead of throwing', () => {
+    assert.equal(W.dayLabel('garbage', '2026-03-01', 'en'), 'garbage');
+    assert.equal(W.dayLabel('2026-03-04', '2026-03-01', 'not a locale!'), 'Wed');
+});
+
+test('placeNow shifts UTC to the place wall clock', () => {
+    assert.equal(W.placeNow(1000, 3600), 1000 + 3600000);
+    assert.equal(W.placeNow(1000), 1000);
+});
