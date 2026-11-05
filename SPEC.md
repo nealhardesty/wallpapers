@@ -11,13 +11,13 @@ wallpapers' only home. They run in three hosts:
    panel opened by a key.
 2. **Chrome new tab**: the same page, loaded through a Chrome extension
    (or as the browser homepage URL).
-3. **Android live wallpaper**: a future app in `android/` that runs the same
-   web code behind the home screen.
+3. **Android live wallpaper** (`android/`, built): the same web code behind
+   the home screen.
 4. **macOS desktop and screen saver** (`mac/`, §10.21, built).
 5. **Windows desktop, tray app and screen saver** (`windows/`, §10.25,
    designed 2026-11-02; W0 passed, W1–W5 built by 2026-11-05: the app, the
-   installer, the zip and the screen saver; by-hand passes and the first release
-   pending the owner).
+   installer, the zip and the screen saver; first released in v0.11.0
+   (2026-11-05); the owner's by-hand passes and W6, the two-monitor pass, remain).
 
 > Status: **phases 1–9 done** (2026-10-23), except what needs the owner:
 > measurements on a real phone (6.2's numbers, 6.4a), the first signed
@@ -27,14 +27,15 @@ wallpapers' only home. They run in three hosts:
 > GitHub Pages at https://nealhardesty.github.io/wallpapers/, and as an
 > Android live wallpaper. Every wallpaper is tiered and within budget.
 > Phase 11 (Harvest Valley, §10.22) added the 34th wallpaper for Thanksgiving.
-> Next: Phase 10, the clock overlay (§4.9, specified 2026-10-28, not built);
-> §10 holds the other ideas.
+> Phase 10, the clock overlay (§4.9), was built 2026-10-28; §10 holds the
+> other ideas.
 > Windows (§10.25): the W0 spikes passed, and W1 (the desktop core: behind
 > the icons on every monitor, the tray, the settings window, the self-test)
 > was built 2026-11-03. W2 (monitors and power), W3 (the mouse) and W4
 > (install, update, uninstall, the zip and the CI `win` job) were built
-> 2026-11-04. W5 (the screen saver) was built 2026-11-05; the owner's by-hand
-> pass (§10.25.16) and the first release wait for the owner.
+> 2026-11-04. W5 (the screen saver) was built 2026-11-05, and v0.11.0, the
+> first release with the Windows app, went out the same day (PR #9 merged). The
+> owner's by-hand passes (§10.25.16) and W6 (two monitors) remain.
 
 ---
 
@@ -1832,7 +1833,7 @@ Built differently from the plan, on the spike's evidence:
 
 ### Phase 10: Clock overlay (owner, 2026-10-28)
 
-Designed in §4.9; none of it is built. Each task is done only when `make ci`
+Designed in §4.9; built 2026-10-28. Each task is done only when `make ci`
 passes, and the visible ones have been looked at in `dist/smoke/` and at
 `?tier=low` and `?host=android`. Each is a commit.
 
@@ -4809,8 +4810,8 @@ Task Manager; RDP in and out; the saver from Windows' dialog; uninstall.
   `update (busy exe)` and `uninstall` against the test layout. The real
   install and uninstall ran by `make win-install` / `win-uninstall` on the
   owner's PC (Settings kept, byte-identical); the `win` job passed on
-  `windows-2025` (run 3 of 3, 1m14s). **Nothing is tagged or released: the
-  first release (v0.11.0, §10.25.20) waits for the owner's OK.**
+  `windows-2025` (run 3 of 3, 1m14s). (At W4 nothing was tagged; v0.11.0 was
+  released after W5, 2026-11-05.)
   - **Still to check by hand (owner, at the console, then over RDP).** Agents
     can't click the tray, Settings → Apps or the taskbar, so none of this was
     done; record the results here.
@@ -4930,7 +4931,7 @@ Task Manager; RDP in and out; the saver from Windows' dialog; uninstall.
         runs from Windows' dialog on this PC (a separate file, a separate hash
         from the exe's).
     16. *The release (the controller bumps and tags; the owner verifies).*
-        `version` goes to 0.11.0 and `v0.11.0` is tagged after the owner's OK;
+        `version` went to 0.11.0 and `v0.11.0` was tagged 2026-11-05 (done);
         download `wallpapers-windows-0.11.0.zip` from the release, check the
         `.sha256`, and repeat W4 item 1, then 1 to 5 above, from that download.
   - **Changed from the design:** `/c` brings up the app's own options window
@@ -5056,7 +5057,8 @@ Task Manager; RDP in and out; the saver from Windows' dialog; uninstall.
   that release with a warning, as the Mac's does. If the runner proves flaky,
   switching to advice is one `if` in `ci.yml`.
 - The exe stays self-contained (~52 MB).
-- The first release, v0.11.0, waits for the owner's explicit OK.
+- The first release, v0.11.0, waited for the owner's explicit OK (given with
+  W5; released 2026-11-05).
 
 #### 10.25.21 Spike results
 
