@@ -20,6 +20,9 @@ sealed class Power : IDisposable
     bool sessionRegistered;
     /// Poll ticks seen while asleep (PowerSignals.Tick): the second clears a missed resume.
     int ticksAsleep;
+    /// Our own screen saver's pings (SPEC §10.25.12): it counts as running until it says it ended or
+    /// stops pinging, so a crashed saver can't leave the desktop hidden.
+    readonly SaverLease saverLease = new();
     /// Windows 11 24H2 renamed battery saver Energy Saver and gave it a new GUID.
     static readonly Guid SaverGuid = Environment.OSVersion.Version.Build >= 26100 ? N.GUID_ENERGY_SAVER_STATUS : N.GUID_POWER_SAVING_STATUS;
 
@@ -50,11 +53,25 @@ sealed class Power : IDisposable
         Set(Polled(next));
     }
 
+    /// Our saver is up (its pipe ping, every 4 s): hidden at once, not at the next poll.
+    public void SaverPing()
+    {
+        saverLease.Ping(DateTime.UtcNow);
+        Set(State with { SaverRunning = true });
+    }
+
+    /// Our saver said it ended: Windows' own flag decides again.
+    public void SaverEnded()
+    {
+        saverLease.End();
+        Set(Polled(State));
+    }
+
     /// The signals nothing announces, read now.
-    static PowerState Polled(PowerState s)
+    PowerState Polled(PowerState s)
     {
         var fullscreen = N.SHQueryUserNotificationState(out var quns) == 0 && quns is N.QUNS_RUNNING_D3D_FULL_SCREEN or N.QUNS_PRESENTATION_MODE;
-        var saver = N.SystemParametersInfo(N.SPI_GETSCREENSAVERRUNNING, 0, out var running, 0) && running != 0;
+        var saver = (N.SystemParametersInfo(N.SPI_GETSCREENSAVERRUNNING, 0, out var running, 0) && running != 0) || saverLease.Active(DateTime.UtcNow);
         s = s with { FullscreenApp = fullscreen, SaverRunning = saver, Remote = N.GetSystemMetrics(N.SM_REMOTESESSION) != 0 };
         return N.SessionState() is { } session ? s with { Locked = session.Locked, Disconnected = session.Disconnected } : s;
     }

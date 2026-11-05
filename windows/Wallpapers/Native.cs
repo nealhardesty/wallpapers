@@ -226,6 +226,12 @@ static class N
     [DllImport("user32.dll")] public static extern IntPtr WindowFromPoint(POINT p);
     [DllImport("user32.dll")] public static extern uint GetDoubleClickTime();
 
+    // ---- The screen saver (Saver/, SPEC §10.25.12): the input that ends it ----------------------
+    public const int WM_ACTIVATEAPP = 0x1C, WM_KEYDOWN = 0x100, WM_SYSKEYDOWN = 0x104, WM_SYSCOMMAND = 0x112;
+    public const int WM_MOUSEMOVE = 0x200, WM_LBUTTONDOWN = 0x201, WM_RBUTTONDOWN = 0x204, WM_MBUTTONDOWN = 0x207;
+    public const int WM_MOUSEWHEEL = 0x20A, WM_XBUTTONDOWN = 0x20B, WM_MOUSEHWHEEL = 0x20E;
+    public const int SC_SCREENSAVE = 0xF140, VK_SPACE = 0x20;
+
     // ---- UI Automation (Pointer.cs's classifier; COM, UIAutomationCore) ------------------------
     // Hand-written from the Windows SDK 10.0.26100 UIAutomationClient.h/.idl: only the calls we make,
     // every earlier vtable slot kept as a placeholder (_n is absolute slot n; 0-2 are IUnknown's).

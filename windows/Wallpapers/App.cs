@@ -66,10 +66,12 @@ sealed class App : ApplicationContext
 
     void OnCommand(string command)
     {
-        Log.Info($"command: {command}");
+        if (command != "saver-on") Log.Info($"command: {command}");   // every 4 s while the saver runs
         switch (command)
         {
             case "quit": Quit(); break;
+            case "saver-on": Power.SaverPing(); break;
+            case "saver-off": Power.SaverEnded(); break;
             case "settings": OpenSettings(); break;
             case "reload": Desktop.ReloadAll(); break;
             default: Log.Warn($"unknown command {command}"); break;

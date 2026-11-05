@@ -12,6 +12,10 @@ sealed class AppPaths
     public string UserData => Path.Combine(Root, "WebView2");
     public string SettingsFile => Path.Combine(Root, "settings.json");
     public string LogFile => Path.Combine(Root, "log.txt");
+    /// The screen saver's own log: two processes never roll one file.
+    public string SaverLogFile => Path.Combine(Root, "saver-log.txt");
+    /// What a running saver is doing, for the self-test and WP_DEBUG (SPEC §10.25.12).
+    public string SaverStateFile => Path.Combine(Root, "saver-state.json");
 
     public static AppPaths Resolve(string[] args, string? webRootOverride = null)
     {

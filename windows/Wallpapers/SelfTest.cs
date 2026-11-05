@@ -17,7 +17,7 @@ sealed class SelfTest
 {
     /// What --selftest exits with: set when the run ends.
     public static int ExitCode { get; private set; } = 1;
-    const int TimeoutSeconds = 150;
+    const int TimeoutSeconds = 240;
     const string TestWallpaper = "snow";   // always animating (some wallpapers idle when still), and cheap
 
     readonly App app;
@@ -234,6 +234,10 @@ sealed class SelfTest
 
         // 9 (W1). A crashed renderer is reloaded and animates again.
         await CrashAsync(first);
+
+        // 9a (W5). The screen saver, in harness windows of its own process: it draws, the desktop stands
+        // aside, input ends it, Different rotates, and the watchdog's steps.
+        await SaverAsync(first);
 
         // 10. Cleanup leaves no host windows and none of our keepers.
         desktop.Dispose();
@@ -931,6 +935,150 @@ sealed class SelfTest
         // A reloaded page is new: it must have been told the power state again.
         var reasons = await Js<string[]>(s, "WP.player.policy.reasons") ?? [];
         Check("power after reload", back && reasons.Contains("remote desktop") == app.Power.State.Remote, $"page reasons [{string.Join(", ", reasons)}]");
+    }
+
+    // ---- The screen saver (§10.25.12) ----------------------------------------------------------
+
+    /// `/s` with `--saver-window`: harness windows inside the primary work area's top-left (two side by
+    /// side when asked), never full screen. Only ever posted to once confirmed as this child's.
+    Process StartSaver(int count, string extraArgs = "")
+    {
+        var real = N.Monitors();
+        var work = (real.FirstOrDefault(m => m.Primary) ?? real[0]).Work;
+        var rects = string.Join(";", Enumerable.Range(0, count).Select(i => FormattableString.Invariant($"{work.Left + 40 + i * 480},{work.Top + 40},480,270")));
+        return Process.Start(Environment.ProcessPath!, $"/s --selftest --saver-window {rects} {extraArgs}".TrimEnd())!;
+    }
+
+    /// The child's own state file (one from an earlier child doesn't count).
+    SaverState? ReadState(Process child) => SaverState.Read(app.Paths.SaverStateFile) is { } s && s.Pid == child.Id ? s : null;
+
+    static List<IntPtr> SaverWindows(Process child)
+    {
+        var found = new List<IntPtr>();
+        N.EnumWindows((h, _) => { if (N.PidOf(h) == child.Id && N.TextOf(h) == SaverWindow.Caption) found.Add(h); return true; }, IntPtr.Zero);
+        return found;
+    }
+
+    static IntPtr LParam(int x, int y) => (IntPtr)((y << 16) | (x & 0xFFFF));
+
+    /// The cursor's point in that window's client px (where a real move would land).
+    static (int X, int Y) CursorIn(IntPtr window)
+    {
+        N.GetCursorPos(out var p);
+        var r = new N.RECT { L = p.X, T = p.Y, R = p.X, B = p.Y };
+        N.MapWindowPoints(IntPtr.Zero, window, ref r, 2);
+        return (r.L, r.T);
+    }
+
+    static string Describe(SaverState? s) => s == null ? "no state" : $"ended {s.Ended ?? "no"}; " + string.Join("; ", s.Windows.Select(w =>
+        $"{w.Key} {w.Wallpaper ?? "-"} frames {w.Frames} rotations {w.Rotations}{(w.Fallback ? " fallback" : "")} steps [{string.Join(",", w.Steps)}]"));
+
+    async Task SaverAsync(Surface first)
+    {
+        var before = app.Settings.Saver;
+        app.SaveSettings(app.Settings with { Saver = new(SaverShow.Different, null, 5, true) });
+        try
+        {
+            await SaverRunAsync(first);
+            await SaverInputAsync("key", w => N.PostMessage(w, N.WM_KEYDOWN, N.VK_SPACE, IntPtr.Zero));
+            await SaverInputAsync("click", w => N.PostMessage(w, N.WM_LBUTTONDOWN, 1, LParam(100, 100)));
+            await SaverWatchdogAsync();
+        }
+        finally { app.SaveSettings(app.Settings with { Saver = before }); }
+    }
+
+    /// One run: it draws in both windows, two different wallpapers that rotate, the desktop hides while it
+    /// runs; a move to where the cursor is doesn't end it, one 200 px away does, and the desktop comes back.
+    async Task SaverRunAsync(Surface first)
+    {
+        using var child = StartSaver(2, "--saver-change-ms 2000");
+        try
+        {
+            SaverState? a = null, b = null;
+            var drawing = await Until(20000, async () =>
+            {
+                a = ReadState(child);
+                if (a is not { Windows.Count: 2 } || a.Windows.Any(w => w.Wallpaper == null || w.Frames <= 0)) return false;
+                await Wait(2000);
+                b = ReadState(child);
+                return b is { Windows.Count: 2 } && b.Windows.Zip(a.Windows).All(p => p.First.Frames - p.Second.Frames > 20);
+            }, 500);
+            var wallpapers = b?.Windows.Select(w => w.Wallpaper).ToList() ?? [];
+            Check("saver run", drawing && b!.Windows.All(w => w.Url.Contains("host=windows-saver") && w.Url.Contains("clock=drift"))
+                && wallpapers.All(id => id != null && !SaverPicker.Never.Contains(id)) && wallpapers.Distinct().Count() == 2,
+                $"{(drawing ? "both windows drawing" : "NOT drawing in 20 s")}; {Describe(b ?? a ?? ReadState(child))}");
+
+            var hid = await Until(6000, () => Task.FromResult(app.Power.State.SaverRunning && !first.Visible));
+            var hideDetail = $"while it ran: {app.Power.State.Describe()}, desktop {(first.Visible ? "VISIBLE" : "hidden")}";
+
+            SaverState? r = null;
+            var rotated = await Until(8000, () => Task.FromResult((r = ReadState(child)) is { Windows.Count: 2 } s
+                && s.Windows.All(w => w.Rotations >= 1) && s.Windows[0].Wallpaper != s.Windows[1].Wallpaper));
+            Check("saver rotation", rotated, Describe(r));
+
+            var windows = SaverWindows(child);
+            if (windows.Count == 0) { Line("FAIL", "saver input (move)", "no saver window of the child's"); return; }
+            var (x, y) = CursorIn(windows[0]);
+            N.PostMessage(windows[0], N.WM_MOUSEMOVE, IntPtr.Zero, LParam(x, y));
+            await Wait(1000);
+            var stayed = !child.HasExited;
+            N.PostMessage(windows[0], N.WM_MOUSEMOVE, IntPtr.Zero, LParam(x + 200, y));
+            var exited = await Until(3000, () => Task.FromResult(child.HasExited), 100);
+            var state = ReadState(child);
+            Check("saver input (move)", stayed && exited && child.ExitCode == 0 && state?.Ended == "move",
+                $"a move at the cursor: {(stayed ? "still running" : "ENDED it")}; 200 px away: {(exited ? $"exit {child.ExitCode}" : "STILL running after 3 s")}, ended {state?.Ended ?? "?"}");
+
+            var back = await Until(6000, () => Task.FromResult(!app.Power.State.SaverRunning && first.Visible));
+            Check("saver hides the desktop", hid && back,
+                $"{hideDetail}; after: {app.Power.State.Describe()}, desktop {(first.Visible ? "visible" : "STILL hidden")}");
+        }
+        finally { if (!child.HasExited) child.Kill(); }
+    }
+
+    /// A fresh run, once its page draws (so a live web view is under the input), then one input message:
+    /// it exits at once, cleanly, saying why.
+    async Task SaverInputAsync(string kind, Action<IntPtr> send)
+    {
+        var name = $"saver input ({kind})";
+        using var child = StartSaver(1);
+        try
+        {
+            var windows = new List<IntPtr>();
+            if (!await Until(15000, () => Task.FromResult(ReadState(child) is { Windows: [{ Frames: > 0 }] } && (windows = SaverWindows(child)).Count > 0)))
+            {
+                Line("FAIL", name, $"the saver's page never drew; {Describe(ReadState(child))}");
+                return;
+            }
+            send(windows[0]);
+            var exited = await Until(3000, () => Task.FromResult(child.HasExited), 100);
+            var state = ReadState(child);
+            Check(name, exited && child.ExitCode == 0 && state?.Ended == kind,
+                $"{(exited ? $"exit {child.ExitCode}" : "STILL running after 3 s")}, ended {state?.Ended ?? "?"}");
+        }
+        finally { if (!child.HasExited) child.Kill(); }
+    }
+
+    /// --saver-stall: the counter never answers, so reload, recreate, the clock and a retry come in order.
+    async Task SaverWatchdogAsync()
+    {
+        using var child = StartSaver(1, "--saver-stall");
+        try
+        {
+            var fallback = false;
+            SaverState? s = null;
+            string[] want = ["reload", "recreate", "fallback", "retry"];
+            var stepped = await Until(25000, () =>
+            {
+                s = ReadState(child);
+                fallback |= s is { Windows: [{ Fallback: true }] };
+                return Task.FromResult(s is { Windows: [var w] } && w.Steps.Count >= 4 && w.Steps.Take(4).SequenceEqual(want));
+            }, 250);
+            foreach (var w in SaverWindows(child)) N.PostMessage(w, N.WM_KEYDOWN, N.VK_SPACE, IntPtr.Zero);
+            var exited = await Until(3000, () => Task.FromResult(child.HasExited), 100);
+            Check("saver watchdog", stepped && fallback && exited,
+                $"{Describe(s)}; {(fallback ? "seen in fallback" : "NEVER in fallback")}; {(exited ? "a key ended it" : "a key did NOT end it")}");
+        }
+        finally { if (!child.HasExited) child.Kill(); }
     }
 
     /// --selftest --bad-web-root: the app must say what's wrong, draw nothing, and keep its tray.

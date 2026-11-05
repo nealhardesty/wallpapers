@@ -5,6 +5,7 @@ namespace Wallpapers;
 /// Modes (SPEC §10.25.4): the app [--just-run] · --install · --uninstall [--keep-settings|--delete-settings] · --quit ·
 /// --reload · --settings · --dump-displays · --selftest [--bad-web-root] (and --cover-for-test, the self-test's covering
 /// window: coverage ignores our own process's; --uninstall-stage2 <root>, the %TEMP% copy that removes the install).
+/// The screen saver (§10.25.12): /s, /p <hwnd>, /c (as Wallpapers.scr, no argument is /c); with --selftest, its harness.
 static class Program
 {
     [STAThread]
@@ -14,6 +15,10 @@ static class Program
         var install = InstallArgs.Parse(args);
         // Before paths, the log and the mutex: it runs from %TEMP%, logs there, and may delete the data folder.
         if (install.Mode == InstallMode.UninstallStage2) return Install.Stage2(install);
+        // The saver keeps its own log and lock; --selftest among its arguments makes it the test flavour
+        // without the self-test's mutex or wipe.
+        var saver = SaverArgs.Parse(args, Path.GetExtension(Environment.ProcessPath ?? "").Equals(".scr", StringComparison.OrdinalIgnoreCase));
+        if (saver.Mode != SaverMode.None) return SaverMain.Run(AppPaths.Resolve(args), saver, args);
         var paths = AppPaths.Resolve(args);
         var selfTest = paths.Flavor == "test";
         if (selfTest)

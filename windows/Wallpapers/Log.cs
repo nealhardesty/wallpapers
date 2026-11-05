@@ -2,15 +2,15 @@ using System.Diagnostics;
 
 namespace Wallpapers;
 
-/// The app's log: log.txt in the data folder, rolling at 1 MB (SPEC §10.25.4).
+/// The app's log: log.txt in the data folder (the screen saver's: saver-log.txt), rolling at 1 MB (SPEC §10.25.4).
 static class Log
 {
     static RollingLog? file;
 
-    public static void Init(AppPaths paths)
+    public static void Init(AppPaths paths, bool saver = false)
     {
         Directory.CreateDirectory(paths.Root);
-        file = new RollingLog(paths.LogFile);
+        file = new RollingLog(saver ? paths.SaverLogFile : paths.LogFile);
     }
 
     public static void Info(string text) => Write("info ", text);
