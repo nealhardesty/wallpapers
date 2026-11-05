@@ -475,6 +475,7 @@ Run `make` to list every target.
 | `make win-run` | Build it and start it on the Windows side from WSL, with your normal settings: the wallpaper goes behind your desktop icons, a tray icon controls it (a running installed copy quits first; it comes back at the next sign-in) |
 | `make win-install` | Build it and install it for this Windows user: `%LOCALAPPDATA%\Programs\Wallpapers`, a Start menu shortcut, an entry in Settings → Apps, Start with Windows. No admin rights; a running copy quits first |
 | `make win-uninstall` | Remove the installed app: the folder, the shortcut, the Apps entry and Start with Windows. Your settings stay (`DELETE_SETTINGS=1` removes them too); the steps are logged in `%TEMP%\Wallpapers-uninstall.log` |
+| `make win-sign` | Sign `dist/win/Wallpapers.exe` with Azure Trusted Signing through a pinned, sha256-checked jsign (see Releasing); prints `unsigned` when no `WALLPAPERS_SIGN_*` variable is set |
 | `make win-dev` | Run it straight from this checkout's `web/` (over `\\wsl.localhost`), with its own settings and DevTools, so an edit shows after `make win-reload` or *Reload Wallpapers* in the tray |
 | `make win-reload` | Reload the running app's pages after a `web/` edit: the `win-dev` one, or `FLAVOR=run` for the normal one |
 | `make win-test` | The app's self-test against a throwaway settings store: layer, animation, settings sharing, pause, the pointer (a move, a tap and a double-click at the right CSS px, icons and hidden surfaces ignored, the toggles, the bare-desktop classifier against your real icons, a tap on fake monitor 2), coverage (a test window over monitor 1; skipped when something else already covers it), power reaching every page, `display=` and a resize in place (in a fake two-monitor layout), the Performance menu, insets, overlay, Bing, Explorer restart (simulated), a renderer crash, cleanup, then install, update (also with the exe held open) and uninstall into a throwaway `Wallpapers-test` install (never your real one) (about 70 s; `WIN_ARGS=--bad-web-root` checks the missing-files case) |
@@ -540,6 +541,19 @@ browser features only work on secure pages.
    `wallpapers-mac` artifact, without publishing anything. Every CI run also
    uploads the Windows zip as the `wallpapers-windows` artifact. It's unsigned:
    see the Windows install notes.
+6. The Windows app is unsigned by default, and `make win-release` ends its last
+   line with `signed` or `unsigned` to say which. Unsigned means SmartScreen
+   shows "Windows protected your PC" on a downloaded copy (*More info* →
+   *Run anyway*), and a machine with Smart App Control on may refuse the exe by
+   its hash, with no override. To sign: create an Azure Trusted Signing account
+   and certificate profile, plus an Entra app registration allowed to sign with
+   it, then `gh secret set` each of `WALLPAPERS_SIGN_ENDPOINT`,
+   `WALLPAPERS_SIGN_ACCOUNT`, `WALLPAPERS_SIGN_PROFILE`, `WALLPAPERS_SIGN_TENANT`,
+   `WALLPAPERS_SIGN_CLIENT_ID` and `WALLPAPERS_SIGN_CLIENT_SECRET`. CI then signs
+   tagged releases and the release notes say so. All six or none: a partial set
+   fails the build. Locally the same variables work with `make win-release` or
+   `make win-sign` (needs `java`; `osslsigncode` verifies the result). Never
+   commit a value.
 
 ### Adding a wallpaper
 

@@ -16,7 +16,7 @@ DOTNET ?= $(shell command -v dotnet 2>/dev/null || echo $(HOME)/.dotnet/dotnet)
 DOTNET_FOUND := $(shell command -v $(DOTNET) 2>/dev/null)
 export DOTNET
 
-.PHONY: help hooks open serve serve-https cert bing-json thumbnails icons screenshots extension site android-build android-install android-logcat android-emulator android-release android-keystore android-bench jellyfin-media jellyfin-fixtures jellyfin-dev jellyfin-stop jellyfin-mock mac-build mac-run mac-dev mac-test mac-install mac-uninstall mac-release mac-saver-test mac-saver-live mac-saver-log win-build win-release win-unit win-ci win-run win-dev win-reload win-test win-install win-uninstall win-log docker-build docker-run lint audit audit-staged audit-history test smoke smoke-clock smoke-live bench bench-clock ci clean
+.PHONY: help hooks open serve serve-https cert bing-json thumbnails icons screenshots extension site android-build android-install android-logcat android-emulator android-release android-keystore android-bench jellyfin-media jellyfin-fixtures jellyfin-dev jellyfin-stop jellyfin-mock mac-build mac-run mac-dev mac-test mac-install mac-uninstall mac-release mac-saver-test mac-saver-live mac-saver-log win-build win-release win-sign win-unit win-ci win-run win-dev win-reload win-test win-install win-uninstall win-log docker-build docker-run lint audit audit-staged audit-history test smoke smoke-clock smoke-live bench bench-clock ci clean
 
 help: ## List every target
 	@awk 'BEGIN {FS = ":.*## "} /^[a-zA-Z0-9_-]+:.*## / {printf "  \033[36m%-17s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -131,8 +131,11 @@ mac-saver-log: ## Show the screen saver's own log (it writes inside the host's s
 win-build: ## Build the Windows app: dist/win/Wallpapers.exe (self-contained) and web/ beside it; cross-compiles in WSL or Linux (needs the .NET 10 SDK)
 	@windows/build.sh
 
-win-release: ## Build the Windows app and zip it: dist/wallpapers-windows-<version>.zip and .sha256 (unsigned; cross-compiles in WSL or Linux)
+win-release: ## Build the Windows app and zip it: dist/wallpapers-windows-<version>.zip and .sha256 (signed when the WALLPAPERS_SIGN_* variables are set, else unsigned; cross-compiles in WSL or Linux)
 	@DOTNET="$(DOTNET)" windows/release.sh
+
+win-sign: ## Sign dist/win/Wallpapers.exe with Azure Trusted Signing (needs the WALLPAPERS_SIGN_* variables; prints "unsigned" without them)
+	@windows/sign.sh dist/win/Wallpapers.exe
 
 win-unit: ## Run the Windows app's unit tests (windows/Wallpapers.Tests, no Windows needed)
 	@cd windows && $(DOTNET) test --project Wallpapers.Tests

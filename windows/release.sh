@@ -1,8 +1,9 @@
 #!/bin/bash
 # Builds the Windows app and zips it for a release (SPEC §10.25.15):
 # dist/wallpapers-windows-<version>.zip and its .sha256. The zip holds one folder,
-# Wallpapers\, with Wallpapers.exe (self-contained, unsigned: SPEC §10.25.13) and
-# web\ beside it. It checks what it built before it zips, so a broken build never ships.
+# Wallpapers\, with Wallpapers.exe (self-contained; signed only when the WALLPAPERS_SIGN_*
+# variables are set, else unsigned: windows/sign.sh, SPEC §10.25.13) and web\ beside it.
+# It checks what it built before it zips, so a broken build never ships.
 set -e
 cd "$(dirname "$0")/.."
 VERSION=$(node -p "require('./web/manifest.json').version")
@@ -15,6 +16,17 @@ windows/build.sh
 
 EXE="$OUT/Wallpapers.exe"
 [ -f "$EXE" ] || fail "no $EXE"
+# Sign before the checks and the zip; a signed exe has to verify, or the release stops.
+signed=unsigned
+result=$(windows/sign.sh "$EXE") || exit 1
+echo "$result"
+case "$result" in
+  signed*)
+    signed=signed
+    command -v osslsigncode >/dev/null || fail "$EXE was signed but osslsigncode isn't installed to verify it"
+    osslsigncode verify "$EXE" >/dev/null || fail "$EXE's signature doesn't verify"
+    ;;
+esac
 # A 64-bit Windows exe: "MZ", then at the PE header (offset at 0x3C) "PE\0\0" and machine 0x8664.
 [ "$(head -c 2 "$EXE")" = "MZ" ] || fail "$EXE isn't a Windows executable"
 pe=$(od -An -tu4 -j 60 -N 4 "$EXE" | tr -d ' ')
@@ -45,4 +57,4 @@ for want in Wallpapers/Wallpapers.exe Wallpapers/web/index.html Wallpapers/LICEN
   grep -qx "$want" <<< "$listing" || fail "$ZIP has no $want"
 done
 
-echo "built $ZIP ($(du -h "$ZIP" | cut -f1)), $(cut -d' ' -f1 "$ZIP.sha256")"
+echo "built $ZIP ($(du -h "$ZIP" | cut -f1)), $(cut -d' ' -f1 "$ZIP.sha256"), $signed"

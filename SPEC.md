@@ -4202,6 +4202,7 @@ section):**
 | `win-install` / `win-uninstall` | install/uninstall the built app for this Windows user |
 | `win-saver` | run the built `.scr /s` for 15 s and print its log |
 | `win-log` | tail the log |
+| `win-sign` | `windows/sign.sh dist/win/Wallpapers.exe`: Azure Trusted Signing through jsign 7.6 (pinned sha256, cached under `dist/wallpapers-tools` or `$XDG_CACHE_HOME`; token by Entra client credentials). All six `WALLPAPERS_SIGN_*` variables set signs; none prints `unsigned (no WALLPAPERS_SIGN_* variables)`; a partial set exits 1 naming the missing ones. `win-release` calls it after the build, runs `osslsigncode verify` if it signed, and ends `…, signed` or `…, unsigned` |
 | `win-release` | `windows/release.sh`: build, check, `dist/wallpapers-windows-<version>.zip` + `.sha256`. *Built ahead of W4 (owner, 2026-11-03):* the `ci` job runs it on every push and uploads `wallpapers-windows`; the `release` job attaches it. The installer and the `win` job stay in W4 |
 
 `make ci` stays as it is, except `win-unit` joins it when `dotnet` is on the
