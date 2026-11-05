@@ -4,7 +4,7 @@ Toy animated wallpapers: snow, rain, falling leaves, fireflies, a fireplace,
 northern lights, a fish tank, a Halloween night, an advent calendar, a
 self-playing 8-bit adventure, koi, a zen garden, a night train, fireworks,
 the real satellites overhead, your own Jellyfin videos playing in an old
-TV, a harvest valley for Thanksgiving, and more: 34 in all. Each one is a full-screen canvas
+TV, a harvest valley for Thanksgiving, and more: 37 in all. Each one is a full-screen canvas
 animation with no page around it. Most just play; some also respond to you.
 Click to feed the fish, light the jack-o'-lanterns, rake the sand, or take
 over Pixel Quest's hero with the arrow keys.

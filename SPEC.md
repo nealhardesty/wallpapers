@@ -23,10 +23,12 @@ wallpapers' only home. They run in three hosts:
 > measurements on a real phone (6.2's numbers, 6.4a), the first signed
 > release (6.6), the switch-over itself (7.2), and trying Phase 8's touch
 > and location, and Jellyfin, on a phone. The player, the stage, the panel
-> and all 34 wallpapers run from `web/index.html`, as a Chrome new-tab extension, on
+> and all 37 wallpapers run from `web/index.html`, as a Chrome new-tab extension, on
 > GitHub Pages at https://nealhardesty.github.io/wallpapers/, and as an
 > Android live wallpaper. Every wallpaper is tiered and within budget.
 > Phase 11 (Harvest Valley, §10.22) added the 34th wallpaper for Thanksgiving.
+> Weather (§10.2), World Clock (§10.3) and the Orrery (§10.26) were built
+> 2026-11-05, making 37.
 > Phase 10, the clock overlay (§4.9), was built 2026-10-28; §10 holds the
 > other ideas.
 > Windows (§10.25): the W0 spikes passed, and W1 (the desktop core: behind
@@ -51,7 +53,8 @@ wallpapers' only home. They run in three hosts:
   are self-contained and work offline, from `file://`, from
   `chrome-extension://` and from Android assets. Wallpapers that are online
   by nature declare it (`network`, §4.1). Today that is the Bing image of
-  the day (§4.6); a weather-forecast wallpaper is planned. Every online
+  the day (§4.6), the weather forecast, the satellites and the wave
+  and edit streams. Every online
   wallpaper must:
   - show a sensible offline or error state, never a blank screen or a spinner
   - list the hosts it talks to, which feed the audit allowlist, the
@@ -3190,7 +3193,7 @@ the import.
 | Settings in that origin's `localStorage` | Import (below) | ✓ |
 | A Chrome new-tab extension asking for storage, geolocation and three hosts | One host (Bing), no other permissions, a pinned ID (§5) | ✓ fewer permissions |
 | Docker and nginx | The container, `make serve`, GitHub Pages | ✓ |
-| Links, weather, search, clocks | Left behind by decision; weather and a world clock are ideas 10.2 and 10.3 | — |
+| Links, weather, search, clocks | Left behind by decision; weather and a world clock were built later (§10.2, §10.3) | — |
 
 **Moving settings** (`core/legacy.js`, loaded only on Import): the README's
 console snippet saves the old wallpaper keys (never the links) as
