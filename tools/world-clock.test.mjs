@@ -211,3 +211,46 @@ test('land: at least 100 finite rings on the map, from a file of 50 KB or less',
     assert.ok(on(2.35, 48.86) && on(-100, 40) && on(135, -25) && on(20, 0) && on(0, -85), 'land where land is');
     assert.ok(!on(-30, 0) && !on(-150, 0) && !on(80, -20), 'sea where sea is');
 });
+
+// ---- The moon ---------------------------------------------------------------
+
+test('sublunar: at the April 2024 eclipse the moon sits on the sun, new', () => {
+    const date = at('2024-04-08T18:17:00Z');
+    const moon = M.sublunar(date), sun = M.subsolar(date);
+    near(moon.lat, sun.lat, 1.5, 'latitude against the sun');
+    near(moon.lon, sun.lon, 1.5, 'longitude against the sun');
+    assert.ok(moon.illum < 0.01, `illum ${moon.illum}`);
+    assert.ok(moon.age < 0.01 || moon.age > 0.99, `age ${moon.age}`);
+});
+
+test('sublunar: a full moon is full and opposite the sun; every point is finite and in range', () => {
+    const full = M.sublunar(at('2024-04-23T23:49:00Z'));
+    near(full.age, 0.5, 0.01, 'age at full moon');
+    assert.ok(full.illum > 0.99, `illum ${full.illum}`);
+    const sun = M.subsolar(at('2024-04-23T23:49:00Z'));
+    near(Math.abs(((full.lon - sun.lon) % 360 + 540) % 360 - 180), 180, 3, 'antisolar longitude');
+    for (let day = 0; day < 30; day += 0.25) {
+        const m = M.sublunar(new Date(Date.UTC(2025, 0, 1) + day * 86400000));
+        assert.ok(Math.abs(m.lat) <= 29 && Math.abs(m.lon) <= 180 && m.age >= 0 && m.age < 1 && m.illum >= 0 && m.illum <= 1, JSON.stringify(m));
+    }
+});
+
+// ---- Settings ---------------------------------------------------------------
+
+test('parseCustom: good pairs, and each bad one with why', () => {
+    const { zones, bad } = M.parseCustom(' Fixture=Asia/Kathmandu, Base Camp = Asia/Kolkata ;\nNowhere=Mars/Olympus, Kathmandu, =Asia/Tokyo, Here=local,,');
+    assert.deepEqual(JSON.parse(JSON.stringify(zones)), [{ label: 'Fixture', zone: 'Asia/Kathmandu' }, { label: 'Base Camp', zone: 'Asia/Kolkata' }]);
+    assert.equal(bad.map(b => b.text).join(' | '), 'Nowhere=Mars/Olympus | Kathmandu | =Asia/Tokyo | Here=local');
+    assert.match(bad[0].why, /Mars\/Olympus isn’t a time zone/);
+    assert.match(bad[1].why, /Label=Area\/City/);
+    assert.equal(M.parseCustom('A very long label indeed and longer than that=UTC').zones[0].label.length, 24);
+    assert.deepEqual(JSON.parse(JSON.stringify(M.parseCustom(''))), { zones: [], bad: [] });
+});
+
+test('order: as listed, west to east, or by offset, stable', () => {
+    const places = [{ id: 'a', lon: 139, offsetMinutes: 540 }, { id: 'b', lon: -74, offsetMinutes: -300 }, { id: 'c', lon: 0, offsetMinutes: 0 }, { id: 'd', lon: -0.1, offsetMinutes: 0 }];
+    const ids = sort => M.order(places, sort).map(p => p.id).join('');
+    assert.equal(ids('list'), 'abcd');
+    assert.equal(ids('east-west'), 'bdca');
+    assert.equal(ids('offset'), 'bcda');
+});

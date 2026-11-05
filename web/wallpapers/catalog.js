@@ -114,6 +114,19 @@
               { keys: ['u'], label: 'Switch units (°C or °F)', run: weather => weather.switchUnits() },
               { keys: ['r'], label: 'Refresh the forecast now', run: weather => weather.refreshNow() },
           ] },
+        // clockface.js (the clock overlay's zone helpers) loads first: the
+        // maths reads WP.clockface when it's called.
+        { id: 'world-clock', name: 'World Clock', icon: '🌍', accent: '#ffd479', background: '#06101c',
+          scripts: ['../core/clockface.js', 'world-clock/world-land.js', 'world-clock/world-cities.js', 'world-clock/world-clock-math.js', 'world-clock/world-clock-art.js',
+              'world-clock/world-clock-map.js', 'world-clock/world-clock-faces.js', 'world-clock/world-clock-board.js', 'world-clock/world-clock.js'],
+          settingsScripts: ['world-clock/world-cities.js'],
+          make: host => new WorldClockAnimationManager(host), cost: 'low', motion: 'slow', interactive: true,
+          effects: [['cityLights', 'medium'], ['twilight', 'medium']],
+          keys: [
+              { keys: ['v'], label: 'Next view: map, faces, board', run: clock => clock.nextView() },
+              { keys: ['m'], label: 'Centre the map on the next place', run: clock => clock.nextCenter() },
+              { keys: ['l'], label: 'Next map look', run: clock => clock.nextStyle() },
+          ] },
         { id: 'lighthouse', name: 'Lighthouse', icon: '🌊', accent: '#ffd27a', background: '#03050b',
           scripts: ['lighthouse/lighthouse-light.js', 'lighthouse/lighthouse-sea.js', 'lighthouse/lighthouse.js'],
           make: host => new LighthouseAnimationManager(host), cost: 'medium', network: ['marine-api.open-meteo.com'], offline: true,

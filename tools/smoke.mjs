@@ -1201,6 +1201,155 @@ const STAGE_CHECKS = {
             return true;
         }],
     ],
+    'world-clock': [
+        ['V cycles the map, the faces and the board, each drawn', async () => {
+            await bootStage('w=world-clock&date=2026-11-05T17:50');
+            const seen = [await evaluate('WP.stage.manager.layout.view')];
+            for (let i = 0; i < 3; i++) {
+                await press('v');
+                await sleep(1800);   // past the crossfade, and the board's flaps
+                const view = await evaluate('WP.stage.manager.layout.view');
+                seen.push(view);
+                if (await evaluate(DRAWN) < 2) record(`${view}: nothing drawn`);
+                if (i < 2) await shoot(`world-clock-${view}`);
+            }
+            if (seen.join() !== 'map,faces,board,map') record(`views went ${seen.join(' → ')}`);
+            return true;
+        }],
+        ['every map look draws; L steps through them', async () => {
+            for (const look of ['atlas', 'blueprint', 'paper']) {
+                await stageWith('world-clock', { configVersion: 1, mapStyle: look }, '&date=2026-11-05T17:50');
+                await sleep(400);
+                if (await evaluate(DRAWN) < 2) record(`${look}: nothing drawn`);
+                await shoot(`world-clock-${look}`);
+            }
+            await bootStage('w=world-clock');
+            const looks = [];
+            for (let i = 0; i < 4; i++) { await press('l'); looks.push(await evaluate('WP.stage.manager.config.mapStyle')); }
+            if (looks.join() !== 'atlas,blueprint,paper,night-lights') record(`L went ${looks.join(' → ')}`);
+            // Low: no twilight bands and no city lights, still a whole night.
+            await bootStage('w=world-clock&tier=low&date=2026-11-05T17:50');
+            await sleep(400);
+            if (await counts(`m.fx('twilight') || m.fx('cityLights')`)) record('Low kept its effects');
+            if (await evaluate(DRAWN) < 2) record('Low: nothing drawn');
+            await shoot('world-clock-low');
+            return true;
+        }],
+        ['the June solstice: the far north in daylight, the far south in night', async () => {
+            await bootStage('w=world-clock&date=2026-06-21T12:00:00Z');
+            await sleep(300);
+            // The darkness layer's alpha along the top and bottom rows of the map.
+            const rows = await evaluate(`(() => {
+                const c = WP.stage.manager.views.map.dark, p = document.createElement('canvas');
+                p.width = c.width; p.height = c.height;
+                const g = p.getContext('2d', { willReadFrequently: true });
+                g.drawImage(c, 0, 0);
+                const row = y => { const d = g.getImageData(0, y, c.width, 1).data; let s = 0; for (let i = 3; i < d.length; i += 4) s += d[i]; return s / c.width; };
+                return { north: row(2), south: row(c.height - 3) };
+            })()`);
+            if (!(rows.north < 8)) record(`the far north is dark (alpha ${rows.north.toFixed(1)})`);
+            if (!(rows.south > 120)) record(`the far south isn't dark (alpha ${rows.south.toFixed(1)})`);
+            // And on screen: the top of the map brighter than its bottom.
+            const lit = await evaluate(`(() => {
+                const m = WP.stage.manager.views.map, c = document.querySelector('canvas'), d = WP.stage.manager.dpr;
+                const p = document.createElement('canvas'); p.width = c.width; p.height = c.height;
+                const g = p.getContext('2d', { willReadFrequently: true }); g.drawImage(c, 0, 0);
+                const at = y => { const px = g.getImageData(0, Math.round(y * d), c.width, 1).data; let s = 0; for (let i = 0; i < px.length; i += 4) s += px[i] + px[i + 1] + px[i + 2]; return s / c.width; };
+                return { north: at(m.top + 2), south: at(m.top + m.mh - 3) };
+            })()`);
+            if (!(lit.north > lit.south * 1.5)) record(`on screen the north (${lit.north.toFixed(0)}) isn't lit against the south (${lit.south.toFixed(0)})`);
+            return true;
+        }],
+        ['the March equinox: the night\'s edges are near-vertical', async () => {
+            for (const twilight of ['sharp', 'soft']) {
+                await stageWith('world-clock', { configVersion: 1, twilight }, '&date=2026-03-20T14:46:00Z');
+                await sleep(300);
+                const edges = await evaluate(`(() => {
+                    const c = WP.stage.manager.views.map.dark, p = document.createElement('canvas');
+                    p.width = c.width; p.height = c.height;
+                    const g = p.getContext('2d', { willReadFrequently: true });
+                    g.drawImage(c, 0, 0);
+                    let top = 0;
+                    const d = g.getImageData(0, Math.round(c.height / 2), c.width, 1).data;
+                    for (let i = 3; i < d.length; i += 4) top = Math.max(top, d[i]);
+                    // Where each row crosses into the night (west) and out of it (east).
+                    return [60, 30, 0, -30, -60].map(lat => {
+                        const y = Math.round((90 - lat) / 180 * c.height), row = g.getImageData(0, y, c.width, 1).data, cut = top * ${twilight === 'sharp' ? 0.2 : 0.5};
+                        const cross = [];
+                        for (let x = 1; x < c.width; x++) if ((row[x * 4 + 3] > cut) !== (row[x * 4 - 1] > cut)) cross.push(x / c.width);
+                        return cross;
+                    });
+                })()`);
+                if (edges.some(e => e.length !== 2)) { record(`${twilight}: edges per row ${edges.map(e => e.length).join()}`); continue; }
+                for (const side of [0, 1]) {
+                    const xs = edges.map(e => e[side]), spread = Math.max(...xs) - Math.min(...xs);
+                    if (spread > (twilight === 'sharp' ? 0.006 : 0.03)) record(`${twilight}: the ${side ? 'eastern' : 'western'} edge leans (${(spread * 100).toFixed(1)}% of the width)`);
+                }
+                const width = edges[2][1] - edges[2][0];
+                if (Math.abs(width - 0.5) > (twilight === 'sharp' ? 0.01 : 0.06)) record(`${twilight}: the night is ${(width * 100).toFixed(0)}% of the world`);
+            }
+            return true;
+        }],
+        ['a custom Fixture=Asia/Kathmandu shows UTC+5:45; a bad zone is in the panel\'s status', async () => {
+            await stageWith('world-clock', { configVersion: 1, custom: 'Fixture=Asia/Kathmandu' });
+            await sleep(300);
+            const card = await counts(`m.layout.cards.find(c => c.text.startsWith('Fixture'))?.text`);
+            if (!card || !card.includes('UTC+5:45')) record(`the Fixture card says ${card}`);
+            for (const view of ['faces', 'board']) {
+                await stageWith('world-clock', { configVersion: 1, view, custom: 'Fixture=Asia/Kathmandu' });
+                await sleep(2500);
+                const text = await counts(view === 'faces' ? `m.layout.faces.find(f => f.text.startsWith('Fixture'))?.text` : `m.layout.shown.find(r => r.startsWith('FIXTURE'))`);
+                if (!text || !text.includes('5:45')) record(`${view}: the Fixture row says ${JSON.stringify(text)}`);
+            }
+            await fresh(`${WEB}/index.html?w=world-clock&panel=open`, { 'wp:world-clock': { configVersion: 1, custom: 'Fixture=Asia/Kathmandu, Nowhere=Mars/Olympus' } });
+            const status = await waitFor(() => evaluate(`document.querySelector('#panel .setting-status[data-name=custom]:not([hidden])')?.textContent`), 6000);
+            if (!status || !status.includes('Mars/Olympus')) record(`panel status: ${JSON.stringify(status)}`);
+            return true;
+        }],
+        ['a phone with a gesture bar, a taskbar: everything above the inset', async () => {
+            const phone = { width: 412, height: 915, deviceScaleFactor: 2.625, mobile: true };
+            for (const [size, viewport] of [['phone', phone], ['desktop', null]]) {
+                for (const view of ['map', 'faces', 'board']) {
+                    if (viewport) await cdp.send('Emulation.setDeviceMetricsOverride', viewport);
+                    else await cdp.send('Emulation.clearDeviceMetricsOverride');
+                    await stageWith('world-clock', { configVersion: 1, view, cities: ['local', 'utc', 'new-york', 'london', 'tokyo', 'sydney', 'kolkata', 'sao-paulo'] }, '&insets=0,0,48,0&date=2026-11-05T17:50');
+                    await sleep(view === 'board' ? 2500 : 400);
+                    const l = await counts('({ bottom: m.layout.bottom, H: innerHeight, W: innerWidth, cards: m.layout.cards, board: m.layout.board })');
+                    if (!(l.bottom > 0)) record(`${size} ${view}: nothing laid out`);
+                    if (l.bottom > l.H - 48) record(`${size} ${view}: drawn down to ${l.bottom.toFixed(0)}, under the 48 px inset (${l.H})`);
+                    for (const c of l.cards || []) if (c.x < 0 || c.x + c.w > l.W + 0.5 || c.y < 0) record(`${size}: ${c.id}'s label is off screen`);
+                    if (l.board && (l.board.x < 0 || l.board.x + l.board.w > l.W)) record(`${size}: the board is wider than the screen`);
+                    if (size === 'phone') await shoot(`world-clock-phone-${view}`);
+                }
+            }
+            await cdp.send('Emulation.clearDeviceMetricsOverride');
+            return true;
+        }],
+        ['still, it idles: about a frame a second on every view', async () => {
+            for (const view of ['map', 'faces', 'board']) {
+                await stageWith('world-clock', { configVersion: 1, view, seconds: view === 'faces' });
+                await sleep(view === 'board' ? 3000 : 1200);
+                const fps = await stageFps(4000);
+                if (fps > 1.6 || fps < 0.5) record(`${view}: ${fps.toFixed(2)} fps while still`);
+            }
+            return true;
+        }],
+        ['a tap on a city makes it home, and the map recentres there; M steps the centre', async () => {
+            await bootStage('w=world-clock&date=2026-11-05T17:50');
+            await sleep(300);
+            const card = await counts(`m.layout.cards.find(c => c.id === 'tokyo')`);
+            if (!card) return record('no Tokyo card');
+            await mouse('mousePressed', card.x + card.w / 2, card.y + card.h / 2);
+            await mouse('mouseReleased', card.x + card.w / 2, card.y + card.h / 2);
+            await waitFor(() => counts('Math.abs(m.views.map.centre - 139.69) < 0.1'), 4000);
+            const after = await counts('({ home: m.home, centre: m.views.map.centre, highlighted: m.infos.find(i => i.home)?.id })');
+            if (after.home !== 'tokyo' || after.highlighted !== 'tokyo' || Math.abs(after.centre - 139.69) > 0.1) record(`after a tap: ${JSON.stringify(after)}`);
+            await shoot('world-clock-tokyo');
+            await press('m');
+            if (!await waitFor(() => counts(`m.config.center === 'greenwich' && !m.home && Math.abs(m.views.map.centre) < 0.1`), 4000)) record(`M: ${JSON.stringify(await counts('({ center: m.config.center, centre: m.views.map.centre })'))}`);
+            return true;
+        }],
+    ],
     jellyfin: [
         ['fresh: the idle test card, and nothing asked of any server', async () => {
             jellyfinServer();

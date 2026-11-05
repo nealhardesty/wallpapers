@@ -35,5 +35,6 @@ WP.costs = {
     'synthwave': 1,
     'weather': 2,
     'wiki-pond': 1,
+    'world-clock': 1,
     'zen-garden': 1
 };

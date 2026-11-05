@@ -14,6 +14,7 @@ load('wallpapers/catalog.js');
 load('core/legacy.js');
 const WP = context.WP;
 for (const entry of WP.catalog) {
+    for (const file of entry.settingsScripts || []) load(`wallpapers/${file}`);
     for (const file of ['defaults.js', 'settings.js']) {
         if (existsSync(join(WEB, 'wallpapers', entry.id, file))) load(`wallpapers/${entry.id}/${file}`);
     }

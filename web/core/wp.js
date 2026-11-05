@@ -67,11 +67,17 @@
     };
 
     // ?date= (SPEC §4.2): YYYY-MM-DD, optionally with THH:MM or THH:MM:SS,
-    // in local time. A date alone keeps the real time of day. The Date, or
-    // null for anything else (including days that don't exist).
+    // in local time, or in UTC with a Z after the time (World Clock's
+    // solstices are moments, wherever the test runs). A date alone keeps the
+    // real time of day. The Date, or null for anything else (including days
+    // that don't exist).
     WP.parseDate = (text, real = new Date()) => {
-        const m = /^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2})(?::(\d{2}))?)?$/.exec(text || '');
+        const m = /^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2})(?::(\d{2}))?(Z)?)?$/.exec(text || '');
         if (!m || +m[4] > 23 || +m[5] > 59 || +m[6] > 59) return null;
+        if (m[7]) {
+            const utc = new Date(Date.UTC(+m[1], m[2] - 1, +m[3], +m[4], +m[5], +(m[6] || 0)));
+            return utc.getUTCMonth() === m[2] - 1 && utc.getUTCDate() === +m[3] ? utc : null;
+        }
         const date = m[4] === undefined
             ? new Date(+m[1], m[2] - 1, +m[3], real.getHours(), real.getMinutes(), real.getSeconds(), real.getMilliseconds())
             : new Date(+m[1], m[2] - 1, +m[3], +m[4], +m[5], +(m[6] || 0));

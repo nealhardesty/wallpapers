@@ -6,6 +6,7 @@
 //     good to about 0.01° in declination and a few seconds of time;
 //   - the night (and the civil, nautical and astronomical twilight) as
 //     polygons on an equirectangular map;
+//   - the moon's sub-lunar point and phase, low precision;
 //   - the time in a zone, from core/clockface.js's zone helpers
 //     (WP.clockface), which the catalog loads before this file;
 //   - WORLD_LAND decoded.
@@ -52,6 +53,33 @@ const WorldClockMath = (() => {
     }
 
     const isNight = (lat, lon, date) => sunAltitude(lat, lon, date) < 0;
+
+    // ---- The moon -----------------------------------------------------------
+
+    // Where the moon is overhead, and its phase: { lat, lon, age, illum }.
+    // age is 0 at new moon, 0.5 at full; illum the lit share of the disc.
+    // The low-precision series (the largest terms of Meeus ch. 47, as in the
+    // Astronomical Almanac's own short form): about 0.3° on the sky, plus up
+    // to a degree of parallax, since this is the geocentric point.
+    function sublunar(date) {
+        const d = date.getTime() / DAY + 2440587.5 - 2451545;          // days from J2000
+        const r = x => x * DEG;
+        const Lp = 218.316 + 13.176396 * d, Mp = 134.963 + 13.064993 * d, Ms = 357.529 + 0.98560028 * d;
+        const D = 297.850 + 12.190749 * d, F = 93.272 + 13.229350 * d;
+        const lambda = Lp + 6.289 * Math.sin(r(Mp)) + 1.274 * Math.sin(r(2 * D - Mp)) + 0.658 * Math.sin(r(2 * D))
+            + 0.214 * Math.sin(r(2 * Mp)) - 0.186 * Math.sin(r(Ms)) - 0.114 * Math.sin(r(2 * F));
+        const beta = 5.128 * Math.sin(r(F)) + 0.281 * Math.sin(r(Mp + F)) + 0.278 * Math.sin(r(Mp - F)) + 0.173 * Math.sin(r(2 * D - F));
+        const eps = r(23.439 - 0.0000004 * d);
+        const l = r(lambda), b = r(beta);
+        const ra = Math.atan2(Math.sin(l) * Math.cos(eps) - Math.tan(b) * Math.sin(eps), Math.cos(l)) / DEG;
+        const dec = Math.asin(clamp(Math.sin(b) * Math.cos(eps) + Math.cos(b) * Math.sin(eps) * Math.sin(l), -1, 1)) / DEG;
+        const gmst = 280.46061837 + 360.98564736629 * d;
+        // The sun's ecliptic longitude, for the phase.
+        const g = r(357.528 + 0.9856003 * d);
+        const sun = 280.460 + 0.9856474 * d + 1.915 * Math.sin(g) + 0.020 * Math.sin(2 * g);
+        const elongation = ((lambda - sun) % 360 + 360) % 360;
+        return { lat: dec, lon: wrap(ra - gmst), age: elongation / 360, illum: (1 - Math.cos(r(elongation))) / 2 };
+    }
 
     // ---- The night ----------------------------------------------------------
 
@@ -156,6 +184,32 @@ const WorldClockMath = (() => {
     // UTC+5:30, UTC−3:30 (a true minus sign), UTC.
     const offsetLabel = minutes => C().offsetLabel(minutes);
 
+    // The custom zones setting: "Label=Area/City" pairs, separated by commas
+    // (or new lines, or semicolons). { zones: [{ label, zone }], bad: [{ text,
+    // why }] }; a label is cut to 24 characters, and a zone Intl doesn't know
+    // is bad, not UTC.
+    function parseCustom(text) {
+        const zones = [], bad = [];
+        for (const raw of String(text || '').split(/[,;\n]/)) {
+            const item = raw.trim();
+            if (!item) continue;
+            const m = /^([^=]+)=\s*(.+)$/.exec(item);
+            const label = m?.[1].trim().slice(0, 24), zone = m?.[2].trim();
+            if (!m || !label) bad.push({ text: item, why: 'write it as Label=Area/City' });
+            else if (zone === 'local' || !C().validZone(zone)) bad.push({ text: item, why: `${zone} isn’t a time zone` });
+            else zones.push({ label, zone });
+        }
+        return { zones, bad };
+    }
+
+    // Places ({ lon, offsetMinutes }) in the order the sort setting asks:
+    // 'list' as given, 'east-west' from the west, 'offset' from the
+    // earliest. Stable, so equal ones keep their order.
+    function order(places, sort) {
+        const by = sort === 'east-west' ? p => p.lon : sort === 'offset' ? p => p.offsetMinutes : null;
+        return by ? places.map((p, i) => [p, i]).sort((a, b) => by(a[0]) - by(b[0]) || a[1] - b[1]).map(([p]) => p) : [...places];
+    }
+
     // ---- Land ---------------------------------------------------------------
 
     let land = null;
@@ -175,5 +229,5 @@ const WorldClockMath = (() => {
         return land;
     }
 
-    return { subsolar, sunAltitude, isNight, terminator, twilight, zoneTime, offsetLabel, land: decodeLand };
+    return { subsolar, sunAltitude, isNight, sublunar, terminator, twilight, zoneTime, offsetLabel, parseCustom, order, land: decodeLand };
 })();

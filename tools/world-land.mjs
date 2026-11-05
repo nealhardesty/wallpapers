@@ -12,7 +12,8 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
-const SOURCE = 'https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_110m_land.geojson';
+// A release tag, not master, so a regeneration gives the same file.
+const SOURCE = 'https://raw.githubusercontent.com/nvkelso/natural-earth-vector/v5.1.2/geojson/ne_110m_land.geojson';
 const OUT = join(resolve(import.meta.dirname, '..'), 'web/wallpapers/world-clock/world-land.js');
 const TOLERANCE = 0.05;     // degrees: half the grid, so only redundant points go (about 25 KB)
 const SCALE = 10;           // tenths of a degree

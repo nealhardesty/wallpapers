@@ -126,6 +126,7 @@ Added in November 2026, drawn in code (design in §10.2):
 | id | Files | Size | Notes |
 |---|---|---|---|
 | `weather` | weather-data.js, weather-scenes.js, weather.js | ~1.9k lines | Network: `api.open-meteo.com` (+ the panel's geocoder); needs location; a labelled sample offline; pure data rules (`WeatherData`), unit-tested; interactive (tap a day); keys V, U, R |
+| `world-clock` | world-land.js (generated), world-cities.js, world-clock-math.js, world-clock-art.js, world-clock-map.js, world-clock-faces.js, world-clock-board.js, world-clock.js | ~2.3k lines | No network; Natural Earth land (public domain); the sun, moon, terminator and zones (`WorldClockMath`), unit-tested; follows `host.now()`; interactive (tap a city); keys V, M, L |
 
 About 1.7 MB of JavaScript in total. **Not imported:** links, weather, clocks,
 search/omniprompt, custom links, status bar, Docker/nginx, the homepage's
@@ -246,7 +247,11 @@ building on it.
 order: `id`, `name`, `icon`, `scripts`, `make(host)`, an optional
 `prepare(manager, host)` hook (run before `init()`), `background`,
 `interactive`, `motion` (`'slow'` gets the slow fps cap), `network`
-(hosts), `cost`, `disabled` (why), and `pseudo` (Seasonal). It's one small
+(hosts), `cost`, `disabled` (why), `pseudo` (Seasonal), and
+`settingsScripts` (data its `settings.js` is built from, loaded before it in
+the panel and the tests: World Clock's cities). A script path may leave the
+wallpaper's folder (`'../core/clockface.js'`): the stage loads
+`wallpapers/<path>`. It's one small
 file, so the player can show names and icons without loading any wallpaper
 code, and the stage loads only the chosen wallpaper's `defaults.js` and
 scripts.
@@ -329,7 +334,7 @@ Phase 4 and 6 take it:
   |---|---|
   | `w=<id>` | Show this wallpaper instead of the saved one, e.g. `index.html?w=fishtank`. An unknown id is ignored, with a console warning |
   | `panel=open` | Open the switcher and settings panel on load (closes as usual with `,` or `Esc`) |
-  | `date=YYYY-MM-DD`, `theme=<id>` | Passed to the wallpaper as `host.params`. Advent uses them for time travel and themes, e.g. `?w=advent&date=2026-12-25` |
+  | `date=YYYY-MM-DD`, `theme=<id>` | Passed to the wallpaper as `host.params`. Advent uses them for time travel and themes, e.g. `?w=advent&date=2026-12-25`. A time may follow (`T23:59` or `T23:59:50`), in local time, or in UTC with a `Z` (`2026-06-21T12:00:00Z`) |
   | `tier=low\|medium\|high` | Pin a performance tier for this load (§4.8), e.g. to see Low on a desktop |
   | `host=android`, `hud=1`, `thumb=1` | Host simulation (§4.3), performance HUD (§4.8), thumbnail mode (§4.7). The Windows app passes `host=windows` (and its saver `host=windows-saver`, W5) |
   | `insets=t,r,b,l` | CSS px kept clear on each edge, on any host (the Windows app passes its taskbar), e.g. `?w=harvest&insets=0,0,48,0`. Malformed values fall back to the host's default (48 px at the bottom on Android, else 0) |
@@ -795,6 +800,7 @@ and the commits.
 | wiki-pond | — | Ripple pool 60 + 140 × density, 8/s × (0.4 + 0.6 × density); pond baked; listens in bursts on Android |
 | satellites | — | Stars × density; sky and ground one layer every 30 s; positions once a second, interpolated; idle until the next second when nothing's up; onScroll |
 | weather | — | Sky a quarter-size gradient on its own layer, painted only when it changes; the forecast one cached layer, rebuilt once a minute; clouds, rain, snow × density, pooled; with nothing moving in the sky, only the scenes' squares repaint; ≤ 20 fps through idleUntil, once a minute under reduced motion |
+| world-clock | `cityLights`, `twilight` (medium) | Background, land and graticule per resize and look; the night once a minute (a 1° altitude grid scaled up, or polygons), lights masked into it; a composed base per centre; once a second, idle between; only recentring, flaps and crossfades take more frames; stars and city lights × density |
 | harvest | `mist`, `beams` (medium) | Land is one baked layer per resize; trees, leaves, apples, geese and clouds are baked sprites; the world is washed once per frame with the hour's light; leaves, apples, smoke, sparks and flocks × density; squirrels × (0.5 + 0.5 density) |
 
 #### In the panel
@@ -1966,6 +1972,36 @@ wallpaper. Its zone list and `format` could feed this later.)
   under ~50 KB.
 - **Cost:** redraws once a second, idle in between. Close to free, and a
   showcase for idle frames.
+
+**As built (November 2026):** three views (`view`, key V). **The map**: the
+world filling the width, centred on Here (its zone's listed city, else 0°),
+Greenwich, the Pacific or any chosen city (key M), letterboxed into stars on
+tall screens; on a phone the home's time is large in the sky above and the
+labels sit in the sky on leader lines, leaving the map clear. Four looks
+(key L): night lights, atlas (land coloured by latitude), blueprint (a dashed
+terminator) and old paper (an engraved, hatched night). The night is a smooth
+fade through civil, nautical and astronomical twilight (from the sun's
+altitude on a 1° grid, scaled up) or the three bands as polygons; city lights
+are a seeded speckle clustered round every listed city and masked by the land
+and the night. The sun's glow sits at the subsolar point, the moon at the
+sub-lunar point in its phase (`WorldClockMath.sublunar`, the low-precision
+series: within a degree or so of the eclipse of 8 April 2024 in the tests).
+Each city is a dot and a card (name, time, the weekday where it isn't home's,
+offset, ☀/twilight/☾), laid out greedily round its dot, compact when space
+runs out, keeping last time's spot. Tap a city and it's home for the session
+(highlighted, the others' weekdays against it) and the map eases round to it;
+tap it again to go back. **Faces**: a grid with the column count that gives
+the biggest dials; each dial is that city's sky from the sun's altitude
+there, with stars at night and a sun or moon at six; classic, modern or
+minimal. **The board**: split flaps, a row per city, columns dropped on narrow
+screens; a digit steps through the digits between, a new board flips in from
+blank. Cities are chips per region in the panel (`settingsScripts` loads
+world-cities.js for it); custom zones are `Label=Area/City`, placed at a
+listed city in that zone (else on the equator at their offset, as a ring),
+with any bad one named in the panel's status. `?date=` with `Z` pins a moment
+for the smoke checks (the June solstice, the March equinox). Bench (phone, 4×
+throttle): 0.8% Low, 1.1% Medium, 1.3% High; the night's rebuild once a minute
+is the p95.
 
 ### 10.4 Map of where you are (owner)
 
