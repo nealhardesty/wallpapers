@@ -25,7 +25,7 @@ public sealed record SaverRestore(string? Exe, string Active)
     public static SaverRestore For(PreviousSaver? before, string saverPath, Func<string, string> longPath)
     {
         if (before?.Exe is { Length: > 0 } exe)
-            return SaverRegistry.IsOurs(exe, saverPath, longPath) ? new(null, "0") : new(exe, before.Active ?? "1");
+            return SaverRegistry.IsOurs(exe, saverPath, longPath) ? new(null, "0") : new(exe, before.Active is { Length: > 0 } on ? on : "1");
         return new(null, before?.Active is { Length: > 0 } a ? a : "0");
     }
 }

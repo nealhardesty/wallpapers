@@ -144,6 +144,28 @@ static class N
     public struct SYSTEM_POWER_STATUS { public byte ACLineStatus, BatteryFlag, BatteryLifePercent, SystemStatusFlag; public int BatteryLifeTime, BatteryFullLifeTime; }
     [DllImport("kernel32.dll")] public static extern bool GetSystemPowerStatus(out SYSTEM_POWER_STATUS status);
 
+    // ---- Screen saver selection (SaverSelection.cs, SPEC §10.25.12) ---------------------------
+    // Values checked against WinUser.h. Only the run flavour ever calls a SET (SaverSelection guards it).
+    public const uint SPI_GETSCREENSAVETIMEOUT = 0x0E, SPI_SETSCREENSAVETIMEOUT = 0x0F, SPI_SETSCREENSAVEACTIVE = 0x11;
+    public const uint SPIF_UPDATEINIFILE = 1, SPIF_SENDCHANGE = 2;
+    [DllImport("user32.dll", EntryPoint = "SystemParametersInfoW", SetLastError = true)] public static extern bool SystemParametersInfo(uint action, uint param, IntPtr value, uint winIni);
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)] static extern uint GetShortPathName(string path, StringBuilder buffer, uint size);
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)] static extern uint GetLongPathName(string path, StringBuilder buffer, uint size);
+
+    /// The 8.3 name, or null when the volume has none (short names off) or the call fails.
+    public static string? ShortPath(string path) => PathCall(GetShortPathName, path);
+
+    /// The long form, or null when the call fails (the file is gone).
+    public static string? LongPath(string path) => PathCall(GetLongPathName, path);
+
+    static string? PathCall(Func<string, StringBuilder, uint, uint> call, string path)
+    {
+        var sb = new StringBuilder(260);
+        var n = call(path, sb, (uint)sb.Capacity);
+        if (n > sb.Capacity) { sb = new StringBuilder((int)n); n = call(path, sb, (uint)sb.Capacity); }
+        return n == 0 || n > sb.Capacity ? null : sb.ToString();
+    }
+
     const int WTS_CURRENT_SESSION = -1, WTSSessionInfoEx = 25, WTSDisconnected = 4;
     const int WTS_SESSIONSTATE_LOCK = 0, WTS_SESSIONSTATE_UNLOCK = 1;
 

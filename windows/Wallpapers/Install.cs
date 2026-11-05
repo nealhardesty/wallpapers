@@ -22,10 +22,10 @@ sealed class Install(InstallLayout layout, Action<string> log)
     /// This process runs from the install folder.
     public bool InstalledHere => layout.IsInstalledAt(Path.GetFullPath(AppContext.BaseDirectory));
 
-    /// Copies this exe (as Wallpapers.exe, whatever the download was renamed to) and sourceDir's web\ into the
-    /// root: staged beside the old ones and swapped last, the old ones moved back on any failure, so a failed
-    /// Apply leaves the old install whole. Then the Uninstall entry and the shortcut; `fresh` also turns on
-    /// Start with Windows (an update leaves the person's choice). Returns why it failed, or null; never throws.
+    /// Copies this exe (as Wallpapers.exe, whatever the download was renamed to, and again as Wallpapers.scr)
+    /// and sourceDir's web\ into the root: staged beside the old ones and swapped last, the old ones moved back
+    /// on any failure, so a failed Apply leaves the old install whole. Then the Uninstall entry and the shortcut;
+    /// `fresh` also turns on Start with Windows (an update leaves the person's choice). Returns why it failed, or null; never throws.
     /// A failure after it quit the running app starts the old installed copy again (RestartedOld).
     public string? Apply(string sourceDir, bool fresh)
     {
@@ -64,7 +64,11 @@ sealed class Install(InstallLayout layout, Action<string> log)
 
         // Run from the install folder itself (--install from the installed exe): nothing to copy, and its own
         // image is the lock, so no waiting either.
-        if (layout.IsInstalledAt(Path.GetFullPath(sourceDir))) log("install: already in place, copy skipped");
+        if (layout.IsInstalledAt(Path.GetFullPath(sourceDir)))
+        {
+            log("install: already in place, copy skipped");
+            EnsureSaver();
+        }
         else
         {
             // Still running at the deadline: it never quit, so there's nothing to start again. Quit, but the exe
@@ -111,44 +115,69 @@ sealed class Install(InstallLayout layout, Action<string> log)
         return true;
     }
 
-    /// Stages exe.new and web.new, moves the old ones to .old, the new ones in; on any failure puts the old ones
-    /// back. Returns why it failed, or null.
+    /// Stages exe.new, scr.new (the same exe again, as the screen saver) and web.new, moves the old ones to .old
+    /// (exe, then .scr, then web), the new ones in; on any failure puts the old ones back. Returns why it
+    /// failed, or null.
     string? CopyAndSwap(string sourceExe, string sourceWeb)
     {
-        string newExe = layout.Exe + ".new", oldExe = layout.Exe + ".old", newWeb = layout.Web + ".new", oldWeb = layout.Web + ".old";
+        string newExe = layout.Exe + ".new", oldExe = layout.Exe + ".old", newScr = layout.Saver + ".new", oldScr = layout.Saver + ".old",
+            newWeb = layout.Web + ".new", oldWeb = layout.Web + ".old";
+        // A running saver can be renamed but not replaced cleanly: it would keep running from .old.
+        if (!CanOpenAlone(layout.Saver)) return ScrInUse;
         try
         {
             Directory.CreateDirectory(layout.Root);
-            foreach (var stale in new[] { newExe, oldExe, newWeb, oldWeb }) Delete(stale);
+            foreach (var stale in new[] { newExe, oldExe, newScr, oldScr, newWeb, oldWeb }) Delete(stale);
             File.Copy(sourceExe, newExe);
+            File.Copy(sourceExe, newScr);
             CopyFolder(sourceWeb, newWeb);
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
-            Tidy(newExe, newWeb);
+            Tidy(newExe, newScr, newWeb);
             return $"couldn't copy: {e.Message}";
         }
 
-        bool exeAside = false, webAside = false, exeIn = false;
+        bool exeAside = false, scrAside = false, webAside = false, exeIn = false, scrIn = false;
         try
         {
             if (File.Exists(layout.Exe)) { File.Move(layout.Exe, oldExe); exeAside = true; }
+            if (File.Exists(layout.Saver)) { File.Move(layout.Saver, oldScr); scrAside = true; }
             if (Directory.Exists(layout.Web)) { Directory.Move(layout.Web, oldWeb); webAside = true; }
             File.Move(newExe, layout.Exe);
             exeIn = true;
+            File.Move(newScr, layout.Saver);
+            scrIn = true;
             Directory.Move(newWeb, layout.Web);
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
             log($"install: swap failed ({e.Message}); putting the old install back");
             Undo("the new exe", () => { if (exeIn) File.Delete(layout.Exe); });
+            Undo("the new screen saver", () => { if (scrIn) File.Delete(layout.Saver); });
             Undo("the old exe", () => { if (exeAside) File.Move(oldExe, layout.Exe); });
+            Undo("the old screen saver", () => { if (scrAside) File.Move(oldScr, layout.Saver); });
             Undo("the old web folder", () => { if (webAside) Directory.Move(oldWeb, layout.Web); });
-            Tidy(newExe, newWeb);
+            Tidy(newExe, newScr, newWeb);
             return $"couldn't replace the installed files: {e.Message}";
         }
-        Tidy(oldExe, oldWeb);
+        Tidy(oldExe, oldScr, oldWeb);
         return null;
+    }
+
+    const string ScrInUse = "Wallpapers.scr is in use (the screen saver may be running); try again when it has stopped";
+
+    /// --install from the install folder skips the copy; a W4 install has no .scr, so make it from the exe here.
+    /// Best effort: a failure is logged, and the install stands.
+    void EnsureSaver()
+    {
+        try
+        {
+            if (File.Exists(layout.Saver) && new FileInfo(layout.Saver).Length == new FileInfo(layout.Exe).Length) return;
+            File.Copy(layout.Exe, layout.Saver, overwrite: true);
+            log($"install: made {layout.Saver}");
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { log($"install: couldn't make {layout.Saver}: {e.Message}"); }
     }
 
     static void Delete(string path)
@@ -427,7 +456,7 @@ sealed class Install(InstallLayout layout, Action<string> log)
     {
         var plan = UninstallPlan.For(layout, keepSettings);
         var left = new List<string>();
-        RestoreSaver();
+        RestoreSaver(left);
         Step(left, "run value", null, () =>
         {
             using var key = Registry.CurrentUser.OpenSubKey(plan.RunValue.Key, writable: true);
@@ -478,8 +507,21 @@ sealed class Install(InstallLayout layout, Action<string> log)
             catch (Exception e) when (attempt < 10 && e is IOException or UnauthorizedAccessException) { Thread.Sleep(300); }
     }
 
-    /// W5 selects our screen saver and remembers the one before; uninstall puts that back here.
-    static void RestoreSaver() { }
+    /// Selecting our screen saver remembered the one before (settings.json's saver.before); while ours is still
+    /// selected, uninstall puts that back. A failure is logged and named in `left`; the rest still runs.
+    void RestoreSaver(List<string> left)
+    {
+        try
+        {
+            var before = (AppSettings.Load(Path.Combine(layout.DataFolder, "settings.json")).Saver ?? new()).Before;
+            new SaverSelection(layout.Flavor, log).RestoreIfOurs(before, layout.Saver);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or System.Security.SecurityException)
+        {
+            log($"uninstall: screen saver not restored: {e.Message}");
+            left.Add("screen saver");
+        }
+    }
 
     /// Stage 2's last step: a hidden cmd deletes this copy once it has exited. Only a copy stage 1 made.
     static void DeleteSelf(Action<string> say)

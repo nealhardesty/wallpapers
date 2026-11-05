@@ -252,8 +252,9 @@ sealed class SelfTest
         InstallChecks();
     }
 
-    /// install, update, update (busy exe), uninstall against the `test` layout only (§10.25.13), removed first and in
-    /// `finally` (settings kept: the data root holds this very report).
+    /// install, saver selection, update, update (busy exe / .scr / web), uninstall against the `test` layout and
+    /// the test flavour's own saver key only (§10.25.12, §10.25.13), removed first and in `finally` (settings
+    /// kept: the data root holds this very report).
     void InstallChecks()
     {
         var layout = app.Layout;
@@ -264,27 +265,68 @@ sealed class SelfTest
             Line("FAIL", "install", $"not the test layout ({layout?.Flavor ?? "none"}); refusing to touch an install");
             return;
         }
+        // Uninstall restores the saver under KeyFor(layout.Flavor): never the real one from here.
+        if (SaverRegistry.KeyFor(app.Paths.Flavor) == SaverRegistry.DesktopKey || SaverRegistry.KeyFor(layout.Flavor) == SaverRegistry.DesktopKey)
+        {
+            Line("FAIL", "install", $"the saver key for {app.Paths.Flavor} is the real one; refusing to touch it");
+            return;
+        }
+        const string TestRoot = @"Software\Wallpapers-test", Ribbons = @"C:\Windows\System32\Ribbons.scr";
+        var saverKey = SaverRegistry.KeyFor("test");
         string? Run() { using var k = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(RunKey.Path); return k?.GetValue(layout.RunValueName) as string; }
         string? Entry(string name) { using var k = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(layout.UninstallKey); return k?.GetValue(name)?.ToString(); }
+        string? SaverValue(string name) { using var k = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(saverKey); return k?.GetValue(name) as string; }
+        long Length(string path) => File.Exists(path) ? new FileInfo(path).Length : -1;
+        bool ScrMatches() => Length(layout.Saver) > 0 && Length(layout.Saver) == Length(layout.Exe);
+        string Scr() => ScrMatches() ? ".scr ok" : $".scr {(File.Exists(layout.Saver) ? $"{Length(layout.Saver)} bytes, exe {Length(layout.Exe)}" : "MISSING")}";
+        List<string> Leftovers() => new[] { layout.Exe, layout.Saver, layout.Web }.SelectMany(p => new[] { p + ".new", p + ".old" })
+            .Where(p => File.Exists(p) || Directory.Exists(p)).Select(Path.GetFileName).OfType<string>().ToList();
+        var settingsBefore = app.Settings.Saver;
         try
         {
             installer.Remove(keepSettings: true);   // what a self-test killed mid-way left behind
+            Microsoft.Win32.Registry.CurrentUser.DeleteSubKeyTree(TestRoot, throwOnMissingSubKey: false);
             var why = installer.Apply(AppContext.BaseDirectory, fresh: true);
             var (_, runData) = RunKey.Spec(layout);
             var target = File.Exists(layout.Shortcut) ? ShellLink.TargetOf(layout.Shortcut) : null;
-            Check("install", why == null && File.Exists(layout.Exe) && File.Exists(Path.Combine(layout.Web, "index.html"))
+            Check("install", why == null && File.Exists(layout.Exe) && ScrMatches() && File.Exists(Path.Combine(layout.Web, "index.html"))
                 && Run() == runData && Entry("DisplayName") == "Wallpapers (test)" && Entry("DisplayVersion") == App.Version.Split('+')[0]
                 && Entry("UninstallString") == $"\"{layout.Exe}\" --uninstall"
                 && string.Equals(target, layout.Exe, StringComparison.OrdinalIgnoreCase),
-                why ?? $"run {(Run() == runData ? "ok" : "WRONG")}, entry {Entry("DisplayName")} {Entry("DisplayVersion")}, shortcut {target ?? "missing"}");
+                why ?? $"{Scr()}, run {(Run() == runData ? "ok" : "WRONG")}, entry {Entry("DisplayName")} {Entry("DisplayVersion")}, shortcut {target ?? "missing"}");
+
+            // The test flavour's private key, seeded with another saver: Select takes over and remembers it.
+            using (var k = Microsoft.Win32.Registry.CurrentUser.CreateSubKey(saverKey))
+            {
+                k.SetValue(SaverRegistry.ExeValue, Ribbons, Microsoft.Win32.RegistryValueKind.String);
+                k.SetValue(SaverRegistry.ActiveValue, "1", Microsoft.Win32.RegistryValueKind.String);
+            }
+            var selection = new SaverSelection("test", Log.Info);
+            var selected = selection.Select(layout.Saver);
+            var isSelected = selection.IsSelected(layout.Saver);
+            var value = SaverValue(SaverRegistry.ExeValue);
+            var active = SaverValue(SaverRegistry.ActiveValue);
+            using (var k = Microsoft.Win32.Registry.CurrentUser.CreateSubKey(SaverRegistry.PolicyKeyFor("test")))
+                k.SetValue(SaverRegistry.ExeValue, Ribbons, Microsoft.Win32.RegistryValueKind.String);
+            var policy = selection.PolicyReason();
+            using (var k = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(SaverRegistry.PolicyKeyFor("test"), writable: true))
+                k?.DeleteValue(SaverRegistry.ExeValue, throwOnMissingValue: false);
+            var noPolicy = selection.PolicyReason();
+            selection.SetTimeoutMinutes(10);
+            var minutes = selection.TimeoutMinutes();
+            Check("saver selection", selected.Exe == Ribbons && isSelected && active == "1" && policy != null && noPolicy == null && minutes == 10,
+                $"was {selected.Exe ?? "none"}; now {value} ({(isSelected ? "ours" : "NOT ours")}), active {active ?? "unset"}; "
+                + $"policy {(policy != null ? "seen" : "MISSED")}, then {(noPolicy == null ? "clear" : "STILL SEEN")}; start after {minutes?.ToString(CultureInfo.InvariantCulture) ?? "unset"} min");
 
             installer.SetStartWithWindows(false);
             var marker = Path.Combine(layout.Web, "marker.txt");
             File.WriteAllText(marker, "old");
+            File.WriteAllText(layout.Saver, "old");
             why = installer.Apply(AppContext.BaseDirectory, fresh: false);
-            Check("update", why == null && !File.Exists(marker) && File.Exists(layout.Exe) && Run() == null
-                && Entry("InstallDate") != null && Entry("DisplayVersion") != null,
-                why ?? $"marker {(File.Exists(marker) ? "STILL THERE" : "gone")}, run value {(Run() == null ? "absent" : "PRESENT")}");
+            Check("update", why == null && !File.Exists(marker) && File.Exists(layout.Exe) && ScrMatches() && Run() == null
+                && Entry("InstallDate") != null && Entry("DisplayVersion") != null && Leftovers().Count == 0,
+                why ?? $"marker {(File.Exists(marker) ? "STILL THERE" : "gone")}, {Scr()}, run value {(Run() == null ? "absent" : "PRESENT")}"
+                    + (Leftovers() is { Count: > 0 } l ? $", LEFT {string.Join(", ", l)}" : ""));
 
             long before = new FileInfo(layout.Exe).Length;
             var clock = Stopwatch.StartNew();
@@ -295,16 +337,50 @@ sealed class SelfTest
                 && new FileInfo(layout.Exe).Length == before,
                 $"{seconds:0.0} s, {(why == null ? "NO REASON given" : $"\"{why}\"")}, exe {(new FileInfo(layout.Exe).Length == before ? "unchanged" : "CHANGED")}");
 
+            // A running saver holds the .scr: the update refuses before touching anything.
+            File.WriteAllText(layout.Saver, "old");
+            using (new FileStream(layout.Saver, FileMode.Open, FileAccess.Read, FileShare.None))
+                why = installer.Apply(AppContext.BaseDirectory, fresh: false);
+            var scrKept = File.ReadAllText(layout.Saver) == "old";
+            Check("update (busy .scr)", why != null && why.Contains("Wallpapers.scr is in use") && scrKept
+                && new FileInfo(layout.Exe).Length == before && Leftovers().Count == 0,
+                $"{(why == null ? "NO REASON given" : $"\"{why}\"")}, .scr {(scrKept ? "unchanged" : "CHANGED")}, exe {(new FileInfo(layout.Exe).Length == before ? "unchanged" : "CHANGED")}"
+                    + (Leftovers() is { Count: > 0 } l2 ? $", LEFT {string.Join(", ", l2)}" : ""));
+
+            // The last move fails (a file open in web\ blocks the folder's rename) after the exe and the .scr
+            // went aside: all three come back as they were.
+            File.WriteAllText(layout.Exe, "old exe");
+            File.WriteAllText(layout.Saver, "old scr");
+            using (new FileStream(Path.Combine(layout.Web, "index.html"), FileMode.Open, FileAccess.Read, FileShare.Read))
+                why = installer.Apply(AppContext.BaseDirectory, fresh: false);
+            bool exeBack = File.ReadAllText(layout.Exe) == "old exe", scrBack = File.ReadAllText(layout.Saver) == "old scr",
+                webBack = File.Exists(Path.Combine(layout.Web, "index.html"));
+            Check("update (rolled back)", why != null && exeBack && scrBack && webBack && Leftovers().Count == 0,
+                $"{(why == null ? "NO REASON given" : $"\"{why}\"")}; exe {(exeBack ? "back" : "NOT back")}, .scr {(scrBack ? "back" : "NOT back")}, web {(webBack ? "back" : "MISSING")}"
+                    + (Leftovers() is { Count: > 0 } l3 ? $", LEFT {string.Join(", ", l3)}" : ""));
+
+            // Uninstall reads the data folder's settings.json for the saver it put aside.
+            app.SaveSettings(app.Settings with { Saver = (app.Settings.Saver ?? new()) with { Before = selected } });
             var left = installer.Remove(keepSettings: true);
             Check("uninstall", left.Count == 0 && !Directory.Exists(layout.Root) && !File.Exists(layout.Shortcut) && Run() == null
                 && Entry("DisplayName") == null && Directory.Exists(layout.DataFolder),
-                left.Count == 0 ? "root, shortcut, run value and key gone; the data folder kept" : $"left: {string.Join(", ", left)}");
+                left.Count == 0 ? "root (exe, .scr, web), shortcut, run value and key gone; the data folder kept" : $"left: {string.Join(", ", left)}");
+            var restored = SaverValue(SaverRegistry.ExeValue);
+            var restoredActive = SaverValue(SaverRegistry.ActiveValue);
+            Check("uninstall restores the saver", restored == Ribbons && restoredActive == "1",
+                $"{restored ?? "none"}, active {restoredActive ?? "unset"}");
         }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException or InvalidOperationException or System.Runtime.InteropServices.COMException)
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or InvalidOperationException or System.Security.SecurityException
+            or System.Runtime.InteropServices.COMException)
         {
             Line("FAIL", "install", $"threw {e.GetType().Name}: {e.Message}");
         }
-        finally { installer.Remove(keepSettings: true); }
+        finally
+        {
+            installer.Remove(keepSettings: true);
+            Microsoft.Win32.Registry.CurrentUser.DeleteSubKeyTree(TestRoot, throwOnMissingSubKey: false);
+            app.SaveSettings(app.Settings with { Saver = settingsBefore });
+        }
     }
 
     /// WebView2's visible top-level windows in our environment's processes that are layered: the

@@ -50,6 +50,13 @@ public class SaverRegistryTests
     }
 
     [Fact]
+    public void Restore_EmptyActiveBecomesAFlag()
+    {
+        Assert.Equal(new SaverRestore(Ribbons, "1"), SaverRestore.For(new PreviousSaver(Ribbons, ""), Ours, Same));
+        Assert.Equal(new SaverRestore(null, "0"), SaverRestore.For(new PreviousSaver(null, ""), Ours, Same));
+    }
+
+    [Fact]
     public void Restore_OldValueThatWasOursClears() =>
         Assert.Equal(new SaverRestore(null, "0"), SaverRestore.For(new PreviousSaver(OursShort, "1"), Ours, Long));
 }
