@@ -484,6 +484,7 @@ Run `make` to list every target.
 | `make cert` | Make a fresh self-signed certificate in `.cert/` (localhost and your LAN addresses) |
 | `make bing-json` | Fetch Bing's last eight images of the day into `web/bing.json`, so the Bing wallpaper works when served |
 | `make thumbnails` | Re-render the panel's wallpaper thumbnails (they're committed: review the changes) |
+| `make world-land` | Regenerate World Clock's coastline, `web/wallpapers/world-clock/world-land.js`, from Natural Earth's 1:110m land (downloads it; `LAND=<file>` to use a copy you have). Committed; the same input gives the same file |
 | `make icons` | Render `web/icons/icon.svg` to the PNG icons the extension and web app need (committed) |
 | `make screenshots` | Re-render the README's screenshots in `docs/` (committed: review the changes) |
 | `make extension` | Build the Chrome extension: `dist/extension/` to load unpacked, and a zip |
