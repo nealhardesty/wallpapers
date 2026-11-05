@@ -107,7 +107,7 @@
           keys: [{ keys: ['n'], label: 'When the space station passes next', run: sky => sky.passText() || 'No space station in this group' }] },
         { id: 'weather', name: 'Weather', icon: '🌦️', accent: '#8fc8ff', background: '#0b1a2e',
           scripts: ['weather/weather-data.js', 'weather/weather-scenes.js', 'weather/weather.js'],
-          make: host => new WeatherAnimationManager(host), cost: 'low', motion: 'slow', interactive: true,
+          make: host => new WeatherAnimationManager(host), cost: 'medium', motion: 'slow', interactive: true,
           network: ['api.open-meteo.com', 'geocoding-api.open-meteo.com'], offline: true, needs: ['location'],
           keys: [
               { keys: ['v'], label: 'Next view: days, hours, now', run: weather => weather.nextView() },

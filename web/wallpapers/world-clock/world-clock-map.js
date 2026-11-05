@@ -596,6 +596,21 @@ class WorldClockMap {
         return cards;
     }
 
+    // The layers and the composed base for `date`, ahead of the frame that
+    // draws them (the manager calls this outside the frames). Canvas drawing
+    // is deferred until something uses the result, so a one-pixel read makes
+    // it happen now rather than inside the next frame's drawImage (once a
+    // minute, never per frame).
+    prepare(date) {
+        if (this.app.config.view !== 'map') return;
+        if (this.centre === null) this.centre = this.app.centerLon() + (this.app.scroll - 0.5) * 60;
+        if (!this.base) this.layers();
+        if (this.stale || this.nightAt !== Math.floor(date.getTime() / 60000)) {
+            this.composeBase(date);
+            this.base.getContext('2d').getImageData(0, 0, 1, 1);
+        }
+    }
+
     draw(g, date) {
         const app = this.app, { k, dpr } = app, look = this.look, font = this.font;
         if (this.centre === null) this.centre = app.centerLon() + (app.scroll - 0.5) * 60;

@@ -10,7 +10,9 @@
 // night once a minute, the dials when their sky changes, the board's
 // tiles per resize), once a second, idle in between. Only a recentring map,
 // flipping flaps or a crossfade ask for more frames, and only until they
-// settle. Everything that depends on the time reads host.now().
+// settle. The slow rebuilds (the map's layers and its night) run outside
+// the frames (prepare(), the minute timer), so Auto's governor never sees
+// them. Everything that depends on the time reads host.now().
 
 const WORLD_CLOCK_VIEWS = { map: '🗺️ The world, day and night', faces: '🕰️ Clock faces', board: '🚉 Departures board' };
 const WORLD_CLOCK_LOOK_NAMES = { 'night-lights': '🌃 Night lights', atlas: '🧭 Atlas', blueprint: '📐 Blueprint', paper: '📜 Old paper' };
@@ -146,11 +148,13 @@ class WorldClockAnimationManager {
         this.say();
         this.last = performance.now();
         this.frameId = requestAnimationFrame(t => this.frame(t));
+        this.everyMinute();
     }
 
     stop() {
         this.running = false;
         cancelAnimationFrame(this.frameId);
+        clearTimeout(this.minuteTimer);
         window.removeEventListener('resize', this.onResize);
         this.stopGestures?.();
         this.stopGestures = null;
@@ -178,6 +182,37 @@ class WorldClockAnimationManager {
         this.k = WorldClockArt.clamp(Math.min(this.W, this.H) / 800, 0.78, 2.2) * this.config.scale;
         this.fade = this.fadeCanvas = null;
         for (const view of Object.values(this.views)) view.resize();
+        this.prepare();
+        this.dirty = true;
+    }
+
+    // The slow work (the map's layers, its night) done here, outside the
+    // frames: a frame a second that took 100 ms once a minute would read to
+    // Auto's governor as a wallpaper too heavy for its tier.
+    prepare(date = this.host.now()) {
+        if (!this.running || !this.canvas) return;
+        if (Math.floor(date.getTime() / 60000) !== this.minute) this.newMinute(date);
+        this.view.prepare?.(date);
+    }
+
+    // The minute's work (the sun, the moon, the order, the night) on a timer
+    // just past the minute; the frame that follows only draws.
+    everyMinute() {
+        clearTimeout(this.minuteTimer);
+        if (!this.running) return;
+        this.minuteTimer = setTimeout(() => {
+            this.prepare();
+            this.wake();
+            this.everyMinute();
+        }, 60000 - (this.host.now().getTime() % 60000) + 5);
+    }
+
+    newMinute(date) {
+        this.minute = Math.floor(date.getTime() / 60000);
+        this.sun = WorldClockMath.subsolar(date);
+        this.moon = WorldClockMath.sublunar(date);
+        this.resolve();   // a DST change moves an offset, and the order by offset with it
+        for (const view of Object.values(this.views)) view.minute?.(date);
         this.dirty = true;
     }
 
@@ -192,6 +227,7 @@ class WorldClockAnimationManager {
         if (changed('view') && this.views[old.view] !== this.view) this.views[old.view]?.release?.();   // its picture is in the crossfade now
         if (changed('scale')) { this.resize(); return this.wake(); }
         for (const view of Object.values(this.views)) view.configure?.(old, config);
+        this.prepare();
         this.wake();
     }
 
@@ -202,6 +238,7 @@ class WorldClockAnimationManager {
         if (effects(before) !== effects(quality) || before?.density !== quality.density) {
             this.crossfade(1.5);
             for (const view of Object.values(this.views)) view.onQuality?.();
+            this.prepare();
             this.wake();
         }
     }
@@ -211,7 +248,10 @@ class WorldClockAnimationManager {
         this.wake();
     }
 
-    onResume() { this.wake(); }
+    // Hidden: no minute timer either (the first frame back catches up).
+    onPause() { clearTimeout(this.minuteTimer); }
+
+    onResume() { this.everyMinute(); this.wake(); }
 
     wake() {
         this.dirty = true;
@@ -291,14 +331,10 @@ class WorldClockAnimationManager {
         this.last = now;
         const date = this.host.now(), ms = date.getTime();
         const minute = Math.floor(ms / 60000), second = Math.floor(ms / 1000);
-        if (minute !== this.minute) {
-            this.minute = minute;
-            this.sun = WorldClockMath.subsolar(date);
-            this.moon = WorldClockMath.sublunar(date);
-            this.resolve();   // a DST change moves an offset, and the order by offset with it
-            for (const view of Object.values(this.views)) view.minute?.(date);
-            this.dirty = true;
-        }
+        // The minute timer does the minute's work; a frame only steps in
+        // when it's well overdue (a frame just past the minute draws the
+        // last minute's night, a second at most).
+        if (minute !== this.minute && (this.minute < 0 || ms - minute * 60000 > 2000)) this.newMinute(date);
         if (second !== this.second || this.dirty) {
             this.second = second;
             this.infos = this.tick(date);

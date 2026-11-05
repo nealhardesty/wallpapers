@@ -1285,6 +1285,33 @@ const STAGE_CHECKS = {
             if (!(lit.north > lit.south * 1.5)) record(`on screen the north (${lit.north.toFixed(0)}) isn't lit against the south (${lit.south.toFixed(0)})`);
             return true;
         }],
+        ['city lights only on the night side, each by its own sun', async () => {
+            await stageWith('world-clock', { configVersion: 1 }, '&date=2026-11-05T22:50:00Z');
+            await sleep(400);
+            const lights = await counts(`(() => {
+                const map = m.views.map, c = map.night, ms = map.ms, date = WP.host.now(), sun = WorldClockMath.subsolar(date);
+                const p = document.createElement('canvas'); p.width = c.width; p.height = c.height;
+                const g = p.getContext('2d', { willReadFrequently: true }); g.drawImage(c, 0, 0);
+                const data = g.getImageData(0, 0, c.width, c.height).data;
+                const [r0] = map.look.night;
+                const at = s => { const x = Math.floor((s.x + s.r / 2) * ms), y = Math.floor((s.y + s.r / 2) * ms); return x < 0 || y < 0 || x >= c.width || y >= c.height ? null : (y * c.width + x) * 4; };
+                let day = 0, dayLit = 0, night = 0, nightLit = 0;
+                // The cities' own bright specks (the large ones), well inside the day or the night.
+                for (const s of map.specks || []) {
+                    if (s.a < 0.9) continue;
+                    const alt = WorldClockMath.sunAltitude(s.lat, s.lon, date, sun), o = at(s);
+                    if (o === null) continue;
+                    if (alt > 5) { day++; if (data[o + 3] > 0) dayLit++; }
+                    if (alt < -20) { night++; if (data[o] > r0 + 60) nightLit++; }
+                }
+                return { day, dayLit, night, nightLit, specks: (map.specks || []).length };
+            })()`);
+            if (!lights.specks) record('no city lights at all');
+            if (lights.day < 5 || lights.night < 5) record(`too few cities to judge: ${JSON.stringify(lights)}`);
+            if (lights.dayLit) record(`${lights.dayLit} of ${lights.day} cities in daylight are lit`);
+            if (lights.nightLit < lights.night * 0.8) record(`only ${lights.nightLit} of ${lights.night} cities deep in the night are lit`);
+            return true;
+        }],
         ['the March equinox: the night\'s edges are near-vertical', async () => {
             for (const twilight of ['sharp', 'soft']) {
                 await stageWith('world-clock', { configVersion: 1, twilight, cityLights: false }, '&date=2026-03-20T14:46:00Z');
@@ -1544,6 +1571,22 @@ const STAGE_CHECKS = {
                     }
                 }
             } finally { await cdp.send('Emulation.clearDeviceMetricsOverride'); }
+            return true;
+        }],
+        ['on battery the corona\'s shimmer stops: a frame a minute', async () => {
+            await fresh(`${WEB}/index.html?w=orrery&tier=medium`);
+            if (!await waitFor(() => inStage('WP.stage?.ready'))) return record('never ready');
+            const fps = async () => { const a = await inStage('WP.host.frames.count'); await sleep(3000); return (await inStage('WP.host.frames.count') - a) / 3; };
+            await sleep(1200);
+            const plugged = await fps();
+            if (plugged < 2) record(`plugged in, the shimmer ran at ${plugged.toFixed(1)} fps`);
+            await evaluate(`WP.power({ battery: { charging: false, level: 0.6 } })`);
+            await sleep(800);
+            const battery = await fps();
+            const reasons = await inStage('WP.host.power.reasons.join()');
+            if (!reasons.includes('battery')) record(`the stage's power reasons: ${reasons}`);
+            if (battery > 0.7) record(`on battery: ${battery.toFixed(1)} fps (want the once-a-minute idle)`);
+            await evaluate(`WP.power({ battery: { charging: true, level: 0.6 } })`);
             return true;
         }],
         ['still and live it idles; time-lapse and drift run', async () => {

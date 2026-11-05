@@ -41,7 +41,8 @@ zone helpers), §10.1 (location), §10.2 (Weather), §10.3 (World Clock), §10.5
   cache static layers; pool particles; bake glows into sprites; read `host.quality` (multiply counts by
   `density`, honour `effects`), implement `onQuality`; size canvases by `devicePixelRatio`. Check `?tier=low`
   and `?hud=1`, and `node tools/bench.mjs <id>`: **under 25% busy on Low and 50% on Medium**. Target for all
-  three: `cost: 'low'`.
+  three: `cost: 'low'`. (Final review: Weather ships as `cost: 'medium'`; its ⚡ holds only for a
+  clear sky, SPEC §10.2.)
 - **Settings:** every default has a control and every control a default, on the slider's step grid; groups
   with `advanced: true` for the rest; `applySettings(config)` takes changes live where it can.
 - **Keys** are declared in the catalog `keys` and must not clash with the player's own keys (SPEC §4.5:
@@ -105,7 +106,7 @@ zone helpers), §10.1 (location), §10.2 (Weather), §10.3 (World Clock), §10.5
 
 **Interfaces — Consumes:** Task 1's `WeatherData`; `host.storage`, `host.now()`, `host.location`/the `wp:location` capability exactly as Satellites/Lighthouse use it (`needs: ['location']`), `host.panel(feed)` + `status` extras for the panel's state line, `host.toast`, `host.gestures`, `host.idleUntil`, `host.quality`, `host.insets`.
 
-**Catalog:** `{ id: 'weather', name: 'Weather', icon: '🌦️', accent: '#8fc8ff', background: '#0b1a2e', scripts: ['weather/weather-data.js', 'weather/weather-scenes.js', 'weather/weather.js'], make: host => new WeatherAnimationManager(host), cost: 'low', motion: 'slow', interactive: true, network: ['api.open-meteo.com', 'geocoding-api.open-meteo.com'], offline: true, needs: ['location'], keys: [...] }`.
+**Catalog:** `{ id: 'weather', name: 'Weather', icon: '🌦️', accent: '#8fc8ff', background: '#0b1a2e', scripts: ['weather/weather-data.js', 'weather/weather-scenes.js', 'weather/weather.js'], make: host => new WeatherAnimationManager(host), cost: 'medium' /* was 'low'; final review */, motion: 'slow', interactive: true, network: ['api.open-meteo.com', 'geocoding-api.open-meteo.com'], offline: true, needs: ['location'], keys: [...] }`.
 
 **What it shows (the design — implement all of it):**
 - **The sky is the weather outside.** A full-screen cached gradient for the current `sky()` phase and kind (clear blue day, golden dawn/dusk, deep night with stars and the moon, grey overcast, fog bank), crossfading when either changes. Over it, an **ambient layer** of the current conditions drawn in code: drifting cloud sprites, rain streaks or snowflakes (pooled, `density`-scaled), a lightning flash now and then for thunder, fog sheets, heat shimmer never (no filters). Setting `ambient`: `off | subtle | full` (default `subtle`).
