@@ -26,15 +26,33 @@ sealed class Install(InstallLayout layout, Action<string> log)
     /// root: staged beside the old ones and swapped last, the old ones moved back on any failure, so a failed
     /// Apply leaves the old install whole. Then the Uninstall entry and the shortcut; `fresh` also turns on
     /// Start with Windows (an update leaves the person's choice). Returns why it failed, or null; never throws.
+    /// A failure after it quit the running app starts the old installed copy again (RestartedOld).
     public string? Apply(string sourceDir, bool fresh)
     {
-        try { return ApplyOrThrow(sourceDir, fresh); }
+        quitTheRunningApp = false;
+        RestartedOld = false;
+        string? why;
+        try { why = ApplyOrThrow(sourceDir, fresh); }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException or COMException or System.Security.SecurityException)
         {
             log($"install: {e.GetType().Name}: {e.Message}");
-            return $"couldn't finish installing: {e.Message}";
+            why = $"couldn't finish installing: {e.Message}";
         }
+        if (why != null && quitTheRunningApp && File.Exists(layout.Exe))
+            try
+            {
+                Process.Start(new ProcessStartInfo(layout.Exe) { WorkingDirectory = layout.Root, UseShellExecute = false });
+                RestartedOld = true;
+                log("install: restarted the old copy");
+            }
+            catch (Exception e) when (e is System.ComponentModel.Win32Exception or IOException) { log($"install: couldn't restart the old copy: {e.Message}"); }
+        return why;
     }
+
+    bool quitTheRunningApp;
+
+    /// The last Apply failed after quitting the running app, and started the old installed copy again.
+    public bool RestartedOld { get; private set; }
 
     string? ApplyOrThrow(string sourceDir, bool fresh)
     {
@@ -54,6 +72,7 @@ sealed class Install(InstallLayout layout, Action<string> log)
             var deadline = DateTime.UtcNow + QuitWait;
             if (layout.Flavor == "run" && !SingleInstance.Holds && SingleInstance.IsRunning("run"))
             {
+                quitTheRunningApp = true;
                 log($"install: asking the running app to quit ({(SingleInstance.Send("run", "quit") ? "sent" : "it didn't answer")})");
                 while (SingleInstance.IsRunning("run"))
                 {
@@ -241,7 +260,7 @@ sealed class Install(InstallLayout layout, Action<string> log)
             {
                 Caption = layout.DisplayName,
                 Heading = update ? "Couldn't update" : "Couldn't install",
-                Text = $"{why}.\n\nWallpapers runs from here this time.",
+                Text = $"{why}.\n\n{(RestartedOld ? $"The installed copy in {layout.Root} is running again." : "Wallpapers runs from here this time.")}",
                 Icon = TaskDialogIcon.Warning,
             }, TaskDialogStartupLocation.CenterScreen);
             return false;
