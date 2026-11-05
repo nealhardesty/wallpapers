@@ -587,6 +587,13 @@ sealed class SelfTest
     async Task FakeTapAsync(List<Surface> fake)
     {
         var (one, two) = (fake.First(s => s.Plan.Number == 1), fake.First(s => s.Plan.Number == 2));
+        // At 1 the check can't see a missing factor; below 0.5 WebView2 doesn't render at the planned scale.
+        var scale = two.Placement.RasterizationScale;
+        if (scale is >= 0.99 or < 0.5)
+        {
+            Line("SKIP", "pointer (fake monitor 2)", $"the fake layout fits at {scale:0.###}, outside [0.5, 0.99): a tap there proves nothing about the fit factor");
+            return;
+        }
         var listening = await ListenAsync(one) & await ListenAsync(two);
         var (x, y) = TestPoint(two);
         await TapAsync(x, y);
@@ -739,16 +746,30 @@ sealed class SelfTest
             + (bad.Count == 0 ? $"{surfaces.Count} page(s) got {got}, reasons [{string.Join(", ", reasons)}]" : string.Join("; ", bad)));
     }
 
-    /// Two fake 1920×720 monitors at 100%, side by side; monitor 1 can be made 80 px taller. Wider than most
-    /// real work areas, so they're fitted (scaled down): the pointer's CSS px must have that factor in them.
-    /// WebView2 renders no smaller than half scale, so on a primary narrower than 2022 px (CI's 1024×768)
-    /// they're 640×360 instead, fitted at about 0.75.
+    /// Two fake monitors at 100%, side by side; monitor 1 can be made 80 px taller. They must be fitted
+    /// (scaled down by FakeLayout.Fit) so the pointer's CSS px have a factor in them that isn't 1, but not
+    /// below 0.5, where WebView2 stops scaling (a 182 px window got a 364 px page at 0.253 on CI). So
+    /// 1920×720 when its fit, plain and taller, lies in [0.5, 1) (the owner's RDP screen: 0.727); else
+    /// a pair sized from the primary's work area to fit at 0.75 (CI's 1024×768: 648×360; 1920×1080:
+    /// 1216×456), never smaller than 640×360 so CSS (400, 300) and the 80 px stay on monitor 1.
     static List<MonitorInfo> FakeTwo(bool taller = false)
+    {
+        var (w, h) = FakeSize();
+        return [FakeMonitor(1, new Rect(0, 0, w, h + (taller ? 80 : 0))), FakeMonitor(2, new Rect(w, 0, 2 * w, h))];
+    }
+
+    static (int W, int H) FakeSize()
     {
         var real = N.Monitors();
         var work = (real.FirstOrDefault(m => m.Primary) ?? real[0]).Work;
-        var (w, h) = work.Width * 0.95 / 3840 >= 0.5 ? (1920, 720) : (640, 360);
-        return [FakeMonitor(1, new Rect(0, 0, w, h + (taller ? 80 : 0))), FakeMonitor(2, new Rect(w, 0, 2 * w, h))];
+        // FakeLayout.Fit's factor for the pair, plain and with monitor 1 taller.
+        double Fit(int w, int h, int extra) => Math.Min(1, Math.Min(work.Width * 0.95 / (2 * w), work.Height * 0.95 / (h + extra)));
+        bool Good(int w, int h) => Fit(w, h, 0) is >= 0.5 and < 1 && Fit(w, h, 80) is >= 0.5 and < 1;
+        if (Good(1920, 720)) return (1920, 720);
+        const double Target = 0.75;
+        var fw = (int)(work.Width * 0.95 / (2 * Target));
+        var fh = (int)Math.Min(fw * 3 / 8, work.Height * 0.95 / Target - 80);
+        return (Math.Max(640, fw), Math.Max(360, fh));
     }
 
     static MonitorInfo FakeMonitor(int n, Rect r) =>

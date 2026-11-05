@@ -26,7 +26,7 @@ if [ -d /mnt/c/Windows ]; then
   win_path() { wslpath -w "$1"; }
 else
   # Git Bash (the CI runner): Windows' tools are on PATH and %LOCALAPPDATA% is in the environment.
-  PS=$(command -v powershell.exe)
+  PS=$(command -v powershell.exe) || true
   LAD=$LOCALAPPDATA
   unix_path() { cygpath -u "$1"; }
   win_path() { cygpath -w "$1"; }

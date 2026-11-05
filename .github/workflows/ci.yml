@@ -35,7 +35,7 @@ jobs:
           SIGNING: ${{ secrets.WALLPAPERS_SIGN_ENDPOINT != '' }}
         run: |
           if [ "$SIGNING" = true ]; then
-            sudo apt-get update -qq && sudo apt-get install -y -qq osslsigncode
+            make win-sign-tools
           else
             echo "no WALLPAPERS_SIGN_* secrets: the Windows app ships unsigned"
           fi
