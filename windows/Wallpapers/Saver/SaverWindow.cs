@@ -90,6 +90,8 @@ sealed class SaverWindow : Form
         try
         {
             await s.StartAsync(env, session.Paths, session.Bing, Url);
+            // Chromium's input window must not take the mouse moves and clicks that end the saver.
+            WebFactory.MakeOverlaysClickThrough(env);
             if (surface == s) await ApplyPowerAsync();
         }
         catch (Exception e) when (e is COMException or InvalidOperationException or ArgumentException)
@@ -123,6 +125,7 @@ sealed class SaverWindow : Form
         try { frames = await ReadFramesAsync(); }
         finally { reading = false; }
         if (IsDisposed) return;
+        if (surface != null && session.Environment is { } env) WebFactory.MakeOverlaysClickThrough(env);   // as Desktop's 5 s check
         Act(watchdog.Tick(frames), $"frames {frames}");
         session.WriteState();
     }

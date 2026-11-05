@@ -402,21 +402,7 @@ sealed class Desktop : IDisposable
     /// it must be click-through or it can swallow clicks meant for the icons (W0.2, W0.4; §10.25.8).
     public void FixOverlay()
     {
-        if (env == null) return;
-        var pids = env.GetProcessInfos().Select(p => p.ProcessId).ToHashSet();
-        N.EnumWindows((h, _) =>
-        {
-            if (N.IsWindowVisible(h) && pids.Contains(N.PidOf(h)) && N.ClassOf(h) == "Chrome_WidgetWin_1")
-            {
-                var ex = N.ExStyle(h);
-                if ((ex & N.WS_EX_LAYERED) != 0 && (ex & N.WS_EX_TRANSPARENT) == 0)
-                {
-                    N.SetWindowLongPtr(h, N.GWL_EXSTYLE, (IntPtr)(ex | N.WS_EX_TRANSPARENT));
-                    Log.Info($"overlay: made {h:X} click-through");
-                }
-            }
-            return true;
-        }, IntPtr.Zero);
+        if (env != null) WebFactory.MakeOverlaysClickThrough(env);
     }
 
     public async Task SetPausedAsync(bool paused)

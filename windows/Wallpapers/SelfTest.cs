@@ -1008,6 +1008,11 @@ sealed class SelfTest
                 && wallpapers.All(id => id != null && !SaverPicker.Never.Contains(id)) && wallpapers.Distinct().Count() == 2,
                 $"{(drawing ? "both windows drawing" : "NOT drawing in 20 s")}; {Describe(b ?? a ?? ReadState(child))}");
 
+            // Chromium's input window over the saver would take the real moves and clicks this check posts past.
+            var overlays = Overlays();
+            var blocking = overlays.Where(h => (N.ExStyle(h) & N.WS_EX_TRANSPARENT) == 0).ToList();
+            Check("saver overlay", blocking.Count == 0, $"{overlays.Count} overlay window(s) while the saver runs, {(blocking.Count == 0 ? "all click-through" : $"{blocking.Count} NOT click-through")}");
+
             var hid = await Until(6000, () => Task.FromResult(app.Power.State.SaverRunning && !first.Visible));
             var hideDetail = $"while it ran: {app.Power.State.Describe()}, desktop {(first.Visible ? "VISIBLE" : "hidden")}";
 

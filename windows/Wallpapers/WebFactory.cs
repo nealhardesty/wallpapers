@@ -60,6 +60,27 @@ static class WebFactory
         }
     }
 
+    /// Visual hosting's full-screen, alpha-0, layered input window (one per browser process) gets
+    /// WS_EX_TRANSPARENT, or it can swallow the clicks and moves meant for the windows under it: the
+    /// desktop's icons, or a saver that must end on them (W0.2, W0.4; §10.25.8).
+    public static void MakeOverlaysClickThrough(CoreWebView2Environment env)
+    {
+        var pids = env.GetProcessInfos().Select(p => p.ProcessId).ToHashSet();
+        N.EnumWindows((h, _) =>
+        {
+            if (N.IsWindowVisible(h) && pids.Contains(N.PidOf(h)) && N.ClassOf(h) == "Chrome_WidgetWin_1")
+            {
+                var ex = N.ExStyle(h);
+                if ((ex & N.WS_EX_LAYERED) != 0 && (ex & N.WS_EX_TRANSPARENT) == 0)
+                {
+                    N.SetWindowLongPtr(h, N.GWL_EXSTYLE, (IntPtr)(ex | N.WS_EX_TRANSPARENT));
+                    Log.Info($"overlay: made {h:X} click-through");
+                }
+            }
+            return true;
+        }, IntPtr.Zero);
+    }
+
     static void Serve(CoreWebView2 web, CoreWebView2WebResourceRequestedEventArgs e, AppPaths paths, BingJson bing)
     {
         var url = e.Request.Uri;
