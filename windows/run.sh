@@ -5,7 +5,8 @@
 #   run.sh test  the same into ...\test, run --selftest, print its report, exit with its code
 #   run.sh install    the same into ...\install, then --install it (%LOCALAPPDATA%\Programs\Wallpapers; a running copy quits first)
 #   run.sh uninstall  the installed copy's --uninstall --keep-settings (DELETE_SETTINGS=1: --delete-settings)
-#   run.sh log [run|dev|test]   the last lines of that flavour's log (FOLLOW=1 to follow)
+#   run.sh saver      the same into ...\run, run `Wallpapers.exe /s` (your settings, read-only) full screen until you end it, then the end of saver-log.txt
+#   run.sh log [run|dev|test|saver]   the last lines of that flavour's log (FOLLOW=1 to follow); saver: the saver's own saver-log.txt
 #   run.sh reload [dev|run]     reload the running app's pages (after a web/ edit, for dev)
 # Extra arguments for the app: WIN_ARGS="--dump-displays". WP_FAKE_DISPLAYS=<displays JSON> (a WSL path,
 # translated; keep it under /mnt/c so Windows sees edits to it) lays the surfaces out as that file says,
@@ -39,7 +40,7 @@ LOCAL=$(unix_path "$LAD")
 root_for() { case "$1" in dev) echo "$LOCAL/Wallpapers-dev" ;; test) echo "$LOCAL/Wallpapers-test" ;; *) echo "$LOCAL/Wallpapers" ;; esac; }
 
 if [ "$mode" = log ]; then
-  log="$(root_for "${2:-run}")/log.txt"
+  if [ "${2:-run}" = saver ]; then log="$(root_for run)/saver-log.txt"; else log="$(root_for "${2:-run}")/log.txt"; fi
   [ -f "$log" ] || { echo "no log yet: $log"; exit 0; }
   if [ -n "$FOLLOW" ]; then tail -n 40 -f "$log"; else tail -n 80 "$log"; fi
   exit 0
@@ -67,12 +68,14 @@ if [ "$mode" = reload ]; then
 fi
 
 BIN="$LOCAL/Wallpapers-build/$mode"
+[ "$mode" = saver ] && BIN="$LOCAL/Wallpapers-build/run"
 mkdir -p "$BIN"
 export WSLENV="WP_DEV:WP_DEBUG:WP_WEB_ROOT:WP_FAKE_DISPLAYS/p${WSLENV:+:$WSLENV}"
 if [ "$mode" = dev ]; then
   export WP_DEV=1 WP_DEBUG=1 WP_WEB_ROOT="$(win_path "$PWD/web")"
 fi
 LOG="$(root_for "$mode")/log.txt"
+[ "$mode" = saver ] && LOG="$(root_for run)/saver-log.txt"
 OUTPUT=$(mktemp)
 trap 'rm -f "$OUTPUT"' EXIT
 REPO=$PWD
@@ -114,6 +117,14 @@ launch() {
       return 1
     fi
     echo "installed $LAD\Programs\Wallpapers"
+    return 0
+  fi
+  if [ "$mode" = saver ]; then
+    # Wait for the saver itself (a Start-Process wait on that one process, so WSL's pipes aren't inherited).
+    echo "run.sh: the saver is running full screen; press a key or move the mouse to end it"
+    "$PS" -NoProfile -Command "\$p = Start-Process -FilePath '$(win_path "$BIN/Wallpapers.exe")' -WorkingDirectory '$(win_path "$BIN")' -ArgumentList '/s' -PassThru; \$null = \$p.Handle; \$p.WaitForExit(); exit \$p.ExitCode" < /dev/null || status=$?
+    echo "run.sh: the saver ended (exit $status); the end of $LOG:"
+    tail -n 40 "$LOG" 2>/dev/null | tr -d '\r' || true
     return 0
   fi
   if [ "$mode" = test ]; then

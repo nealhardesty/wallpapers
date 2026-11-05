@@ -222,6 +222,30 @@ SmartScreen asks about a downloaded copy: **More info → Run anyway**. (Or
 right-click the zip → Properties → **Unblock** before you unzip it.) Its data
 (settings, log) is in `%LOCALAPPDATA%\Wallpapers`.
 
+**Windows screen saver.** Once the app is installed (the screen saver is the
+installed copy's `Wallpapers.scr`, so **Just Run** can't offer it), open the tray
+menu → **Screen Saver** → **Use Wallpapers as the Screen Saver…**. It asks first,
+then makes Wallpapers your saver and remembers the one you had. The same submenu
+has:
+- **Start After**: 1, 3, 5, 10, 15 or 30 minutes without input
+- **Show**: **Same as the Desktop**, **A Different One Each Time** (a different
+  wallpaper on each monitor, never one that needs the network), or **One
+  Wallpaper** of your choice
+- **Change Every**: 1, 5, 15 or 30 minutes, for *Different*
+- **Show a Clock**: the drifting clock on top
+- **Preview Now**, and **Open Windows Screen Saver Settings…**
+
+Windows' own *Screen Saver Settings* dialog lists *Wallpapers*, shows a live
+preview, and its **Settings…** button opens the same options in a small window.
+A key, a click or moving the mouse ends the saver, on every monitor; *On resume,
+display logon screen* works as for any saver. The desktop pauses while it runs.
+If the page ever stalls, the saver reloads it and, failing that, shows a clock on
+black. Untick **Use Wallpapers…** (or uninstall) and your old saver comes back.
+The saver is a second copy of the exe, about 52 MB more on disk; Smart App
+Control and SmartScreen treat `Wallpapers.scr` the same as `Wallpapers.exe`.
+A group policy that sets the screen saver wins, and the menu says so. Its log is
+`%LOCALAPPDATA%\Wallpapers\saver-log.txt`.
+
 **On any phone,** without installing anything: open the hosted copy and
 choose *Add to Home screen*. It opens full screen, with no browser around
 it. Hold a right-hand corner for the panel.
@@ -488,6 +512,7 @@ Run `make` to list every target.
 | `make win-run` | Build it and start it on the Windows side from WSL, with your normal settings: the wallpaper goes behind your desktop icons, a tray icon controls it (a running installed copy quits first; it comes back at the next sign-in) |
 | `make win-install` | Build it and install it for this Windows user: `%LOCALAPPDATA%\Programs\Wallpapers`, a Start menu shortcut, an entry in Settings → Apps, Start with Windows. No admin rights; a running copy quits first |
 | `make win-uninstall` | Remove the installed app: the folder, the shortcut, the Apps entry and Start with Windows. Your settings stay (`DELETE_SETTINGS=1` removes them too); the steps are logged in `%TEMP%\Wallpapers-uninstall.log` |
+| `make win-saver` | Build it and run the screen saver (`Wallpapers.exe /s`) full screen with your settings, until you press a key or move the mouse, then print the end of `saver-log.txt` (`make win-log FLAVOR=saver` shows it any time). It takes over every monitor |
 | `make win-sign` | Sign `dist/win/Wallpapers.exe` with Azure Trusted Signing through a pinned, sha256-checked jsign (see Releasing); prints `unsigned` when no `WALLPAPERS_SIGN_*` variable is set |
 | `make win-sign-tools` | Install `osslsigncode` (Debian/Ubuntu, through `apt` and `sudo`), which `make win-release` needs to verify a signed exe; CI runs it before a signed release |
 | `make win-dev` | Run it straight from this checkout's `web/` (over `\\wsl.localhost`), with its own settings and DevTools, so an edit shows after `make win-reload` or *Reload Wallpapers* in the tray |
@@ -495,7 +520,7 @@ Run `make` to list every target.
 | `make win-test` | The app's self-test against a throwaway settings store: layer, animation, settings sharing, pause, the pointer (a move, a tap and a double-click at the right CSS px, icons and hidden surfaces ignored, the toggles, the bare-desktop classifier against your real icons, a tap on fake monitor 2), coverage (a test window over monitor 1; skipped when something else already covers it), power reaching every page, `display=` and a resize in place (in a fake two-monitor layout), the Performance menu, insets, overlay, Bing, Explorer restart (simulated), a renderer crash, cleanup, then install, update (also with the exe held open) and uninstall into a throwaway `Wallpapers-test` install (never your real one) (about 70 s; `WIN_ARGS=--bad-web-root` checks the missing-files case) |
 | `make win-test-zip` | The same self-test against the app inside `dist/wallpapers-windows-<version>.zip` (from `make win-release`, or CI's `wallpapers-windows` artifact saved into `dist/`), unzipped to `dist/win-zip/`: what ships is what's tested. CI's `win` job runs it on a Windows runner (Git Bash or WSL) |
 | `WP_FAKE_DISPLAYS=<file>` with `make win-run` or `make win-dev` | Lay the surfaces out as a recorded monitor layout says (a JSON file under `/mnt/c`, made with `WIN_ARGS=--dump-displays make win-run`), each in an ordinary window, to try Different mode, per-monitor menus and hot-plug (edit the file) on one screen |
-| `make win-log` | The app's log (`FLAVOR=dev` or `test` for those; `FOLLOW=1` to follow) |
+| `make win-log` | The app's log (`FLAVOR=dev` or `test` for those, `saver` for the screen saver's; `FOLLOW=1` to follow) |
 | `make docker-build` | Build the container image `wallpapers` |
 | `make docker-run` | Run it at http://localhost:8000 (read-only, unprivileged) |
 | `make lint` | Syntax-check every script and JSON file |

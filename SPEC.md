@@ -15,8 +15,9 @@ wallpapers' only home. They run in three hosts:
    web code behind the home screen.
 4. **macOS desktop and screen saver** (`mac/`, §10.21, built).
 5. **Windows desktop, tray app and screen saver** (`windows/`, §10.25,
-   designed 2026-11-02; W0 passed, W1–W4 built by 2026-11-04: the app, the
-   installer and the zip; first release pending owner OK; the saver is W5).
+   designed 2026-11-02; W0 passed, W1–W5 built by 2026-11-05: the app, the
+   installer, the zip and the screen saver; by-hand passes and the first release
+   pending the owner).
 
 > Status: **phases 1–9 done** (2026-10-23), except what needs the owner:
 > measurements on a real phone (6.2's numbers, 6.4a), the first signed
@@ -32,8 +33,8 @@ wallpapers' only home. They run in three hosts:
 > the icons on every monitor, the tray, the settings window, the self-test)
 > was built 2026-11-03. W2 (monitors and power), W3 (the mouse) and W4
 > (install, update, uninstall, the zip and the CI `win` job) were built
-> 2026-11-04. W5 (the screen saver) is next; the first release waits for the
-> owner's OK.
+> 2026-11-04. W5 (the screen saver) was built 2026-11-05; the owner's by-hand
+> pass (§10.25.16) and the first release wait for the owner.
 
 ---
 
@@ -3447,7 +3448,8 @@ the screen saver: the Mac app (§10.21) for Windows, going further where
 Windows allows. **Status: W0 passed (2026-11-03, §10.25.21); W1 built
 (2026-11-03, *As built* in §10.25.16); W2 built (2026-11-04; by-hand console
 pass pending); W3 built (2026-11-04; by-hand console pass pending); W4 built
-(2026-11-04; by-hand pass pending, checklist in §10.25.16); W5 next.** Phase W0
+(2026-11-04; by-hand pass pending, checklist in §10.25.16); W5 built
+(2026-11-05; by-hand pass pending, checklist in §10.25.16).** Phase W0
 (spikes) is the gate: if a live web page can't run behind the icons on 25H2,
 the project stops. Brainstormed and reviewed 2026-11-02; the original design
 note is `docs/superpowers/specs/2026-11-02-windows-design.md`, and this
@@ -4128,6 +4130,69 @@ on black and retries every minute. A dead renderer
 While the saver runs, it tells the tray app over the named pipe, and the
 desktop surfaces go `hidden`.
 
+*As built (W5, 2026-11-05; plan
+`docs/superpowers/plans/2026-11-05-windows-w5-screen-saver.md`).*
+- **Files.** Core: `SaverArgs` (the argument forms), `SaverSettings` (with
+  `SaverShow`, `PreviousSaver`, `SaverChoices`), `SaverPicker`, `SaverInput`
+  (the 8 px move rule), `SaverWatchdog` (the steps), `SaverRegistry` (with
+  `SaverRestore`) and `SaverLease`. App: `Saver/SaverMain.cs` (`/s`, `/p`, `/c`
+  entry), `SaverSession.cs` (the windows, rotation, pings, the state file),
+  `SaverWindow.cs` (one form per monitor: input, watchdog, fallback clock),
+  `SaverPreview.cs` (`/p`), `SaverSelection.cs` (the registry and
+  `SystemParametersInfo` side), `SaverControl.cs` (the tray's and the options
+  window's actions), `SaverOptionsWindow.cs` (`/c`). `Program.Main` dispatches
+  right after the uninstall stage-2 line: any `SaverArgs` mode other than none
+  goes to `SaverMain`.
+- **Dispatch.** `/s`, `/p <hwnd>` (also `/p:<hwnd>`, `-p`), `/c` (also
+  `/c:<hwnd>`); a `.scr` run with no argument is `/c`. `--selftest /s` is not a
+  saver. The saver logs to `saver-log.txt` beside `log.txt`, so a saver run never
+  interleaves with the tray app's log. Its state goes to `saver-state.json`
+  (written in the test flavour and with `WP_DEBUG`; the self-test reads it).
+- **`/s`.** Each window is a `Form` that holds a `Surface` (composition
+  hosting, the way the desktop does): the form gets every key, click and move
+  itself, and Chromium's full-screen, alpha-0 input window is made
+  click-through (`WebFactory.MakeOverlaysClickThrough`, shared with
+  `Desktop.FixOverlay`; re-run on every watchdog tick). The cursor is hidden;
+  the first window is activated; losing activation (`WM_ACTIVATEAPP` 0) ends
+  the saver ("deactivate"), as does `WM_CLOSE`. `SC_SCREENSAVE` is swallowed.
+  Quality ceiling is High.
+- **Different mode** loads each window on `?w=blank` and, once the page answers,
+  calls `WP.player.show(pick)` so the first frame is black and then crossfades
+  to the pick. Picks come from `SaverPicker` (never Blank, Jellyfin or Bing; no
+  monitor shows another's current wallpaper, and a rotation always changes
+  something). After a reload or recreate the window's kept pick is shown again.
+- **The desktop's saver flag is a lease.** The saver sends `saver-on` over the
+  pipe at once and every **4 s**; the app treats the saver as running for
+  **10 s** after the last ping (`SaverLease`), or while Windows says it is.
+  `saver-off` is queued behind any ping on its way. A saver that dies leaves the
+  desktop hidden for at most 10 s.
+- **Watchdog timings.** Every 4 s (1 s, 3 retry ticks in the test flavour) the
+  page's rAF counter is read with a 2 s timeout; no advance is a stall. Steps:
+  Reload, Recreate (new Surface), Fallback (clock on black), then a retry every
+  15 ticks (about a minute) that puts a new Surface under the clock and removes
+  the clock once frames advance. A dead renderer (`Surface.Lost`) takes the same
+  path. The watchdog waits while the saver's windows are hidden (locked,
+  display off).
+- **Fallback clock.** Native: the time in the user's format, white, Segoe UI
+  Light at a sixth of the height, on black, moving to a random spot each
+  minute. It is also what shows with no WebView2 runtime or a bad web root.
+- **`/p`.** `SaverPreview` makes a child window of Windows' preview host and
+  draws a live `Surface` at 0.5 `RasterizationScale`; if that can't start it
+  paints the app icon on black. It exits when the parent goes (500 ms poll, and
+  on `WM_DESTROY`). No pinging, input or watchdog.
+- **`/c`.** Sends `saver-options` over the pipe to the running app (after
+  `AllowSetForegroundWindow`), or starts `Wallpapers.exe --saver-options` beside
+  the `.scr` when nothing answers. The app opens `SaverOptionsWindow`: a native
+  dialog with the same choices as the tray, each applied at once.
+- **Selection.** `SaverSelection.Select` writes `SCRNSAVE.EXE` (the short 8.3
+  path when Windows gives one), `ScreenSaveActive=1`, and the timeout through
+  `SystemParametersInfo`; it returns the saver it replaced, which
+  `SaverControl` keeps as `Before` only when it isn't ours. A group policy
+  (`Software\Policies\Microsoft\Windows\Control Panel\Desktop`, HKCU and HKLM)
+  disables the item and its tooltip says why. Only the `run` flavour touches the
+  real `Control Panel\Desktop`; `test` and `dev` write
+  `Software\Wallpapers-<flavor>\…`.
+
 #### 10.25.13 Install, start, uninstall (`Install.cs`)
 
 - **The download** is a zip: `Wallpapers.exe` (self-contained, single-file,
@@ -4232,9 +4297,20 @@ desktop surfaces go `hidden`.
   every step to `%TEMP%\Wallpapers-uninstall.log`, shows a result dialog when
   it asked, and deletes its own copy through a hidden `cmd` after a ping delay.
   A step that fails doesn't stop the others and is named in the result.
-  `RestoreSaver()` is an empty hook for W5. `Wallpapers.scr` is **not created
-  until W5**: an `.scr` that doesn't handle `/s` would start the whole app from
-  Windows' screen saver dialog.
+  `RestoreSaver()` was an empty hook until W5 (below).
+- *As built (W5, 2026-11-05).* `Wallpapers.scr` is now created: a **full copy
+  of the exe** (about 52 MB more on disk; a hard link or a tiny stub would be
+  smaller, but the `.scr` must run on its own and survive the exe being
+  replaced), staged as `Wallpapers.scr.new` and swapped with the exe and `web\`
+  in `CopyAndSwap` (move aside exe, `.scr`, web; move in; roll back all three on
+  failure). A running saver locks the `.scr`, which `CanOpenAlone` checks before
+  anything is staged: the update stops with "Wallpapers.scr is in use (the
+  screen saver may be running); try again when it has stopped". `--install`
+  from the install folder (the copy skipped) makes the `.scr` when it is missing
+  or a different length (`EnsureSaver`). `RestoreSaver` is real: it reads
+  `settings.json`'s `Saver`, and if `SCRNSAVE.EXE` is ours puts back the saved
+  `Before` (deleting the value when there was none); it runs first in the
+  removal plan, and a failure is named in the result as "screen saver".
 - **About** is a TaskDialog: version, WebView2 runtime, data folder, wallpapers
   folder, `Installed in <root>` or `Running from … (not installed)`; **Close**,
   **Uninstall…** (installed only) and **Project Page** (opens the homepage,
@@ -4297,6 +4373,7 @@ section):**
 | `win-reload` | reload a running app's pages (`--reload`; the `win-dev` one by default) |
 | `win-run` | build and run the built exe (normal settings) |
 | `win-test` | `--selftest` against a throwaway user data folder (below); needs Windows (WSL interop or CI) |
+| `win-saver` | *As built (W5):* `BUILD=1 windows/run.sh saver` copies `dist/win` to `Wallpapers-build\run` like `win-run`, runs `Wallpapers.exe /s` (your settings, read-only) full screen, waits for that one process (Start-Process, so WSL's pipes aren't inherited), then prints the last 40 lines of `saver-log.txt`. `windows/run.sh log saver` (`make win-log FLAVOR=saver`) shows that log. It takes over the owner's screen: run it only when you mean to |
 | `win-install` / `win-uninstall` | install/uninstall the built app for this Windows user. *As built:* `windows/run.sh install` copies `dist/win` to `Wallpapers-build\install`, runs `--install` there and waits on that one process (started straight from WSL the installed app would inherit WSL's pipes); `win-uninstall` runs the installed exe's `--uninstall --keep-settings` (`DELETE_SETTINGS=1` adds `--delete-settings`). With nothing installed it says so and exits 0 |
 | `win-test-zip` | the same `--selftest` against the app inside `dist/wallpapers-windows-<version>.zip`, unzipped to `dist/win-zip/`: what ships is what's tested. Works from WSL or Git Bash (`run.sh` takes `DIST=`; `cygpath` on Git Bash) |
 | `win-sign-tools` | installs `osslsigncode` (apt, sudo) if missing; CI runs it before a signed release |
@@ -4363,6 +4440,18 @@ is never touched. Details that matter:
    never kills the real Explorer).
 9. Saver: `/s` in a harness, frames advance, input ends it; the watchdog's
    three steps; `/p` into a test parent.
+   *As built (W5):* check 9 is the lines `saver run`, `saver overlay`,
+   `saver rotation`, `saver input (move)`, `saver hides the desktop`,
+   `saver input (key)`, `saver input (click)`, `saver watchdog`, `saver preview`,
+   `saver options (/c)` and `saver menu`, plus `saver selection` and the
+   `.scr` / `uninstall restores the saver` additions to the install lines. The
+   self-test runs the saver **only in harness windows** (`--saver-window`: 480×270
+   windows inside the work area, not topmost, cursor shown, never activated,
+   deactivation ignored; `--saver-change-ms`, `--saver-stall`), so it never takes
+   the screen, and it selects the saver **only in a scratch key**
+   (`Software\Wallpapers-test\…`, deleted at the start and the end; it refuses to
+   run if the key would be the real `Control Panel\Desktop`). The tray menu check
+   only reads the menu. `TimeoutSeconds` is 240.
 10. Quit cleanup leaves no host windows.
 
 **Core unit tests (xUnit, Linux):** surfaces and insets for side-by-side,
@@ -4770,6 +4859,73 @@ Task Manager; RDP in and out; the saver from Windows' dialog; uninstall.
 - **W5 Screen saver (last, owner):** `/s /p /c`, selection and timeout,
   choices, clock, watchdog, saver ↔ app pipe; uninstall restores Windows'
   saver. Self-test 9. Ships in the next release.
+
+  *As built (2026-11-05; plan
+  `docs/superpowers/plans/2026-11-05-windows-w5-screen-saver.md`).* What was
+  built and how is in §10.25.12 *As built* (files, dispatch, `/s`, `/p`, `/c`,
+  the lease, the watchdog), §10.25.13 *As built* (the `.scr` in install, update
+  and uninstall), §10.25.15 (`win-saver`, self-test 9) and §10.25.20.
+  `make win-unit` passes 250 tests (193 at W4). `make win-test` passes over RDP
+  with every `saver …` line, `saver selection` and the install lines including
+  `uninstall restores the saver`; `pointer classify` and `coverage` SKIP over
+  RDP as before. The real `/s`, Windows' own dialog and the real
+  `Control Panel\Desktop` were never touched by an agent.
+  - **Still to check by hand (owner, at the console with both monitors where it
+    says so).** Agents can't use Windows' dialog, wait out a timeout or press
+    real keys on a topmost window. Install first (`make win-install`). Record
+    the results here.
+    1. *Select from the tray.* Tray → Screen Saver → *Use Wallpapers as the
+       Screen Saver…*: the confirmation names the minutes; *Use Wallpapers*: the
+       row is ticked. Untick it: your old saver is back in Windows' dialog.
+       Select it again.
+    2. *Windows' dialog.* Settings → Personalization → Lock screen → Screen
+       saver (or the tray's *Open Windows Screen Saver Settings…*): *Wallpapers*
+       is the saver and the wait matches *Start After*.
+    3. *Settings….* In that dialog, *Settings…* opens our options window, with the
+       app running and with it quit (Tray → Quit first; the window should still
+       open, after a moment, and the tray icon appears). A change there shows in
+       the tray's menu.
+    4. *The preview.* The little monitor in that dialog shows a live, moving page,
+       and stops cleanly when the dialog closes (no `Wallpapers.exe` left in
+       Task Manager except the app).
+    5. *The timeout.* Leave the PC alone for *Start After* minutes (use 1): the
+       saver starts on every monitor, the cursor is hidden, the desktop
+       wallpaper behind it stopped (`make win-log` shows `power: screen saver`).
+    6. *Input ends it.* On each monitor in turn, a key, a click, the wheel, and a
+       mouse move of more than a few pixels (a nudge of the mouse does not end it)
+       each end it. No stray click lands on the desktop or an icon afterwards.
+    7. *Preview Now* (tray and options window) starts it at once; ends the same way.
+    8. *Show.* *A Different One Each Time* with two monitors: a different
+       wallpaper on each, starting on black and fading in, changing every *Change
+       Every* minutes (set 1). *One Wallpaper*: the pick on both. *Same as the
+       Desktop*: whatever the desktop shows (and per monitor, in Different
+       monitors mode).
+    9. *Show a Clock* ticked: the drifting clock over it.
+    10. *On resume, display logon screen.* Tick it in Windows' dialog, start the
+        saver, press a key: Windows asks for the password.
+    11. *The fallback clock.* In a copy of the install (a test install or the
+        unzipped download, never the real one while selected) rename `web\` and
+        run `Wallpapers.exe /s`: black with the time, which moves each minute;
+        any input ends it; `saver-log.txt` says why.
+    12. *Update while selected.* With the saver selected, run a newer download
+        (item 5 of W4): the update works, the saver is still selected and
+        starts (the 8.3 short name in `SCRNSAVE.EXE` still points at the
+        file). With the saver running, the update refuses with the in-use message.
+    13. *Uninstall restores.* With it selected, uninstall (Settings → Apps):
+        Windows' dialog shows your old saver again, with its wait.
+    14. *Group policy message.* Only if you have a way to set the policy: with
+        *Screen saver executable name* set by policy, the tray row is disabled
+        and its tooltip says your organization's policy sets it.
+    15. *Smart App Control and SmartScreen* on `Wallpapers.scr`: note whether it
+        runs from Windows' dialog on this PC (a separate file, a separate hash
+        from the exe's).
+    16. *The release (the controller bumps and tags; the owner verifies).*
+        `version` goes to 0.11.0 and `v0.11.0` is tagged after the owner's OK;
+        download `wallpapers-windows-0.11.0.zip` from the release, check the
+        `.sha256`, and repeat W4 item 1, then 1 to 5 above, from that download.
+  - **Changed from the design:** `/c` brings up the app's own options window
+    rather than a dialog from the `.scr` process; the saver reuses `Surface`
+    (§10.25.20); `Wallpapers.scr` is a full copy of the exe.
 - **W6 Two-monitor pass (owner, later):** the by-hand list in §10.25.15 at the
   console with both monitors. Everything multi-monitor is built and tested
   before this (W2) against simulated layouts, so W6 is verification and
@@ -4851,6 +5007,31 @@ Task Manager; RDP in and out; the saver from Windows' dialog; uninstall.
   self-test's fake monitors fit at about 0.75 (WebView2 renders no smaller
   than ~0.5 scale). The installed size is about 53 MB. The jsign token is in
   jsign's argv while signing. The signed path hasn't run.
+
+**Design calls made in W5 without the owner (2026-11-05; check these):**
+- The saver reuses `Surface` (composition hosting), so the form gets every key,
+  click and move itself; Chromium's alpha-0 input window is made click-through
+  (a shared helper) so it can't take them.
+- `Wallpapers.scr` is a full copy of the exe, about 52 MB more on disk and in
+  each update.
+- `SCRNSAVE.EXE` holds the 8.3 short path when Windows gives one (so a legacy
+  reader of the value copes); the long path would also work. If the install
+  folder were deleted and recreated while selected, a stored short name could
+  point at a sibling folder (theoretical: updates keep the folder and uninstall
+  restores first).
+- The self-test runs the saver only in harness windows and selects only in a
+  scratch key (`Software\Wallpapers-test\…`); it never touches the real
+  `Control Panel\Desktop`, and the real `/s` is by hand.
+- Different mode starts on Blank and crossfades to the pick, rather than
+  loading the pick directly.
+- The fallback is a native clock on black that moves each minute.
+- The desktop's saver flag is a 10 s lease renewed by 4 s pings, so a saver that
+  dies can't leave the desktop hidden.
+- `saver-log.txt` is separate from `log.txt`.
+- Harness windows never activate and ignore deactivation; a real run activates
+  the first window and ends on deactivation.
+- The preview renders at 0.5 scale; an open options window doesn't follow
+  changes made elsewhere until one of its controls is used.
 
 **Owner decisions taken 2026-11-04 (W4):**
 - Ship unsigned first; set up Azure Trusted Signing before telling anyone else

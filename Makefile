@@ -16,7 +16,7 @@ DOTNET ?= $(shell command -v dotnet 2>/dev/null || echo $(HOME)/.dotnet/dotnet)
 DOTNET_FOUND := $(shell command -v $(DOTNET) 2>/dev/null)
 export DOTNET
 
-.PHONY: help hooks open serve serve-https cert bing-json thumbnails icons screenshots extension site android-build android-install android-logcat android-emulator android-release android-keystore android-bench jellyfin-media jellyfin-fixtures jellyfin-dev jellyfin-stop jellyfin-mock mac-build mac-run mac-dev mac-test mac-install mac-uninstall mac-release mac-saver-test mac-saver-live mac-saver-log win-build win-release win-sign win-sign-tools win-unit win-ci win-run win-dev win-reload win-test win-test-zip win-install win-uninstall win-log docker-build docker-run lint audit audit-staged audit-history test smoke smoke-clock smoke-live bench bench-clock ci clean
+.PHONY: help hooks open serve serve-https cert bing-json thumbnails icons screenshots extension site android-build android-install android-logcat android-emulator android-release android-keystore android-bench jellyfin-media jellyfin-fixtures jellyfin-dev jellyfin-stop jellyfin-mock mac-build mac-run mac-dev mac-test mac-install mac-uninstall mac-release mac-saver-test mac-saver-live mac-saver-log win-build win-release win-sign win-sign-tools win-unit win-ci win-run win-dev win-reload win-test win-test-zip win-install win-uninstall win-saver win-log docker-build docker-run lint audit audit-staged audit-history test smoke smoke-clock smoke-live bench bench-clock ci clean
 
 help: ## List every target
 	@awk 'BEGIN {FS = ":.*## "} /^[a-zA-Z0-9_-]+:.*## / {printf "  \033[36m%-17s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -177,7 +177,10 @@ win-install: ## Build the Windows app and install it for this Windows user (%LOC
 win-uninstall: ## Remove the installed Windows app and its Start menu, Run and Apps entries; settings stay (DELETE_SETTINGS=1 removes them too)
 	@windows/run.sh uninstall
 
-win-log: ## Show the Windows app's log (FLAVOR=dev or test for those; FOLLOW=1 to follow)
+win-saver: ## Run the built Windows screen saver full screen (/s) until you press a key or move the mouse, then show its log
+	@BUILD=1 windows/run.sh saver
+
+win-log: ## Show the Windows app's log (FLAVOR=dev or test for those, saver for the screen saver's; FOLLOW=1 to follow)
 	@windows/run.sh log $(or $(FLAVOR),run)
 
 bench: ## Every wallpaper at every tier on a simulated phone (4× slower CPU): budgets, bench/results.json, the ⚡ badges (SPEC §4.8)
