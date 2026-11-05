@@ -243,6 +243,63 @@ sealed class SelfTest
         var pid = Environment.ProcessId;
         N.EnumWindows((h, _) => { if (N.PidOf(h) == pid && N.TextOf(h) == "WallpapersKeeper") keepers++; return true; }, IntPtr.Zero);
         Check("cleanup", hosts == 0 && keepers == 0, $"{hosts} host window(s), {keepers} keeper(s) left");
+
+        // 11. Install, update and uninstall, in the throwaway test layout.
+        InstallChecks();
+    }
+
+    /// install, update, update (busy exe), uninstall against the `test` layout only (§10.25.13), removed in
+    /// `finally` (settings kept: the data root holds this very report).
+    void InstallChecks()
+    {
+        var layout = app.Layout;
+        var installer = app.Installer;
+        if (layout == null || installer == null || layout.Flavor != "test" || !layout.Root.EndsWith("Wallpapers-test", StringComparison.OrdinalIgnoreCase)
+            || layout.RunValueName != "Wallpapers-test" || !layout.UninstallKey.EndsWith("Wallpapers-test", StringComparison.OrdinalIgnoreCase))
+        {
+            Line("FAIL", "install", $"not the test layout ({layout?.Flavor ?? "none"}); refusing to touch an install");
+            return;
+        }
+        string? Run() { using var k = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(RunKey.Path); return k?.GetValue(layout.RunValueName) as string; }
+        string? Entry(string name) { using var k = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(layout.UninstallKey); return k?.GetValue(name)?.ToString(); }
+        try
+        {
+            var why = installer.Apply(AppContext.BaseDirectory, fresh: true);
+            var (_, runData) = RunKey.Spec(layout);
+            var target = File.Exists(layout.Shortcut) ? ShellLink.TargetOf(layout.Shortcut) : null;
+            Check("install", why == null && File.Exists(layout.Exe) && File.Exists(Path.Combine(layout.Web, "index.html"))
+                && Run() == runData && Entry("DisplayName") == "Wallpapers (test)" && Entry("DisplayVersion") == App.Version.Split('+')[0]
+                && Entry("UninstallString") == $"\"{layout.Exe}\" --uninstall"
+                && string.Equals(target, layout.Exe, StringComparison.OrdinalIgnoreCase),
+                why ?? $"run {(Run() == runData ? "ok" : "WRONG")}, entry {Entry("DisplayName")} {Entry("DisplayVersion")}, shortcut {target ?? "missing"}");
+
+            installer.SetStartWithWindows(false);
+            var marker = Path.Combine(layout.Web, "marker.txt");
+            File.WriteAllText(marker, "old");
+            why = installer.Apply(AppContext.BaseDirectory, fresh: false);
+            Check("update", why == null && !File.Exists(marker) && File.Exists(layout.Exe) && Run() == null
+                && Entry("InstallDate") != null && Entry("DisplayVersion") != null,
+                why ?? $"marker {(File.Exists(marker) ? "STILL THERE" : "gone")}, run value {(Run() == null ? "absent" : "PRESENT")}");
+
+            long before = new FileInfo(layout.Exe).Length;
+            var clock = Stopwatch.StartNew();
+            using (new FileStream(layout.Exe, FileMode.Open, FileAccess.Read, FileShare.None))
+                why = installer.Apply(AppContext.BaseDirectory, fresh: false);
+            var seconds = clock.Elapsed.TotalSeconds;
+            Check("update (busy exe)", why != null && (why.Contains("still running") || why.Contains("in use")) && seconds < 16
+                && new FileInfo(layout.Exe).Length == before,
+                $"{seconds:0.0} s, {(why == null ? "NO REASON given" : $"\"{why}\"")}, exe {(new FileInfo(layout.Exe).Length == before ? "unchanged" : "CHANGED")}");
+
+            var left = installer.Remove(keepSettings: true);
+            Check("uninstall", left.Count == 0 && !Directory.Exists(layout.Root) && !File.Exists(layout.Shortcut) && Run() == null
+                && Entry("DisplayName") == null && Directory.Exists(layout.DataFolder),
+                left.Count == 0 ? "root, shortcut, run value and key gone; the data folder kept" : $"left: {string.Join(", ", left)}");
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or InvalidOperationException or System.Runtime.InteropServices.COMException)
+        {
+            Line("FAIL", "install", $"threw {e.GetType().Name}: {e.Message}");
+        }
+        finally { installer.Remove(keepSettings: true); }
     }
 
     /// WebView2's visible top-level windows in our environment's processes that are layered: the
