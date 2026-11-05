@@ -552,8 +552,10 @@ browser features only work on secure pages.
    `WALLPAPERS_SIGN_CLIENT_ID` and `WALLPAPERS_SIGN_CLIENT_SECRET`. CI then signs
    tagged releases and the release notes say so. All six or none: a partial set
    fails the build. Locally the same variables work with `make win-release` or
-   `make win-sign` (needs `java`; `osslsigncode` verifies the result). Never
-   commit a value.
+   `make win-sign` (needs `java`; `osslsigncode` verifies the result against
+   Microsoft's root certificate, which is downloaded and sha256-checked).
+   `windows/sign.sh --fetch` downloads and checks jsign and that certificate
+   without any secrets. Never commit a value.
 
 ### Adding a wallpaper
 

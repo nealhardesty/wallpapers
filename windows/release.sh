@@ -23,8 +23,7 @@ echo "$result"
 case "$result" in
   signed*)
     signed=signed
-    command -v osslsigncode >/dev/null || fail "$EXE was signed but osslsigncode isn't installed to verify it"
-    osslsigncode verify "$EXE" >/dev/null || fail "$EXE's signature doesn't verify"
+    windows/sign.sh --verify "$EXE" || exit 1
     ;;
 esac
 # A 64-bit Windows exe: "MZ", then at the PE header (offset at 0x3C) "PE\0\0" and machine 0x8664.
