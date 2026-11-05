@@ -26,6 +26,8 @@ sealed class App : ApplicationContext
     public Power Power { get; } = new();
     public Desktop Desktop { get; }
     public Tray Tray { get; }
+    /// The screen saver's choices: the tray's Screen Saver menu and the options window (SPEC §10.25.12).
+    public SaverControl Saver { get; }
     public InstallLayout? Layout { get; }
     /// The installer for this flavor's layout; null for dev.
     public Install? Installer { get; }
@@ -33,6 +35,7 @@ sealed class App : ApplicationContext
     public Install? StartAfterQuit { get; set; }
     SettingsWindow? settingsWindow;
     PlayWindow? playWindow;
+    SaverOptionsWindow? saverOptions;
     /// Why nothing can be shown (no web root), or null.
     public string? Problem { get; }
     bool cleaned;
@@ -54,6 +57,7 @@ sealed class App : ApplicationContext
         Problem = paths.CheckWebRoot();
         if (Problem != null) Log.Error(Problem);
         else _ = Desktop.StartAsync();
+        Saver = new SaverControl(this);
         Tray = new Tray(this);
         SingleInstance.Listen(paths.Flavor, OnCommand);
     }
@@ -73,6 +77,7 @@ sealed class App : ApplicationContext
             case "saver-on": Power.SaverPing(); break;
             case "saver-off": Power.SaverEnded(); break;
             case "settings": OpenSettings(); break;
+            case "saver-options": OpenSaverOptions(); break;
             case "reload": Desktop.ReloadAll(); break;
             default: Log.Warn($"unknown command {command}"); break;
         }
@@ -85,6 +90,18 @@ sealed class App : ApplicationContext
         settingsWindow ??= new SettingsWindow(this);
         _ = settingsWindow.ShowOrFocusAsync(monitor);
     }
+
+    /// The screen saver's options (Windows' Settings… button, /c): made, or brought forward.
+    public void OpenSaverOptions()
+    {
+        if (saverOptions is { IsDisposed: false } open) { open.Bring(); return; }
+        var window = saverOptions = new SaverOptionsWindow(this);
+        window.FormClosed += (_, _) => { if (saverOptions == window) saverOptions = null; };
+        window.Show();
+    }
+
+    internal bool SaverOptionsOpen => saverOptions is { IsDisposed: false, Visible: true };
+    internal void CloseSaverOptionsForTest() => saverOptions?.Close();
 
     /// Play in a Window: that surface's current wallpaper (monitor 1's, or Same mode's), as the tray last
     /// heard it, in a window on the real monitor under it (a fake layout's monitors are windows on one).
@@ -165,6 +182,8 @@ sealed class App : ApplicationContext
         catch (Exception e) { Log.Error($"cleanup: settings window: {e.Message}"); }
         try { playWindow?.Close(); }
         catch (Exception e) { Log.Error($"cleanup: play window: {e.Message}"); }
+        try { saverOptions?.Close(); }
+        catch (Exception e) { Log.Error($"cleanup: saver options: {e.Message}"); }
         try { Desktop.Dispose(); }
         catch (Exception e) { Log.Error($"cleanup: {e.Message}"); }
         Layer.Dispose();

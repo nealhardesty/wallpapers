@@ -3,7 +3,7 @@ using System.Windows.Forms;
 namespace Wallpapers;
 
 /// Modes (SPEC §10.25.4): the app [--just-run] · --install · --uninstall [--keep-settings|--delete-settings] · --quit ·
-/// --reload · --settings · --dump-displays · --selftest [--bad-web-root] (and --cover-for-test, the self-test's covering
+/// --reload · --settings · --saver-options · --dump-displays · --selftest [--bad-web-root] (and --cover-for-test, the self-test's covering
 /// window: coverage ignores our own process's; --uninstall-stage2 <root>, the %TEMP% copy that removes the install).
 /// The screen saver (§10.25.12): /s, /p <hwnd>, /c (as Wallpapers.scr, no argument is /c); with --selftest, its harness.
 static class Program
@@ -83,9 +83,11 @@ static class Program
 
         if (!selfTest && !SingleInstance.TryBecomeFirst(paths.Flavor))
         {
-            // A second launch (the Start menu, make win-run twice) opens the first one's settings.
+            // A second launch (the Start menu, make win-run twice) opens the first one's settings; a /c that
+            // started us just as the app did, the saver's options.
             N.AllowSetForegroundWindow(N.ASFW_ANY);
-            Log.Info($"second instance: {(SingleInstance.Send(paths.Flavor, "settings") ? "asked the first to open settings" : "the first didn't answer")}");
+            var command = args.Contains("--saver-options") ? "saver-options" : "settings";
+            Log.Info($"second instance: {(SingleInstance.Send(paths.Flavor, command) ? $"asked the first to open {command}" : "the first didn't answer")}");
             return 0;
         }
 
@@ -93,6 +95,7 @@ static class Program
         SynchronizationContext.SetSynchronizationContext(new WindowsFormsSynchronizationContext());
         var app = new App(paths);
         if (args.Contains("--settings")) app.OpenSettings();
+        if (args.Contains("--saver-options")) app.OpenSaverOptions();
         if (selfTest) SelfTest.Start(app, badWebRoot: args.Contains("--bad-web-root"));
         Application.Run(app);
         // The tray's Install…: the installed exe starts once this one has cleaned up (hosts, web views).

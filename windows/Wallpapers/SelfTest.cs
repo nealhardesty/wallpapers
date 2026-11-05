@@ -239,6 +239,11 @@ sealed class SelfTest
         // aside, input ends it, Different rotates, and the watchdog's steps.
         await SaverAsync(first);
 
+        // 9b (W5). The preview in a stand-in for Windows' little monitor, /c reaching this app, the Screen Saver menu.
+        await SaverPreviewAsync();
+        await SaverOptionsAsync();
+        SaverMenu();
+
         // 10. Cleanup leaves no host windows and none of our keepers.
         desktop.Dispose();
         await Wait(300);
@@ -1160,6 +1165,93 @@ sealed class SelfTest
                 $"{Describe(s)}; {(fallback ? "seen in fallback" : "NEVER in fallback")}; {(exited ? "a key ended it" : "a key did NOT end it")}");
         }
         finally { if (!child.HasExited) child.Kill(); }
+    }
+
+    /// A stand-in for Windows' dialog: never activated, out of the taskbar. Its little monitor is a 152×112 child
+    /// window, as Windows' is (a top-level form can't be that narrow: Windows' minimum track width).
+    sealed class PreviewHost : Form
+    {
+        protected override bool ShowWithoutActivation => true;
+    }
+
+    /// `/p <hwnd>`: its child window fills our little monitor, the page draws there, and it goes when ours does.
+    async Task SaverPreviewAsync()
+    {
+        var real = N.Monitors();
+        var work = (real.FirstOrDefault(m => m.Primary) ?? real[0]).Work;
+        using var host = new PreviewHost
+        {
+            Text = "Wallpapers self-test (preview)", FormBorderStyle = FormBorderStyle.None, ShowInTaskbar = false, BackColor = Color.DimGray,
+            StartPosition = FormStartPosition.Manual, AutoScaleMode = AutoScaleMode.None, Location = new Point(work.Left + 40, work.Top + 360),
+        };
+        var monitor = new Panel { Location = Point.Empty, Size = new Size(152, 112), BackColor = Color.Gray };
+        host.Controls.Add(monitor);
+        host.ClientSize = monitor.Size;
+        host.Show();
+        using var child = Process.Start(Environment.ProcessPath!, $"/p {monitor.Handle} --selftest")!;
+        try
+        {
+            var preview = IntPtr.Zero;
+            SaverState? a = null, b = null;
+            var drawing = await Until(15000, async () =>
+            {
+                preview = N.FindWindowEx(monitor.Handle, IntPtr.Zero, null, SaverPreview.Caption);
+                if (preview == IntPtr.Zero || N.PidOf(preview) != child.Id) return false;
+                if ((a = ReadState(child)) is not { Mode: "preview", Windows: [{ Frames: > 0 }] }) return false;
+                await Wait(2000);
+                return (b = ReadState(child)) is { Mode: "preview", Windows: [var w] } && w.Frames - a.Windows[0].Frames > 10;
+            }, 500);
+            var size = preview != IntPtr.Zero ? N.RectOf(preview) : null;
+            var fills = size is { Width: 152, Height: 112 };
+            host.Close();
+            var exited = await Until(3000, () => Task.FromResult(child.HasExited), 100);
+            Check("saver preview", drawing && fills && exited,
+                $"{(size is { } r ? $"child window {r.Width}x{r.Height}" : "NO child window")}; "
+                + $"{(drawing ? $"frames {a!.Windows[0].Frames} → {b!.Windows[0].Frames} in 2 s" : $"NOT drawing in 15 s ({Describe(b ?? a ?? ReadState(child))})")}; "
+                + $"host closed: {(exited ? $"exit {child.ExitCode}" : "STILL running after 3 s")}");
+        }
+        finally { if (!child.HasExited) child.Kill(); }
+    }
+
+    /// `/c` while this app runs: it asks over the pipe, and the options window opens here.
+    async Task SaverOptionsAsync()
+    {
+        using var child = Process.Start(Environment.ProcessPath!, "/c --selftest")!;
+        try
+        {
+            var open = await Until(5000, () => Task.FromResult(app.SaverOptionsOpen));
+            var exited = await Until(3000, () => Task.FromResult(child.HasExited), 100);
+            app.CloseSaverOptionsForTest();
+            Check("saver options (/c)", open && exited && child.ExitCode == 0 && !app.SaverOptionsOpen,
+                $"{(open ? "the window opened" : "NO window in 5 s")}; /c {(exited ? $"exit {child.ExitCode}" : "STILL running")}; {(app.SaverOptionsOpen ? "STILL open after Close" : "closed")}");
+        }
+        finally { if (!child.HasExited) child.Kill(); }
+    }
+
+    /// Screen Saver ▸, read the way it shows on opening (no row is clicked: Use and Start After are Windows' own
+    /// settings): the rows in order, after Settings…, and Change Every only for A Different One Each Time.
+    void SaverMenu()
+    {
+        var before = app.Settings.Saver;
+        try
+        {
+            app.Saver.Set(new SaverSettings());
+            var (afterSettings, rows) = app.Tray.SaverMenuForTest();
+            app.Saver.Set(new SaverSettings(SaverShow.Different));
+            var differentEnables = app.Tray.SaverMenuForTest().Rows.FirstOrDefault(r => r.Text == "Change Every").Enabled;
+            string[] want = ["Use Wallpapers as the Screen Saver…", "Start After", "Show", "Change Every", "Show a Clock", "—", "Preview Now", "Open Windows Screen Saver Settings…"];
+            List<string> Sub(string text) => rows.FirstOrDefault(r => r.Text == text).Sub ?? [];
+            var subsOk = Sub("Start After").SequenceEqual(SaverChoices.StartAfterMinutes.Select(m => $"{m} min"))
+                && Sub("Show").SequenceEqual(["Same as the Desktop", "A Different One Each Time", "One Wallpaper"])
+                && Sub("Change Every").SequenceEqual(SaverChoices.ChangeMinutes.Select(m => $"{m} min"));
+            var changeOffForSame = !rows.FirstOrDefault(r => r.Text == "Change Every").Enabled;
+            var use = rows.FirstOrDefault(r => r.Text == want[0]);
+            Check("saver menu", afterSettings && rows.Select(r => r.Text).SequenceEqual(want) && subsOk && changeOffForSame && differentEnables,
+                $"{string.Join(" · ", rows.Select(r => r.Enabled ? r.Text : $"({r.Text})"))}; {(afterSettings ? "after Settings…" : "NOT after Settings…")}; "
+                + $"submenus {(subsOk ? "ok" : "WRONG")}; Change Every {(changeOffForSame ? "off" : "ON")} for Same, {(differentEnables ? "on" : "OFF")} for Different; "
+                + $"Use {(use.Enabled ? "enabled" : $"disabled: {app.Saver.WhyNot()}")}");
+        }
+        finally { app.SaveSettings(app.Settings with { Saver = before }); }
     }
 
     /// --selftest --bad-web-root: the app must say what's wrong, draw nothing, and keep its tray.

@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Reflection;
@@ -9,7 +10,7 @@ namespace Wallpapers;
 /// The notification-area icon and its menu: the app's only always-there UI (SPEC §10.25.10). The
 /// catalog and what's showing live in the pages, so the menu asks every surface each time it opens.
 /// In Different mode the header and the Wallpaper items become one row and one submenu per monitor.
-/// W1's and W2's items; the rest of §10.25.10 comes with W3–W5.
+/// Screen Saver ▸ is SaverControl's choices (§10.25.12).
 sealed class Tray : IDisposable
 {
     /// Thumbnail size in the Wallpaper menu, in logical px (16:9, about one text line tall, so 36
@@ -33,6 +34,9 @@ sealed class Tray : IDisposable
     /// Different mode's per-monitor rows and submenus, and the monitors they were made for.
     readonly List<MonitorItems> perMonitor = [];
     string perMonitorShape = "";
+    /// Screen Saver ▸ and its rows (SaverMenu).
+    ToolStripMenuItem saverMenu, saverUse, showSame, showDifferent, showOne, changeEvery, saverClock;
+    readonly Dictionary<int, ToolStripMenuItem> startAfterRows = [], changeRows = [];
     Size scaledSize;
     Task? refreshing;
     bool thumbsAsked, disposed;
@@ -75,6 +79,7 @@ sealed class Tray : IDisposable
         performanceMenu.DropDownItems.AddRange([new ToolStripSeparator(), batteryAware, new ToolStripSeparator(), performanceStatus]);
         // In Different mode: monitor 1's (App.OpenSettings picks it).
         settings = Item("Settings…", () => { app.OpenSettings(); return Task.CompletedTask; });
+        SaverMenu();
         reload = Item("Reload Wallpapers", () => { app.Desktop.ReloadAll(); return Task.CompletedTask; });
         drawAbove = Item("Draw Above Icons", () => { ToggleDrawAbove(); return Task.CompletedTask; });
         devTools = Item("Developer Tools", () => { app.Desktop.Surfaces.FirstOrDefault()?.Web?.OpenDevToolsWindow(); return Task.CompletedTask; });
@@ -106,11 +111,11 @@ sealed class Tray : IDisposable
         menu.Items.AddRange([
             header, wallpaper, surprise, next, previous, new ToolStripSeparator(),
             pause, follow, clicks, play, new ToolStripSeparator(),
-            monitors, performanceMenu, settings, new ToolStripSeparator(),
+            monitors, performanceMenu, settings, saverMenu, new ToolStripSeparator(),
             startWithWindows, install, troubleshooting, about, quit,
         ]);
         menu.Renderer = new RadioRenderer();   // its submenus draw with their owner's renderer
-        menu.Opening += (_, _) => { Sync(); SyncInstall(); Run("refresh", RefreshAsync); };
+        menu.Opening += (_, _) => { Sync(); SyncInstall(); SyncSaver(); Run("refresh", RefreshAsync); };
 
         icon = new NotifyIcon { Icon = LoadIcon(SystemInformation.SmallIconSize), Text = "Wallpapers", ContextMenuStrip = menu, Visible = true };
         icon.MouseUp += (_, e) => { if (e.Button == MouseButtons.Left) ShowMenu(); };
@@ -141,6 +146,114 @@ sealed class Tray : IDisposable
     }
 
     public bool Visible => !disposed && icon.Visible;
+
+    /// Monitor 1's catalog (what One Wallpaper lists), or null until a page has answered.
+    public CatalogInfo? Catalog => catalog;
+
+    /// Screen Saver ▸ (SPEC §10.25.12). The choices are settings (Sync keeps them); whether ours is selected,
+    /// when Windows starts it and why it can't be are read from Windows when the menu opens (SyncSaver).
+    [MemberNotNull(nameof(saverMenu), nameof(saverUse), nameof(showSame), nameof(showDifferent), nameof(showOne), nameof(changeEvery), nameof(saverClock))]
+    void SaverMenu()
+    {
+        var saver = app.Saver;
+        Task Then(Action action) { action(); SyncSaver(); Sync(); return Task.CompletedTask; }
+        saverUse = Item("Use Wallpapers as the Screen Saver…", () => Then(saver.ToggleUse));
+        saverUse.AutoToolTip = false;
+        var startAfter = new ToolStripMenuItem("Start After");
+        foreach (var minutes in SaverChoices.StartAfterMinutes)
+        {
+            var row = startAfterRows[minutes] = Item($"{minutes} min", () => Then(() => saver.SetStartAfter(minutes)));
+            row.Tag = RadioRenderer.Radio;
+            startAfter.DropDownItems.Add(row);
+        }
+        showSame = Item("Same as the Desktop", () => Then(() => saver.Set(saver.Settings with { Show = SaverShow.Same })));
+        showDifferent = Item("A Different One Each Time", () => Then(() => saver.Set(saver.Settings with { Show = SaverShow.Different })));
+        showOne = WallpaperMenu();
+        showOne.Text = "One Wallpaper";
+        showSame.Tag = showDifferent.Tag = showOne.Tag = RadioRenderer.Radio;
+        var show = new ToolStripMenuItem("Show");
+        show.DropDownItems.AddRange([showSame, showDifferent, showOne]);
+        changeEvery = new ToolStripMenuItem("Change Every");
+        foreach (var minutes in SaverChoices.ChangeMinutes)
+        {
+            var row = changeRows[minutes] = Item($"{minutes} min", () => Then(() => saver.Set(saver.Settings with { ChangeMinutes = minutes })));
+            row.Tag = RadioRenderer.Radio;
+            changeEvery.DropDownItems.Add(row);
+        }
+        saverClock = Item("Show a Clock", () => Then(() => saver.Set(saver.Settings with { Clock = !saver.Settings.Clock })));
+        saverMenu = new ToolStripMenuItem("Screen Saver");
+        saverMenu.DropDown.ShowItemToolTips = true;   // the disabled Use row says why
+        saverMenu.DropDownItems.AddRange([
+            saverUse, startAfter, show, changeEvery, saverClock, new ToolStripSeparator(),
+            Item("Preview Now", () => Then(saver.PreviewNow)),
+            Item("Open Windows Screen Saver Settings…", () => Then(saver.OpenWindowsSettings)),
+        ]);
+    }
+
+    /// What Windows says now: ours selected, its timeout, and whether ours could be selected.
+    void SyncSaver()
+    {
+        if (disposed) return;
+        var saver = app.Saver;
+        var why = saver.WhyNot();
+        saverUse.Checked = saver.Selected;
+        saverUse.Enabled = why == null;
+        saverUse.ToolTipText = why;
+        var after = saver.StartAfter;
+        foreach (var (minutes, row) in startAfterRows) row.Checked = after == minutes;
+    }
+
+    /// The saver's own choices (settings.json), and One Wallpaper's list from monitor 1's catalog.
+    void SyncSaverChoices()
+    {
+        var s = app.Saver.Settings;
+        showSame.Checked = s.Show == SaverShow.Same;
+        showDifferent.Checked = s.Show == SaverShow.Different;
+        showOne.Checked = s.Show == SaverShow.One;
+        foreach (var (minutes, row) in changeRows) row.Checked = s.ChangeMinutes == minutes;
+        changeEvery.Enabled = s.Show == SaverShow.Different;
+        saverClock.Checked = s.Clock;
+
+        var list = (ToolStripDropDownMenu)showOne.DropDown;
+        var entries = catalog?.Entries.Where(e => !e.Pseudo).ToList();
+        if (entries == null)
+        {
+            if (list.Items.Count != 1 || list.Items[0].Tag != null)
+            {
+                list.Items.Clear();
+                list.Items.Add(new ToolStripMenuItem("Loading…") { Enabled = false });
+            }
+            return;
+        }
+        if (!list.Items.Cast<ToolStripItem>().Select(i => i.Tag as string).SequenceEqual(entries.Select(e => e.Id)))
+        {
+            list.Items.Clear();
+            foreach (var entry in entries)
+            {
+                var id = entry.Id;
+                list.Items.Add(Item($"{entry.Icon}  {entry.Name}", () =>
+                {
+                    app.Saver.Set(app.Saver.Settings with { Show = SaverShow.One, Wallpaper = id });
+                    Sync();
+                    return Task.CompletedTask;
+                }));
+                list.Items[^1].Tag = id;
+            }
+        }
+        foreach (ToolStripMenuItem row in list.Items) row.Checked = s.Show == SaverShow.One && (string?)row.Tag == s.Wallpaper;
+    }
+
+    /// The self-test reads Screen Saver ▸ as the menu would show it on opening (SPEC §10.25.16): each row's
+    /// text, whether it's enabled, its submenu's rows; and whether it sits right after Settings….
+    internal (bool AfterSettings, List<(string Text, bool Enabled, List<string> Sub)> Rows) SaverMenuForTest()
+    {
+        Sync();
+        SyncSaver();
+        return (menu.Items.IndexOf(saverMenu) == menu.Items.IndexOf(settings) + 1,
+            saverMenu.DropDownItems.Cast<ToolStripItem>().Select(i => i is ToolStripSeparator
+                ? ("—", true, new List<string>())
+                : (i.Text ?? "", i.Enabled, ((ToolStripMenuItem)i).DropDownItems.Cast<ToolStripItem>().Select(r => r.Text ?? "").ToList())).ToList());
+    }
 
     static ToolStripMenuItem WallpaperMenu()
     {
@@ -325,6 +438,7 @@ sealed class Tray : IDisposable
         drawAbove.Checked = app.Settings.DrawAboveIcons;
         devTools.Enabled = live;
         settings.Enabled = app.Problem == null;   // without web/ there's no panel to show
+        SyncSaverChoices();
     }
 
     void SetTooltip(string text)

@@ -52,9 +52,7 @@ sealed class SaverSession : ApplicationContext
             ?? Layout.Plan(N.Monitors());
         foreach (var plan in plans)
         {
-            var display = Settings.Show == SaverShow.Same && Real && app.Monitors == MonitorMode.Different ? plan.Key : null;
-            var wallpaper = Settings.Show switch { SaverShow.One => Settings.Wallpaper, SaverShow.Different => "blank", _ => null };
-            var window = new SaverWindow(this, plan, PageUrl.Saver(wallpaper, display, Settings.Clock))
+            var window = new SaverWindow(this, plan, UrlFor(Settings, app.Monitors, Real ? plan.Key : null, Settings.Clock))
             {
                 Wallpaper = Settings.Show == SaverShow.One ? Settings.Wallpaper : null,
             };
@@ -104,6 +102,15 @@ sealed class SaverSession : ApplicationContext
             return;
         }
         foreach (var w in windows) await w.StartAsync();
+    }
+
+    /// What a saver page loads (the preview's too, without the clock): Same shows the desktop's choice (its own
+    /// monitor's, `display`, in Different monitor mode), One pins it, Different starts on Blank until it's told.
+    public static string UrlFor(SaverSettings s, MonitorMode monitors, string? display, bool clock)
+    {
+        var key = s.Show == SaverShow.Same && monitors == MonitorMode.Different ? display : null;
+        var wallpaper = s.Show switch { SaverShow.One => s.Wallpaper, SaverShow.Different => "blank", _ => null };
+        return PageUrl.Saver(wallpaper, key, clock);
     }
 
     /// The mouse moved this far from where it was when the saver started (screen px).

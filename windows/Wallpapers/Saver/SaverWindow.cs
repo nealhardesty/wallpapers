@@ -13,7 +13,7 @@ sealed class SaverWindow : Form
 {
     public const string Caption = "WallpapersSaver";
     /// A counter the watchdog installs on the top-level page: a still wallpaper idles its stage legitimately.
-    const string FrameScript = "(() => { if (window.__wpSaverRaf == null) { window.__wpSaverRaf = 0; (function t() { window.__wpSaverRaf++; requestAnimationFrame(t); })(); } return window.__wpSaverRaf; })()";
+    internal const string FrameScript = "(() => { if (window.__wpSaverRaf == null) { window.__wpSaverRaf = 0; (function t() { window.__wpSaverRaf++; requestAnimationFrame(t); })(); } return window.__wpSaverRaf; })()";
 
     public SurfacePlan Plan { get; }
     public string Url { get; }
@@ -114,9 +114,11 @@ sealed class SaverWindow : Form
     public async Task ShowWallpaperAsync(string id)
     {
         if (surface == null) return;
-        try { await surface.EvalAsync($"window.WP && WP.player && WP.player.show({JsonSerializer.Serialize(id)})"); }
+        try { await surface.EvalAsync(ShowScript(id)); }
         catch (Exception e) when (e is COMException or InvalidOperationException or ObjectDisposedException) { Log.Warn($"saver: {Plan.Key}: couldn't show {id} ({e.Message})"); }
     }
+
+    internal static string ShowScript(string id) => $"window.WP && WP.player && WP.player.show({JsonSerializer.Serialize(id)})";
 
     async Task TickAsync()
     {
