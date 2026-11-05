@@ -595,7 +595,7 @@ class WorldClockMap {
     }
 
     draw(g, date) {
-        const app = this.app, { W, H, k, dpr } = app, look = this.look, font = this.font;
+        const app = this.app, { k, dpr } = app, look = this.look, font = this.font;
         if (this.centre === null) this.centre = app.centerLon() + (app.scroll - 0.5) * 60;
         if (this.stale || this.nightAt !== Math.floor(date.getTime() / 60000)) this.composeBase(date);
         g.setTransform(1, 0, 0, 1, 0, 0);
@@ -604,7 +604,6 @@ class WorldClockMap {
 
         this.hero = this.drawHero(g, date);
         const dots = app.infos.map(info => ({ info, ...this.screen(info.place.lon, info.place.lat) }));
-        for (const d of dots) d.visible = d.y >= this.top - 1 && d.y <= this.top + this.mh + 1 && d.y >= 0 && d.y <= H;
         const cards = this.cards = this.place(g, dots);
 
         // Leader lines, then dots, then cards.

@@ -1974,7 +1974,7 @@ wallpaper. Its zone list and `format` could feed this later.)
   showcase for idle frames.
 
 **As built (November 2026):** three views (`view`, key V). **The map**: the
-world filling the width, centred on Here (its zone's listed city, else 0°),
+world filling the width, centred on Here (its zone's listed city, else its offset's longitude),
 Greenwich, the Pacific or any chosen city (key M), letterboxed into stars on
 tall screens; on a phone the home's time is large in the sky above and the
 labels sit in the sky on leader lines, leaving the map clear. Four looks
@@ -1994,7 +1994,7 @@ tap it again to go back. **Faces**: a grid with the column count that gives
 the biggest dials; each dial is that city's sky from the sun's altitude
 there, with stars at night and a sun or moon at six; classic, modern or
 minimal. **The board**: split flaps, a row per city, columns dropped on narrow
-screens; a digit steps through the digits between, a new board flips in from
+screens and re-laid out the second a city rolls into another day (the DAY column) or an offset widens; a digit steps through the digits between, a new board flips in from
 blank. Cities are chips per region in the panel (`settingsScripts` loads
 world-cities.js for it); custom zones are `Label=Area/City`, placed at a
 listed city in that zone (else on the equator at their offset, as a ring),

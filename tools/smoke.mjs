@@ -1334,6 +1334,24 @@ const STAGE_CHECKS = {
             }
             return true;
         }],
+        ['the board gains its DAY column when a city rolls over to tomorrow', async () => {
+            // Seen from New York at 09:55, Tokyo is at 23:55 the same day: no DAY column.
+            await cdp.send('Emulation.setTimezoneOverride', { timezoneId: 'America/New_York' });
+            try {
+                await stageWith('world-clock', { configVersion: 1, view: 'board' }, '&date=2026-11-05T14:55:00Z');
+                await sleep(2500);
+                const before = await counts('m.views.board.plan.columns.map(c => c.key).join()');
+                if (before.includes('day')) record(`before midnight in Tokyo the board has ${before}`);
+                // Ten minutes on: Tokyo is in tomorrow.
+                await evaluate('(now => { WP.host.now = () => new Date(now().getTime() + 600000); })(WP.host.now); WP.stage.manager.wake()');
+                if (!await waitFor(() => counts(`m.views.board.plan.columns.some(c => c.key === 'day') && m.layout.rows.some(r => r.startsWith('TOKYO') && r.includes('FRI'))`), 4000)) {
+                    record(`after Tokyo's midnight: ${JSON.stringify(await counts('({ columns: m.views.board.plan.columns.map(c => c.key), rows: m.layout.rows })'))}`);
+                }
+            } finally {
+                await cdp.send('Emulation.setTimezoneOverride', { timezoneId: '' });
+            }
+            return true;
+        }],
         ['a tap on a city makes it home, and the map recentres there; M steps the centre', async () => {
             await bootStage('w=world-clock&date=2026-11-05T17:50');
             await sleep(300);

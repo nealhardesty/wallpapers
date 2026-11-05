@@ -22,7 +22,13 @@ class WorldClockBoard {
 
     resize() { this.plan = null; }
 
-    configure() { this.plan = null; }
+    // What the board's layout depends on: the rows, and the columns they
+    // need now (a city rolling over to tomorrow brings the DAY column, a
+    // DST change can widen UTC). Checked every second, so it never goes
+    // stale; settings that change neither leave the flaps alone.
+    key(infos, narrow) {
+        return `${infos.map(i => i.id).join()}|${this.columns(infos, narrow).map(c => `${c.key}:${c.len}`).join()}`;
+    }
 
     // ---- What each row says ---------------------------------------------------------
 
@@ -65,14 +71,15 @@ class WorldClockBoard {
     layout(infos) {
         const app = this.app, { safe, k, dpr } = app;
         const aw = (safe.right - safe.left) * 0.94, ah = (safe.bottom - safe.top) * 0.9, rows = Math.max(1, infos.length);
-        let columns, tw;
-        for (let narrow = 0; narrow < 3; narrow++) {
+        let columns, tw, narrow;
+        for (narrow = 0; narrow < 3; narrow++) {
             columns = this.columns(infos, narrow);
             const units = 1.8 + columns.reduce((s, c) => s + c.len + (c.len - 1) * 0.1, 0) + 0.7 * (columns.length - 1);
             const tall = 1.8 + 1.7 + 1.1 + rows * 1.45 + (rows - 1) * 1.45 * 0.28;
             tw = Math.min(aw / units, ah / tall, 46 * k);
             if (tw >= 14 * Math.min(1, k)) break;
         }
+        narrow = Math.min(narrow, 2);
         const th = tw * 1.45, gap = tw * 0.1, cg = tw * 0.7, rg = th * 0.28, pad = tw * 0.9;
         const width = pad * 2 + columns.reduce((s, c) => s + c.len * tw + (c.len - 1) * gap, 0) + cg * (columns.length - 1);
         const height = pad * 2 + tw * 1.7 + tw * 1.1 + rows * th + (rows - 1) * rg;
@@ -88,7 +95,8 @@ class WorldClockBoard {
             columns.forEach((c, ci) => { for (let i = 0; i < c.len; i++) row.push({ x: colX[ci] + i * (tw + gap), y: firstRow + r * (th + rg) }); });
             cells.push(row);
         }
-        this.plan = { columns, tw, th, gap, cg, rg, pad, x0, y0, width, height, cells, colX, rows: infos.length, ids: infos.map(i => i.id).join() };
+        this.plan = { columns, tw, th, gap, cg, rg, pad, x0, y0, width, height, cells, colX, rows: infos.length, narrow };
+        this.plan.key = this.key(infos, narrow);
         this.tiles.clear();
         this.drawBoard();
         // A new board flips in from blank.
@@ -223,7 +231,7 @@ class WorldClockBoard {
 
     draw(g, date) {
         const app = this.app, { dpr } = app, infos = app.infos;
-        if (!this.plan || this.plan.ids !== infos.map(i => i.id).join()) this.layout(infos);
+        if (!this.plan || this.plan.key !== this.key(infos, this.plan.narrow)) this.layout(infos);
         const p = this.plan;
         // What every flap should say now.
         infos.forEach((info, r) => {

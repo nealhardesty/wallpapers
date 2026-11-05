@@ -89,7 +89,7 @@ class WorldClockAnimationManager {
         const c = this.config.center;
         if (c === 'greenwich') return 0;
         if (c === 'pacific') return WORLD_CLOCK_PACIFIC;
-        if (c === 'local' || !c) { const here = this.locate('local'); return here.located ? here.lon : 0; }
+        if (c === 'local' || !c) return this.locate('local').lon;   // a listed city in the zone, else its offset's longitude
         return WORLD_CITIES.find(city => city.id === c)?.lon ?? 0;
     }
 
