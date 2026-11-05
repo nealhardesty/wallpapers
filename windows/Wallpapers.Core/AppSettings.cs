@@ -9,7 +9,7 @@ public enum MonitorMode { Same, Different }
 /// The app's own settings (settings.json in the data folder; SPEC §10.25.4). Wallpaper settings
 /// live in the pages' localStorage, not here.
 public sealed record AppSettings(bool DrawAboveIcons = false, Rect? SettingsBounds = null, MonitorMode Monitors = MonitorMode.Same,
-    bool FollowMouse = true, bool DesktopClicks = true)
+    bool FollowMouse = true, bool DesktopClicks = true, bool OfferInstall = true)
 {
     static readonly JsonSerializerOptions Options = new()
     {

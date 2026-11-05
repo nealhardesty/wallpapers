@@ -64,4 +64,22 @@ public class AppSettingsTests
         Assert.Equal(new AppSettings(), AppSettings.Load(dir.File("settings.json")));
         Assert.Equal("{ not json", File.ReadAllText(dir.File("settings.bad.json")));
     }
+
+    [Fact]
+    public void Just_run_is_remembered()
+    {
+        using var dir = new TempDir();
+        var s = new AppSettings(OfferInstall: false);
+        s.Save(dir.File("settings.json"));
+        Assert.Contains("\"offerInstall\": false", File.ReadAllText(dir.File("settings.json")));
+        Assert.Equal(s, AppSettings.Load(dir.File("settings.json")));
+    }
+
+    [Fact]
+    public void Old_files_offer_install()
+    {
+        using var dir = new TempDir();
+        File.WriteAllText(dir.File("settings.json"), "{ \"drawAboveIcons\": true }");
+        Assert.True(AppSettings.Load(dir.File("settings.json")).OfferInstall);
+    }
 }
