@@ -132,6 +132,17 @@ jobs:
             Start-Process -FilePath $setup -ArgumentList '/silent', '/install' -Wait
           }
           Write-Output "WebView2 runtime $((Get-ItemProperty $key).pv)"
+      # The runner's screen is 1024x768. The self-test fits a fake 3840-px-wide
+      # layout on it, and WebView2 won't render below half scale, so the screen
+      # has to be over 2021 px wide for the fake-monitor checks to measure true.
+      - name: Screen size
+        shell: pwsh
+        run: |
+          foreach ($size in @(@(2560, 1440), @(2560, 1600), @(2048, 1536))) {
+            try { Set-DisplayResolution -Width $size[0] -Height $size[1] -Force -ErrorAction Stop; break }
+            catch { Write-Output "no $($size[0])x$($size[1]): $($_.Exception.Message)" }
+          }
+          Get-DisplayResolution
       - name: Self-test the zip
         run: |
           echo "SELFTEST_DIR=$LOCALAPPDATA\Wallpapers-test" >> "$GITHUB_ENV"
