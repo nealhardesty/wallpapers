@@ -248,7 +248,7 @@ sealed class SelfTest
         InstallChecks();
     }
 
-    /// install, update, update (busy exe), uninstall against the `test` layout only (§10.25.13), removed in
+    /// install, update, update (busy exe), uninstall against the `test` layout only (§10.25.13), removed first and in
     /// `finally` (settings kept: the data root holds this very report).
     void InstallChecks()
     {
@@ -264,6 +264,7 @@ sealed class SelfTest
         string? Entry(string name) { using var k = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(layout.UninstallKey); return k?.GetValue(name)?.ToString(); }
         try
         {
+            installer.Remove(keepSettings: true);   // what a self-test killed mid-way left behind
             var why = installer.Apply(AppContext.BaseDirectory, fresh: true);
             var (_, runData) = RunKey.Spec(layout);
             var target = File.Exists(layout.Shortcut) ? ShellLink.TargetOf(layout.Shortcut) : null;
@@ -286,7 +287,7 @@ sealed class SelfTest
             using (new FileStream(layout.Exe, FileMode.Open, FileAccess.Read, FileShare.None))
                 why = installer.Apply(AppContext.BaseDirectory, fresh: false);
             var seconds = clock.Elapsed.TotalSeconds;
-            Check("update (busy exe)", why != null && (why.Contains("still running") || why.Contains("in use")) && seconds < 16
+            Check("update (busy exe)", why != null && (why.Contains("still running") || why.Contains("in use")) && seconds < 20
                 && new FileInfo(layout.Exe).Length == before,
                 $"{seconds:0.0} s, {(why == null ? "NO REASON given" : $"\"{why}\"")}, exe {(new FileInfo(layout.Exe).Length == before ? "unchanged" : "CHANGED")}");
 

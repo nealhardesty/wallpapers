@@ -9,7 +9,7 @@ namespace Wallpapers;
 sealed class Install(InstallLayout layout, Action<string> log)
 {
     static readonly TimeSpan QuitWait = TimeSpan.FromSeconds(15);
-    const string StillRunning = "Wallpapers is still running; quit it from the tray and try again";
+    const string StillRunning = "Wallpapers is still running, or something has Wallpapers.exe open; quit it and try again";
 
     public InstallLayout Layout => layout;
 
@@ -67,9 +67,11 @@ sealed class Install(InstallLayout layout, Action<string> log)
         if (layout.IsInstalledAt(Path.GetFullPath(sourceDir))) log("install: already in place, copy skipped");
         else
         {
-            // Still running at the deadline: it never quit, so there's nothing to start again.
-            if (!QuitAndWait("install", out var asked)) return StillRunning;
-            quitTheRunningApp = asked;
+            // Still running at the deadline: it never quit, so there's nothing to start again. Quit, but the exe
+            // stayed locked: the failure starts the old copy again, as after any other failure past this point.
+            var free = QuitAndWait("install", out var asked);
+            quitTheRunningApp = asked && !SingleInstance.IsRunning("run");
+            if (!free) return StillRunning;
             if (CopyAndSwap(sourceExe, sourceWeb) is { } why) return why;
         }
 
@@ -227,21 +229,44 @@ sealed class Install(InstallLayout layout, Action<string> log)
         return offer;
     }
 
-    /// The Install or Update dialog. Returns true when it installed and started the installed exe (the caller
-    /// exits; with `start: false` the caller starts it, after its own cleanup); false to carry on running from here.
-    /// Just Run is remembered through `save` (by default settings.json in the data folder).
+    /// Run from a zip without unzipping (Explorer's zip view copies only the exe to %TEMP%): no web\ beside it, so
+    /// there's nothing to install or run. Says so; the caller exits without offering anything or saving settings.
+    public static bool ShowUnzipFirst(Action<string> log)
+    {
+        if (Directory.Exists(Path.Combine(AppContext.BaseDirectory, "web"))) return false;
+        log($"install: no web folder beside {AppContext.BaseDirectory.TrimEnd('\\')}; asked to unzip first");
+        TaskDialog.ShowDialog(new TaskDialogPage
+        {
+            Caption = "Wallpapers",
+            Heading = "Unzip the whole download first",
+            Text = "Wallpapers.exe needs the web folder beside it. Unzip the whole download, then run Wallpapers.exe from the unzipped folder.",
+            AllowCancel = true,
+            Icon = TaskDialogIcon.Warning,
+        }, TaskDialogStartupLocation.CenterScreen);
+        return true;
+    }
+
+    /// The Install or Update dialog (Install over an installed copy, from the tray, is Replace). Returns true when
+    /// the caller should exit: it installed and started the installed exe (with `start: false` the caller starts
+    /// it, after its own cleanup), or it failed and the running copy keeps running (it was never quit, or it was
+    /// started again). False to carry on running from here. Just Run is remembered through `save` (by default
+    /// settings.json in the data folder).
     public bool ShowOffer(Offer offer, AppSettings settings, Action<AppSettings>? save = null, bool start = true)
     {
         var running = AppVersion.Parse(App.Version)?.Display ?? App.Version;
         var update = offer == Offer.Update;
-        var go = new TaskDialogButton(update ? "&Update" : "&Install");
+        var installed = InstalledVersion();
+        var replace = !update && installed != null;
+        var go = new TaskDialogButton(update ? "&Update" : replace ? "&Replace" : "&Install");
         var justRun = new TaskDialogButton("&Just Run");
         var page = new TaskDialogPage
         {
             Caption = layout.DisplayName,
-            Heading = update ? $"Update {layout.DisplayName} {InstalledVersion()?.Display} → {running}?" : $"Install {layout.DisplayName} {running}?",
-            Text = update
-                ? $"Replaces the copy in {layout.Root} and restarts it. Your settings stay as they are."
+            Heading = update ? $"Update {layout.DisplayName} {installed?.Display} → {running}?"
+                : replace ? $"Replace {layout.DisplayName} {installed!.Display} with {running}?"
+                : $"Install {layout.DisplayName} {running}?",
+            Text = update ? $"Replaces the copy in {layout.Root} and restarts it. Your settings stay as they are."
+                : replace ? $"Replaces the copy in {layout.Root}. Your settings stay as they are."
                 : $"Copies it to {layout.Root}. It starts with Windows and shows in Settings → Apps.",
             Buttons = { go, justRun },
             DefaultButton = go,
@@ -262,19 +287,22 @@ sealed class Install(InstallLayout layout, Action<string> log)
         if (answer != go) { log("install: offer closed (asked again next time)"); return false; }
 
         Cursor.Current = Cursors.WaitCursor;
-        var why = Apply(AppContext.BaseDirectory, fresh: !update);
+        var why = Apply(AppContext.BaseDirectory, fresh: !update && !replace);
         Cursor.Current = Cursors.Default;
         if (why != null)
         {
-            log($"install: failed: {why}");
+            // Another copy holds the mutex (it never quit), or the old one was started again: this one bows out
+            // rather than race it for the mutex.
+            var keepsRunning = RestartedOld || (!SingleInstance.Holds && SingleInstance.IsRunning("run"));
+            log($"install: failed: {why}{(keepsRunning ? "; the installed copy keeps running" : "")}");
             TaskDialog.ShowDialog(new TaskDialogPage
             {
                 Caption = layout.DisplayName,
                 Heading = update ? "Couldn't update" : "Couldn't install",
-                Text = $"{why}.\n\n{(RestartedOld ? $"The installed copy in {layout.Root} is running again." : "Wallpapers runs from here this time.")}",
+                Text = $"{why}.\n\n{(keepsRunning ? $"The installed copy in {layout.Root} keeps running." : "Wallpapers runs from here this time.")}",
                 Icon = TaskDialogIcon.Warning,
             }, TaskDialogStartupLocation.CenterScreen);
-            return false;
+            return keepsRunning;
         }
         return !start || Start();
     }

@@ -165,8 +165,9 @@ one quits, your settings stay) and starts the new one. **Start with Windows** is
 a tick in the tray menu. To remove it, use Settings → Apps → *Wallpapers* →
 Uninstall, or **About → Uninstall…** in the tray; it asks whether to keep your
 settings (`%LOCALAPPDATA%\Wallpapers`, kept unless you say otherwise). The app
-never checks for updates by itself and makes no network calls of its own: the
-About dialog's **Project Page** opens the releases page in your browser. Or
+never checks for updates and sends nothing anywhere; its only network use is
+the Bing wallpaper fetching the picture of the day. The About dialog's
+**Project Page** opens the releases page in your browser. Or
 build and start it from WSL with `make win-run` (it needs the .NET 10 SDK in WSL;
 see Development). The wallpaper runs live behind your desktop icons on
 every monitor, and the icons, the right-click menu and drag-selecting all work
@@ -556,9 +557,9 @@ browser features only work on secure pages.
    uploads the Windows zip as the `wallpapers-windows` artifact. It's unsigned:
    see the Windows install notes. CI then self-tests that same zip on a Windows
    runner (`make win-test-zip` in the `win` job; its report is the
-   `wallpapers-windows-selftest` artifact). Like the Mac's, it doesn't block: a
-   release whose Windows self-test fails goes out without the Windows app, and
-   the run shows a warning saying so.
+   `wallpapers-windows-selftest` artifact). Like the Mac's, it doesn't block the
+   other artifacts: a release whose Windows self-test fails goes out without
+   the Windows app, and the run shows a warning saying so.
 6. The Windows app is unsigned by default, and `make win-release` ends its last
    line with `signed` or `unsigned` to say which. Unsigned means SmartScreen
    shows "Windows protected your PC" on a downloaded copy (*More info* →

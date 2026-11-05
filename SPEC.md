@@ -3029,15 +3029,12 @@ New questions go here, each with a recommendation.
 - **Windows: signing, now that Smart App Control is in play** (§10.25.13,
   found in W0.2). **Decided 2026-11-04 (§10.25.20): ship unsigned first, set
   up Azure Trusted Signing before telling anyone else; the wiring exists and
-  signs once the six secrets are set.** The owner's PC enforces SAC, which blocks unsigned builds
-  by hash with no override (2 of ~20 spike builds). "Signing later" may have
-  to become "signing before W4", or SAC goes off on this PC (Windows can
-  only turn it back on with a reset). *Recommendation:* Azure Trusted Signing
-  (publicly trusted, inexpensive) for releases; during W1–W3, a build that's
-  refused gets a version bump and is rebuilt. **Owner decision.**
+  signs once the six secrets are set.** Why it came up: the owner's PC enforces
+  SAC, which blocks unsigned builds by hash with no override (2 of ~20 spike
+  builds); a build that's refused gets a version bump and is rebuilt.
 - **Windows: one ~52 MB self-contained exe, or require the .NET runtime?**
-  (§10.25.13). **Decided: self-contained (2026-11-04).** *Recommendation:* self-contained: nothing to install first,
-  and the `.scr` copy just works. Size is the cost.
+  (§10.25.13). **Decided: self-contained (2026-11-04):** nothing to install
+  first, and the `.scr` copy just works. Size is the cost.
 - **Jellyfin on GitHub Pages:** settled by spike 9.0. After Chrome's local
   network prompt, Pages reaches an https server, or an http one addressed
   by IP; only an http *hostname* stays blocked, and the panel says so.
@@ -3646,12 +3643,16 @@ windows/
 **Host kind:** `?host=windows` (and `?host=windows-saver`). The page code stays
 the same apart from §10.25.7's small additions.
 
-**Program modes** (besides the app itself): `--quit`, `--reload`, `--settings`,
+**Program modes** (besides the app itself): `--just-run` (the app, without
+the install offer), `--install` (a quiet install or update; §10.25.13),
+`--uninstall [--keep-settings|--delete-settings]` (asks unless told), `--quit`,
+`--reload`, `--settings`,
 `--dump-displays` (writes `displays.json` and `tree.json` to the data folder),
 `--selftest [--bad-web-root]`, and `--cover-for-test <rect>`: a borderless,
 work-area-sized, non-activating window that closes itself after 20 s. Only
 the self-test starts it (§10.25.15); it has to be a separate process because
-coverage ignores our own windows.
+coverage ignores our own windows. `--uninstall-stage2 <root>` is uninstall's
+own second stage, the `%TEMP%` copy that removes the install folder.
 
 **Where things live (per user):**
 
@@ -4192,15 +4193,23 @@ desktop surfaces go `hidden`.
   pass `--just-run`, so developing never offers. The offer runs **before** the
   single-instance check, so a newer download offers Update while the installed
   app runs; the same or an older exe falls through to the second-instance path
-  (the first app opens Settings).
+  (the first app opens Settings). Before any of it, an exe with no `web\`
+  beside it (opened inside the zip from Explorer, which copies only the exe
+  to `%TEMP%`) shows one dialog, *Unzip the whole download first*, and exits:
+  no offer, nothing saved. The tray's *Install…* over an installed copy (one
+  run with *Just Run*) asks *Replace … with …?* and keeps *Start with
+  Windows* as it was.
 - **Apply (install and update).** Checks the source has `web\` and a version,
   asks a running app to quit over the pipe (run flavour) and waits up to 15 s
   for the mutex and for the exe's lock, then **stages and swaps**: copies to
   `Wallpapers.exe.new` and `web.new`, swaps the exe first (the step a lock
   stops), then `web` → `web.old`, `web.new` → `web`, deletes `web.old`. Any
   failure rolls back to the old install, cleans the staged items, and **starts
-  the old copy again**, except on the StillRunning timeout (the app never quit,
-  so there is nothing to restart; the dialog says to quit it from the tray).
+  the old copy again** if it quit it, even when the exe then stayed locked
+  past the deadline; on a StillRunning timeout where the app never quit there
+  is nothing to restart. Either way the dialog says the installed copy keeps
+  running and the download exits (no race for the mutex); with nothing
+  running, it runs from here this time.
   Then the Uninstall entry, the shortcut, and for a fresh install only the Run
   value (an update leaves the user's *Start with Windows* choice alone). `--install`
   run from the installed exe skips the copy. Settings are never copied or
@@ -4737,7 +4746,8 @@ Task Manager; RDP in and out; the saver from Windows' dialog; uninstall.
        `pipe: All pipe instances are busy` retry, harmless).
     7. *Quiet install in place.* From the installed exe run `Wallpapers.exe
        --install`: no dialog, the install is refreshed in place (no copy,
-       entry and shortcut rewritten), the app restarts.
+       entry and shortcut rewritten), and the running app carries on: the
+       copy it starts is a second launch, so Settings opens.
     8. *Uninstall from Settings → Apps* while the app runs: the dialog, *Keep My
        Settings*: everything goes, settings stay; reinstall and uninstall with
        *Delete My Settings Too*: `%LOCALAPPDATA%\Wallpapers` is gone too.

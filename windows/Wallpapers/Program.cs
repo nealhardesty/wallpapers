@@ -68,6 +68,8 @@ static class Program
         // installed app runs, and Install or Update quits whichever copy holds the mutex.
         if (paths.Flavor == "run" && App.LayoutFor(paths.Flavor) is { } runLayout)
         {
+            // Opened inside the zip: no Install and no Just Run (it would remember the choice), only "unzip first".
+            if (Install.ShowUnzipFirst(Log.Info)) return 0;
             var installer = new Install(runLayout, Log.Info);
             var settings = AppSettings.Load(paths.SettingsFile);
             var offer = installer.OfferToShow(settings, install.JustRun);
