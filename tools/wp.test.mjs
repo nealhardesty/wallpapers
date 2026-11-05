@@ -33,6 +33,33 @@ test('seasons: every seasonal wallpaper exists and can be shown', () => {
     for (const id of new Set(WP.SEASONS)) assert.ok(showable.includes(id), id);
 });
 
+test('host kind: android, windows, the saver, the extension, else standalone', () => {
+    assert.equal(WP.hostKind({ host: 'android' }, 'file:'), 'android');
+    assert.equal(WP.hostKind({ host: 'windows' }, 'https:'), 'windows');
+    assert.equal(WP.hostKind({ host: 'windows-saver' }, 'https:'), 'windows-saver');
+    assert.equal(WP.hostKind({ host: 'windows' }, 'chrome-extension:'), 'extension');
+    assert.equal(WP.hostKind({}, 'file:'), 'standalone');
+    assert.equal(WP.hostKind({ host: 'mac' }, 'https:'), 'standalone');
+});
+
+test('corner buttons: hosts that can\'t click the player get none', () => {
+    assert.equal(WP.cornerButtons('standalone'), true);
+    assert.equal(WP.cornerButtons('extension'), true);
+    assert.equal(WP.cornerButtons('android'), false);
+    assert.equal(WP.cornerButtons('windows'), false);
+    assert.equal(WP.cornerButtons('windows-saver'), false);
+});
+
+test('insets: t,r,b,l in CSS px on any host; Android keeps its 48 px default', () => {
+    assert.deepEqual(plain(WP.parseInsets('0,0,48,0', 'windows')), { top: 0, right: 0, bottom: 48, left: 0 });
+    assert.deepEqual(plain(WP.parseInsets('12,0,0,40', 'standalone')), { top: 12, right: 0, bottom: 0, left: 40 });
+    assert.deepEqual(plain(WP.parseInsets(undefined, 'android')), { top: 0, right: 0, bottom: 48, left: 0 });
+    assert.deepEqual(plain(WP.parseInsets('0,0,24,0', 'android')), { top: 0, right: 0, bottom: 24, left: 0 });
+    for (const bad of ['', '1,2,3', '1,2,3,x', '-1,0,0,0', '0,0,9999,0'])
+        assert.deepEqual(plain(WP.parseInsets(bad, 'windows')), { top: 0, right: 0, bottom: 0, left: 0 }, bad);
+    assert.deepEqual(plain(WP.parseInsets('0, 0, 48.6, 0', 'windows')), { top: 0, right: 0, bottom: 49, left: 0 });
+});
+
 test('URL parameters: only known keys, values as given', () => {
     assert.deepEqual(plain(WP.parseParams('?w=fishtank&panel=open&tier=low&evil=1')), { w: 'fishtank', panel: 'open', tier: 'low' });
     assert.deepEqual(plain(WP.parseParams('')), {});
@@ -193,6 +220,21 @@ test('power: battery, saver, heat and reduced motion lower the ceiling; the stri
     assert.equal(policy({ reducedMotion: true }).fpsCap, 20);
     assert.equal(WP.powerPolicy({ host: 'android', hidden: true }).pause, true, 'hidden pauses');
     assert.equal(WP.powerPolicy({ host: 'android', saver: true, preview: true }).ceiling, 'high', 'the picker preview gets the best');
+});
+
+test('power: remote desktop lowers the ceiling to Low', () => {
+    const remote = policy({ remote: true });
+    assert.equal(remote.ceiling, 'low');
+    assert.ok(remote.reasons.includes('remote desktop'));
+    assert.equal(remote.pause, false);
+    assert.equal(policy({ remote: true, reducedMotion: true }).fpsCap, WP.TIERS.low.fps);
+});
+
+test('display: its own key for the choice, a bad key falls back', () => {
+    assert.equal(WP.currentKey({}), 'wp:current');
+    assert.equal(WP.currentKey({ display: 'm-3fa9c2' }), 'wp:current@m-3fa9c2');
+    assert.equal(WP.currentKey({ display: '../x' }), 'wp:current');
+    assert.equal(WP.currentKey({ display: '' }), 'wp:current');
 });
 
 test('plan: a pinned tier never beats the power ceiling; Auto starts where it settled', () => {

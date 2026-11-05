@@ -444,11 +444,17 @@ const STAGE_CHECKS = {
                 await sleep(80);
             }
             await sleep(2500);
-            const crowd = await evaluate(`(m => ({ n: m.cats.length, coats: new Set(m.cats.map(c => c.look.coat.name)).size, hats: m.cats.filter(c => c.hat).length,
+            const look = () => evaluate(`(m => ({ n: m.cats.length, coats: new Set(m.cats.map(c => c.look.coat.name)).size, hats: m.cats.filter(c => c.hat).length,
                 closest: Math.min(...m.cats.flatMap((a, i) => m.cats.slice(i + 1).map(b => Math.hypot(a.x - b.x, a.y - b.y)))),
                 near: m.cats.filter(c => Math.hypot(c.x - 900, c.y - 430) < 32 * 5).length }))(WP.stage.manager)`);
+            // A pile-up lasts; two of 861 pairs brushing past each other for a frame
+            // (common on a slow CI runner) doesn't. So: closest over five looks a
+            // fifth of a second apart, and only "always too close" fails.
+            const looks = [];
+            for (let i = 0; i < 5; i++) { looks.push(await look()); await sleep(200); }
+            const crowd = { ...looks.at(-1), closest: Math.max(...looks.map(l => l.closest)) };
             if (crowd.n !== 42 || crowd.coats !== 13 || crowd.hats !== 42) record(`${crowd.n} cats, ${crowd.coats} coats, ${crowd.hats} hats`);
-            if (crowd.closest < 32 * 0.45) record(`two cats ${crowd.closest.toFixed(1)} px apart: piled up`);
+            if (crowd.closest < 32 * 0.45) record(`two cats ${crowd.closest.toFixed(1)} px apart in every look: piled up`);
             if (crowd.near < 30) record(`only ${crowd.near} of 42 cats made it to the pointer`);
             console.log(`    neko: ${crowd.near} of 42 round the pointer, the closest two ${crowd.closest.toFixed(1)} px apart`);
             return true;
@@ -531,15 +537,22 @@ const STAGE_CHECKS = {
         if (first.frames > 10) record(`the first frame came at ${first.frames}`);
         if (first.leaves < 20 || first.resting < 3 || first.flocks < 1) record(`not alive on frame one: ${JSON.stringify(first)}`);
         if (first.squirrels < 1 || first.turkeys < 1 || first.cats !== 2 || first.trees < 6 || first.houses < 3) record(`the cast is missing: ${JSON.stringify(first)}`);
-        const before = await evaluate('WP.stage.manager.apples.length');
-        const at = await evaluate(`(m => { const t = m.trees[m.trees.length - 1], c = m.sprites.trees[t.variant].canopy; return { x: t.x + c.cx * t.s, y: t.y + c.cy * t.s }; })(WP.stage.manager)`);
+        // The apples already about are marked, so the count is of new ones (others are
+        // collected and fade meanwhile), and the tree tapped is one with ripe apples
+        // left (the breeze may have taken them all from any given tree).
+        const before = await evaluate('(m => { for (const a of m.apples) a.smokeOld = true; return m.apples.length; })(WP.stage.manager)');
+        const at = await evaluate(`(m => { const t = [...m.trees].sort((a, b) => b.hang.filter(h => h.ripe >= 0.55).length - a.hang.filter(h => h.ripe >= 0.55).length)[0],
+            c = m.sprites.trees[t.variant].canopy; return { x: t.x + c.cx * t.s, y: t.y + c.cy * t.s }; })(WP.stage.manager)`);
         await mouse('mousePressed', at.x, at.y);
         await mouse('mouseReleased', at.x, at.y);
         await sleep(350);
         if (!await evaluate('WP.stage.manager.trees.some(t => t.shake > 0.3)')) record('the tap shook no tree');
-        await sleep(1400);
-        const after = await evaluate('WP.stage.manager.apples.length');
-        if (after <= before) record(`no apples fell: ${before} before, ${after} after`);
+        // The drops are timed in the wallpaper's own seconds, which a slow runner's
+        // clamped frames stretch: wait for them in real time, up to 5 s.
+        const newApples = () => evaluate('WP.stage.manager.apples.filter(a => !a.smokeOld && a.type === "apple").length');
+        await waitFor(async () => await newApples() > 0, 5000);
+        const after = before + await newApples();
+        if (after <= before) record(`no apples fell: ${before} before, none new after 5 s`);
         console.log(`    harvest: ${first.leaves} leaves, ${first.resting} apples down, ${first.flocks} flock, ${first.squirrels} squirrels, ${first.turkeys} turkeys, ${first.cats} cats on frame ${first.frames}; a tap: ${before} → ${after} apples`);
         return true;
     }], ['several flocks can cross at once, with a few stragglers behind', async () => {
@@ -1331,7 +1344,9 @@ const STAGE_CHECKS = {
             await counts('m.togglePause()');
             if (!await waitFor(shut, 2000)) record('pause didn\'t close the curtains');
             await counts('m.togglePause()');
-            if (!await waitFor(async () => !await shut(), 2000)) record('play didn\'t open them');
+            // The curtains move in the wallpaper's own time, which a loaded machine
+            // stretches; the wait ends as soon as they're open.
+            if (!await waitFor(async () => !await shut(), 4000)) record('play didn\'t open them');
             await counts('m.skip(1)');
             if (!await waitFor(shut, 1500)) record('a change didn\'t close them');
             await shoot('jellyfin-cinema-closing');
@@ -1405,6 +1420,40 @@ async function playerSuite(catalog) {
     await check('?w=rain shows rain and persists nothing', async () => {
         await fresh(`${WEB}/index.html?w=rain`);
         return await playerReady() === 'rain' && await evaluate("localStorage.getItem('wp:current')") === null;
+    });
+
+    await check('?insets= reaches the stage; host=windows is a kind', async () => {
+        await fresh(`${WEB}/index.html?w=harvest&host=windows&insets=0,0,48,0`);
+        if (await playerReady() !== 'harvest') return record('harvest not shown');
+        const got = await inStage('JSON.stringify({ kind: WP.host.kind, insets: WP.host.insets })');
+        const { kind, insets } = JSON.parse(got);
+        if (kind !== 'windows' || insets.bottom !== 48 || insets.top || insets.left || insets.right) return record(`stage got ${got}`);
+        await fresh(`${WEB}/index.html?w=harvest`);
+        await playerReady();
+        const plain = JSON.parse(await inStage('JSON.stringify(WP.host.insets)'));
+        return plain.bottom === 0 || record(`no ?insets=, yet bottom ${plain.bottom}`);
+    });
+
+    await check('?display= keeps two monitors\' choices apart', async () => {
+        // Only the first load clears storage; the rest navigate straight on,
+        // so what the second and third read was written by show().
+        const open = async display => {
+            await cdp.send('Page.navigate', { url: `${WEB}/index.html?display=${display}&host=windows` });
+            return playerReady();
+        };
+        await fresh(`${WEB}/index.html?display=m-aaaaaa&host=windows`);
+        await playerReady();
+        await evaluate("WP.player.show('snow', { persist: true })");
+        await open('m-bbbbbb');
+        await evaluate("WP.player.show('rain', { persist: true })");
+        await open('m-aaaaaa');
+        const again = await waitFor(async () => await evaluate('WP.player.choice') === 'snow' && 'snow');
+        const got = await evaluate("JSON.stringify([localStorage.getItem('wp:current@m-aaaaaa'), localStorage.getItem('wp:current@m-bbbbbb'), localStorage.getItem('wp:current')])");
+        if (again !== 'snow' || got !== JSON.stringify(['"snow"', '"rain"', null])) return record(`reopened ${again}, storage ${got}`);
+        await evaluate("localStorage.setItem('wp:current', JSON.stringify('leaves'))");
+        await open('m-cccccc');
+        const inherited = await evaluate('WP.player.choice');
+        return inherited === 'leaves' || record(`a new display showed ${inherited}, not the shared leaves`);
     });
 
     await check('] switches, persists and drops ?w= from the URL', async () => {

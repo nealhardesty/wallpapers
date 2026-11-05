@@ -12,8 +12,11 @@ ADB ?= $(ANDROID_HOME)/platform-tools/adb
 AVD ?= $(firstword $(shell $(ANDROID_HOME)/emulator/emulator -list-avds 2>/dev/null))
 GRADLE = cd android && ./gradlew --quiet
 APP = com.roadwaffle.wallpapers
+DOTNET ?= $(shell command -v dotnet 2>/dev/null || echo $(HOME)/.dotnet/dotnet)
+DOTNET_FOUND := $(shell command -v $(DOTNET) 2>/dev/null)
+export DOTNET
 
-.PHONY: help hooks open serve serve-https cert bing-json thumbnails icons screenshots extension site android-build android-install android-logcat android-emulator android-release android-keystore android-bench jellyfin-media jellyfin-fixtures jellyfin-dev jellyfin-stop jellyfin-mock mac-build mac-run mac-dev mac-test mac-install mac-uninstall mac-release mac-saver-test mac-saver-live mac-saver-log docker-build docker-run lint audit audit-staged audit-history test smoke smoke-clock smoke-live bench bench-clock ci clean
+.PHONY: help hooks open serve serve-https cert bing-json thumbnails icons screenshots extension site android-build android-install android-logcat android-emulator android-release android-keystore android-bench jellyfin-media jellyfin-fixtures jellyfin-dev jellyfin-stop jellyfin-mock mac-build mac-run mac-dev mac-test mac-install mac-uninstall mac-release mac-saver-test mac-saver-live mac-saver-log win-build win-release win-sign win-sign-tools win-unit win-ci win-run win-dev win-reload win-test win-test-zip win-install win-uninstall win-saver win-log docker-build docker-run lint audit audit-staged audit-history test smoke smoke-clock smoke-live bench bench-clock ci clean
 
 help: ## List every target
 	@awk 'BEGIN {FS = ":.*## "} /^[a-zA-Z0-9_-]+:.*## / {printf "  \033[36m%-17s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -125,6 +128,61 @@ mac-saver-live: ## Run the installed screen saver in Apple's real host for a few
 mac-saver-log: ## Show the screen saver's own log (it writes inside the host's sandbox)
 	@tail -40 "$(HOME)/Library/Containers/com.apple.ScreenSaver.Engine.legacyScreenSaver/Data/wallpapers-saver.log"
 
+win-build: ## Build the Windows app: dist/win/Wallpapers.exe (self-contained) and web/ beside it; cross-compiles in WSL or Linux (needs the .NET 10 SDK)
+	@windows/build.sh
+
+win-release: ## Build the Windows app and zip it: dist/wallpapers-windows-<version>.zip and .sha256 (signed when the WALLPAPERS_SIGN_* variables are set, else unsigned; cross-compiles in WSL or Linux)
+	@DOTNET="$(DOTNET)" windows/release.sh
+
+win-sign: ## Sign dist/win/Wallpapers.exe with Azure Trusted Signing (needs the WALLPAPERS_SIGN_* variables; prints "unsigned" without them)
+	@windows/sign.sh dist/win/Wallpapers.exe
+
+win-sign-tools: ## Install osslsigncode, which win-release needs to verify a signed exe (Debian/Ubuntu, through apt and sudo; CI runs it before a signed release)
+	@command -v osslsigncode >/dev/null || { sudo apt-get update -qq && sudo apt-get install -y -qq osslsigncode; }
+	@osslsigncode --version | head -n 1
+
+win-unit: ## Run the Windows app's unit tests (windows/Wallpapers.Tests, no Windows needed)
+	@cd windows && $(DOTNET) test --project Wallpapers.Tests
+
+win-ci:
+ifneq ($(DOTNET_FOUND),)
+	@$(MAKE) --no-print-directory win-unit
+else
+	@echo "win-unit: skipped (no dotnet; see README)"
+endif
+
+win-run: ## Build the Windows app and start it on the Windows side from WSL (your normal settings)
+	@BUILD=1 windows/run.sh run
+
+win-dev: ## Run the Windows app straight from this checkout's web/, with its own settings and DevTools (Reload Wallpapers in the tray after an edit)
+	@BUILD=1 windows/run.sh dev
+
+win-reload: ## Reload the running Windows app's pages after a web/ edit (the win-dev one; FLAVOR=run for the normal one)
+	@windows/run.sh reload $(or $(FLAVOR),dev)
+
+win-test: ## Run the Windows app's self-test against a throwaway settings store: layer, pause, coverage, power, the pointer, monitors, performance, Explorer restart, cleanup (about 50 s; shows a wallpaper behind your icons)
+	@BUILD=1 windows/run.sh test
+
+win-test-zip: ## Self-test the app inside dist/wallpapers-windows-<version>.zip (the zip CI ships; needs Windows: Git Bash or WSL)
+	@zip="dist/wallpapers-windows-$$(node -p "require('./web/manifest.json').version").zip"; \
+	[ -f "$$zip" ] || { echo "win-test-zip: no $$zip (make win-release, or download CI's wallpapers-windows artifact into dist/)" >&2; exit 1; }; \
+	rm -rf dist/win-zip && mkdir -p dist/win-zip; \
+	if command -v unzip >/dev/null; then unzip -q "$$zip" -d dist/win-zip; \
+	else powershell.exe -NoProfile -Command "Expand-Archive -LiteralPath '$$zip' -DestinationPath 'dist/win-zip'"; fi; \
+	DIST=dist/win-zip/Wallpapers windows/run.sh test
+
+win-install: ## Build the Windows app and install it for this Windows user (%LOCALAPPDATA%\Programs\Wallpapers, Start menu, Settings → Apps, Start with Windows); quits a running copy first
+	@BUILD=1 windows/run.sh install
+
+win-uninstall: ## Remove the installed Windows app and its Start menu, Run and Apps entries; settings stay (DELETE_SETTINGS=1 removes them too)
+	@windows/run.sh uninstall
+
+win-saver: ## Run the built Windows screen saver full screen (/s) until you press a key or move the mouse, then show its log
+	@BUILD=1 windows/run.sh saver
+
+win-log: ## Show the Windows app's log (FLAVOR=dev or test for those, saver for the screen saver's; FOLLOW=1 to follow)
+	@windows/run.sh log $(or $(FLAVOR),run)
+
 bench: ## Every wallpaper at every tier on a simulated phone (4× slower CPU): budgets, bench/results.json, the ⚡ badges (SPEC §4.8)
 	node tools/bench.mjs
 
@@ -179,7 +237,7 @@ smoke-clock: ## Just the clock overlay's checks in headless Chrome (SPEC §4.9)
 smoke-live: ## Run the stage and player smoke suites against the deployed site, with real network (SMOKE_URL= to pick another)
 	@SMOKE_URL=$(or $(SMOKE_URL),https://nealhardesty.github.io/wallpapers) node tools/smoke.mjs
 
-ci: lint audit audit-history test smoke ## Everything CI runs
+ci: lint audit audit-history test win-ci smoke ## Everything CI runs (win-unit when dotnet is installed)
 
 clean: ## Remove build output
 	rm -rf dist android/build android/app/build

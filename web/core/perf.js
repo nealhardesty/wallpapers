@@ -123,8 +123,9 @@
     //   saver: battery saver on; thermal: Android's thermal status name
     //   preview: Android's wallpaper picker, which gets the best
     //   hidden: the host can't be seen (Android's home screen is covered)
+    //   remote: a Remote Desktop session (Windows); Low, no fps cap of its own
     WP.powerPolicy = ({ host = 'standalone', batteryAware = true, battery = null, saver = false,
-        thermal = 'none', reducedMotion = false, preview = false, hidden = false } = {}) => {
+        thermal = 'none', reducedMotion = false, preview = false, hidden = false, remote = false } = {}) => {
         let ceiling = host === 'android' ? 'medium' : 'high';
         let fpsCap = host === 'android' ? 30 : 0;
         const reasons = [];
@@ -139,6 +140,7 @@
         if (saver) { lower('low', 'battery saver'); cap(15); }
         if (thermal === 'moderate') lower(ORDER[Math.max(0, rank(ceiling) - 1)], 'warm');
         if (['severe', 'critical', 'emergency', 'shutdown'].includes(thermal)) { lower('low', 'hot'); cap(10); }
+        if (remote) lower('low', 'remote desktop');
         if (reducedMotion) cap(WP.TIERS.low.fps, 'reduced motion');
         const pause = hidden || ['critical', 'emergency', 'shutdown'].includes(thermal);
         return { ceiling, fpsCap, pause, reasons };

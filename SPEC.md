@@ -13,6 +13,11 @@ wallpapers' only home. They run in three hosts:
    (or as the browser homepage URL).
 3. **Android live wallpaper**: a future app in `android/` that runs the same
    web code behind the home screen.
+4. **macOS desktop and screen saver** (`mac/`, §10.21, built).
+5. **Windows desktop, tray app and screen saver** (`windows/`, §10.25,
+   designed 2026-11-02; W0 passed, W1–W5 built by 2026-11-05: the app, the
+   installer, the zip and the screen saver; by-hand passes and the first release
+   pending the owner).
 
 > Status: **phases 1–9 done** (2026-10-23), except what needs the owner:
 > measurements on a real phone (6.2's numbers, 6.4a), the first signed
@@ -24,6 +29,12 @@ wallpapers' only home. They run in three hosts:
 > Phase 11 (Harvest Valley, §10.22) added the 34th wallpaper for Thanksgiving.
 > Next: Phase 10, the clock overlay (§4.9, specified 2026-10-28, not built);
 > §10 holds the other ideas.
+> Windows (§10.25): the W0 spikes passed, and W1 (the desktop core: behind
+> the icons on every monitor, the tray, the settings window, the self-test)
+> was built 2026-11-03. W2 (monitors and power), W3 (the mouse) and W4
+> (install, update, uninstall, the zip and the CI `win` job) were built
+> 2026-11-04. W5 (the screen saver) was built 2026-11-05; the owner's by-hand
+> pass (§10.25.16) and the first release wait for the owner.
 
 ---
 
@@ -164,6 +175,8 @@ wallpapers/
 ├── tools/                       # node scripts (built-ins only): audit, lint, serve, build, smoke, tests, images
 ├── docs/                        # README screenshots (`make screenshots`)
 ├── android/                     # the live wallpaper app (§6): Gradle wrapper, app/ (Kotlin)
+├── mac/                         # the macOS app and screen saver (§10.21, Swift)
+├── windows/                     # the Windows app and tray (§10.25, C#): Wallpapers, Wallpapers.Core, Wallpapers.Tests
 ├── bench/                       # make bench results (results.json; android.json from a phone)
 ├── .github/workflows/ci.yml     # `make ci`; on master also `make site` → GitHub Pages; daily for bing.json
 ├── Dockerfile                   # the site in a container, served by tools/serve.mjs
@@ -297,7 +310,9 @@ Phase 4 and 6 take it:
   Old homepage settings move over by hand, once: the extension is a new
   identity with its own storage. The README's console snippet saves the
   old wallpaper keys to a file, and the panel's Import converts it
-  (Appendix B).
+  (Appendix B). Export and Import carry per-display `wp:current@<key>`
+  entries like any other `wp:` key; keys for monitors that another machine
+  doesn't have are harmless.
 - **URL parameters (decided).** They override for **this page load only**:
   nothing is persisted, the saved choice and Seasonal are untouched, and a
   reload without them returns to normal. They replace the old
@@ -309,7 +324,9 @@ Phase 4 and 6 take it:
   | `panel=open` | Open the switcher and settings panel on load (closes as usual with `,` or `Esc`) |
   | `date=YYYY-MM-DD`, `theme=<id>` | Passed to the wallpaper as `host.params`. Advent uses them for time travel and themes, e.g. `?w=advent&date=2026-12-25` |
   | `tier=low\|medium\|high` | Pin a performance tier for this load (§4.8), e.g. to see Low on a desktop |
-  | `host=android`, `hud=1`, `thumb=1` | Host simulation (§4.3), performance HUD (§4.8), thumbnail mode (§4.7) |
+  | `host=android`, `hud=1`, `thumb=1` | Host simulation (§4.3), performance HUD (§4.8), thumbnail mode (§4.7). The Windows app passes `host=windows` (and its saver `host=windows-saver`, W5) |
+  | `insets=t,r,b,l` | CSS px kept clear on each edge, on any host (the Windows app passes its taskbar), e.g. `?w=harvest&insets=0,0,48,0`. Malformed values fall back to the host's default (48 px at the bottom on Android, else 0) |
+  | `display=<key>` | the choice is kept per display, as `wp:current@<key>` (Windows' Different mode). With no value of its own it shows `wp:current`, then Seasonal. A key must match `[a-z0-9-]{1,40}`, else it is ignored |
 | `clock=on\|off\|<motion>` | §4.9: force the clock overlay on or off for this load, or on with a motion (`static`, `drift`, `bounce`, `teleport`, `follow`). Never persisted |
 
   Picking a wallpaper in the panel while `w=` is active does persist, as
@@ -345,10 +362,10 @@ One object, passed to every wallpaper's constructor and also available as
 
 ```js
 host = {
-  kind: 'standalone' | 'extension' | 'android',
+  kind: 'standalone' | 'extension' | 'android' | 'windows' | 'windows-saver',
   id: 'fishtank',                         // this stage's wallpaper
   params: { date, theme, … },             // URL parameters (§4.2)
-  insets: { top, right, bottom, left },   // px kept clear, e.g. Android's gesture bar; 0 elsewhere
+  insets: { top, right, bottom, left },   // px kept clear: ?insets= (Windows' taskbar), Android's gesture bar; else 0
   storage: { get(key), set(key, value) }, // non-setting state, under wp:<id>:<key>
   quality: { tier, fps, renderScale, dpr, density, slowFps },  // the current tier (§4.8)
   frames: { count, workMs },              // from the frame pacer, for the governor and tests
@@ -643,6 +660,7 @@ they are stricter. "Battery-aware" can be switched off in the panel.
 | Thermal: moderate | — | `PowerManager.getCurrentThermalStatus()` + listener (API 29+; ignored on 26–28) | One tier lower |
 | Thermal: severe and above | — | same | Low and 10 fps. At `critical`, pause and hold the last frame |
 | Reduced motion | `prefers-reduced-motion` | `ANIMATOR_DURATION_SCALE == 0` | Slow-motion profile at the Low fps |
+| Remote Desktop | — (the Windows app passes `WP.power({ remote })`) | — | Ceiling Low, no fps cap of its own; reason `remote desktop` |
 | Wallpaper picker preview | — | `Engine.isPreview()` | High: it's brief and it's the sales pitch |
 
 **Host defaults:**
@@ -2995,6 +3013,29 @@ New questions go here, each with a recommendation.
   home pages swipe (it doesn't follow `onScroll`). *Recommendation:* keep it
   fixed; a clock that slides with the pages looks like a widget that
   has come loose.
+- **Windows: the same wallpaper on two monitors in *Different* mode** (§10.25.6).
+  Only the choice is per monitor (`wp:current@<key>`); the wallpaper's own
+  settings (`wp:<id>`) are shared. *Recommendation:* keep it shared: the
+  panel and storage model stay unchanged, and wanting two differently-tuned
+  Fish Tanks is rare. Revisit if it comes up.
+- **Windows over Remote Desktop** (§10.25.9). RDP sends every changed pixel
+  over the network. *Recommendation:* a new `remote` power signal, Low at
+  15 fps; it still animates. The owner often works over RDP, so they'll see
+  this first.
+- **Windows: what counts as a covered monitor** (§10.25.9). *Recommendation:*
+  97% of its work area under real windows (overlays ignored), paused after
+  300 ms, resumed at once. Tune after the two-monitor pass (W6).
+- **Windows: sound on the desktop** (§10.25.9). *Recommendation:* muted, with
+  *Allow Sound* in the tray, off by default. Matters once Jellyfin arrives.
+- **Windows: signing, now that Smart App Control is in play** (§10.25.13,
+  found in W0.2). **Decided 2026-11-04 (§10.25.20): ship unsigned first, set
+  up Azure Trusted Signing before telling anyone else; the wiring exists and
+  signs once the six secrets are set.** Why it came up: the owner's PC enforces
+  SAC, which blocks unsigned builds by hash with no override (2 of ~20 spike
+  builds); a build that's refused gets a version bump and is rebuilt.
+- **Windows: one ~52 MB self-contained exe, or require the .NET runtime?**
+  (§10.25.13). **Decided: self-contained (2026-11-04):** nothing to install
+  first, and the `.scr` copy just works. Size is the cost.
 - **Jellyfin on GitHub Pages:** settled by spike 9.0. After Chrome's local
   network prompt, Pages reaches an https server, or an http one addressed
   by IP; only an http *hostname* stays blocked, and the panel says so.
@@ -3398,6 +3439,1795 @@ CI `mac` job.
    bonus** (owner, revised after M0): the wallpaper must truly sit behind
    the desktop icons, like the real wallpaper. If the saver can't be made
    reliable, ship the desktop app without it.
+
+### 10.25 Windows: live desktop, tray app and screen saver (`windows/`, owner pick, 2026-11-02)
+
+One native Windows 11 app that runs the same `web/` wallpapers behind the
+desktop icons, on every monitor, controlled from a tray icon, and later as
+the screen saver: the Mac app (§10.21) for Windows, going further where
+Windows allows. **Status: W0 passed (2026-11-03, §10.25.21); W1 built
+(2026-11-03, *As built* in §10.25.16); W2 built (2026-11-04; by-hand console
+pass pending); W3 built (2026-11-04; by-hand console pass pending); W4 built
+(2026-11-04; by-hand pass pending, checklist in §10.25.16); W5 built
+(2026-11-05; by-hand pass pending, checklist in §10.25.16).** Phase W0
+(spikes) is the gate: if a live web page can't run behind the icons on 25H2,
+the project stops. Brainstormed and reviewed 2026-11-02; the original design
+note is `docs/superpowers/specs/2026-11-02-windows-design.md`, and this
+section supersedes it.
+
+#### 10.25.1 Intent
+
+The Mac app proved the idea: the same `web/` wallpapers, unchanged, running
+as the real desktop background and as the screen saver. The owner wants the
+same on Windows 11, where they sit in front of a two-monitor desktop all day.
+
+Windows is friendlier ground than macOS, so this design goes further than the
+Mac app did:
+
+- The wallpaper truly sits **behind the desktop icons** (the Mac sits in a
+  window just above the picture; here we live inside Explorer's own
+  wallpaper layer).
+- **Each monitor its own world**, or the same wallpaper on all (one world
+  spanning both is planned for later).
+- **The wallpaper reacts to the real mouse**, on the real desktop: fish
+  follow the cursor, a click on bare desktop is a tap, Neko chases the
+  pointer.
+- **The screen saver is a first-class citizen**, because Windows `.scr`
+  files are just programs and the app can select itself as the saver in one
+  click (macOS couldn't).
+
+#### 10.25.2 Goals, non-goals, anti-goals
+
+**Goals (owner)**
+1. Live wallpaper behind the icons on Windows 11, every monitor.
+2. A tray icon that does everything (there are no global hotkeys, so the
+   menu must be complete).
+3. Per-monitor wallpapers. (Span across all monitors: later, owner.)
+4. Interactive: pointer moves and desktop clicks reach the wallpaper.
+   **Required.**
+5. Pause per monitor when it's covered (fullscreen *or* a maximized or
+   snapped window filling it).
+6. On battery: drop to the power-save quality, never stop.
+7. Ground lines sit above the taskbar.
+8. C# (.NET), WebView2.
+
+**Goals (proposed here, all approved by the owner)**
+- The same app is the screen saver (`.scr`), sharing settings. **Built
+  last**; it never holds up a release of the desktop app.
+- Survives Explorer restarts, monitor hot-plug, DPI changes, sleep, lock and
+  Remote Desktop without a relaunch.
+- Installs per user with no admin rights, and uninstalls cleanly from
+  Settings → Apps.
+- Developed and built from WSL on the owner's machine; CI builds and tests it.
+
+**Not in v1 (owner: later)**
+- **Span mode** (one wallpaper across all monitors). v1's code shouldn't
+  make it hard, but nothing is built for it; §10.25.6 keeps the sketch. No
+  wallpaper learns about monitor edges (no Neko crossing screens).
+- **Jellyfin on the Windows desktop.** Pages load from an https origin and a
+  home Jellyfin server is usually plain http: mixed content and local-network
+  blocks, the problem Android solved with its `MediaProxy`. In v1 Jellyfin
+  shows its own offline/sign-in state like any unreachable server, is never
+  picked by the saver's random pool, and the README says so. §10.25.19 has the
+  later plan.
+
+**Non-goals (owner)**
+- Lock screen. Accent colour. Global hotkeys. Playlists/rotation on the
+  desktop. Code signing (later; SmartScreen will warn on first run until
+  then).
+
+**Anti-goals: failure even if it "works"**
+- Any wallpaper code forked or special-cased for Windows. `web/` gets only
+  small, host-neutral additions (§10.25.7); a wallpaper never checks for Windows.
+- Icons, desktop right-click, icon drag/drop or rubber-band selection
+  breaking or lagging because of us.
+- A stale frame or black desktop left behind after Quit or a crash.
+- Burning GPU/CPU while nobody can see it: covered, locked, display off,
+  fullscreen game.
+- Stealing focus, appearing in Alt-Tab or the taskbar, or showing a console.
+- Changing the user's Windows wallpaper or screen saver without asking.
+
+#### 10.25.3 What research found (Nov 2026)
+
+| Goal | Possible? | How | Risk |
+|---|---|---|---|
+| Behind the icons | **Yes** | Explorer's undocumented `0x052C` message to `Progman` creates the wallpaper layer; our window goes into it. Wallpaper Engine and Lively work this way. | **Medium**: 24H2 changed the layout (below); proven in spike W0.1 |
+| WebView2 in it | **Yes**, with care | WebView2 is on every Windows 11 machine (the owner's: runtime 156) | **Medium**: Chromium's occlusion tracking may think we're covered by the icons and stop rAF (W0.2) |
+| Pointer moves and clicks | **Yes** | Raw Input with `RIDEV_INPUTSINK` sees the mouse with no hook and no permission; a hit test tells bare desktop from icons and apps | Low |
+| Per-monitor pause | **Yes** | Enumerate top-level windows on window events; measure how much of each monitor is covered | Low |
+| Screen saver | **Yes, solid** | A `.scr` is an exe run with `/s`, `/p <hwnd>`, `/c`; selecting it is `HKCU\Control Panel\Desktop` + `SystemParametersInfo` | Low (Mac's equivalent was the fragile part) |
+| Per-user install, no admin | **Yes** | `%LOCALAPPDATA%\Programs\Wallpapers`, `HKCU` Run and Uninstall keys | Low |
+
+**The 24H2 change.** Through 23H2, `0x052C` split the desktop into two
+top-level `WorkerW` windows and wallpaper apps parented into the one *behind*
+the icon view. From 24H2 (the owner runs **25H2, build 26200**) the desktop is
+"raised": `Progman` has `WS_EX_NOREDIRECTIONBITMAP`, the icon view
+(`SHELLDLL_DefView`) is a *layered child* of `Progman`, and Explorer's own
+wallpaper layer is a `WorkerW` child of `Progman` below it. Lively broke on
+24H2 and was fixed in 2.1.0.6. Projects that work on 24H2/25H2 report:
+
+- Send `0x052C` with **wParam `0xD`, lParam `1`** (with `0, 0` the shell
+  silently does nothing on new builds); send it only if the layer doesn't
+  already exist; give Explorer up to ~2 s to build it.
+- Put our window in a **layered child of `Progman` (alpha 255)**, Z-ordered
+  **directly below `SHELLDLL_DefView` and above Explorer's `WorkerW`**.
+  Check the order periodically and repair it only if Explorer changed it.
+- The process needs a manifest declaring Windows 8–11 support (layered
+  *child* windows need it).
+- Read the window tree once and pick a layout: **classic** (≤ 23H2, two
+  top-level `WorkerW`s, parent into the one without the icons), **raised**
+  (24H2+), or **not split** (draw in front of the icons as a last resort,
+  and log it).
+
+**Settled on 25H2 by spike W0.1 (§10.25.21):** the raised recipe works as
+written: a layered child of `Progman` directly below `SHELLDLL_DefView`.
+Reports disagree on details across builds (one finds parenting into
+`SHELLDLL_DefView` works where `Progman` didn't), so W0.1 tries the
+candidates on the owner's 25H2 machine and records what works, like the Mac's
+Spike M0.1. Sources: [lively#2074](https://github.com/lively-community/lively/issues/2074),
+[kirie#11](https://github.com/UnhingedSoftware/kirie/pull/11),
+[Intonaco#5](https://github.com/77worldd/Intonaco/pull/5),
+[beautiful-wallpaper#83](https://github.com/C0uki/beautiful-wallpaper/pull/83).
+
+**Occlusion.** Chromium on Windows computes native-window occlusion from the
+Z-order and, when it decides a window is covered, treats the page as a
+background tab: rendering stops and timers throttle. A full-screen icon
+view above us may trigger that. Candidate fixes, tried in W0.2: browser
+argument `--disable-features=CalculateNativeWinOcclusion` (plus
+`--disable-background-timer-throttling`), or WebView2 **visual hosting**
+(`CoreWebView2CompositionController` drawing into our own DirectComposition
+visual), which also gives real input injection (§10.25.8). This is the analogue of
+the Mac saver's occlusion gotcha. We then own visibility ourselves through
+`CoreWebView2Controller.IsVisible` (§10.25.9). **Settled by W0.2
+(§10.25.21):** on 25H2 Chromium never throttles our host, flags or not,
+icons above it or a maximized window over it (the host's top-level ancestor
+is Explorer's, not ours, so Chromium's occlusion pass ignores it). The
+flags are harmless and unneeded; **visual hosting** wins on cost (~10× less
+CPU than windowed) and on Explorer restarts.
+
+**The owner's machine right now:** Windows 11 25H2, a laptop (RTX 3080 Ti
+Laptop + Iris Xe, a battery), usually two monitors; this session was over
+**Remote Desktop** (one virtual 2560×1440 screen, taskbar 48 px), with
+Parsec and a virtual-display driver installed. So RDP and virtual displays are
+first-class cases (§10.25.9), and real two-monitor testing happens at the console.
+
+#### 10.25.4 Architecture
+
+One process, one exe. WinForms (for `NotifyIcon`, the settings window and the
+WebView2 control) plus hand-written P/Invoke in one file. No other NuGet
+packages but `Microsoft.Web.WebView2` (and xUnit in the test project).
+
+```
+windows/
+  Wallpapers/                  net10.0-windows, WinForms, the exe
+    Program.cs                 mode dispatch: app · /s /p /c (saver) · --install · --uninstall · --selftest · --dump-displays · --cover-for-test
+    App.cs                     single instance (named mutex + pipe), startup, shutdown, crash cleanup
+    Tray.cs                    NotifyIcon and the whole menu (§10.25.10)
+    DesktopLayer.cs            finds/creates Explorer's wallpaper layer, attaches hosts, repairs Z-order (§10.25.5)
+    Desktop.cs                 one Surface per monitor; reconciles on display change (§10.25.6)
+    DisplayConfig.cs           QueryDisplayConfig: monitor device paths and friendly names (§10.25.6)
+    IdentifyWindow.cs          the big numbers of Identify Monitors
+    Surface.cs                 a host HWND + its WebView2; bounds, DPI, visibility, power push
+    WebFactory.cs              the shared CoreWebView2Environment; serves web/ and bing.json itself; policies (§10.25.14)
+    BingJson.cs                answers bing.json natively, like Android/Mac
+    Pointer.cs                 Raw Input → pointer events in the right page (§10.25.8)
+    Coverage.cs                win-event hooks + EnumWindows: top-level window rects per monitor (math is in Core)
+    Power.cs                   lock, display, sleep, battery, Energy Saver, RDP, fullscreen apps (§10.25.9)
+    SettingsWindow.cs          the panel in a normal window (§10.25.11)
+    PlayWindow.cs              a wallpaper in a normal focused window, for keyboard games (§10.25.8)
+    Saver/                     /s full-screen windows, /p preview, /c options, watchdog (§10.25.12)
+    Install.cs                 per-user install and update, Run key, Uninstall entry, uninstall stage 2, the offer (§10.25.13)
+    ShellLink.cs               the Start menu shortcut (IShellLinkW by hand-written COM)
+    Native.cs                  P/Invoke
+    SelfTest.cs                --selftest (§10.25.15)
+    app.manifest               PerMonitorV2 DPI, Windows 8–11 compatibility, asInvoker
+  Wallpapers.Core/             net10.0, no Windows references, so it builds and tests on Linux
+    Layout.cs                  modes → surfaces, insets, display keys
+    DisplayKey.cs              the stable `m-xxxxxx` key of a monitor
+    Coverage.cs                rectangle subtraction: fraction of a work area covered, and the pause hysteresis
+    Power.cs                   the power state → what each page is told (`WP.power` JSON)
+    SaverArgs.cs               /s /p:123 /p 123 /c:456 parsing (Windows passes all of these)
+    AppSettings.cs             settings.json (mode, mouse, saver choices) with defaults
+    PageUrl.cs                 index.html?host=windows&display=…&insets=…&screens=…
+    DesktopShape.cs            window-tree snapshot → Raised | Classic | NotSplit | NoShell, attach target, z check
+    WebFiles.cs                a URL → a file under web/ (nothing outside it) and its content type
+    Catalog.cs                 the page's catalog for the tray, its labels, Surprise Me
+    WindowPlacement.cs         where the settings window reopens, kept on a monitor that's there
+    Install*.cs, AppVersion.cs  install folder, shortcut, Run and Uninstall values per flavour; versions and the offer; the uninstall plan; install modes (§10.25.13)
+    BingArchive.cs, RollingLog.cs, Repaint.cs, Geometry.cs
+  Wallpapers.Tests/            xUnit over Core; runs in WSL and CI
+  build.sh                     publish + copy web/ + version stamping (like mac/build.sh)
+  release.sh                   zip, checksum, checks; calls sign.sh
+  sign.sh                      optional Azure Trusted Signing through jsign (§10.25.15)
+  run.sh                       win-run/dev/test/install/uninstall launcher (WSL or Git Bash)
+```
+
+**Host kind:** `?host=windows` (and `?host=windows-saver`). The page code stays
+the same apart from §10.25.7's small additions.
+
+**Program modes** (besides the app itself): `--just-run` (the app, without
+the install offer), `--install` (a quiet install or update; §10.25.13),
+`--uninstall [--keep-settings|--delete-settings]` (asks unless told), `--quit`,
+`--reload`, `--settings`,
+`--dump-displays` (writes `displays.json` and `tree.json` to the data folder),
+`--selftest [--bad-web-root]`, and `--cover-for-test <rect>`: a borderless,
+work-area-sized, non-activating window that closes itself after 20 s. Only
+the self-test starts it (§10.25.15); it has to be a separate process because
+coverage ignores our own windows. `--uninstall-stage2 <root>` is uninstall's
+own second stage, the `%TEMP%` copy that removes the install folder.
+
+**Where things live (per user):**
+
+| What | Where |
+|---|---|
+| App | `%LOCALAPPDATA%\Programs\Wallpapers\` (`Wallpapers.exe`, `Wallpapers.scr`, `web\`) |
+| Web storage (all wallpaper settings) | `%LOCALAPPDATA%\Wallpapers\WebView2\` (one shared user data folder) |
+| App settings (display mode, mouse, saver) | `%LOCALAPPDATA%\Wallpapers\settings.json` |
+| Log | `%LOCALAPPDATA%\Wallpapers\log.txt` (rolls at 1 MB, keeps one old) |
+
+#### 10.25.5 Behind the icons (`DesktopLayer.cs`)
+
+- **Attach:** detect the layout (classic / raised / not split) as in §3.
+  Create one **host window** per surface: a borderless child,
+  `WS_CHILD | WS_VISIBLE | WS_CLIPCHILDREN`, layered (alpha 255) where the
+  raised layout needs it, never activatable, positioned in the parent's
+  client coordinates (the virtual screen's origin can be negative: a monitor
+  left of or above the primary).
+- **Z-order:** raised: directly below `SHELLDLL_DefView`. Classic: inside the
+  back `WorkerW`. Checked on every display change and on a 5 s timer;
+  repaired only when wrong.
+- **Explorer restarts:** listen for the registered `TaskbarCreated` message.
+  Re-detect, re-create the layer (send `0x052C` again: the new `Progman` has
+  none), and re-attach. **Spike W0.1 found that a host HWND dies with
+  Explorer** (it's a child of Explorer's `Progman`), so it is *recreated*, not
+  re-parented. **The page still survives without a reload (W0.2):** with
+  visual hosting, the `CoreWebView2CompositionController` is parented to a
+  hidden top-level window of *ours* (Explorer can't take it down), and only
+  the DirectComposition target lives on the host. On restart: detach the
+  visual from the dead target (`SetRoot(null)`), bind it to the new host's
+  target, `Commit`. Measured: re-bound in 7 ms, frame counter unbroken. (A
+  controller parented to the host itself is disposed with it: recreate and
+  reload, ~3 s.)
+  Also re-attach if the parent HWND dies (`IsWindow` check on the timer).
+- **At login:** Explorer may not be ready. Retry the attach with backoff for
+  up to 60 s, then stay running and attach on the next `TaskbarCreated`.
+- **Quit and crash:** destroy the hosts, then make Explorer repaint its own
+  picture by re-applying the current wallpaper path
+  (`SPI_GETDESKWALLPAPER` → `SPI_SETDESKWALLPAPER` with the same path, no
+  `SPIF_UPDATEINIFILE`), so no stale frame is left. The same cleanup runs from
+  the unhandled-exception handler and on `WM_ENDSESSION`.
+- **Not split** (a runtime safety net for a *future* Windows build that
+  breaks the layer after we ship; at W0 this case means the project stops,
+  §10.25.16): draw in front of the icons only if the owner ticks
+  *Troubleshooting → Draw above icons*; otherwise show a tray balloon
+  explaining, and keep running (the tray still works, the saver still works).
+
+#### 10.25.6 Monitors: Same and Different (`Desktop.cs`, `Core/Layout.cs`)
+
+A tray choice, `Monitors ▸`, stored in `settings.json`:
+
+| Mode | Surfaces | Which wallpaper | Default |
+|---|---|---|---|
+| **Same on all** | one per monitor | all follow `wp:current` | ✓ |
+| **Different per monitor** | one per monitor | each its own (`?display=<key>`, §10.25.7) | |
+| *Span across all (later)* | *one, covering every monitor* | *`?display=span`* | |
+
+- **Display keys** must survive reboots and port changes, so not
+  `\\.\DISPLAY1`: use the monitor device path from `QueryDisplayConfig` +
+  `DisplayConfigGetDeviceInfo` (falls back to the GDI name), hashed to a
+  short stable id (`m-3fa9c2`). Friendly names come from the same call
+  ("DELL U2720Q"), for the menu. *(Built in W2: key = `m-` + the first six
+  hex digits of SHA-256 of the lowercased path, or of `gdi:` + the GDI name
+  when there is no path; a duplicate gets `-2`, `-3`. Monitor numbers are
+  1-based in plan order: primary first, then by left, then top.)*
+- **Same wallpaper on two monitors in Different mode share that wallpaper's
+  settings** (`wp:<id>`); only the *choice* is per monitor. *(Design call;
+  keeps the panel and storage model unchanged.)*
+- **Hot-plug, resolution, DPI, taskbar moves:** `WM_DISPLAYCHANGE`,
+  `WM_SETTINGCHANGE` (`SPI_SETWORKAREA`) and `WM_DPICHANGED`, debounced
+  500 ms, then reconcile: surfaces whose key still exists are kept and
+  moved (a resize or scale change doesn't reload the page; only a changed
+  inset does, and only that surface's); new monitors get a surface; gone
+  ones are disposed. A monitor that comes back in Different mode gets its
+  old wallpaper back (its key's `wp:current@` stays in storage). *(Built in
+  W2. A surface that fails to start is dropped and tried again by the 5 s
+  watch: at its next tick, then every 30 s while it keeps failing (logged
+  once per streak), and at any display change. `SetModeAsync` does not persist the mode: the tray saves
+  `settings.json`.)*
+- **Over Remote Desktop** *(measured in W2)*: there is a monitor device path
+  (`Default_Monitor`), and the friendly name is empty, so menus say
+  "Display 1". The key (`m-5b3fcd` here) was the same across two runs;
+  whether it survives a disconnect and reconnect is still to check by hand
+  (§10.25.16). The `displays-rdp-200*.json` fixtures were captured in W1,
+  before paths were read, so they have none and key by GDI name;
+  `Diff_rdp_resize_is_a_move` tests that fallback, which a real RDP session
+  no longer takes.
+- **DPI:** the process is PerMonitorV2. Each per-monitor surface uses its
+  monitor's scale (WebView2 `RasterizationScale`), so CSS px match Windows'
+  scaling on each screen.
+- **Taskbar → `host.insets`:** per surface, `monitor rect − work area` on
+  each side (handles a taskbar on any edge and Windows 11's taskbar on
+  secondary monitors), in CSS px. Auto-hide taskbar → 0. Passed as
+  `?insets=t,r,b,l` (§10.25.7). A change reloads that surface's page (rare).
+
+**Span (later, owner: not in v1). A sketch so v1 doesn't paint it into a
+corner;** v1 only needs `Layout` to return a list of surfaces, each with its
+own bounds, scale, insets and display key, which span later fills with one
+entry.
+- One surface over the **bounding box** of all monitors. Parts of the box no
+  monitor shows (monitors of different heights, or offset) are drawn but
+  never seen.
+- `host.screens` (a new web parameter, added with span) would list each monitor's rect inside the canvas, in
+  CSS px, so a wallpaper *can* avoid the invisible parts. Nothing has to:
+  most wallpapers just fill the box and look right.
+- **Insets in span:** bottom = canvas bottom − the highest work-area bottom
+  of any monitor, so ground lines sit above every taskbar. The same rule for
+  the other edges.
+- **Mixed DPI in span:** one web view has one scale; use the **primary
+  monitor's**. The other monitor shows things slightly larger or smaller
+  than its own scaling. Accepted; documented in the README.
+- **Pause in span:** only when *every* monitor is covered.
+- **Cost:** one page instead of two; at 2 × 2560×1440 the tier governor
+  (§4.8) handles it as it does a 5K browser window.
+
+#### 10.25.7 Changes to `web/` (small, additive, host-neutral)
+
+Each is useful beyond Windows and testable in a browser with URL parameters.
+
+1. *(Built in W1: `WP.hostKind`.)* **`host=windows` / `windows-saver`** recognised by `player.js` and
+   `stage.js` as host kinds (the desktop defaults: Auto, ceiling High,
+   battery-aware). Today only `android` is special-cased; `mac` falls through
+   to `standalone`, and that's fine for Windows too, except for the next
+   items.
+2. *(Built in W1: `WP.parseInsets`.)* **`?insets=t,r,b,l`** (CSS px) sets `host.insets` on any host; the player
+   passes it to the stage. Replaces nothing: `host=android` keeps its 48 px
+   default when `insets` is absent. Lets anyone test ground lines in a
+   browser: `?w=harvest&insets=0,0,48,0`.
+3. *(Built in W2.)* **`?display=<key>`**: the player reads and writes the choice as
+   `wp:current@<key>` instead of `wp:current`. Absent key → inherit
+   `wp:current` (so a new monitor starts with what the others show), then
+   Seasonal. Its storage listener watches the right key. Picking in the
+   panel opened with `display=` persists to that key.
+4. *(With span, later: `?screens=x,y,w,h;…` → `host.screens`. Not in v1.)*
+5. *(Built in W2.)* **Power policy:** a `remote` signal (Remote Desktop session) lowers the
+   ceiling to Low: RDP sends every changed pixel over the
+   network. Reason text `remote desktop`. *(W0.2 found RDP already turns
+   animation effects off, so Chromium reports `prefers-reduced-motion` and
+   the existing policy caps at 20 fps; with RDP's 32 Hz frames that paces to
+   16 fps. A 15 fps cap would pace to ~10.7. Owner's pick (2026-11-04): ceiling Low and
+   **no extra fps cap**, since RDP's own reduced-motion already paces it.)*
+6. **Tests:** unit tests for the params and the policy; a smoke
+   `STAGE_CHECKS` entry proving `insets` reaches `host.insets` and
+   `display=` keeps two choices apart.
+7. *(Built in W3: `WP.cornerButtons`.)* **No corner buttons on `windows` and
+   `windows-saver`** (as on `android`). W3 sends real pointer moves into the
+   desktop pages and the stage reports a mouse near a corner, which would show
+   the gear and full-screen buttons; a desktop click goes into the stage, not
+   the player, so they could never be pressed. `,` still opens the panel in
+   *Play in a Window*. The settings window opens its panel with `panel=open`,
+   so it doesn't need the gear. Owner's call (2026-11-04).
+
+#### 10.25.8 The mouse (`Pointer.cs`), required
+
+The host windows never take input: clicks belong to Explorer (icons,
+right-click menu, rubber band). We *watch* the mouse and replay it into the
+page, as the Mac does with its global monitor.
+
+- **Source:** Raw Input (`RegisterRawInputDevices`, mouse,
+  `RIDEV_INPUTSINK`) on a hidden message window: delivered even though we're
+  never focused, no hook (so nothing Windows can time out, no lag added to
+  the user's mouse). Position from `GetCursorPos` (physical px with
+  PerMonitorV2); buttons from the raw flags. Unregistered while every surface
+  is hidden. *(W0.4: works unfocused, over app windows and the taskbar;
+  100–275 raw moves a second when the mouse is busy.)*
+- **Moves:** forwarded to the surface under the cursor, if it's visible,
+  coalesced to at most 60 per second. Moves count even when the cursor is
+  over an app window (fish still follow it), matching the Mac.
+- **Clicks (left button only):** forwarded only on **bare desktop**:
+  `WindowFromPoint` is the desktop (`SysListView32` in `SHELLDLL_DefView`,
+  `Progman`, `WorkerW` or our host), and UI Automation's `ElementFromPoint`
+  there isn't a `ListItem` (an icon). Ask UI Automation **only** when
+  `WindowFromPoint` already says desktop, on a worker thread (W0.4: on the
+  desktop median 10 ms, p95 37 ms; over app windows it's slower, p95 79 ms,
+  max 178 ms, and not needed). The press decides: a gesture that starts on
+  an icon is never forwarded, even if it ends on bare desktop (an icon drag);
+  one that starts bare is forwarded through its release. Down, up and click,
+  so `host.gestures` sees taps and drags; W3 also synthesizes `dblclick`
+  (the Fish Tank taps the glass) from the system's double-click time and
+  distance. A drag on bare desktop also draws Explorer's
+  selection rectangle; that's expected and harmless. Right and middle
+  buttons are never forwarded.
+- **Coordinates:** physical px → the surface's client px → CSS px (÷ its
+  rasterization scale).
+- **Delivery (settled by W0.4):** **moves** through
+  `CoreWebView2CompositionController.SendMouseInput` (real, trusted
+  `pointermove`s; Chromium coalesces them to its frame rate), plus `Leave`
+  when the cursor leaves a surface. **Clicks** by the Mac's approach:
+  `ExecuteScriptAsync` dispatching `PointerEvent`s and `MouseEvent`s at the
+  CSS point into the active `iframe.stage` (same origin under our virtual
+  host, so `contentDocument` is reachable). `SendMouseInput` presses work
+  too, but **WebView2 then takes the foreground** (our controller's parent
+  window becomes active despite `WS_EX_NOACTIVATE`), so keys typed on the
+  desktop afterwards would go to us; script clicks never move focus (owner:
+  an arrow key after a click still reached the desktop). No wallpaper reads
+  `isTrusted`. (Handing the foreground straight back works as well, but
+  leaves a ~100–200 ms gap where we hold it.)
+- **Chromium's input window (W0.2, W0.4):** visual hosting makes WebView2
+  create a top-level, full-screen `Chrome_WidgetWin_1` (layered, alpha 0),
+  placed directly above `Progman`. With the controller parented to the
+  *host*, it **swallows the first right-click on the desktop** and covers
+  every hit test (bare-desktop classifier: 0 of 24 right). With the
+  controller parented to **our own hidden window** (§10.25.5), it's harmless
+  (24 of 24, menus open first time), though it sits at the same place in the
+  z-order; why isn't known. Belt and braces: add `WS_EX_TRANSPARENT` to it
+  (cross-process `SetWindowLongPtr`, same user), found among the
+  environment's own process ids after every controller creation and
+  re-checked on the 5 s timer. `EnableWindow(false)` doesn't help.
+- **Settings (tray):** *Wallpaper Follows the Mouse* (moves) and *Clicks on
+  the Desktop Play* (taps), both on by default. Touchscreens arrive as mouse
+  raw input and just work.
+- **Keyboard:** never forwarded from the desktop (typing there jumps between
+  icons). Wallpapers that need keys (Quest; catalog `keys`) get
+  **Play in a Window**: the current wallpaper in a normal, focused,
+  resizable window where keys and clicks work natively. It also covers games
+  you'd rather play than watch.
+- **Elevated apps:** when an admin window has focus, Windows withholds raw
+  input from us (UIPI; W0.4: zero raw moves for 15 s with Task Manager
+  focused while the cursor crossed the screen, and a click lost its press).
+  `GetCursorPos` keeps working, so W3 polls it (~30 Hz) while raw input is
+  silent and the cursor moves: fish still follow. Clicks are lost until
+  focus moves (clicking the desktop moves it anyway). Accepted.
+
+*As built (W3, 2026-11-04; plan
+`docs/superpowers/plans/2026-11-04-windows-w3-interactivity.md`).*
+- **Where:** `Pointer.cs` (the hidden top-level `WallpapersPointer` window,
+  `WM_INPUT`, the classifier worker, delivery), `Core/Pointer.cs` (`HitTest`,
+  `PointerMap`, `MoveThrottle`, `CursorSource`), `Core/Gesture.cs`
+  (`GestureTracker`, `DoubleClickRule`, `PointerScript`), `Surface.SendMove`,
+  `SendLeave` and `SendPressAsync`, `PlayWindow.cs`. No hook anywhere;
+  `SetForegroundWindow` is never called; no button ever goes through
+  `SendMouseInput`.
+- **Moves:** coalesced to one per **16 ms** (the latest position is flushed
+  when a burst ends), to the visible surface under the cursor, over app
+  windows too; `Leave` when the cursor leaves a surface. A position counts as
+  a move when `GetCursorPos` changed, not by `lLastX/Y` (RDP's mouse is
+  absolute). Local px = physical − `Placement.Screen` origin, CSS = local ÷
+  that surface's `RasterizationScale`: one rule for real monitors (mixed DPI)
+  and fake layouts (the fit factor is in the scale).
+- **Clicks:** left down/up go through **one queue to one MTA worker**
+  (`pointer-uia`), so a down and its up reach the page in order or not at all.
+  Only when `WindowFromPoint` is a desktop class (`HitTest.IsDesktop`) is UI
+  Automation asked. **It is hand-written COM to UIAutomationCore, not WPF**
+  (controller ruling in Task 4's fix): `CUIAutomation8`
+  (`e22ad333-b25f-460c-83d0-0581107395c9`) with 500 ms connection and
+  transaction timeouts through `IUIAutomation2`, falling back to
+  `CUIAutomation` (no timeouts, logged); `ElementFromPoint`, then
+  `CurrentControlType == 50007` (`ListItem`) is an icon. `UseWPF` would have
+  cost 23 MB (the exe went 52.1 → 75.9 MB); the exe stays 52,154,922 bytes.
+  Any UIA failure counts the press as **bare** (owner's call).
+- **A press whose verdict arrives more than ~1 s after it is dropped as
+  stale** (debug log `(stale, N ms old)`), so a hung Explorer can't replay old
+  clicks, and breaks the double-click pair like any press that isn't
+  forwarded. A new down first releases a still-pressed surface (a missed up). A
+  gesture ends (the release is sent) when its pressed surface is hidden, and
+  hidden surfaces get no moves or `Leave`. A drag's moves go to the pressed
+  surface even off it, with `buttons 1`; with *Follows the Mouse* off the
+  release is followed by a `Leave`. A surface whose browser process has died
+  reads as not visible until it is rebuilt.
+- **Double click:** `GetDoubleClickTime()` and `SM_CXDOUBLECLK/SM_CYDOUBLECLK`
+  read when the pointer starts: a second bare press within that time, on the
+  same surface, within half the distance each way, adds `dblclick`
+  (`detail: 2`) to its release; a double resets the pair. The Fish Tank
+  therefore gets its glass tap and two foods.
+- **Raw input** is registered only while the toggles allow it and some surface
+  is visible (log `pointer: on …` / `pointer: off (no visible surface | both
+  toggles off)`); the 33 ms poll counts a sample only when raw input has been
+  silent for 250 ms.
+- **Settings:** `settings.json` gains `followMouse` and `desktopClicks`
+  (default true; old files read as true), the two tray rows after *Pause*.
+- **Play in a Window:** `index.html?host=windows&w=<id>`, a normal, focused,
+  resizable window (title `Wallpapers · <name>`, centred on the monitor
+  asked), unmuted (owner's call). The page has no corner buttons (§10.25.7
+  item 7); `,` and `f` work. Current behaviour: a pick or `n`/`p` inside it
+  writes the shared `wp:current`, so in Same mode it changes the desktop, as
+  the settings window does. A Play window is ours (by pid), so it never pauses
+  a desktop surface by coverage, even maximized over it.
+- **Verified (by script or self-test, over RDP at 200% and in the fake
+  layout):** `Pointer.FeedForTest` probes landed at (400, 300) on the real
+  surface and on fake monitor 2, with the foreground never ours;
+  `ClassifyForTest` on fake hosts took 1.5–19.8 ms (the first call includes
+  creating `CUIAutomation8`); the Play window opened three times (title,
+  centring, unmuted, renderer count back after close); deliberate-failure
+  runs (Task 7: a broken `Plan.Scale` path failed `pointer (fake monitor 2)`
+  at the tap, which is why the built-in fake layout is now two 1920×720
+  monitors: at 1280×720 the RDP fit factor was exactly 1 and the bug hid).
+- **Not verified:** real mouse input of any kind; an icon verdict from UIA on
+  real icons (every icon was under the owner's maximized terminal, so
+  `pointer classify` reported UIA correctly not asked); the stale drop (it
+  needs a hung Explorer); the app's CPU with the mouse busy (owner, Task
+  Manager: *pending (by hand)*); UIA timings against real icons (*pending
+  (by hand)*; W0.4 measured median 10 ms, p95 37 ms on the desktop).
+
+#### 10.25.9 Visibility and power (`Power.cs`, `Coverage.cs`)
+
+Everything becomes `WP.power({...})` on each page, as on Mac and Android,
+plus `IsVisible = false` on hidden web views (Chromium then stops rendering
+outright, the biggest saving).
+
+**Per-monitor coverage.** *(W0.2: needed for power, not just tidiness: a
+covered visual surface costs ~10× an exposed one, ~55% of a core against
+~5% for Harvest Valley; `IsVisible = false` stops frames at once and
+`visible` resumes them within a second.)*
+- Candidates: top-level windows that are visible, not minimized, not cloaked
+  (`DWMWA_CLOAKED`: other virtual desktops, suspended UWP apps, Task View),
+  not ours (our process and our WebView2 child processes: the full-screen
+  input overlay belongs to them), not shell windows (`Progman`, `WorkerW`, `Shell_TrayWnd`,
+  `Shell_SecondaryTrayWnd`), and not click-through overlays
+  (`WS_EX_TRANSPARENT`, or layered with alpha 0: GeForce and Discord
+  overlays are full-screen and must not pause us; a per-pixel-alpha overlay
+  from `UpdateLayeredWindow` without `WS_EX_TRANSPARENT` counts as covering).
+  Rects from
+  `DWMWA_EXTENDED_FRAME_BOUNDS` (excludes the invisible resize border).
+- **Covered** when ≥ 97% of the monitor's work area is under candidates
+  (rectangle subtraction in `Core/Coverage.cs`). That catches
+  fullscreen, maximized and two snapped halves.
+- **When:** `SetWinEventHook` (out of context) for foreground, show/hide,
+  minimize start/end, move-size end, cloak/uncloak and top-level location
+  changes; coalesced (it fires 150 ms after the first event; later events
+  don't push it back); plus a 2 s safety timer. An `EnumWindows` pass
+  is well under a millisecond.
+- **Hysteresis:** uncovered → resume at once (after the coalescing wait
+  above); covered → pause after 300 ms (Alt-Tab and window drags don't
+  flicker). Off in a fake layout.
+
+**All signals:**
+
+| Signal | Windows source | Effect |
+|---|---|---|
+| Monitor covered | coverage, above | that surface: `hidden` |
+| Fullscreen game / presentation | `SHQueryUserNotificationState` (`QUNS_RUNNING_D3D_FULL_SCREEN`, `QUNS_PRESENTATION_MODE`) | all: `hidden` |
+| Locked, user switched | `WTSRegisterSessionNotification` | all: `hidden` |
+| Display off, sleep | `RegisterPowerSettingNotification(GUID_CONSOLE_DISPLAY_STATE)`, `WM_POWERBROADCAST` | all: `hidden` |
+| Screen saver running | the saver tells the app over the pipe; `SPI_GETSCREENSAVERRUNNING` as backup | desktop: `hidden` |
+| Tray Pause | menu | all: `hidden` (paused) |
+| On battery | `GUID_ACDC_POWER_SOURCE`, `GUID_BATTERY_PERCENTAGE_REMAINING` | `battery {charging, level}` → ceiling Medium, Low under 20% (existing policy) |
+| Energy Saver on | `GUID_ENERGY_SAVER_STATUS` (Win 11), else `GUID_POWER_SAVING_STATUS` | `saver` → Low, 15 fps |
+| Remote Desktop | `GetSystemMetrics(SM_REMOTESESSION)` + session change | `remote` → Low, no extra fps cap (§10.25.7) |
+| Animation effects off | Chromium maps it to `prefers-reduced-motion` already | existing reduced-motion profile |
+
+This matches the owner's rule: battery and Energy Saver *lower* quality and
+never pause. Only invisibility pauses.
+
+*As built in W2 (`Core/Power.cs`, `Power.cs`):*
+- Lock and disconnect are re-polled every 2 s as well as notified, so a
+  missed message can't leave the wallpaper hidden. Fullscreen app and screen
+  saver are polled too.
+- A console display-off does not hide while the session is remote: the
+  display-state setting is the physical console, and an RDP viewer still sees
+  the wallpaper.
+- `DisplayOff` is never re-read: a missed display-on without a sleep leaves
+  the wallpaper hidden. A known limit. `Asleep` is cleared by a resume
+  message, or by the second 2 s poll tick after the suspend (a tick only
+  fires while the machine runs, so a missed resume or an aborted suspend
+  can't leave it hidden; logged `power: no resume message; awake again`).
+  In modern standby the ticks keep coming, which is harmless: `DisplayOff`
+  still hides.
+- Every surface gets its visibility set before any script is awaited, so one
+  hung page can't hold the others in the wrong state.
+
+**GPU on hybrid laptops:** WebView2 renders on the adapter Chromium picks
+(usually the one driving the display). Nothing to do; noted in the README for
+anyone who wants to force the power-saving GPU in Windows' Graphics settings.
+(README, Windows: Settings → System → Display → Graphics, add
+`Wallpapers.exe`.)
+
+**Sound:** web views are muted (`IsMuted`) on the desktop. *Allow Sound* in
+the tray (off by default) unmutes them; it matters once Jellyfin arrives
+(§10.25.19). A desktop that talks unexpectedly is a failure.
+
+#### 10.25.10 The tray (`Tray.cs`)
+
+Our icon (`web/icons/icon.svg` → `.ico` via `make icons`), tooltip = what's
+showing ("Wallpapers: Snow · Fish Tank"). Left or right click opens the same
+menu. Everything is here, since there are no hotkeys:
+
+```
+❄  Snow                                  (what's showing; per monitor in Different mode)
+Wallpaper                             ▸  catalog list, current ticked
+  — in Different mode this becomes one submenu per monitor:
+Monitor 1 · DELL U2720Q (main)        ▸  Wallpaper ▸ · Surprise Me · Next · Previous · Settings…
+Monitor 2 · LG 27GL850                ▸  …
+Surprise Me · Next · Previous            (all surfaces, in Same mode)
+───
+Pause / Resume
+Wallpaper Follows the Mouse           ✓
+Clicks on the Desktop Play            ✓
+Allow Sound
+Play in a Window…                        (current wallpaper; per monitor in Different)
+───
+Monitors                              ▸  ● Same on All · ○ Different per Monitor   (Span added later)
+                                         ── Identify Monitors (a big number on each for 3 s)
+Performance                           ▸  ● Auto · Low · Medium · High · ✓ Save Power on Battery
+                                         ── now: Medium, fewer · 30 fps · on battery
+Settings…                                (the panel; per monitor in Different)
+Screen Saver                          ▸  (§10.25.12)
+───
+Start with Windows                    ✓
+Troubleshooting                       ▸  Open Log Folder · Reload Wallpapers · Draw Above Icons · Developer Tools (debug builds)
+About Wallpapers 0.11.0
+Quit
+```
+
+- The catalog and current choice come from a page, as on the Mac
+  (`ExecuteScriptAsync` on the first surface: `WP.catalog`, `WP.store`).
+- Menu rows show the wallpaper's `thumb.webp` as a small image (Windows 11
+  decodes WebP through WIC) next to its name; falls back to the emoji.
+- Performance writes `wp:performance` through the page (`WP.store`), so the
+  panel, the tray and every surface agree.
+
+#### 10.25.11 Settings window (`SettingsWindow.cs`)
+
+The panel, exactly as Android and Mac do it: a normal window with
+`index.html?host=windows&panel=open` (`&display=<key>` in Different mode;
+the title says which monitor). Same user data folder, so changes reach the
+desktop through `storage` events, which Chromium fires across all pages of
+a profile. Remembers its size and position. Closing hides it. It shows in the
+taskbar only while open. The first-run hint (`wp:hinted`) is pre-set on
+desktop surfaces, like the Mac, because "press , for settings" is wrong on a
+desktop that ignores keys.
+
+#### 10.25.12 Screen saver (`Saver/`)
+
+**Shape.** The same exe, installed a second time as `Wallpapers.scr` next
+to `Wallpapers.exe`. `Program.cs` dispatches on arguments (`SaverArgs`
+handles `/s`, `/p 123`, `/p:123`, `/c`, `/c:456`, any case, and no argument =
+`/c` when the file is `.scr`).
+
+- **`/s` run:** one topmost borderless window per monitor, each with a WebView2 on `?host=windows-saver`.
+  Quality ceiling High. Exits on a key, a click, or the mouse moving more than
+  8 px from where it started; the cursor is hidden. Windows' *On resume,
+  display logon screen* works unchanged (Windows locks when our process
+  exits).
+- **`/p <hwnd>` preview:** a child window in the little monitor in
+  Windows' dialog, with a live web view; if that fails, the wallpaper's
+  `thumb.webp`. Exits when the parent window goes away.
+- **`/c` options:** brings up the tray app (starting it if needed) and opens
+  a small native dialog with the saver choices below. (Unlike the Mac's dead
+  Options button, this works.)
+
+**Choices (tray `Screen Saver ▸`):**
+```
+✓ Use Wallpapers as the Screen Saver…      (asks first; sets SCRNSAVE.EXE, ScreenSaveActive)
+Start After                             ▸  1 · 3 · 5 · 10 · 15 · 30 min        (ScreenSaveTimeOut)
+Show                                    ▸  ● Same as the Desktop · ○ A Different One Each Time · ○ One Wallpaper ▸
+Change Every                            ▸  1 · 5 · 15 · 30 min                 (for "Different")
+Show a Clock                            ✓  (the web clock overlay, §4.9: ?clock=drift)
+Preview Now
+Open Windows Screen Saver Settings…
+```
+Selecting writes `HKCU\Control Panel\Desktop` (`SCRNSAVE.EXE` = full path
+to our `.scr`, which Windows accepts outside `System32`), then
+`SystemParametersInfo(SPI_SETSCREENSAVEACTIVE / SPI_SETSCREENSAVETIMEOUT,
+SPIF_SENDCHANGE)`. Group Policy can override; we detect that and say so.
+"A Different One Each Time" skips Blank, Jellyfin and Bing (they need a
+network), and monitors avoid each other's wallpaper, as on the Mac.
+
+**Settings reach the saver.** **Settled by W0.3 (§10.25.21): the saver
+opens the same WebView2 user data folder as the app, and there is no
+mirror.** The two processes share one browser process and `localStorage`
+directly, in either start order: storage events arrive in ~1 ms, a saver
+started alone reads the last values, and a crash of the app leaves the
+saver's page running. **The environment options must be identical** (same
+browser arguments; a mismatch fails `CreateAsync` with `0x8007139F`), so
+both come from one place in the code. *(The superseded alternative was the
+Mac's `saver.json` mirror, `Core/Mirror.cs`; not built.)*
+
+**Watchdog** (from the Mac): the page's frame counter is checked every 4 s;
+two stalls reload, the next recreates the web view, the next shows the clock
+on black and retries every minute. A dead renderer
+(`ProcessFailed`) takes the same path.
+
+While the saver runs, it tells the tray app over the named pipe, and the
+desktop surfaces go `hidden`.
+
+*As built (W5, 2026-11-05; plan
+`docs/superpowers/plans/2026-11-05-windows-w5-screen-saver.md`).*
+- **Files.** Core: `SaverArgs` (the argument forms), `SaverSettings` (with
+  `SaverShow`, `PreviousSaver`, `SaverChoices`), `SaverPicker`, `SaverInput`
+  (the 8 px move rule), `SaverWatchdog` (the steps), `SaverRegistry` (with
+  `SaverRestore`) and `SaverLease`. App: `Saver/SaverMain.cs` (`/s`, `/p`, `/c`
+  entry), `SaverSession.cs` (the windows, rotation, pings, the state file),
+  `SaverWindow.cs` (one form per monitor: input, watchdog, fallback clock),
+  `SaverPreview.cs` (`/p`), `SaverSelection.cs` (the registry and
+  `SystemParametersInfo` side), `SaverControl.cs` (the tray's and the options
+  window's actions), `SaverOptionsWindow.cs` (`/c`). `Program.Main` dispatches
+  right after the uninstall stage-2 line: any `SaverArgs` mode other than none
+  goes to `SaverMain`.
+- **Dispatch.** `/s`, `/p <hwnd>` (also `/p:<hwnd>`, `-p`), `/c` (also
+  `/c:<hwnd>`); a `.scr` run with no argument is `/c`. `--selftest /s` is not a
+  saver. The saver logs to `saver-log.txt` beside `log.txt`, so a saver run never
+  interleaves with the tray app's log. Its state goes to `saver-state.json`
+  (written in the test flavour and with `WP_DEBUG`; the self-test reads it).
+- **`/s`.** Each window is a `Form` that holds a `Surface` (composition
+  hosting, the way the desktop does): the form gets every key, click and move
+  itself, and Chromium's full-screen, alpha-0 input window is made
+  click-through (`WebFactory.MakeOverlaysClickThrough`, shared with
+  `Desktop.FixOverlay`; re-run on every watchdog tick). The cursor is hidden;
+  the first window is activated; losing activation (`WM_ACTIVATEAPP` 0) ends
+  the saver ("deactivate"), as does `WM_CLOSE`. `SC_SCREENSAVE` is swallowed.
+  Quality ceiling is High.
+- **Different mode** loads each window on `?w=blank` and, once the page answers,
+  calls `WP.player.show(pick)` so the first frame is black and then crossfades
+  to the pick. Picks come from `SaverPicker` (never Blank, Jellyfin or Bing; no
+  monitor shows another's current wallpaper, and a rotation always changes
+  something). After a reload or recreate the window's kept pick is shown again.
+- **The desktop's saver flag is a lease.** The saver sends `saver-on` over the
+  pipe at once and every **4 s**; the app treats the saver as running for
+  **10 s** after the last ping (`SaverLease`, on the monotonic clock
+  `Environment.TickCount64`, so a wall clock set back can't stretch it), or while Windows says it is.
+  `saver-off` is queued behind any ping on its way. A saver that dies leaves the
+  desktop hidden for at most 10 s.
+- **Watchdog timings.** Every 4 s (1 s, 3 retry ticks in the test flavour) the
+  page's rAF counter is read with a 2 s timeout; no advance is a stall. Steps:
+  Reload, Recreate (new Surface), Fallback (clock on black), then a retry every
+  15 ticks (about a minute) that puts a new Surface under the clock and removes
+  the clock once frames advance. A dead renderer (`Surface.Lost`) takes the same
+  path. The watchdog waits while the saver's windows are hidden (locked,
+  display off).
+- **Fallback clock.** Native: the time in the user's format, white, Segoe UI
+  Light at a sixth of the height, on black, moving to a random spot each
+  minute. It is also what shows with no WebView2 runtime or a bad web root, and
+  when creating the WebView2 environment fails in any other way. Each window
+  starts on its own: one whose start throws is logged (`couldn't start …; its
+  watchdog takes over`) and the windows after it still start.
+- **`/p`.** `SaverPreview` makes a child window of Windows' preview host and
+  draws a live `Surface` at 0.5 `RasterizationScale`; if that can't start
+  (whatever it throws) it paints the app icon on black. It exits when the parent goes (500 ms poll, and
+  on `WM_DESTROY`). No pinging, input or watchdog.
+- **`/c`.** Sends `saver-options` over the pipe to the running app (after
+  `AllowSetForegroundWindow`), or starts `Wallpapers.exe --saver-options` beside
+  the `.scr` when nothing answers. The app opens `SaverOptionsWindow`: a native
+  dialog with the same choices as the tray, each applied at once.
+- **Selection.** `SaverSelection.Select` writes `SCRNSAVE.EXE` (the short 8.3
+  path when Windows gives one), `ScreenSaveActive=1`, and the timeout through
+  `SystemParametersInfo`; it returns the saver it replaced, which
+  `SaverControl` keeps as `Before` only when it isn't ours. A group policy
+  (`Software\Policies\Microsoft\Windows\Control Panel\Desktop`, HKCU and HKLM)
+  disables the item and its tooltip says why (while ours is selected, Use stays
+  enabled so it can still be unticked). Only the `run` flavour touches the
+  real `Control Panel\Desktop`; `test` and `dev` write
+  `Software\Wallpapers-<flavor>\…`.
+
+#### 10.25.13 Install, start, uninstall (`Install.cs`)
+
+- **The download** is a zip: `Wallpapers.exe` (self-contained, single-file,
+  .NET included, ~52 MB unpacked) and `web\`. Run `Wallpapers.exe` from
+  anywhere: if it isn't installed, it offers **Install** (copy to
+  `%LOCALAPPDATA%\Programs\Wallpapers`, a Start menu
+  shortcut, `Wallpapers.scr` (W5, below), an `HKCU\…\Uninstall` entry so it's in Settings → Apps, and
+  *Start with Windows* ticked), or **Just Run** from where it is.
+- **Updates:** running a newer exe offers to replace the installed one
+  (compared by version), restarting the app.
+- **Start with Windows:** `HKCU\…\CurrentVersion\Run`.
+- **Uninstall** (`--uninstall`, from Settings → Apps or the tray's About
+  dialog): quits the app, restores Windows' screen saver if it was ours
+  (to what it was before; we save that when selecting), removes the Run
+  key, shortcut, Uninstall entry and program folder. Asks whether to keep
+  settings (`%LOCALAPPDATA%\Wallpapers`).
+- **SmartScreen:** an unsigned exe from the internet shows "Windows
+  protected your PC" → *More info* → *Run anyway*. The README says so. Built
+  locally with `make win-install`, there's no Mark of the Web and no warning.
+- **Smart App Control (found in W0.2; changes the signing call):** the
+  owner's machine has SAC **on, enforcing**. It judges every unsigned binary
+  by its hash, from cloud reputation, with no *Run anyway*: during the spikes
+  it blocked 2 of about 20 local builds of `Spike.dll` outright (Code
+  Integrity events 3033/3077, SAC's policy `{0283ac0f-…}`); a blocked hash
+  stays blocked, and changing one log string gave a new hash that passed.
+  Local builds aren't exempt (no Mark of the Web needed). So an unsigned
+  release may simply not run on SAC machines, and day-to-day builds can be
+  refused at random. See Open questions. In W1 a refused exe run through WSL
+  interop showed only `Invalid argument` (PowerShell shows the real "An
+  Application Control policy has blocked this file"); `run.sh` treats both
+  as a refusal and builds again.
+- **Single instance:** a second launch tells the first (named pipe) to open
+  Settings, and exits.
+- No admin rights anywhere. No services, no scheduled tasks, no drivers.
+
+*As built (W4, 2026-11-04; plan `docs/superpowers/plans/2026-11-04-windows-w4-install-release.md`).*
+- **Files.** `Install.cs` (`Install(layout, log)`: `Apply`, the offer, stage 1
+  and 2 of uninstall), `ShellLink.cs` (`IShellLinkW` by hand-written COM, on an
+  STA thread, so the self-test can call it from anywhere), Core's
+  `InstallLayout` (`For(flavor, localAppData, roamingAppData)`, Windows paths
+  joined with `\` so Linux tests agree), `AppVersion`, `InstallOffer`,
+  `InstallSpecs` (the Run value, shortcut and Uninstall entry as data) and
+  `InstallArgs`. The `run` flavour installs to `%LOCALAPPDATA%\Programs\Wallpapers`
+  (`Wallpapers.exe`, `web\`); the `test` flavour adds `-test` to the folder,
+  the shortcut, the Run value and the key, and shows as `Wallpapers (test)`;
+  `dev` never installs or offers. The shortcut is
+  `%APPDATA%\Microsoft\Windows\Start Menu\Programs\Wallpapers.lnk`, the Run
+  value is `Wallpapers`, the key is `HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\Wallpapers`
+  (DisplayName, DisplayVersion, Publisher, DisplayIcon, InstallLocation,
+  InstallDate, `UninstallString` = `"<exe>" --uninstall`, `QuietUninstallString` =
+  that plus `--keep-settings`, NoModify, NoRepair, EstimatedSize,
+  URLInfoAbout). Everything is under `HKCU` and the user's profile: no UAC,
+  `asInvoker` stays.
+- **The offer.** Run flavour, not `--just-run`, not already running from the
+  install folder: not installed and not declined before → *Install* / *Just
+  Run*; installed and this exe newer → *Update* / *Just Run*; installed and the
+  same or older → no dialog (one log line), run. Versions compare
+  `major.minor.patch` numerically, then the `+` build stamp (`build.sh`'s
+  `InformationalVersion`); the dialog drops the stamp (so a local rebuild reads
+  "Update 0.10.3 → 0.10.3"). *Just Run* is remembered (`settings.json`
+  `"offerInstall": false`) and an update is still offered after it; closing
+  the dialog with X or Esc asks again next time. `run.sh`'s `run` and `dev`
+  pass `--just-run`, so developing never offers. The offer runs **before** the
+  single-instance check, so a newer download offers Update while the installed
+  app runs; the same or an older exe falls through to the second-instance path
+  (the first app opens Settings). Before any of it, an exe with no `web\`
+  beside it (opened inside the zip from Explorer, which copies only the exe
+  to `%TEMP%`) shows one dialog, *Unzip the whole download first*, and exits:
+  no offer, nothing saved. The tray's *Install…* over an installed copy (one
+  run with *Just Run*) asks *Replace … with …?* and keeps *Start with
+  Windows* as it was.
+- **Apply (install and update).** Checks the source has `web\` and a version,
+  asks a running app to quit over the pipe (run flavour) and waits up to 15 s
+  for the mutex and for the exe's lock, then **stages and swaps**: copies to
+  `Wallpapers.exe.new` and `web.new`, swaps the exe first (the step a lock
+  stops), then `web` → `web.old`, `web.new` → `web`, deletes `web.old`. Any
+  failure rolls back to the old install, cleans the staged items, and **starts
+  the old copy again** if it quit it, even when the exe then stayed locked
+  past the deadline; on a StillRunning timeout where the app never quit there
+  is nothing to restart. Either way the dialog says the installed copy keeps
+  running and the download exits (no race for the mutex); with nothing
+  running, it runs from here this time.
+  Then the Uninstall entry, the shortcut, and for a fresh install only the Run
+  value (an update leaves the user's *Start with Windows* choice alone). `--install`
+  run from the installed exe skips the copy. Settings are never copied or
+  removed. `Apply` never throws; it returns the reason.
+- **Start with Windows** is the Run value, ticked from the registry each time
+  the tray opens (no registry read per page event). Not installed: the row
+  becomes **Install…**, which hands over: it releases the mutex, starts the
+  installed exe and quits.
+- **Uninstall.** `--uninstall` (stage 1) deletes stale
+  `%TEMP%\Wallpapers-uninstall-*.exe`, copies the running exe to
+  `%TEMP%\Wallpapers-uninstall-<stamp>.exe` and starts it with
+  `--uninstall-stage2 "<root>"` (working directory `%TEMP%`, so nothing holds the
+  root), then exits. **Stage 2 acts only on the run or test install folder**:
+  any other root logs `that isn't an install folder; nothing removed` and exits
+  1, so a command line can't point it at another folder. It asks *Keep My
+  Settings* / *Delete My Settings Too* / *Cancel* (unless `--keep-settings` or
+  `--delete-settings`), quits the running app, removes the Run value, the
+  Uninstall key, the shortcut and the folder (and `%LOCALAPPDATA%\Wallpapers`
+  when told; folders retry for ~3 s because WebView2 helpers linger), logs
+  every step to `%TEMP%\Wallpapers-uninstall.log`, shows a result dialog when
+  it asked, and deletes its own copy through a hidden `cmd` after a ping delay.
+  A step that fails doesn't stop the others and is named in the result.
+  `RestoreSaver()` was an empty hook until W5 (below).
+- *As built (W5, 2026-11-05).* `Wallpapers.scr` is now created: a **full copy
+  of the exe** (about 52 MB more on disk; a hard link or a tiny stub would be
+  smaller, but the `.scr` must run on its own and survive the exe being
+  replaced), staged as `Wallpapers.scr.new` and swapped with the exe and `web\`
+  in `CopyAndSwap` (move aside exe, `.scr`, web; move in; roll back all three on
+  failure). A running saver locks the `.scr`, which `CanOpenAlone` checks before
+  anything is staged: the update stops with "Wallpapers.scr is in use (the
+  screen saver may be running); try again when it has stopped". `--install`
+  from the install folder (the copy skipped) makes the `.scr` when it is missing
+  or a different length (`EnsureSaver`). `RestoreSaver` is real: it reads
+  `settings.json`'s `Saver`, and if `SCRNSAVE.EXE` is ours puts back the saved
+  `Before` (deleting the value when there was none); it runs first in the
+  removal plan, and a failure is named in the result as "screen saver". An
+  update notes whether ours was selected before the swap; if so and the stored
+  `SCRNSAVE.EXE` no longer names our file afterwards (an 8.3 name that went with
+  the old `.scr`), `SaverSelection.KeepSelected` writes the new short path
+  (this flavour's key only; best effort, logged).
+- **About** is a TaskDialog: version, WebView2 runtime, data folder, wallpapers
+  folder, `Installed in <root>` or `Running from … (not installed)`; **Close**,
+  **Uninstall…** (installed only) and **Project Page** (opens the homepage,
+  which `build.sh` stamps into the exe from `web/manifest.json`'s
+  `homepage_url`; it is never written in C#; the dialog stays open).
+- **No online update check.** An update is a newer download run by hand. The
+  app makes no network call to install or update, and no telemetry.
+- **Sizes.** The installed folder is about 53 MB (EstimatedSize 54441 KB for
+  0.10.3). The exe is compressed inside the single file, so `strings` on
+  `Wallpapers.exe` doesn't find the homepage; read the Uninstall entry's
+  `URLInfoAbout`, or `strings` the `obj` DLL.
+- **Signing** is optional and off until the secrets exist (§10.25.15,
+  Open questions). Unsigned, a downloaded copy shows SmartScreen, and Smart App
+  Control can refuse a hash.
+
+#### 10.25.14 Web view details (`WebFactory.cs`)
+
+- One `CoreWebView2Environment` for the app, user data folder as in §4.
+  Browser arguments: none needed (W0.2); `--disable-features=
+  CalculateNativeWinOcclusion` may be kept as cheap insurance. DevTools and
+  `--remote-debugging-port` only with `WP_DEBUG=1`.
+- **Serving `web/`:** pages load from `https://wallpapers.example/`: one
+  origin for every web view (shared storage), a secure context (battery
+  API, geolocation), the CSP holds, no local server, no open port. `.example`
+  is reserved and never resolves. The app answers every request to that
+  origin itself, in `WebResourceRequested` (filter `https://wallpapers.example/*`),
+  from the web folder (`Core/WebFiles.cs`: nothing outside it, `..` and
+  backslashes refused, 404 otherwise; `Cache-Control: no-cache`, so *Reload
+  Wallpapers* shows an edit). *Not* `SetVirtualHostNameToFolderMapping`, the
+  first design: `WebResourceRequested` never fires for a mapped host
+  ([Microsoft's docs](https://learn.microsoft.com/microsoft-edge/webview2/how-to/webresourcerequested)),
+  so `bing.json` fell through to the folder and failed; `--selftest`'s
+  `bing.json` check found it (W1, 2026-11-03). `WP_WEB_ROOT` overrides the
+  folder for development (§10.25.15).
+- **`bing.json`:** the same handler sends
+  `https://wallpapers.example/bing.json` to `BingJson.cs`, which fetches Bing's
+  archive natively (no CORS for the app) in `tools/bing.mjs`'s shape, cached
+  an hour, with `X-Wallpapers-Bing: native` (503 when Bing can't be reached).
+  `bing.js` already fetches `bing.json` on non-`http:` pages.
+- **Navigation:** only our origin and `about:` load; any `http(s)` link
+  (Bing's credit) opens the default browser; new windows likewise.
+- **Console:** page errors go to the log (`WP_DEBUG=1`: everything).
+- Default background black, so a slow first load isn't white.
+
+#### 10.25.15 Build, develop, test, ship
+
+**Toolchain.** .NET 10 SDK (current LTS). It cross-compiles Windows desktop
+apps on Linux (`EnableWindowsTargeting=true`), so the whole build runs in
+WSL and on Ubuntu CI. Running it needs Windows; WSL launches Windows exes
+directly.
+
+**Make targets (new, each with a `##` description; README Development
+section):**
+
+| Target | Does |
+|---|---|
+| `win-build` | `windows/build.sh`: publish win-x64 self-contained single-file to `dist/win/`, copy `web/` beside it, stamp `web/manifest.json`'s version |
+| `win-unit` | `dotnet test` over Core (runs in WSL/Linux, no Windows needed) |
+| `win-dev` | build, copy to `%LOCALAPPDATA%\Wallpapers-dev\` on the Windows side (found with `wslpath` and `cmd.exe /c echo %LOCALAPPDATA%`), and run it with `WP_WEB_ROOT` pointing at this checkout's `web/` through `\\wsl.localhost\…`, so a web edit + *Reload Wallpapers* shows at once. Uses a separate user data folder (`Wallpapers-dev`), never the installed app's. *As built:* the UNC path works as is (the app reads the files itself, §10.25.14); no copy needed |
+| `win-reload` | reload a running app's pages (`--reload`; the `win-dev` one by default) |
+| `win-run` | build and run the built exe (normal settings) |
+| `win-test` | `--selftest` against a throwaway user data folder (below); needs Windows (WSL interop or CI) |
+| `win-saver` | *As built (W5):* `BUILD=1 windows/run.sh saver` copies `dist/win` to its own `Wallpapers-build\saver` (so it quits nothing: the app you're running stays, and stands aside while the saver runs, as for a real one), runs `Wallpapers.exe /s` (your settings, read-only) full screen, waits for that one process (Start-Process, so WSL's pipes aren't inherited; its error output is where a refused build shows, since the usual `--quit` probe would stop the running app), then prints the last 40 lines of `saver-log.txt`. `windows/run.sh log saver` (`make win-log FLAVOR=saver`) shows that log. It takes over the owner's screen: run it only when you mean to |
+| `win-install` / `win-uninstall` | install/uninstall the built app for this Windows user. *As built:* `windows/run.sh install` copies `dist/win` to `Wallpapers-build\install`, runs `--install` there and waits on that one process (started straight from WSL the installed app would inherit WSL's pipes); `win-uninstall` runs the installed exe's `--uninstall --keep-settings` (`DELETE_SETTINGS=1` adds `--delete-settings`). With nothing installed it says so and exits 0 |
+| `win-test-zip` | the same `--selftest` against the app inside `dist/wallpapers-windows-<version>.zip`, unzipped to `dist/win-zip/`: what ships is what's tested. Works from WSL or Git Bash (`run.sh` takes `DIST=`; `cygpath` on Git Bash) |
+| `win-sign-tools` | installs `osslsigncode` (apt, sudo) if missing; CI runs it before a signed release |
+| `win-log` | tail the log |
+| `win-sign` | `windows/sign.sh dist/win/Wallpapers.exe`: Azure Trusted Signing through jsign 7.6 (pinned sha256, cached under `dist/wallpapers-tools` or `$XDG_CACHE_HOME`; token by Entra client credentials). All six `WALLPAPERS_SIGN_*` variables set signs; none prints `unsigned (no WALLPAPERS_SIGN_* variables)`; a partial set exits 1 naming the missing ones. `win-release` calls it after the build, runs `osslsigncode verify` against Microsoft's root certificate (downloaded, sha256-pinned) if it signed, and ends `…, signed` or `…, unsigned`. `sign.sh --fetch` downloads and checks jsign and the root without secrets. **The token is jsign's `--storepass`, so it appears in jsign's argv (the process list) while signing**: fine on a CI runner, noted for a shared machine. **The signed path (token, sign, `osslsigncode verify`) has not run yet**: there are no secrets; only the unsigned path, a partial-set failure and `--fetch` were exercised |
+| `win-release` | `windows/release.sh`: build, check, `dist/wallpapers-windows-<version>.zip` + `.sha256`. *Built ahead of W4 (owner, 2026-11-03):* the `ci` job runs it on every push and uploads `wallpapers-windows`; the `release` job attaches it. The installer and the `win` job came in W4 (below) |
+
+`make ci` stays as it is, except `win-unit` joins it when `dotnet` is on the
+PATH (skipped with a note otherwise, so contributors without .NET aren't
+blocked).
+
+**`--selftest`** (like `mac-test`, about 30 s, prints one line per check, exits
+non-zero on failure):
+*As built (W2), `make win-test` runs these checks:* `layer`, `animates` and
+`insets` (per surface), `overlay`, `storage`, `pause`, `coverage`, `power`,
+`display=`, `resize in place`, `resize in place (monitor removed)`,
+`performance` low/medium/high/auto, `performance battery toggle`,
+`bing.json`, `shell restart (simulated)`, `renderer crash`,
+`power after reload`, `cleanup`, and with `--bad-web-root` the `web root`
+check. About 45 s. *W3 adds* the pointer checks: `pointer move`, `pointer
+tap`, `pointer double click`, `pointer icon`, `pointer hidden`, `pointer
+toggles`, `pointer classify` and `pointer (fake monitor 2)`; the run is now
+about 50 s. *W4 adds* `install`, `update`, `update (busy exe)` and `uninstall`
+(after `cleanup`, since they need no surfaces; the busy-exe check takes about
+15 s, the wait it proves). They use the **test layout only**, refuse to run
+against any other, and remove everything in a `finally`, so the real install
+is never touched. Details that matter:
+- The pointer checks never synthesize input: they feed the forwarder
+  (`Pointer.FeedForTest`) and classify real points without clicking
+  (`ClassifyForTest`). The built-in fake layout is **two 1920×720 monitors**,
+  so over RDP the fit factor is not 1 and a plan-scale bug shows. `pointer
+  classify` needs desktop icons, and some of them or bare desktop in view:
+  it SKIPs when the desktop has no icons or every point is covered (as it
+  usually is over RDP, where the maximized terminal fills the one monitor;
+  nothing else about RDP skips it); PASS reads `n of n right; uia median …`.
+- `coverage` starts `Wallpapers.exe --cover-for-test <monitor 1 work area>`
+  (a borderless, non-activating window, not a real maximize, so it takes no
+  focus from whoever is working), checks that only monitor 1 hides, that the
+  foreground window is unchanged and that closing it resumes. It is SKIPped
+  when something already covers every surface. Coverage is off for the other
+  checks' frames and on only for this one.
+- `display=` and the two `resize in place` checks always run in a built-in
+  fake two-monitor layout, even at the console with two real monitors.
+- The `performance` checks compare against the stricter of the picked mode
+  and the page's ceiling (battery, Energy Saver or Remote Desktop can lower
+  it); `power` asserts the JSON the page last received.
+
+*The design's list (numbers as in the plan):*
+1. Desktop layer found (layout name logged); host attached below the icons;
+   Z-order correct.
+2. Every surface's page reports ready and its frame counter advances (proves
+   W0.2's occlusion fix is in place).
+3. A setting written in a second web view arrives as a `storage` event on the
+   desktop page.
+4. `WP.power({hidden})` freezes frames; resume restarts them; `IsVisible`
+   follows.
+5. Coverage: a test window covering a monitor's work area hides that surface
+   only; closing it resumes.
+6. Pointer: a synthetic move/click fed through the forwarder lands in the
+   page (`host.gestures` sees a tap at the right CSS px).
+7. `display=` keeps two monitors' choices apart (fake two-monitor layout, below).
+8. Explorer-restart path: re-attach after destroying our parent (simulated;
+   never kills the real Explorer).
+9. Saver: `/s` in a harness, frames advance, input ends it; the watchdog's
+   three steps; `/p` into a test parent.
+   *As built (W5):* check 9 is the lines `saver run`, `saver overlay`,
+   `saver rotation`, `saver input (move)`, `saver hides the desktop`,
+   `saver input (key)`, `saver input (click)`, `saver watchdog`, `saver start fault`, `saver preview`,
+   `saver options (/c)` and `saver menu`, plus `saver selection` and the
+   `.scr` / `uninstall restores the saver` additions to the install lines. The
+   self-test runs the saver **only in harness windows** (`--saver-window`: 480×270
+   windows inside the work area, not topmost, cursor shown, never activated,
+   deactivation ignored; `--saver-change-ms`, `--saver-stall`, `--saver-fault window|webview2`: the first
+   window's start or the WebView2 environment throws an exception no handler filters for, and the other
+   window still draws, or every window shows the clock), so it never takes
+   the screen, and it selects the saver **only in a scratch key**
+   (`Software\Wallpapers-test\…`, deleted at the start and the end; it refuses to
+   run if the key would be the real `Control Panel\Desktop`). The tray menu check
+   only reads the menu. `TimeoutSeconds` is 240.
+10. Quit cleanup leaves no host windows.
+
+**Core unit tests (xUnit, Linux):** surfaces and insets for side-by-side,
+stacked, offset, mixed-size and negative-origin layouts; coverage math
+(maximized, two snapped halves, 96% vs 98%, overlays ignored); display key
+stability; saver argument forms; page URL encoding.
+
+**CI:**
+- `ci` (Ubuntu): `make win-build` and `make win-unit` (cross-compile proves
+  it builds on every push), `make win-release`, and the `wallpapers-windows`
+  artifact. On tags, `make win-release` also gets the six `WALLPAPERS_SIGN_*`
+  secrets (`make win-sign-tools` installs `osslsigncode` first, only when the
+  secrets exist).
+- *As built (W4):* the `win` job (`windows-2025`, `needs: ci`, 15 min limit,
+  Git Bash) **downloads that zip and runs `make win-test-zip`** on it; it
+  doesn't build again, so what ships is what was tested. It uploads
+  `wallpapers-windows-selftest` (the report and the log). **Runner facts
+  (image `windows-2025-vs2026` 20261030):** it has an Explorer desktop
+  (`layer` passes as *Raised*, so `--no-desktop` isn't needed), GNU make is
+  preinstalled (a `choco install make` fallback never ran), the WebView2
+  runtime is preinstalled (156.0; a step installs it only when missing and
+  prints its version), and the screen is a fixed **1024×768** at scale 1 that
+  `Set-DisplayResolution` refuses to enlarge. `pointer classify` SKIPs there
+  (every icon is covered). The job takes about 75 s.
+- `release` job: `needs: [ci, android, mac, win]`; it attaches the zip and
+  checksum only when `needs.win.result == 'success'`, otherwise it prints a
+  warning and releases without the Windows app, as it does for a failed Mac
+  build (§10.25.20).
+- **Fake monitors and WebView2's scale floor.** WebView2 renders no smaller
+  than about 0.5 `RasterizationScale`, so a fake layout fitted below that
+  maps pointers wrongly (the checks measured the floor, not the app). The
+  self-test keeps the built-in 1920×720 pair while `FakeLayout.Fit` for it
+  (5% margin, both limits) is in [0.5, 1), and otherwise sizes the pair to fit
+  at about 0.75 (648×360 on the runner; 1920×720 on the owner's RDP screen at
+  0.727). `pointer (fake monitor 2)` SKIPs when the measured scale is ≥ 0.99 or
+  < 0.5, so it can never pass vacuously at 1. `pointer classify` SKIPs when only
+  icons or only bare desktop were in view.
+
+**Planning for two monitors before testing on them (owner: test later, plan
+now).** Development mostly happens over Remote Desktop, which shows one
+virtual screen. So nothing multi-monitor may depend on a second monitor being
+there to work:
+- All layout logic (surfaces, insets, display keys, coverage) lives in
+  `Wallpapers.Core` and is unit-tested against recorded layouts: side by
+  side, stacked, offset, mixed sizes, mixed DPI, negative origins, a taskbar
+  on each edge. Real layouts are captured with `Wallpapers.exe --dump-displays`
+  (JSON: monitors, work areas, scales, keys) and added as fixtures.
+- `WP_FAKE_DISPLAYS=<file.json>` makes the app lay its surfaces out as
+  if that layout were real, each in an ordinary window (not behind the
+  icons), so Different mode, the tray's per-monitor submenus,
+  hot-plug (edit the file) and pointer mapping can be exercised on one
+  screen. `--selftest` check 7 uses it.
+- `run.sh` passes `WP_FAKE_DISPLAYS` through to the Windows side (as a
+  translated path; keep the file under `/mnt/c` so Windows sees edits):
+  `WP_FAKE_DISPLAYS=/mnt/c/…/displays.json BUILD=1 windows/run.sh dev`.
+- The owner's RDP client can also present both physical monitors
+  (*Use all my monitors*), a cheap real two-monitor check before W6.
+
+**By hand (the owner, at the console with two monitors, W6):** icons, right-click
+menu, rubber band and icon drag still work; Win+D; Task View and virtual
+desktops; a fullscreen game; snapped windows; unplug/replug a monitor; a
+different scale on each monitor; sleep/wake; lock; Explorer restart from
+Task Manager; RDP in and out; the saver from Windows' dialog; uninstall.
+
+#### 10.25.16 Roadmap
+
+- **W0 Spikes: prove it (throwaway code; each ends with a result written into
+  *Spike results* below, like the Mac's M0).**
+  - W0.1 Behind the icons on 25H2: a host window with a plain coloured
+    panel, in each layout candidate. → visible behind icons, icons and
+    right-click work, survives Explorer restart. Record what worked.
+  - W0.2 WebView2 in it: `index.html?w=fishtank` (the Fish Tank; the id was misnamed `aquarium` here at first) animating at display rate
+    behind the icons for 10 minutes. Try windowed + occlusion flags, then
+    visual hosting. → pick one; record fps and CPU.
+  - W0.3 Two processes on one user data folder (app + saver). → works or
+    mirror.
+  - W0.4 Raw Input + bare-desktop hit test: log moves and taps; icons
+    excluded.
+  - **Gate (owner):** W0.1 + W0.2 must pass. If a live web page can't run
+    behind the icons on 25H2, **the project stops**: no tray-only or
+    saver-only consolation release, and drawing in front of the icons is
+    not an acceptable default. Nothing past W0 is built before the gate.
+  - **Where the spikes run:** over Remote Desktop is fine for W0 (the owner's
+    usual session). Record the session type with every result, measure W0.2
+    with the `remote` ceiling overridden (`?tier=high`), and note that the
+    console's layout must be re-checked later (§10.25.15, two-monitor pass).
+- **W1 Desktop core:** project skeleton, `make win-*` targets, install-free
+  run, attach, one surface per monitor in Same mode, insets, tray (pick,
+  next, pause, settings, quit), settings window, bing.json, Explorer
+  restart, quit cleanup, self-test checks 1–4 and 10. Web changes §7.1–7.2.
+
+  *As built (2026-11-03; plan `docs/superpowers/plans/2026-11-03-windows-w1-desktop-core.md`).*
+  Windows 11 25H2 over Remote Desktop, one monitor at 200%.
+  - **Self-test** (`make win-test`, ~27 s, all pass): layer, animates,
+    storage, pause, insets, overlay, bing.json, shell restart (simulated),
+    renderer crash (reloaded and animating in ~1.5 s), cleanup; and
+    `WIN_ARGS=--bad-web-root`. Check 8 was first run against a broken path
+    (no rebind) and failed, as it should.
+  - **By hand (owner):** the scene behind the icons with the ground above
+    the taskbar; right-click on the first try, icon drag and double-click,
+    rubber band; an Explorer restart (re-bound in ~170 ms, no reload); every
+    tray item; Quit gives back Windows' picture. By script: a pick in the
+    settings window reaches the desktop; the window reopens where it was.
+    A live RDP resize (1686 → 1844 px tall) rebuilt the surface in 0.6 s
+    with the insets right, but twice (Windows sent two bursts) and each
+    rebuild reloads the page: resizing in place belongs to W2's hot-plug
+    and DPI work. An RDP disconnect and reconnect, and a resize, both
+    checked by the owner: the scene fills the new screen.
+  - **Changed from the design:** the app serves its origin itself
+    (§10.25.14; the folder mapping never let `bing.json` through, which the
+    self-test found); a crash exits after its cleanup (with no wallpaper and
+    no tray left, staying would only hold the single-instance lock); Next
+    and Previous step on the first surface and tell the others (stepping
+    each would race through storage events); the panel's × or Esc closes
+    the settings window; `--reload` and `make win-reload`.
+  - **Not in W1** (as planned): the mouse (W3), Different mode and the
+    Performance menu (W2), install and Start with Windows (W4), the saver (W5).
+- **W2 Monitors and power:** Different mode and display keys, hot-plug and
+  DPI, coverage pause, every power signal, Performance menu, Identify
+  Monitors. Web §7.3, §7.5. Self-test 5, 7.
+
+  *As built (2026-11-04; plan
+  `docs/superpowers/plans/2026-11-04-windows-w2-monitors-power.md`).* Built
+  and checked over Remote Desktop (one monitor at 200%) and in fake
+  two-monitor layouts; the console pass with real hardware is pending.
+  - **Built:** display keys from `QueryDisplayConfig` (§10.25.6); Same and
+    Different per Monitor (`wp:current@<key>`, with `?display=`, §10.25.7);
+    reconcile in place on display, DPI and taskbar changes, with a failed
+    surface start retried by the 5 s watch (5 s, then every 30 s); per-monitor
+    coverage pause (§10.25.9); every power signal, with lock and disconnect
+    re-polled; Remote Desktop → ceiling Low and no extra fps cap (owner
+    decision, 2026-11-04); the tray's Monitors menu (Same / Different,
+    Identify Monitors), per-monitor wallpaper and Settings submenus, and the
+    Performance menu (Auto, Low, Medium, High, Save Power on Battery, a
+    "now:" line); `WP_FAKE_DISPLAYS`; `--dump-displays`.
+  - **Verified (by script or self-test):** `make win-unit` (135+ tests,
+    including the recorded layouts), `make win-test` (all pass, ~45 s) over
+    RDP, the fake layouts (a resize or an unplug keeps the other page; a
+    taskbar move navigates only that surface; `display=` in the URLs; a
+    monitor 2 whose start was made to fail came back 5 s later, and with
+    three failures in a row, retried at 5, 35 and 65 s), the
+    coverage gate on RDP (covered ~450 ms after the window appears,
+    uncovered ~150 ms after it closes), power reaching every page, the
+    Performance picks (RDP shows Low for all of them, by its ceiling), the
+    key `m-5b3fcd` stable across two RDP runs, and menus and Identify
+    Monitors on RDP and in fake layouts.
+  - **Not verified, and known limits:** a real second monitor; a real
+    unplug; lock, sleep, display-off and battery transitions (the owner is
+    usually on RDP, so none were triggered); `DisplayOff` is never re-read
+    (§10.25.9); the self-test's `display=` and resize checks never use real
+    monitors.
+  - **Still to check by hand (owner, at the console with two monitors, then
+    over RDP).** Watch `make win-log FOLLOW=1` (normal app, `make win-run`).
+    1. *Keys.* `WIN_ARGS=--dump-displays make win-run`, open
+       `%LOCALAPPDATA%\Wallpapers\displays.json`: two monitors, each with a
+       `path`, a friendly `name` and an `m-xxxxxx` key, no key twice. Run it
+       again, and again after a reboot: same keys.
+    2. *Start.* Two `reconcile: added m-…` lines, a surface behind the icons
+       on each monitor.
+    3. *Monitors menu.* Different per Monitor: both keep what they showed;
+       rows `1 …` and `2 …`, then `Monitor 1 · <name> (main)` and
+       `Monitor 2 · <name>` with the real model names.
+    4. *Different mode.* Monitor 2 ▸ Wallpaper ▸ Fish Tank changes only
+       monitor 2; the tooltip reads `Wallpapers: <m1> · Fish Tank`. Quit and
+       start: both kept. Monitor 2 ▸ Settings…: title
+       `Wallpapers Settings · Monitor 2 · <name>`; a pick in the panel changes
+       only monitor 2; Monitor 1 ▸ Settings… moves the same window to monitor
+       1. Back to Same on All: both show `wp:current`, and the window title
+       is plain again.
+    5. *Identify Monitors,* with a window focused on each monitor: "1" and
+       "2" (names, "(main)" on the primary) centred on the right screens for
+       3 s; the same relative size on a 4K@250% and a 1080p@150% panel; the
+       typing focus stays; clicks pass through.
+    6. *Unplug monitor 2* (or Settings → Display → Disconnect this display;
+       or toggle RDP *Use all my monitors*) with the menu on Different:
+       `removed m-…`, monitor 1 doesn't reload, its submenu and row go.
+       Plug it back: `added m-…` with the same key and its old wallpaper.
+    7. *Scale change on one monitor* (Settings → Display): `reconcile: kept
+       m-… (moved WxH@1.5 → WxH@1.25)`, no `navigating` line, the scene
+       redraws sharp and keeps its state.
+    8. *Resolution change; taskbar moved to the left:* `kept … (moved …)`;
+       the taskbar gives `kept … (insets … → …)` and only that surface
+       navigates.
+    9. *Explorer restart* (Task Manager) with real hosts: W1's re-bind, no
+       reload (only simulated so far).
+    10. *RDP live resize:* `kept m-… (moved 2940x1686@2 → 2940x1844@2)`, no
+        reload.
+    11. *Coverage.* Maximize a window on monitor 2: within ~0.5 s
+        `coverage: <key> covered (…%)` and `IsVisible=false` for that surface
+        only; restore: `uncovered` and `IsVisible=true` within ~150 ms. Then:
+        snap two windows left and right on monitor 1 (covered; un-snap one,
+        uncovered); a window straddling both monitors, maximized on neither
+        (neither covered); a GeForce or Discord overlay, if present (no
+        `coverage:` line); a maximized window on another virtual desktop
+        (no pause in Task View; switch to that desktop: covered; back:
+        uncovered); Alt-Tab between a maximized and a half-snapped window
+        (follows the end state, no burst of flips); the tray menu and the
+        Settings window maximized over a monitor (no pause: they're ours);
+        taskbar on auto-hide with a maximized window (covered).
+    12. *Lock.* Win+L, then unlock: `power: session lock`, `power: locked, …`,
+        `IsVisible=false` on every surface; then `power: session unlock`,
+        `IsVisible=true`, animating within a second. This also confirms that
+        the 2 s poll's `WTSINFOEX` lock flag (`SessionFlags`) reads right on
+        Windows 10 and 11, since it now overrides the notifications.
+    13. *Display off.* `powercfg /change monitor-timeout-ac 1` and wait (or
+        lock and let the monitors sleep): `power: display off`,
+        `IsVisible=false`; on wake `power: display on`, `IsVisible=true`.
+        Over RDP the same timeout must not hide it (the state reads
+        `display off, remote`, no `IsVisible=false`).
+    14. *Sleep and wake:* `power: suspending` (it may not reach the log
+        before the freeze), then `power: resumed`, a state without `asleep`
+        or `display off`, `IsVisible=true` even if no `display on` follows.
+    15. *RDP disconnect and reconnect:* `power: session disconnect`, then
+        `disconnected, remote`, `IsVisible=false`; on reconnect `power:
+        session connect`, `remote`, `IsVisible=true`. A console↔RDP switch
+        adds or removes `remote`. After a reconnect, dump displays again: is
+        the key still `m-5b3fcd`? If not, the RDP path isn't stable across
+        sessions and Different mode loses its choices over RDP. Also redo
+        item 3–4 with Different mode kept across a restart and a reconnect.
+    16. *Battery.* Unplug the laptop: `power: …, on battery NN%`, the
+        `?hud=1` line shows `on battery` (`battery low` under 20%); plug in:
+        `charging NN%`. Quality drops, nothing pauses.
+    17. *Energy Saver* (Quick Settings, or below its threshold): `energy
+        saver`; the page shows `battery saver` and a 15 fps cap.
+    18. *Fullscreen game or presentation mode, and the screen saver*
+        (`scrnsave.scr /s`, or a short timeout): `fullscreen app` or `screen
+        saver` within 2 s, `IsVisible=false`.
+    19. *Performance menu,* on the console (not RDP): Low, Medium, High
+        change the scene's quality (`?hud=1`) and the status line within
+        ~1 s; the Settings panel shows the same mode; in Different mode all
+        monitors follow. Toggle Save Power on Battery on battery.
+    20. *`make win-test` at the console with two monitors,* with no
+        maximized window on monitor 1: `PASS coverage` with "1 other
+        surface(s) unchanged" and "focus kept". On battery, `performance
+        high` reads "stage says Medium (expected medium, ceiling medium)" and
+        still passes; `power` shows `"battery":{"charging":false,…}` and
+        the reason `on battery`. At the console `power` shows
+        `"remote":false` and no `remote desktop` reason.
+    21. *Remote Desktop:* the `remote desktop` reason appears and the stage
+        runs at Low with no extra fps cap.
+  - **Changed from the design:** SetModeAsync leaves persistence to the
+    tray; lock and disconnect are polled too; a console display-off doesn't
+    hide a remote session; the coverage "debounce" is coalesced from the
+    first event; "ours" includes our WebView2 children; the self-test's
+    coverage window is a separate process, not a real maximize.
+- **W3 Interactivity (required):** Raw Input, bare-desktop clicks, delivery,
+  the two tray toggles, Play in a Window. Self-test 6.
+
+  *As built (2026-11-04; plan
+  `docs/superpowers/plans/2026-11-04-windows-w3-interactivity.md`).* What was
+  built and how is in §10.25.8 *As built*. Checked over Remote Desktop (one
+  monitor at 200%) and in the fake two-monitor layout; no real mouse was
+  used. `make win-unit` 166 tests, `make win-test` all pass (~50 s), `make ci`
+  green.
+  - **Still to check by hand (owner, at the console with two monitors, then
+    over RDP).** Watch `make win-log FLAVOR=run FOLLOW=1` (normal app,
+    `make win-run`); the debug lines below need `make win-dev` and
+    `make win-log FLAVOR=dev FOLLOW=1`.
+    1. *Neko.* Pick Neko: the cat runs to the cursor wherever it goes, over
+       app windows too, and keeps following with a window focused.
+       `pointer: moves/s raw=… sent=…` is non-zero within a minute. A click
+       on bare desktop tosses yarn there (`down bare → m-… (x,y)`, `up`).
+    2. *Fish Tank.* Click bare desktop: food drops under the cursor (at 250%
+       and at 150%). Double-click bare desktop: the glass is tapped (the fish
+       startle) *and* two foods drop; the second `up` logs `dblclick`.
+       Right-click: Explorer's menu opens the first time, no food.
+       Middle-click: nothing.
+    3. *Icons.* Click an icon (selected, no food, log `down icon (not
+       forwarded)` and no `up`); double-click an icon (it opens, no food, no
+       glass tap); drag an icon onto bare desktop (it moves, no food);
+       rubber-band from bare desktop across icons (icons selected; one down,
+       one up, no tap; the drag's moves show `buttons 1`, e.g. the Fish
+       Tank's current pushes the plants).
+    4. *Apps and the taskbar.* Click in a window, on the taskbar, on Start:
+       nothing forwarded (no `down` line). Move the mouse over a maximized
+       window on monitor 2 while monitor 1 is uncovered: monitor 1's page gets
+       nothing, monitor 2's is hidden (covered) so nothing either;
+       un-maximize: moves resume at once.
+    5. *Two monitors.* Different mode, Neko on monitor 2 and the Fish Tank on
+       monitor 1: Neko follows only on monitor 2 (it never crosses, §10.25.20
+       item 8); a click on each monitor lands in that monitor's page at the
+       right spot. Mixed scales: the food drops under the cursor on both.
+    6. *Elevated.* Open Task Manager (Ctrl+Shift+Esc) and keep it focused,
+       move over the desktop: fish still follow (`moves/s raw=0 poll=…
+       sent=…`; afterwards `raw=…` again); a bare click while it is focused
+       does nothing (accepted, no click invented); click the desktop once
+       and clicks work again.
+    7. *Focus.* After a bare click, type an arrow key: the desktop's icon
+       selection moves (the key never reached us; the foreground is never
+       ours in the log).
+    8. *Toggles.* Untick *Wallpaper Follows the Mouse*: fish stop following,
+       clicks still feed. Untick *Clicks on the Desktop Play*: no food (no
+       `down bare` line). Both off: `pointer: off (both toggles off)`, and
+       Task Manager shows the app at 0.x% while the mouse is busy. Both on:
+       `pointer: on`. Quit and start: the ticks are kept.
+    9. *Hidden.* Pause from the tray, then Resume: `pointer: off (no visible
+       surface)`, then `pointer: on`. Win+L and unlock: the same. A maximized
+       window over the only monitor: the same pair. (Over a drag started
+       before it hides: the release is sent, nothing is stuck.)
+    10. *Draw Above Icons.* With it ticked: bare clicks feed, icon clicks
+        don't; untick.
+    11. *Play in a Window.* `make win-run`, pick Pixel Quest, tray → *Play in
+        a Window…*: opens focused and centred, titled `Wallpapers · Pixel
+        Quest`, in the taskbar and Alt-Tab. Arrows move the hero, Space,
+        `n`, `?` (help) work; `,` opens the panel in the window; `f` fills
+        the screen (borderless, over the taskbar) and `f` again restores its
+        frame and size (also from a maximized window: it should return
+        maximized, not borderless). Sound is audible there while the desktop
+        stays silent. Close it: the desktop is unchanged and the log has
+        `play: closed`. In Different mode *Monitor 2 ▸ Play in a Window…*
+        opens monitor 2's wallpaper, and asking from another row re-points
+        the same window; on mixed DPI the window's size is right on the
+        target monitor. Quit with the window open: it closes. Known: a pick
+        inside it writes `wp:current` (Same mode changes the desktop).
+    12. *RDP.* Items 1–2 over Remote Desktop (one monitor at 200%, 32 Hz):
+        moves arrive (`sent=…`), clicks land where clicked; the app's CPU
+        stays under 2% with the mouse busy.
+    13. *Touch,* if a touchscreen is at hand: a tap on bare desktop feeds; a
+        drag is a drag.
+    14. *`make win-test` at the console,* with part of the desktop uncovered
+        (terminal restored or moved off part of monitor 1): `PASS pointer
+        classify  n of n right; uia median <40 ms` with real icons (it only
+        SKIPs with no desktop icons or when every point is covered, as the
+        maximized terminal does over RDP; on FAIL read the `wrong:` list), `pointer tap` with `focus kept`. At the console the
+        fake fit factor is about 0.95 and the real scale may differ from
+        200%.
+    15. *Numbers to record here:* the app's CPU with the mouse busy (Task
+        Manager) and UIA timings against real icons (`uia N ms` in the
+        `pointer: click #n` lines, `pointer classify`'s median): *pending
+        (by hand)*.
+  - **Known limits:** with an elevated window focused there are no clicks
+    (§10.25.8); a fake layout whose fit factor is 1 (a 3840-wide 100%
+    monitor) can't catch a plan-scale bug in the self-test.
+- **W4 Install and release:** self-installer, Start with Windows, updates,
+  uninstall, Start menu, `win-release`, CI `win` job, README sections, SPEC
+  updates (this section's status, the intro's host list, §10.25.4's layout).
+  The first release ships here, without the saver.
+
+  *As built (2026-11-04; plan
+  `docs/superpowers/plans/2026-11-04-windows-w4-install-release.md`).* What was
+  built and how is in §10.25.13 *As built* (install, update, Start with
+  Windows, uninstall, About), §10.25.15 (the `win-*` targets, signing, the CI
+  `win` job and its runner) and §10.25.20. `make win-unit` passes 193 tests
+  (166 at W3; 27 new). `make win-test` passes over RDP, including `install`, `update`,
+  `update (busy exe)` and `uninstall` against the test layout. The real
+  install and uninstall ran by `make win-install` / `win-uninstall` on the
+  owner's PC (Settings kept, byte-identical); the `win` job passed on
+  `windows-2025` (run 3 of 3, 1m14s). **Nothing is tagged or released: the
+  first release (v0.11.0, §10.25.20) waits for the owner's OK.**
+  - **Still to check by hand (owner, at the console, then over RDP).** Agents
+    can't click the tray, Settings → Apps or the taskbar, so none of this was
+    done; record the results here.
+    1. *Download path.* Copy `dist/wallpapers-windows-<version>.zip` to
+       Downloads in Windows, unzip, run `Wallpapers.exe`: SmartScreen (or
+       Smart App Control) says what the README says; the Install dialog;
+       *Install*: the app runs installed, the Start menu has *Wallpapers*,
+       Settings → Apps lists *Wallpapers <version>* with the icon and the size
+       (about 53 MB).
+    2. *Start with Windows.* Sign out and in (or restart): the wallpaper is
+       back within ~10 s of the desktop; `make win-log` shows the start and,
+       if Explorer was late, the layer retry. Untick it in the tray, sign out
+       and in: it doesn't start; tick it back. (Ticking and unticking the row
+       was never clicked; the Run value itself was proven by `win-install` and
+       the self-test.)
+    3. *Start menu while running.* Click *Wallpapers* in the Start menu:
+       Settings opens, no second app.
+    4. *About.* Tray → About: the dialog says `Installed in …` and has
+       *Close*, *Uninstall…* and *Project Page* (screenshot it). *Project Page*
+       opens the project's page (the releases) in the browser and About stays open.
+       *Uninstall…* runs end to end (item 6's checks).
+    5. *Update.* Bump `version` in `web/manifest.json` locally, `make
+       win-release`, unzip elsewhere, run it: the Update dialog names both
+       versions; *Update*: the app comes back with the new version in About,
+       settings and the current wallpaper intact, *Start with Windows* as it
+       was. Run the older unzipped exe: no dialog, Settings opens. Put the
+       manifest version back.
+    6. *Just Run and the tray's Install….* `make win-uninstall`, run the
+       unzipped exe, *Just Run*: it runs from Downloads; start it again: no
+       dialog; the tray shows *Install…*; install from there (the hand-over:
+       the installed copy starts, this one quits; the log may show one
+       `pipe: All pipe instances are busy` retry, harmless).
+    7. *Quiet install in place.* From the installed exe run `Wallpapers.exe
+       --install`: no dialog, the install is refreshed in place (no copy,
+       entry and shortcut rewritten), and the running app carries on: the
+       copy it starts is a second launch, so Settings opens.
+    8. *Uninstall from Settings → Apps* while the app runs: the dialog, *Keep My
+       Settings*: everything goes, settings stay; reinstall and uninstall with
+       *Delete My Settings Too*: `%LOCALAPPDATA%\Wallpapers` is gone too.
+       `%TEMP%` has no `Wallpapers-uninstall-*.exe` left.
+    9. *Sign out and in* with the app installed and running: it comes back; no
+       second instance; the Settings → Apps entry is still right.
+    10. *Smart App Control.* Note whether the unsigned release exe runs on this
+        PC (the hash is new) and keep the Code Integrity event id if it is
+        refused, for the signing decision.
+    11. *The first release (owner's step, after the OK).* Bump `version`
+        (0.11.0), commit, `git tag v0.11.0 && git push --tags`; CI's `win` job
+        passes; the release carries `wallpapers-windows-0.11.0.zip` and
+        `.sha256`; download it on the console PC and repeat item 1 from the real
+        release.
+  - **Changed from the design:** `Wallpapers.scr` is named but not created
+    until W5; the install offer runs before the single-instance check; apply
+    stages and swaps with rollback; the CI `win` job tests the Linux-built zip
+    instead of building again; WebView2's 0.5 scale floor shaped the fake
+    monitors (§10.25.15).
+- **W5 Screen saver (last, owner):** `/s /p /c`, selection and timeout,
+  choices, clock, watchdog, saver ↔ app pipe; uninstall restores Windows'
+  saver. Self-test 9. Ships in the next release.
+
+  *As built (2026-11-05; plan
+  `docs/superpowers/plans/2026-11-05-windows-w5-screen-saver.md`).* What was
+  built and how is in §10.25.12 *As built* (files, dispatch, `/s`, `/p`, `/c`,
+  the lease, the watchdog), §10.25.13 *As built* (the `.scr` in install, update
+  and uninstall), §10.25.15 (`win-saver`, self-test 9) and §10.25.20.
+  `make win-unit` passes 250 tests (193 at W4). `make win-test` passes over RDP
+  with every `saver …` line, `saver selection` and the install lines including
+  `uninstall restores the saver`; `pointer classify` and `coverage` SKIP over
+  RDP as before. The real `/s`, Windows' own dialog and the real
+  `Control Panel\Desktop` were never touched by an agent.
+  - **Still to check by hand (owner, at the console with both monitors where it
+    says so).** Agents can't use Windows' dialog, wait out a timeout or press
+    real keys on a topmost window. Install first (`make win-install`). Record
+    the results here.
+    1. *Select from the tray.* Tray → Screen Saver → *Use Wallpapers as the
+       Screen Saver…*: the confirmation names the minutes; *Use Wallpapers*: the
+       row is ticked. Untick it: your old saver is back in Windows' dialog.
+       Select it again.
+    2. *Windows' dialog.* Settings → Personalization → Lock screen → Screen
+       saver (or the tray's *Open Windows Screen Saver Settings…*): *Wallpapers*
+       is the saver and the wait matches *Start After*.
+    3. *Settings….* In that dialog, *Settings…* opens our options window, with the
+       app running and with it quit (Tray → Quit first; the window should still
+       open, after a moment, and the tray icon appears). A change there shows in
+       the tray's menu.
+    4. *The preview.* The little monitor in that dialog shows a live, moving page,
+       and stops cleanly when the dialog closes (no `Wallpapers.exe` left in
+       Task Manager except the app).
+    5. *The timeout.* Leave the PC alone for *Start After* minutes (use 1): the
+       saver starts on every monitor, the cursor is hidden, the desktop
+       wallpaper behind it stopped (`make win-log` shows `power: screen saver`).
+    6. *Input ends it.* On each monitor in turn, a key, a click, the wheel, and a
+       mouse move of more than a few pixels (a nudge of the mouse does not end it)
+       each end it. No stray click lands on the desktop or an icon afterwards.
+    7. *Preview Now* (tray and options window) starts it at once; ends the same way.
+    8. *Show.* *A Different One Each Time* with two monitors: a different
+       wallpaper on each, starting on black and fading in, changing every *Change
+       Every* minutes (set 1). *One Wallpaper*: the pick on both. *Same as the
+       Desktop*: whatever the desktop shows (and per monitor, in Different
+       monitors mode).
+    9. *Show a Clock* ticked: the drifting clock over it.
+    10. *On resume, display logon screen.* Tick it in Windows' dialog, start the
+        saver, press a key: Windows asks for the password.
+    11. *The fallback clock.* In a copy of the install (a test install or the
+        unzipped download, never the real one while selected) rename `web\` and
+        run `Wallpapers.exe /s`: black with the time, which moves each minute;
+        any input ends it; `saver-log.txt` says why.
+    12. *Update while selected.* With the saver selected, run a newer download
+        (item 5 of W4): the update works, the saver is still selected and
+        starts (the 8.3 short name in `SCRNSAVE.EXE` still points at the
+        file). With the saver running, the update refuses with the in-use message.
+    13. *Uninstall restores.* With it selected, uninstall (Settings → Apps):
+        Windows' dialog shows your old saver again, with its wait.
+    14. *Group policy message.* Only if you have a way to set the policy: with
+        *Screen saver executable name* set by policy, the tray row is disabled
+        and its tooltip says your organization's policy sets it.
+    15. *Smart App Control and SmartScreen* on `Wallpapers.scr`: note whether it
+        runs from Windows' dialog on this PC (a separate file, a separate hash
+        from the exe's).
+    16. *The release (the controller bumps and tags; the owner verifies).*
+        `version` goes to 0.11.0 and `v0.11.0` is tagged after the owner's OK;
+        download `wallpapers-windows-0.11.0.zip` from the release, check the
+        `.sha256`, and repeat W4 item 1, then 1 to 5 above, from that download.
+  - **Changed from the design:** `/c` brings up the app's own options window
+    rather than a dialog from the `.scr` process; the saver reuses `Surface`
+    (§10.25.20); `Wallpapers.scr` is a full copy of the exe.
+- **W6 Two-monitor pass (owner, later):** the by-hand list in §10.25.15 at the
+  console with both monitors. Everything multi-monitor is built and tested
+  before this (W2) against simulated layouts, so W6 is verification and
+  fixes, not new design.
+
+#### 10.25.17 Risks
+
+| Risk | Mitigation |
+|---|---|
+| A future Windows build changes the desktop layers again | Layout detection with three paths and clear logging; *Draw Above Icons* escape hatch; the saver and tray keep working regardless |
+| Chromium occlusion stops rAF behind the icons | W0.2 before anything else; visual hosting as the fallback |
+| WebView2 can't render inside a layered child | Visual hosting (DirectComposition) sidesteps redirection; W0.2 |
+| Two monitors × a heavy wallpaper on a laptop | Per-monitor pause, battery ceiling, governor |
+| Smart App Control blocks unsigned builds (found in W0.2) | Sign releases with a publicly trusted certificate (e.g. Azure Trusted Signing); dev builds: retry with a changed build, or the owner turns SAC off (irreversible without a reset). Owner decision |
+| RDP shows one virtual screen, unlike the console | Treated as its own layout: rebuild on session change, `remote` ceiling; fake layouts and fixtures (§10.25.15) cover two monitors until W6 |
+| SmartScreen scares a first-time user | README; local builds aren't flagged; signing later |
+
+#### 10.25.18 Left to the builder
+
+- Windowed vs visual hosting and the exact browser arguments (W0.2 decides).
+- Exact Z-order and parent per layout (W0.1 decides).
+- Menu wording and order details, thumbnail size, icon rendering.
+- Log format, retry timings within the ranges given.
+- ~~Whether the saver shares the user data folder or mirrors~~ (W0.3: shares).
+- File and class names beyond the sketch in §4.
+
+#### 10.25.19 Ideas for later (not in scope)
+
+- **Match Windows to the wallpaper:** Windows 11's Mica and the
+  Alt-Tab/Task View backdrops sample the *real* wallpaper picture, not our
+  window. A confirmable *Use a Still as the Windows Wallpaper* (as the Mac's
+  lock-screen item does) would make them match, and would cover the lock
+  screen if that's wanted later.
+- **`make win-bench`:** drive the desktop web views over the DevTools port
+  (`WP_DEBUG=1`) like `android-bench`, for real two-monitor numbers.
+- **Desktop toys:** a double-click on bare desktop as a second gesture
+  (fireworks launch a big one); the cursor as a light source in Night Train.
+- **winget** manifest once releases are signed.
+- **Jellyfin (owner: later).** A `WebResourceRequested` proxy on our origin
+  for the user's server (API and streamed media, ranges included), like
+  Android's `MediaProxy`, so no Chromium security flags are needed.
+
+#### 10.25.20 Owner decisions (2026-11-02)
+
+1. C# / .NET with WebView2.
+2. Required: behind the icons, tray with everything, per-monitor,
+   interactive (mouse), per-monitor pause, battery → power save (never
+   stop), ground above the taskbar.
+3. No accent colour, no global hotkeys, no playlists, no lock screen,
+   signing later.
+4. Every addition in this design is in: screen saver, installer, recovery
+   paths. **The screen saver comes last.**
+5. If the wallpaper can't live behind the icons, the project stops (§10.25.16 gate).
+6. Two-monitor testing later, but the implementation plans for it (§10.25.15).
+7. Jellyfin on Windows later (§10.25.2, §10.25.19).
+8. **Span mode later**, and no wallpaper learns about monitor edges (no
+   Neko crossing screens); §10.25.6 keeps a sketch only.
+
+**Design calls made without the owner (check these):**
+- Same wallpaper on both monitors in Different mode shares its settings.
+- Remote Desktop runs at Low with no extra fps cap (new `remote` signal; owner's W2 pick, §10.25.7 item 5).
+- Covered = 97% of a monitor's work area; pause after 300 ms.
+- Moves are forwarded even over app windows; clicks only on bare desktop,
+  left button only; keys never (Play in a Window instead).
+- W3 (owner, 2026-11-04): no corner buttons on windows hosts (§10.25.7 item
+  7); Play in a Window is unmuted; a UI Automation failure on a desktop
+  window counts the press as bare.
+- Desktop web views are muted by default.
+- Self-contained single-file exe (~52 MB, 52,154,922 bytes at W3) rather than requiring the .NET
+  runtime; per-user install, no admin.
+- `make ci` runs `win-unit` only when `dotnet` is installed.
+- W4 (2026-11-04): the install offer runs **before** the single-instance
+  check, so a newer download offers Update while the installed app runs.
+  Apply stages and swaps with rollback; a failed update restarts the old copy
+  (not on the StillRunning timeout). Stage 2 refuses any root that isn't the
+  run or test install folder. `Wallpapers.scr` came in W5 (done, §10.25.13). The `win` job
+  tests the Linux-built zip rather than building again; a failed Windows
+  self-test drops the Windows zip from that release with a warning. The
+  self-test's fake monitors fit at about 0.75 (WebView2 renders no smaller
+  than ~0.5 scale). The installed size is about 53 MB. The jsign token is in
+  jsign's argv while signing. The signed path hasn't run.
+
+**Design calls made in W5 without the owner (2026-11-05; check these):**
+- The saver reuses `Surface` (composition hosting), so the form gets every key,
+  click and move itself; Chromium's alpha-0 input window is made click-through
+  (a shared helper) so it can't take them.
+- `Wallpapers.scr` is a full copy of the exe, about 52 MB more on disk and in
+  each update.
+- `SCRNSAVE.EXE` holds the 8.3 short path when Windows gives one (so a legacy
+  reader of the value copes); the long path would also work. If the install
+  folder were deleted and recreated while selected, a stored short name could
+  point at a sibling folder (theoretical: updates keep the folder and uninstall
+  restores first).
+- The self-test runs the saver only in harness windows and selects only in a
+  scratch key (`Software\Wallpapers-test\…`); it never touches the real
+  `Control Panel\Desktop`, and the real `/s` is by hand.
+- Different mode starts on Blank and crossfades to the pick, rather than
+  loading the pick directly.
+- The fallback is a native clock on black that moves each minute.
+- The desktop's saver flag is a 10 s lease renewed by 4 s pings, so a saver that
+  dies can't leave the desktop hidden. The lease is timed on the monotonic clock
+  (`Environment.TickCount64`), so a wall clock set back can't hold it either.
+- `saver-log.txt` is separate from `log.txt`.
+- Harness windows never activate and ignore deactivation; a real run activates
+  the first window and ends on deactivation.
+- The preview renders at 0.5 scale; an open options window doesn't follow
+  changes made elsewhere until one of its controls is used.
+
+**Owner decisions taken 2026-11-04 (W4):**
+- Ship unsigned first; set up Azure Trusted Signing before telling anyone else
+  about the app (Smart App Control and SmartScreen both pass once signed;
+  `winget` becomes possible). Until then the README says SmartScreen asks
+  *Run anyway* and a Smart App Control PC may refuse the hash.
+- No online update check: no network, no telemetry. About → Project Page opens
+  the releases page. A weekly check would be a declared network use, W6+ if
+  wanted.
+- A failed Windows self-test on the hosted runner drops the Windows zip from
+  that release with a warning, as the Mac's does. If the runner proves flaky,
+  switching to advice is one `if` in `ci.yml`.
+- The exe stays self-contained (~52 MB).
+- The first release, v0.11.0, waits for the owner's explicit OK.
+
+#### 10.25.21 Spike results
+
+W0.1–W0.4 each record here: Windows build, session type (console or Remote
+Desktop), monitors, what was tried, what worked, numbers. The spike code was
+`windows/spikes/` (`make win-spike ARGS=…`; plan:
+`docs/superpowers/plans/2026-11-03-windows-w0-spikes.md`), throwaway, deleted at
+W1 and since replaced by `windows/Wallpapers` (it's in git history, like the
+Mac's M0).
+
+**W0.1 behind the icons: passes.** (Windows 11 25H2 build 26200, Remote
+Desktop, one monitor 2940×1686 at 200%, work area 2940×1590, picture
+wallpaper `.jpg`, 2026-11-03)
+- **Tree before:** `Progman` (`WS_EX_TOOLWINDOW | WS_EX_NOREDIRECTIONBITMAP`)
+  → `SHELLDLL_DefView` (`WS_EX_LAYERED`) → `SysListView32`; no wallpaper
+  `WorkerW` yet, so the layout is *raised*. The desktop also has a dozen tiny
+  hidden top-level `WorkerW`s, some owned by other processes: layout detection
+  must only consider Explorer's visible ones.
+- **`0x052C` (0xD, 1)** was needed (no layer at first) and built it in
+  **~105 ms**: a visible `WorkerW` child of `Progman`, z just below
+  `SHELLDLL_DefView`. Later runs found it already there and sent nothing.
+- **Candidate (a), the winner:** `CreateWindowEx` directly with `Progman` (in
+  Explorer's process) as the parent works (no `SetParent` dance).
+  `WS_CHILD | WS_VISIBLE | WS_CLIPCHILDREN | WS_CLIPSIBLINGS`,
+  `WS_EX_LAYERED | WS_EX_NOACTIVATE`, alpha 255, then `SetWindowPos(host,
+  DefView)`. Order `SHELLDLL_DefView > host > WorkerW`; bounds equal the
+  monitor in physical px at 200% (PerMonitorV2); host colour on 93% of the
+  screen; all 4 icons, their labels and the selection highlight draw over it;
+  a `GDI+` clock in it ticks; `WindowFromPoint` on bare desktop is still
+  `SysListView32`, and right-click opens Explorer's menu (a XAML
+  `Microsoft.UI.Content.PopupWindowSiteBridge`, not `#32768`). **Owner by
+  eye:** icon drag and drop, rubber-band selection, double-click to open, and
+  Win+D twice all normal, no lag.
+- **Candidate (b)** child of that `WorkerW`: invisible unless layered (0%
+  colour); layered (alpha 255), it passes the same checks. A fallback, not
+  needed.
+- **Candidate (c)** child of `SHELLDLL_DefView` below `SysListView32`:
+  never visible, layered or not (the list view paints opaquely). Ruled out.
+- **Explorer restart** (killed, Windows restarted it in ~0.8 s):
+  **our host died with it** (`IsWindow` false; it was Explorer's `Progman`'s
+  child). `TaskbarCreated` arrived ~2.4 s after the kill; the new `Progman` had
+  no layer, so `0x052C` was sent again (114 ms); a new host was created, and
+  every check passed again. Design consequence in §10.25.5.
+- **Quit:** destroying the host, then re-applying the wallpaper path, leaves
+  Explorer's picture with no stale frame. **Ctrl+C through WSL interop
+  terminates the Windows process outright** (no `CancelKeyPress`), and
+  `taskkill /f` likewise: in both cases Windows destroys the dead process's
+  host and Explorer's own `WorkerW` shows through, so nothing stale is left
+  even without our cleanup.
+- **Gotchas:** WinForms' `NativeWindow.CreateHandle` superclasses a custom
+  class name (`WindowsForms10.<name>…`), so create with `CreateWindowEx` and
+  `AssignHandle`. After an Explorer restart the first desktop menu can take
+  ~5 s (cold XAML). Synthetic right-clicks over RDP sometimes landed on the
+  taskbar instead (a jump list opened), with no host attached as well, so the
+  automated menu check is advisory; the owner's by-eye check is the real one.
+  `UseWPF` (for UI Automation) cross-compiles fine in WSL; implicit usings then
+  drop `System.IO`. *(W3 didn't ship it: it adds 23 MB; UI Automation is
+  hand-written COM, §10.25.8.)*
+- Still to check: the console session (not RDP) and two monitors (W6, or
+  RDP's *Use all my monitors* earlier).
+
+**W0.2 WebView2 animating behind the icons: passes.** (same machine and
+session; WebView2 runtime 156.0.4314.58, SDK 1.0.4314.35; GPU: ANGLE on the
+Intel Iris Xe, Direct3D 11, even over RDP; mains power; 2026-11-03)
+- **The reference rate R:** in a normal window the session's own rAF runs at
+  **32 Hz** (RDP). RDP also turns Windows' animation effects off, so the page
+  sees `prefers-reduced-motion` and the existing policy caps it at 20 fps,
+  which paces to **16 fps** on 32 Hz frames. To test at full rate, runs
+  emulated reduced motion off (DevTools `Emulation.setEmulatedMedia`): then
+  the stage runs at the full 32. Pass = median ≥ 0.9 R, no 10 s window
+  below 0.5 R, `visibilityState` visible throughout.
+- **The page:** the plan said `?w=aquarium`, which isn't an id (the Fish Tank
+  is `fishtank`), so the first soaks ran Harvest Valley (what Seasonal shows
+  in November, the real default and the heavier scene); the Fish Tank was
+  run afterwards too.
+
+  | Run (raised layout, 2940×1686, High, full motion) | Length | fps median / min | WebView2 CPU (of one core) |
+  |---|---|---|---|
+  | (a) windowed + occlusion flags, Harvest | 10 min, 58 samples | 32.0 / 31.1 | 65% |
+  | windowed, no flags (60 s of it covered by a maximized window) | 3 min | 32.0 / 31.7 | 64–76% |
+  | windowed, unlayered host | 2.5 min | 32.0 / 31.8 | 56% |
+  | **(b) visual + flags, Harvest** | **10 min, 58 samples** | **32.0 / 31.7** | **5.6%** |
+  | visual, unlayered host (with or without `WS_EX_NOREDIRECTIONBITMAP`) | 2.5 min each | 32.0 / 31.8 | 3.6–4.0% |
+  | visual, no flags, exposed → covered | 4 min | 32.0 / 31.7 | 3.9% → 54.8% |
+  | visual + flags, exposed → covered (control) | 4 min | 32.0 / 31.7 | 5.7% → 55.9% |
+  | visual, Fish Tank, exposed / covered | 5 min | 32.0 / 30.6 | ~98% / ~121% |
+  | visual, Fish Tank, **defaults** (Auto, system motion) | 3 min | 15.9 / 15.8 | 28% |
+
+  Our app itself: 0.3–0.7% of a core in every run. WebView2 private memory
+  ~0.9 GB across its 6 processes at this size (Harvest). The Fish Tank costs
+  ~15× Harvest at a forced High (a question for the web bench, not hosting).
+- **Occlusion is a non-issue:** no run lost a frame to Chromium's occlusion
+  tracking, with or without flags, under the icons or under a maximized
+  window (it reports `visible` throughout). Nothing pauses us for free, so
+  coverage → `IsVisible = false` is ours to do, and **it works**: frames
+  stop at once (`hidden`), resume within a second.
+- **Visual hosting renders on screen** (DirectComposition target on the
+  layered host child of `Progman`, topmost visual): screenshots show the
+  scene behind the icons, 5–11% of pixels changing per second, no host colour
+  showing. The host style barely matters to it.
+- **The input catch, and its fix:** see §10.25.8. Chromium's full-screen
+  alpha-0 input window swallowed the first desktop right-click (4 of 4
+  tries; windowed and no-web-view runs never did); with `WS_EX_TRANSPARENT`
+  added, the menu opens first time. **Owner by eye, visual + fix, Fish
+  Tank:** first right-click opens the menu, icon drag and double-click,
+  rubber band, smooth with no lag.
+- **Explorer restart with a live page:** controller parented to the host →
+  disposed with it, recreated in ~0.3 s, page reloaded, animating again ~3 s
+  after the kill. Controller parented to our own hidden window → **no
+  reload**: the visual re-bound to the new host in 7 ms, frames unbroken.
+  Chromium's input window survives that (the fix stays applied).
+- **Decision:** visual hosting, controller parented to a hidden top-level
+  window of ours, DirectComposition target on each host, `WS_EX_TRANSPARENT`
+  on Chromium's input window, no browser flags required.
+- **Smart App Control** (§10.25.13) blocked 2 of the ~20 spike builds; each
+  was rebuilt with a trivial change and ran.
+- **Tooling gotchas:** GUI windows started from WSL can come up minimized
+  (force the window state after `Shown`); `make win-spike` skipped replacing
+  the exe while one ran, so a second command uses the running build.
+
+**W0.3 two processes, one user data folder: works; no mirror.** (same
+machine, RDP, 2026-11-03; the "saver" ran as `Spike.scr`, the same bytes as
+`Spike.exe` renamed, as the real saver will be)
+- **App first, saver second:** one shared browser process (same
+  `BrowserProcessId` in both); the saver read the value written 1.2 s before
+  it started, then got **29 of the ~30** writes made while it ran as
+  `storage` events, **median 1 ms**, max 3 ms.
+- **Saver first, app second:** the app joined the saver's browser process;
+  **22 of 22**, median 1 ms.
+- **Saver alone afterwards:** reads the last value (18 s old). Settings
+  persist with nothing else running.
+- **Mismatched browser arguments:** the second process can't create its
+  environment (`COMException 0x8007139F`, "not in the correct state"), so
+  it fails loudly rather than silently getting a separate profile.
+- **App killed mid-run** (`taskkill /f`): the saver's page stayed alive for
+  the rest of its run, on the same browser process.
+- Decision in §10.25.12.
+
+**W0.4 Raw Input and the bare-desktop hit test: works, with two design
+changes.** (same machine, RDP, 2026-11-03; visual hosting, controller on our
+own window, the Fish Tank, whose clicks drop food)
+- **Raw Input with `RIDEV_INPUTSINK`** on a hidden window: moves arrive while
+  the terminal or File Explorer is focused, over apps and the taskbar.
+- **Classifier self-test** (every icon centre plus a grid of bare points, no
+  clicks): 24 of 24 with no web view and with own-parent visual hosting; **0
+  of 24** with a host-parented controller (Chromium's overlay in the way,
+  §10.25.8).
+- **The owner's script, real clicks:** 26 presses, every one classified
+  correctly. 14 bare presses delivered (food dropped there); icons (6),
+  app windows (4) and the taskbar (2) not; an icon drag (press on an icon,
+  release on bare desktop) not; a rubber band delivered as one gesture. In
+  the page: 14 downs and 14 ups, as sent; 1891 moves sent arrived as 1235
+  `pointermove`s (Chromium coalesces to its frame rate), all trusted.
+- **Delivered `SendMouseInput` presses took the foreground** (our hidden
+  window), in the owner's run and reproduced by a synthetic click; handing
+  it back works; **script-dispatched clicks never moved it** (exact CSS point,
+  physical ÷ 2). Decision in §10.25.8. Owner, final run: food on bare clicks
+  only, and an arrow key after a click still reached the desktop.
+- **UI Automation latency** over 54 real lookups: median 12.5 ms, p95 72 ms
+  overall; on the desktop alone median 10 ms, p95 37 ms; the slow ones were
+  app windows (hence: only ask UIA when the window is the desktop).
+- **Elevated foreground** (Task Manager, opened inside the session; in RDP,
+  Ctrl+Shift+Esc opens the *local* one): zero raw moves for 15 s while the
+  cursor crossed the screen; `GetCursorPos` still moved (hence the poll
+  fallback, §10.25.8).
+- The Fish Tank's own cursor reaction is subtle (fish drift to a cursor that
+  sits still; fast moves startle), so the in-page counter, not the eye, is
+  the proof that moves arrive. Neko is the obvious visual check for W3.
+- Spike builds: Smart App Control blocked none of today's later builds
+  (2 of ~25 overall).
+
 
 ## Appendix A: legacy standalone pages, to bring back
 

@@ -152,6 +152,102 @@ saver can read them. If macOS's screen saver host ever stalls the page, the
 saver reloads it, and failing that shows a clock on black rather than a broken
 screen. An update of the app updates the saver by itself.
 
+**On Windows, as your desktop background** (Windows 11). Download
+`wallpapers-windows-<version>.zip` from the latest
+[release](https://github.com/nealhardesty/wallpapers/releases), check it against
+the `.sha256` beside it, unzip it, and run `Wallpapers.exe`. It asks once:
+**Install** copies the app to `%LOCALAPPDATA%\Programs\Wallpapers` (no admin
+rights), adds *Wallpapers* to the Start menu and to Settings → Apps, and makes it
+start with Windows; **Just Run** runs it from where it is and doesn't ask again
+(the tray's **Install…** is still there if you change your mind). To update, run
+a newer download: it offers to **Update** the installed copy in place (the old
+one quits, your settings stay) and starts the new one. **Start with Windows** is
+a tick in the tray menu. To remove it, use Settings → Apps → *Wallpapers* →
+Uninstall, or **About → Uninstall…** in the tray; it asks whether to keep your
+settings (`%LOCALAPPDATA%\Wallpapers`, kept unless you say otherwise). The app
+never checks for updates and sends nothing anywhere; its only network use is
+the Bing wallpaper fetching the picture of the day. The About dialog's
+**Project Page** opens the releases page in your browser. Or
+build and start it from WSL with `make win-run` (it needs the .NET 10 SDK in WSL;
+see Development). The wallpaper runs live behind your desktop icons on
+every monitor, and the icons, the right-click menu and drag-selecting all work
+as before. A tray icon controls it. Windows puts new tray icons behind the **^**
+at first: drag it onto the taskbar to keep it there. Left or right click opens
+the menu:
+- pick a wallpaper (with thumbnails), **Surprise Me**, **Next** and **Previous**
+- **Pause**
+- **Wallpaper Follows the Mouse** and **Clicks on the Desktop Play** (both on
+  at first): untick them to keep the desktop to itself
+- **Play in a Window…**: the current wallpaper in an ordinary window you can
+  resize, fill the screen with (**f**) and type into, for the ones that want
+  keys (Pixel Quest's arrows; **,** opens the panel there). It has sound.
+- **Monitors**: **Same on All** (every monitor shows the current wallpaper) or
+  **Different per Monitor** (each monitor gets its own, with a submenu per
+  monitor to pick its wallpaper, open its settings or play it in a window; a monitor you unplug
+  gets its wallpaper back when you plug it in). **Identify Monitors** shows a
+  big number on each screen for three seconds, to match the menu's rows.
+- **Performance**: **Auto**, **Low**, **Medium**, **High**, and **Save Power on
+  Battery**, with a line saying what it is doing now
+- **Settings…**: the same panel as everywhere else, in a window; a pick there
+  changes the desktop at once
+- **Start with Windows** (installed) or **Install…** (running from elsewhere)
+- **Troubleshooting**: **Open Log Folder**, **Reload Wallpapers**, and **Draw
+  Above Icons**, a fallback for a Windows update that breaks the layer behind
+  the icons
+
+It keeps going when Explorer restarts and when a Remote Desktop session
+resizes the screen. Plugging a monitor in or out, changing its scale or moving
+the taskbar adjusts that monitor and leaves the others running.
+
+It pauses, and stops drawing, while it can't be seen: the PC is locked, the
+display is off or asleep, a fullscreen game or presentation is running, the
+screen saver is on, you've disconnected from Remote Desktop, or a monitor is
+covered by windows (a maximized window, or two snapped halves; the other
+monitors keep going). It lowers quality, but never pauses, on battery, with
+Energy Saver on and over Remote Desktop. On a laptop with two graphics chips,
+it uses the one Windows picks; to force the power-saving one, add
+`Wallpapers.exe` in Settings → System → Display → Graphics. **Quit** gives you your own picture back. Wallpapers that
+react to the mouse do on the desktop too: they follow it everywhere, even over
+your windows, and a left click plays only on bare desktop (never on an icon or
+a window; right and middle clicks never). Keys never reach the desktop (typing
+there jumps between icons): use **Play in a Window**. While an administrator
+window (Task Manager, an installer) has focus Windows withholds the mouse from
+the app: the wallpaper still follows it, at about 30 times a second, but clicks
+don't play until you click the desktop once. The two tray toggles turn the
+following and the clicks off, and with both off the app doesn't listen to the
+mouse at all. The exe isn't
+signed, so **Smart App Control**, if it's on, can refuse a build by its hash.
+`make win-run` notices and builds again (each build is a new file to it).
+SmartScreen asks about a downloaded copy: **More info → Run anyway**. (Or
+right-click the zip → Properties → **Unblock** before you unzip it.) Its data
+(settings, log) is in `%LOCALAPPDATA%\Wallpapers`.
+
+**Windows screen saver.** Once the app is installed (the screen saver is the
+installed copy's `Wallpapers.scr`, so **Just Run** can't offer it), open the tray
+menu → **Screen Saver** → **Use Wallpapers as the Screen Saver…**. It asks first,
+then makes Wallpapers your saver and remembers the one you had. The same submenu
+has:
+- **Start After**: 1, 3, 5, 10, 15 or 30 minutes without input
+- **Show**: **Same as the Desktop**, **A Different One Each Time** (a different
+  wallpaper on each monitor, never one that needs the network), or **One
+  Wallpaper** of your choice
+- **Change Every**: 1, 5, 15 or 30 minutes, for *Different*
+- **Show a Clock**: the drifting clock on top
+- **Preview Now**, and **Open Windows Screen Saver Settings…**
+
+Windows' own *Screen Saver Settings* dialog lists *Wallpapers*, shows a live
+preview, and its **Settings…** button opens the same options in a small window.
+A key, a click or moving the mouse ends the saver, on every monitor; *On resume,
+display logon screen* should work as for any saver (Windows handles it; not yet
+checked by hand). The desktop pauses while it runs.
+If the page ever stalls, the saver reloads it and, failing that, shows a clock on
+black. Untick **Use Wallpapers…** (or uninstall) and your old saver comes back.
+The saver is a second copy of the exe, about 52 MB more on disk. Smart App
+Control and SmartScreen should treat `Wallpapers.scr` as they do `Wallpapers.exe`
+(the same file; not yet checked by hand).
+A group policy that sets the screen saver wins, and the menu says so. Its log is
+`%LOCALAPPDATA%\Wallpapers\saver-log.txt`.
+
 **On any phone,** without installing anything: open the hosted copy and
 choose *Add to Home screen*. It opens full screen, with no browser around
 it. Hold a right-hand corner for the panel.
@@ -358,6 +454,9 @@ Requirements:
   found)
 - `openssl`, for `make serve-https`
 - Docker, for the container
+- For the Windows app: the .NET 10 SDK (in WSL or Linux is fine: it
+  cross-compiles; running it needs Windows, which WSL reaches directly).
+  Without it, `make ci` skips the Windows unit tests with a note.
 - For Android: the Android SDK and a JDK 17 or later. With Android Studio
   installed in the usual place, the Makefile finds both (`ANDROID_HOME=`
   and `JAVA_HOME=` override). Gradle comes with the wrapper.
@@ -409,6 +508,21 @@ Run `make` to list every target.
 | `make mac-saver-live` | Run the installed saver in Apple's real host for a few seconds and read its log (once you've chosen it in System Settings) |
 | `make mac-saver-log` | The screen saver's own log |
 | `make mac-install` / `make mac-uninstall` | Put the app in `~/Applications` / remove it |
+| `make win-build` | Build the Windows app: `dist/win/Wallpapers.exe` (self-contained, about 50 MB) with `web/` beside it; cross-compiles in WSL or Linux |
+| `make win-release` | Build it, check it (a 64-bit exe carrying the manifest's version, `web/` beside it) and zip it: `dist/wallpapers-windows-<version>.zip` and `.sha256`. CI does this on every push |
+| `make win-unit` | The Windows app's unit tests (`windows/Wallpapers.Tests`); no Windows needed |
+| `make win-run` | Build it and start it on the Windows side from WSL, with your normal settings: the wallpaper goes behind your desktop icons, a tray icon controls it (a running installed copy quits first; it comes back at the next sign-in) |
+| `make win-install` | Build it and install it for this Windows user: `%LOCALAPPDATA%\Programs\Wallpapers`, a Start menu shortcut, an entry in Settings → Apps, Start with Windows. No admin rights; a running copy quits first |
+| `make win-uninstall` | Remove the installed app: the folder, the shortcut, the Apps entry and Start with Windows. Your settings stay (`DELETE_SETTINGS=1` removes them too); the steps are logged in `%TEMP%\Wallpapers-uninstall.log` |
+| `make win-saver` | Build it and run the screen saver (`Wallpapers.exe /s`) full screen with your settings, until you press a key or move the mouse, then print the end of `saver-log.txt` (`make win-log FLAVOR=saver` shows it any time). It takes over every monitor. It runs from its own folder (`Wallpapers-build\saver`), so the app you're running keeps running and stands aside while the saver shows, as for a real one |
+| `make win-sign` | Sign `dist/win/Wallpapers.exe` with Azure Trusted Signing through a pinned, sha256-checked jsign (see Releasing); prints `unsigned` when no `WALLPAPERS_SIGN_*` variable is set |
+| `make win-sign-tools` | Install `osslsigncode` (Debian/Ubuntu, through `apt` and `sudo`), which `make win-release` needs to verify a signed exe; CI runs it before a signed release |
+| `make win-dev` | Run it straight from this checkout's `web/` (over `\\wsl.localhost`), with its own settings and DevTools, so an edit shows after `make win-reload` or *Reload Wallpapers* in the tray |
+| `make win-reload` | Reload the running app's pages after a `web/` edit: the `win-dev` one, or `FLAVOR=run` for the normal one |
+| `make win-test` | The app's self-test against a throwaway settings store: layer, animation, settings sharing, pause, the pointer (a move, a tap and a double-click at the right CSS px, icons and hidden surfaces ignored, the toggles, the bare-desktop classifier against your real icons, a tap on fake monitor 2), coverage (a test window over monitor 1; skipped when something else already covers it), power reaching every page, `display=` and a resize in place (in a fake two-monitor layout), the Performance menu, insets, overlay, Bing, Explorer restart (simulated), a renderer crash, cleanup, then install, update (also with the exe held open) and uninstall into a throwaway `Wallpapers-test` install (never your real one) (about 70 s; `WIN_ARGS=--bad-web-root` checks the missing-files case) |
+| `make win-test-zip` | The same self-test against the app inside `dist/wallpapers-windows-<version>.zip` (from `make win-release`, or CI's `wallpapers-windows` artifact saved into `dist/`), unzipped to `dist/win-zip/`: what ships is what's tested. CI's `win` job runs it on a Windows runner (Git Bash or WSL) |
+| `WP_FAKE_DISPLAYS=<file>` with `make win-run` or `make win-dev` | Lay the surfaces out as a recorded monitor layout says (a JSON file under `/mnt/c`, made with `WIN_ARGS=--dump-displays make win-run`), each in an ordinary window, to try Different mode, per-monitor menus and hot-plug (edit the file) on one screen |
+| `make win-log` | The app's log (`FLAVOR=dev` or `test` for those, `saver` for the screen saver's; `FOLLOW=1` to follow) |
 | `make docker-build` | Build the container image `wallpapers` |
 | `make docker-run` | Run it at http://localhost:8000 (read-only, unprivileged) |
 | `make lint` | Syntax-check every script and JSON file |
@@ -451,10 +565,11 @@ browser features only work on secure pages.
 2. Bump `version` in `web/manifest.json` (it's the extension's and the
    app's version), commit, and push a matching tag: `git tag v0.6.0 &&
    git push --tags`.
-3. CI checks everything, builds the signed APK, the extension zip and the
-   universal Mac app (on a macOS runner), and publishes all three on a GitHub
-   Release: `wallpapers-<version>.apk`, `wallpapers-extension-<version>.zip` and
-   `wallpapers-mac-<version>.zip` with its `.sha256`. Until the secrets exist it
+3. CI checks everything, builds the signed APK, the extension zip, the
+   universal Mac app (on a macOS runner) and the Windows app (cross-compiled on
+   Linux), and publishes them on a GitHub Release: `wallpapers-<version>.apk`,
+   `wallpapers-extension-<version>.zip`, and `wallpapers-mac-<version>.zip` and
+   `wallpapers-windows-<version>.zip`, each with its `.sha256`. Until the secrets exist it
    publishes the debug APK (`wallpapers-<version>-debug.apk`) instead: it
    sideloads fine, but each one is signed by a throwaway key, so installing the
    next release means uninstalling first.
@@ -465,7 +580,28 @@ browser features only work on secure pages.
    in `mac/release.sh` and a few secrets; nothing else changes.)
 5. To try the Mac job before tagging: `gh workflow run ci.yml --ref <branch>`
    runs CI, the Android build and the Mac build, and uploads the zip as the
-   `wallpapers-mac` artifact, without publishing anything.
+   `wallpapers-mac` artifact, without publishing anything. Every CI run also
+   uploads the Windows zip as the `wallpapers-windows` artifact. It's unsigned:
+   see the Windows install notes. CI then self-tests that same zip on a Windows
+   runner (`make win-test-zip` in the `win` job; its report is the
+   `wallpapers-windows-selftest` artifact). Like the Mac's, it doesn't block the
+   other artifacts: a release whose Windows self-test fails goes out without
+   the Windows app, and the run shows a warning saying so.
+6. The Windows app is unsigned by default, and `make win-release` ends its last
+   line with `signed` or `unsigned` to say which. Unsigned means SmartScreen
+   shows "Windows protected your PC" on a downloaded copy (*More info* →
+   *Run anyway*), and a machine with Smart App Control on may refuse the exe by
+   its hash, with no override. To sign: create an Azure Trusted Signing account
+   and certificate profile, plus an Entra app registration allowed to sign with
+   it, then `gh secret set` each of `WALLPAPERS_SIGN_ENDPOINT`,
+   `WALLPAPERS_SIGN_ACCOUNT`, `WALLPAPERS_SIGN_PROFILE`, `WALLPAPERS_SIGN_TENANT`,
+   `WALLPAPERS_SIGN_CLIENT_ID` and `WALLPAPERS_SIGN_CLIENT_SECRET`. CI then signs
+   tagged releases and the release notes say so. All six or none: a partial set
+   fails the build. Locally the same variables work with `make win-release` or
+   `make win-sign` (needs `java`; `osslsigncode` verifies the result against
+   Microsoft's root certificate, which is downloaded and sha256-checked).
+   `windows/sign.sh --fetch` downloads and checks jsign and that certificate
+   without any secrets. Never commit a value.
 
 ### Adding a wallpaper
 

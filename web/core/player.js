@@ -7,8 +7,9 @@
     'use strict';
 
     const params = WP.parseParams(location.search);
-    const host = params.host === 'android' ? 'android'
-        : location.protocol === 'chrome-extension:' ? 'extension' : 'standalone';
+    const host = WP.hostKind(params, location.protocol);
+    const currentKey = WP.currentKey(params);
+    const insets = WP.parseInsets(params.insets, host);
     const settingsScreen = host === 'android' && params.panel === 'open';
     const FADE_MS = 600;
     const REBUILD_MS = 400;
@@ -41,13 +42,14 @@
             if (usable(params.w)) return params.w;
             console.warn(`wallpapers: ignoring unknown or disabled w=${params.w}`);
         }
-        const saved = WP.store.get('wp:current');
+        // A display with no choice of its own inherits the shared one.
+        const saved = WP.store.get(currentKey) ?? (currentKey === 'wp:current' ? null : WP.store.get('wp:current'));
         return usable(saved) ? saved : 'seasonal';
     }
 
     function stageUrl(id) {
         const query = new URLSearchParams({ w: id });
-        for (const key of ['date', 'theme', 'host', 'tier', 'hud']) if (params[key]) query.set(key, params[key]);
+        for (const key of ['date', 'theme', 'host', 'tier', 'hud', 'insets']) if (params[key]) query.set(key, params[key]);
         return `stage.html?${query}`;
     }
 
@@ -95,7 +97,7 @@
         }
         WP.clockface.view.init({
             now,
-            insets: { top: 0, right: 0, bottom: host === 'android' ? 48 : 0, left: 0 },
+            insets,
             override: () => clockOverride,
             reduced: () => matchMedia('(prefers-reduced-motion: reduce)').matches,
             wallpaper: () => stage?.id,
@@ -126,7 +128,7 @@
     function show(next, { persist = false } = {}) {
         choice = next;
         if (persist) {
-            WP.store.set('wp:current', next);
+            WP.store.set(currentKey, next);
             // A pick from the keyboard or panel replaces a ?w= override, so
             // a reload shows what was picked.
             if (params.w) {
@@ -221,8 +223,9 @@
     // settings screen. Follow it.
     window.addEventListener('storage', event => {
         if (!event.key?.startsWith('wp:') || !stage) return;
-        if (event.key === 'wp:current' && !params.w) {
-            const saved = WP.store.get('wp:current');
+        const inherits = event.key === 'wp:current' && currentKey !== event.key && WP.store.get(currentKey) == null;
+        if ((event.key === currentKey || inherits) && !params.w) {
+            const saved = WP.store.get(event.key);
             if (saved && saved !== choice && usable(saved)) show(saved);
         } else if (event.key === `wp:${stage.id}`) {
             rebuild();
@@ -355,7 +358,7 @@
             rebuild();
         } else if (message.wp === 'corner') {
             const gear = document.getElementById('gear'), full = document.getElementById('fullscreen');
-            const c = host === 'android' ? null : message.near;
+            const c = WP.cornerButtons(host) ? message.near : null;
             gear.classList.toggle('bottom', c === 'br');
             full.classList.toggle('bottom', c === 'bl');
             gear.classList.toggle('show', settingsScreen || c === 'tr' || c === 'br');

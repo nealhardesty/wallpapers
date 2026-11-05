@@ -20,13 +20,41 @@
 
     // URL parameters. They override for this page load only; nothing here
     // is ever persisted (SPEC §4.2).
-    WP.PARAMS = ['w', 'panel', 'date', 'theme', 'host', 'hud', 'thumb', 'tier', 'seed', 'clock'];
+    WP.PARAMS = ['w', 'panel', 'date', 'theme', 'host', 'hud', 'thumb', 'tier', 'seed', 'clock', 'insets', 'display'];
 
     WP.parseParams = search => {
         const query = new URLSearchParams(search);
         const params = {};
         for (const key of WP.PARAMS) if (query.has(key)) params[key] = query.get(key);
         return params;
+    };
+
+    // Where the page runs (SPEC §4.3). The extension is told by its protocol,
+    // whatever ?host= says; the native apps say who they are with ?host=.
+    WP.HOST_KINDS = ['android', 'windows', 'windows-saver'];
+    WP.hostKind = (params, protocol) => protocol === 'chrome-extension:' ? 'extension'
+        : WP.HOST_KINDS.includes(params.host) ? params.host : 'standalone';
+
+    // The player's corner buttons (gear, full screen) need a pointer that can
+    // press them. Android has touch pages of its own; a Windows desktop page
+    // gets forwarded moves, not clicks on the player (SPEC §10.25.7).
+    WP.cornerButtons = kind => !['android', 'windows', 'windows-saver'].includes(kind);
+
+    // Where this page keeps its wallpaper choice (SPEC §4.2): ?display=<key>
+    // gives one monitor its own; a malformed key is ignored.
+    WP.currentKey = params => /^[a-z0-9-]{1,40}$/.test(params?.display ?? '') ? `wp:current@${params.display}` : 'wp:current';
+
+    // ?insets=t,r,b,l (CSS px): room kept clear of the host's own chrome, such
+    // as Windows' taskbar. Android's gesture bar is the only default; anything
+    // malformed falls back to it.
+    WP.parseInsets = (text, kind) => {
+        const fallback = { top: 0, right: 0, bottom: kind === 'android' ? 48 : 0, left: 0 };
+        const parts = String(text ?? '').split(',').map(part => part.trim());
+        if (parts.length !== 4 || parts.some(part => part === '')) return fallback;
+        const values = parts.map(Number);
+        if (values.some(v => !Number.isFinite(v) || v < 0 || v > 2000)) return fallback;
+        const [top, right, bottom, left] = values.map(Math.round);
+        return { top, right, bottom, left };
     };
 
     // ?clock= (SPEC §4.9): on, off, or a motion (which also turns it on), for

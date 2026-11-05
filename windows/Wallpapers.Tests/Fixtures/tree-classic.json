@@ -1,0 +1,144 @@
+{
+ "nodes": [
+  {
+   "handle": 1,
+   "parent": 0,
+   "class": "Progman",
+   "pid": 100,
+   "visible": true,
+   "bounds": {
+    "left": 0,
+    "top": 0,
+    "right": 2940,
+    "bottom": 1686
+   },
+   "z": 0
+  },
+  {
+   "handle": 30,
+   "parent": 0,
+   "class": "WorkerW",
+   "pid": 100,
+   "visible": true,
+   "bounds": {
+    "left": 0,
+    "top": 0,
+    "right": 2940,
+    "bottom": 1686
+   },
+   "z": 0
+  },
+  {
+   "handle": 31,
+   "parent": 30,
+   "class": "SHELLDLL_DefView",
+   "pid": 100,
+   "visible": true,
+   "bounds": {
+    "left": 0,
+    "top": 0,
+    "right": 2940,
+    "bottom": 1686
+   },
+   "z": 0
+  },
+  {
+   "handle": 32,
+   "parent": 31,
+   "class": "SysListView32",
+   "pid": 100,
+   "visible": true,
+   "bounds": {
+    "left": 0,
+    "top": 0,
+    "right": 2940,
+    "bottom": 1686
+   },
+   "z": 0
+  },
+  {
+   "handle": 40,
+   "parent": 0,
+   "class": "WorkerW",
+   "pid": 400,
+   "visible": true,
+   "bounds": {
+    "left": 0,
+    "top": 0,
+    "right": 2940,
+    "bottom": 1686
+   },
+   "z": 0
+  },
+  {
+   "handle": 33,
+   "parent": 0,
+   "class": "WorkerW",
+   "pid": 100,
+   "visible": true,
+   "bounds": {
+    "left": 0,
+    "top": 0,
+    "right": 2940,
+    "bottom": 1686
+   },
+   "z": 0
+  },
+  {
+   "handle": 10,
+   "parent": 0,
+   "class": "WorkerW",
+   "pid": 100,
+   "visible": false,
+   "bounds": {
+    "left": 0,
+    "top": 0,
+    "right": 198,
+    "bottom": 56
+   },
+   "z": 0
+  },
+  {
+   "handle": 11,
+   "parent": 0,
+   "class": "WorkerW",
+   "pid": 100,
+   "visible": false,
+   "bounds": {
+    "left": 0,
+    "top": 0,
+    "right": 198,
+    "bottom": 56
+   },
+   "z": 0
+  },
+  {
+   "handle": 20,
+   "parent": 0,
+   "class": "WorkerW",
+   "pid": 200,
+   "visible": false,
+   "bounds": {
+    "left": 0,
+    "top": 0,
+    "right": 324,
+    "bottom": 88
+   },
+   "z": 0
+  },
+  {
+   "handle": 21,
+   "parent": 0,
+   "class": "WorkerW",
+   "pid": 300,
+   "visible": false,
+   "bounds": {
+    "left": 0,
+    "top": 0,
+    "right": 324,
+    "bottom": 88
+   },
+   "z": 0
+  }
+ ]
+}

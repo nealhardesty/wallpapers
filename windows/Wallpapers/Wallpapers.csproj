@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- The Windows app (SPEC §10.25): one self-contained exe; build it with `make win-build`. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <OutputType>WinExe</OutputType>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>app.ico</ApplicationIcon>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>true</SelfContained>
+    <PublishSingleFile>true</PublishSingleFile>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <RootNamespace>Wallpapers</RootNamespace>
+    <AssemblyName>Wallpapers</AssemblyName>
+    <Version>0.0.0</Version>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4314.35" />
+    <ProjectReference Include="../Wallpapers.Core/Wallpapers.Core.csproj" />
+    <!-- The tray icon, loaded at the small-icon size for the screen's DPI. -->
+    <EmbeddedResource Include="app.ico" LogicalName="app.ico" />
+    <Using Include="Wallpapers.Core" />
+    <Using Include="System.Runtime.InteropServices" />
+    <!-- The project page: build.sh passes -p:Homepage from web/manifest.json (App.Homepage). -->
+    <AssemblyMetadata Include="Homepage" Value="$(Homepage)" />
+  </ItemGroup>
+  <!-- The WebView2 package references its WPF control on every .NET 5+ app; this one has no WPF. -->
+  <Target Name="DropWebView2Wpf" BeforeTargets="ResolveAssemblyReferences">
+    <ItemGroup>
+      <Reference Remove="@(Reference)" Condition="'%(Filename)' == 'Microsoft.Web.WebView2.Wpf'" />
+    </ItemGroup>
+  </Target>
+</Project>

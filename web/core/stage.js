@@ -89,17 +89,16 @@
     // ---- Host -------------------------------------------------------------
     const id = WP.entry(params.w) && !WP.entry(params.w).pseudo ? params.w : 'blank';
     const entry = WP.entry(id);
-    const kind = params.host === 'android' ? 'android'
-        : location.protocol === 'chrome-extension:' ? 'extension' : 'standalone';
+    const kind = WP.hostKind(params, location.protocol);
     const read = WP.store.get, write = WP.store.set;
 
     const host = WP.host = {
         kind,
         id,
         params,
-        // Space kept clear of the host's own chrome. Android's gesture bar is
-        // simulated with ?host=android until the app passes real insets.
-        insets: { top: 0, right: 0, bottom: kind === 'android' ? 48 : 0, left: 0 },
+        // Space kept clear of the host's own chrome: ?insets= (Windows passes
+        // its taskbar), else Android's simulated 48 px gesture bar, else none.
+        insets: WP.parseInsets(params.insets, kind),
         quality: null,
         frames,
         // Nothing to draw for a while: no frames until `ms` from now (or

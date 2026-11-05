@@ -1,0 +1,116 @@
+{
+ "nodes": [
+  {
+   "handle": 1,
+   "parent": 0,
+   "class": "Progman",
+   "pid": 100,
+   "visible": true,
+   "bounds": {
+    "left": 0,
+    "top": 0,
+    "right": 2940,
+    "bottom": 1686
+   },
+   "z": 0
+  },
+  {
+   "handle": 2,
+   "parent": 1,
+   "class": "SHELLDLL_DefView",
+   "pid": 100,
+   "visible": true,
+   "bounds": {
+    "left": 0,
+    "top": 0,
+    "right": 2940,
+    "bottom": 1686
+   },
+   "z": 0
+  },
+  {
+   "handle": 3,
+   "parent": 2,
+   "class": "SysListView32",
+   "pid": 100,
+   "visible": true,
+   "bounds": {
+    "left": 0,
+    "top": 0,
+    "right": 2940,
+    "bottom": 1686
+   },
+   "z": 0
+  },
+  {
+   "handle": 4,
+   "parent": 1,
+   "class": "WorkerW",
+   "pid": 100,
+   "visible": true,
+   "bounds": {
+    "left": 0,
+    "top": 0,
+    "right": 2940,
+    "bottom": 1686
+   },
+   "z": 1
+  },
+  {
+   "handle": 10,
+   "parent": 0,
+   "class": "WorkerW",
+   "pid": 100,
+   "visible": false,
+   "bounds": {
+    "left": 0,
+    "top": 0,
+    "right": 198,
+    "bottom": 56
+   },
+   "z": 0
+  },
+  {
+   "handle": 11,
+   "parent": 0,
+   "class": "WorkerW",
+   "pid": 100,
+   "visible": false,
+   "bounds": {
+    "left": 0,
+    "top": 0,
+    "right": 198,
+    "bottom": 56
+   },
+   "z": 0
+  },
+  {
+   "handle": 20,
+   "parent": 0,
+   "class": "WorkerW",
+   "pid": 200,
+   "visible": false,
+   "bounds": {
+    "left": 0,
+    "top": 0,
+    "right": 324,
+    "bottom": 88
+   },
+   "z": 0
+  },
+  {
+   "handle": 21,
+   "parent": 0,
+   "class": "WorkerW",
+   "pid": 300,
+   "visible": false,
+   "bounds": {
+    "left": 0,
+    "top": 0,
+    "right": 324,
+    "bottom": 88
+   },
+   "z": 0
+  }
+ ]
+}
