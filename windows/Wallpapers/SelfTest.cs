@@ -555,7 +555,13 @@ sealed class SelfTest
         }
         times.Sort();
         double Pct(double q) => times.Count == 0 ? 0 : times[Math.Min(times.Count - 1, (int)Math.Ceiling(q * times.Count) - 1)];
-        Check(Name, wrong.Count == 0 && iconPoints > 0 && barePoints > 0,
+        // Both kinds are needed to prove anything (a classifier that always said Icon would pass on icons alone).
+        if (wrong.Count == 0 && (iconPoints == 0 || barePoints == 0))
+        {
+            Line("SKIP", Name, $"{points.Count} of {points.Count} right, but no {(iconPoints == 0 ? "icon" : "bare desktop")} in view ({where})");
+            return;
+        }
+        Check(Name, wrong.Count == 0,
             $"{points.Count - wrong.Count} of {points.Count} right; uia median {Pct(0.5):0.#} ms, p95 {Pct(0.95):0.#} ms; {where}"
             + (wrong.Count > 0 ? $"; wrong: {string.Join(", ", wrong)}" : ""));
     }
@@ -733,10 +739,17 @@ sealed class SelfTest
             + (bad.Count == 0 ? $"{surfaces.Count} page(s) got {got}, reasons [{string.Join(", ", reasons)}]" : string.Join("; ", bad)));
     }
 
-    /// Two fake 1920×720 monitors at 100%, side by side; monitor 1 can be made taller. Wider than most real
-    /// work areas, so they're fitted (scaled down): the pointer's CSS px must have that factor in them.
-    static List<MonitorInfo> FakeTwo(int firstHeight = 720) =>
-        [FakeMonitor(1, new Rect(0, 0, 1920, firstHeight)), FakeMonitor(2, new Rect(1920, 0, 3840, 720))];
+    /// Two fake 1920×720 monitors at 100%, side by side; monitor 1 can be made 80 px taller. Wider than most
+    /// real work areas, so they're fitted (scaled down): the pointer's CSS px must have that factor in them.
+    /// WebView2 renders no smaller than half scale, so on a primary narrower than 2022 px (CI's 1024×768)
+    /// they're 640×360 instead, fitted at about 0.75.
+    static List<MonitorInfo> FakeTwo(bool taller = false)
+    {
+        var real = N.Monitors();
+        var work = (real.FirstOrDefault(m => m.Primary) ?? real[0]).Work;
+        var (w, h) = work.Width * 0.95 / 3840 >= 0.5 ? (1920, 720) : (640, 360);
+        return [FakeMonitor(1, new Rect(0, 0, w, h + (taller ? 80 : 0))), FakeMonitor(2, new Rect(w, 0, 2 * w, h))];
+    }
 
     static MonitorInfo FakeMonitor(int n, Rect r) =>
         new($@"\\.\DISPLAY{n}", r, r, 96, Primary: n == 1, Path: $"selftest-fake-{n}", Name: $"Self-test {n}");
@@ -818,17 +831,18 @@ sealed class SelfTest
         var (one, two) = (fake.First(s => s.Plan.Number == 1), fake.First(s => s.Plan.Number == 2));
         var origin = await Js<double>(one, "performance.timeOrigin");
         var before = await Js<int>(one, "innerHeight");
-        await desktop.UseFakeDisplaysForTest(FakeTwo(firstHeight: 800));
+        var size = $"{one.Plan.Bounds.Width}x{one.Plan.Bounds.Height}";
+        await desktop.UseFakeDisplaysForTest(FakeTwo(taller: true));
         var kept = desktop.Surfaces.Contains(one);
         // The page sees the fake monitor's CSS size give or take rounding (±2 px in a scaled-down fit).
         var after = 0;
         var grew = await Until(3000, async () => (after = await Js<int>(one, "innerHeight")) - before is >= 78 and <= 82);
         var same = await Js<double>(one, "performance.timeOrigin") == origin;
         Check("resize in place", kept && grew && same,
-            $"monitor 1 1920x720 → 1920x800: {(kept ? "the same surface" : "a NEW surface")}, innerHeight {before} → {after}, {(same ? "no reload" : "the page RELOADED")}");
+            $"monitor 1 {size} → {one.Plan.Bounds.Width}x{one.Plan.Bounds.Height}: {(kept ? "the same surface" : "a NEW surface")}, innerHeight {before} → {after}, {(same ? "no reload" : "the page RELOADED")}");
 
         var host = two.Host;
-        await desktop.UseFakeDisplaysForTest([FakeTwo(firstHeight: 800)[0]]);
+        await desktop.UseFakeDisplaysForTest([FakeTwo(taller: true)[0]]);
         var gone = !N.IsWindow(host) && desktop.Surfaces.Count == 1 && desktop.Surfaces[0] == one;
         var stayed = await Js<double>(one, "performance.timeOrigin") == origin;
         Check("resize in place (monitor removed)", gone && stayed,
