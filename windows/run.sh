@@ -3,6 +3,8 @@
 #   run.sh run   copy dist/win to %LOCALAPPDATA%\Wallpapers-build\run and start it (normal settings; --just-run, no install offer)
 #   run.sh dev   the same into ...\dev, with WP_DEV=1 WP_DEBUG=1 and WP_WEB_ROOT on this checkout's web/
 #   run.sh test  the same into ...\test, run --selftest, print its report, exit with its code
+#   run.sh install    the same into ...\install, then --install it (%LOCALAPPDATA%\Programs\Wallpapers; a running copy quits first)
+#   run.sh uninstall  the installed copy's --uninstall --keep-settings (DELETE_SETTINGS=1: --delete-settings)
 #   run.sh log [run|dev|test]   the last lines of that flavour's log (FOLLOW=1 to follow)
 #   run.sh reload [dev|run]     reload the running app's pages (after a web/ edit, for dev)
 # Extra arguments for the app: WIN_ARGS="--dump-displays". WP_FAKE_DISPLAYS=<displays JSON> (a WSL path,
@@ -26,6 +28,15 @@ if [ "$mode" = log ]; then
   log="$(root_for "${2:-run}")/log.txt"
   [ -f "$log" ] || { echo "no log yet: $log"; exit 0; }
   if [ -n "$FOLLOW" ]; then tail -n 40 -f "$log"; else tail -n 80 "$log"; fi
+  exit 0
+fi
+
+if [ "$mode" = uninstall ]; then
+  exe="$LOCAL/Programs/Wallpapers/Wallpapers.exe"
+  [ -f "$exe" ] || { echo "nothing installed ($LAD\Programs\Wallpapers has no Wallpapers.exe)"; exit 0; }
+  if [ -n "$DELETE_SETTINGS" ]; then flag=--delete-settings; else flag=--keep-settings; fi
+  "$exe" --uninstall "$flag"
+  echo "asked the installed app to uninstall ($flag); its log: %TEMP%\Wallpapers-uninstall.log"
   exit 0
 fi
 
@@ -71,6 +82,18 @@ launch() {
   if grep -qiE "Device Guard|Application Control|Invalid argument" "$OUTPUT"; then return 3; fi
   local before status=0
   before=$(stat -c %s "$LOG" 2>/dev/null || echo 0)
+  if [ "$mode" = install ]; then
+    # Through Start-Process and a wait on that process alone: the installed app it starts must not
+    # inherit WSL's pipes, or this script would wait until that app quit.
+    "$PS" -NoProfile -Command "\$p = Start-Process -FilePath '$(wslpath -w "$BIN/Wallpapers.exe")' -WorkingDirectory '$(wslpath -w "$BIN")' -ArgumentList '--install' -PassThru; \$null = \$p.Handle; \$p.WaitForExit(); exit \$p.ExitCode" < /dev/null || status=$?
+    if [ $status != 0 ]; then
+      echo "run.sh: --install failed (exit $status):" >&2
+      tail -n 5 "$LOG" | tr -d '\r' >&2
+      return 1
+    fi
+    echo "installed $LAD\Programs\Wallpapers"
+    return 0
+  fi
   if [ "$mode" = test ]; then
     # shellcheck disable=SC2086
     ./Wallpapers.exe --selftest $WIN_ARGS || status=$?

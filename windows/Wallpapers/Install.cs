@@ -67,24 +67,9 @@ sealed class Install(InstallLayout layout, Action<string> log)
         if (layout.IsInstalledAt(Path.GetFullPath(sourceDir))) log("install: already in place, copy skipped");
         else
         {
-            // The running copy holds the exe: a run-flavor app that isn't us is asked to quit first (the test
-            // layout's exe is never the one running, so only the lock matters there).
-            var deadline = DateTime.UtcNow + QuitWait;
-            if (layout.Flavor == "run" && !SingleInstance.Holds && SingleInstance.IsRunning("run"))
-            {
-                quitTheRunningApp = true;
-                log($"install: asking the running app to quit ({(SingleInstance.Send("run", "quit") ? "sent" : "it didn't answer")})");
-                while (SingleInstance.IsRunning("run"))
-                {
-                    if (DateTime.UtcNow > deadline) return StillRunning;
-                    Thread.Sleep(200);
-                }
-            }
-            while (!CanOpenAlone(layout.Exe))
-            {
-                if (DateTime.UtcNow > deadline) return StillRunning;
-                Thread.Sleep(200);
-            }
+            // Still running at the deadline: it never quit, so there's nothing to start again.
+            if (!QuitAndWait("install", out var asked)) return StillRunning;
+            quitTheRunningApp = asked;
             if (CopyAndSwap(sourceExe, sourceWeb) is { } why) return why;
         }
 
@@ -96,6 +81,32 @@ sealed class Install(InstallLayout layout, Action<string> log)
         if (fresh) SetStartWithWindows(true);
         log($"install: {layout.Root} ({(fresh ? "fresh" : "update")}) {versionText} ({sizeKb / 1024} MB)");
         return null;
+    }
+
+    /// The running copy holds the exe: a run-flavor app that isn't this process is asked to quit, then we wait
+    /// for its mutex and for layout.Exe to come free, up to 15 s in all (the test layout's exe is never the one
+    /// running, so only the lock matters there). False when it's still running at the deadline; `asked` says
+    /// whether a running app was asked to quit. Install and uninstall's stage 2 both wait here.
+    bool QuitAndWait(string what, out bool asked)
+    {
+        asked = false;
+        var deadline = DateTime.UtcNow + QuitWait;
+        if (layout.Flavor == "run" && !SingleInstance.Holds && SingleInstance.IsRunning("run"))
+        {
+            asked = true;
+            log($"{what}: asking the running app to quit ({(SingleInstance.Send("run", "quit") ? "sent" : "it didn't answer")})");
+            while (SingleInstance.IsRunning("run"))
+            {
+                if (DateTime.UtcNow > deadline) return false;
+                Thread.Sleep(200);
+            }
+        }
+        while (!CanOpenAlone(layout.Exe))
+        {
+            if (DateTime.UtcNow > deadline) return false;
+            Thread.Sleep(200);
+        }
+        return true;
     }
 
     /// Stages exe.new and web.new, moves the old ones to .old, the new ones in; on any failure puts the old ones
@@ -281,5 +292,178 @@ sealed class Install(InstallLayout layout, Action<string> log)
         }
         log($"install: started {layout.Exe}");
         return true;
+    }
+
+    // Uninstall (--uninstall): stage 1 copies this exe to %TEMP% and starts the copy as stage 2, which can delete
+    // the install folder because it doesn't run from there, and deletes itself on the way out.
+    const string StageTwoPrefix = "Wallpapers-uninstall-";
+    static string UninstallLog => Path.Combine(Path.GetTempPath(), "Wallpapers-uninstall.log");
+
+    /// Stage 1: starts a %TEMP% copy of this exe with --uninstall-stage2 "<root>" (and the settings choice when
+    /// it's known; otherwise stage 2 asks). The caller exits, or carries on until stage 2 asks it to quit.
+    /// Returns why it couldn't start, or null.
+    public string? StartUninstall(bool? keepSettings)
+    {
+        var temp = Path.GetTempPath();
+        foreach (var stale in Directory.EnumerateFiles(temp, StageTwoPrefix + "*.exe"))
+            try { File.Delete(stale); }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }   // one still running: the next time
+        var copy = Path.Combine(temp, $"{StageTwoPrefix}{DateTime.Now:yyyyMMddHHmmss}.exe");
+        // Quoted, and never with a trailing backslash: \" would escape the closing quote.
+        var args = $"--uninstall-stage2 \"{layout.Root.TrimEnd('\\')}\"" + keepSettings switch { true => " --keep-settings", false => " --delete-settings", null => "" };
+        try
+        {
+            File.Copy(Environment.ProcessPath ?? Path.Combine(AppContext.BaseDirectory, "Wallpapers.exe"), copy, overwrite: true);
+            N.AllowSetForegroundWindow(N.ASFW_ANY);   // its question comes up in front, as ours would
+            Process.Start(new ProcessStartInfo(copy, args) { WorkingDirectory = temp, UseShellExecute = false });
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or System.ComponentModel.Win32Exception)
+        {
+            log($"uninstall: couldn't start {copy}: {e.Message}");
+            return $"couldn't start the uninstaller: {e.Message}";
+        }
+        log($"uninstall: started {copy} {args}");
+        return null;
+    }
+
+    /// Stage 2, from %TEMP%: never takes the app's mutex or writes its log (it may delete that folder). Asks
+    /// unless told, quits the running app, removes the install, logs to %TEMP%\Wallpapers-uninstall.log, and
+    /// deletes its own copy. 0 done, 1 not an install folder, 2 cancelled.
+    public static int Stage2(InstallArgs args)
+    {
+        static void Say(string line)
+        {
+            try { File.AppendAllText(UninstallLog, $"{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff} {line}\r\n"); }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
+        }
+        Say($"uninstall: Wallpapers {App.Version} for {args.Root}");
+        // Only a folder we install to: never an arbitrary path from the command line.
+        var layout = new[] { "run", "test" }.Select(App.LayoutFor).FirstOrDefault(l => l != null && args.Root != null && l.IsInstalledAt(args.Root));
+        if (layout == null)
+        {
+            Say("uninstall: that isn't an install folder; nothing removed");
+            DeleteSelf(Say);
+            return 1;
+        }
+        ApplicationConfiguration.Initialize();
+        var keep = args.KeepSettings ?? Ask(layout);
+        if (keep == null)
+        {
+            Say("uninstall: cancelled");
+            DeleteSelf(Say);
+            return 2;
+        }
+        var installer = new Install(layout, Say);
+        if (!installer.QuitAndWait("uninstall", out _)) Say("uninstall: the app is still running after 15 s; removing what can be removed");
+        var left = installer.RemovePlan(keep.Value);
+        if (args.KeepSettings == null) ShowResult(layout, keep.Value, left);
+        DeleteSelf(Say);
+        return 0;
+    }
+
+    /// In-process removal, for the self-test's test layout (the running exe isn't in that root): the same plan,
+    /// no stage 2. Returns what couldn't be removed.
+    public IReadOnlyList<string> Remove(bool keepSettings) => RemovePlan(keepSettings);
+
+    static bool? Ask(InstallLayout layout)
+    {
+        var keep = new TaskDialogButton("&Keep My Settings");
+        var delete = new TaskDialogButton("&Delete My Settings Too");
+        var answer = TaskDialog.ShowDialog(new TaskDialogPage
+        {
+            Caption = layout.DisplayName,
+            Heading = $"Uninstall {layout.DisplayName}?",
+            Text = $"Removes {layout.Root}, its Start menu shortcut and Start with Windows.\n\nYour settings are in {layout.DataFolder}: keep them for next time, or delete them too.",
+            Buttons = { keep, delete, TaskDialogButton.Cancel },
+            DefaultButton = keep,
+            AllowCancel = true,
+            Icon = TaskDialogIcon.Information,
+        }, TaskDialogStartupLocation.CenterScreen);
+        return answer == keep ? true : answer == delete ? false : null;
+    }
+
+    static void ShowResult(InstallLayout layout, bool keep, IReadOnlyList<string> left) =>
+        TaskDialog.ShowDialog(new TaskDialogPage
+        {
+            Caption = layout.DisplayName,
+            Heading = left.Count == 0 ? $"{layout.DisplayName} is uninstalled" : $"{layout.DisplayName} is uninstalled, except for:",
+            Text = left.Count == 0
+                ? keep ? $"Your settings stay in {layout.DataFolder} for next time." : "Your settings are gone too."
+                : $"{string.Join("\n", left)}\n\nSomething still had them open. Delete them by hand; the details are in {UninstallLog}.",
+            AllowCancel = true,
+            Icon = left.Count == 0 ? TaskDialogIcon.Information : TaskDialogIcon.Warning,
+        }, TaskDialogStartupLocation.CenterScreen);
+
+    /// UninstallPlan's removals, each logged; one that fails is logged and returned, and the rest still run.
+    List<string> RemovePlan(bool keepSettings)
+    {
+        var plan = UninstallPlan.For(layout, keepSettings);
+        var left = new List<string>();
+        RestoreSaver();
+        Step(left, "run value", null, () =>
+        {
+            using var key = Registry.CurrentUser.OpenSubKey(plan.RunValue.Key, writable: true);
+            if (key?.GetValue(plan.RunValue.Name) == null) return false;
+            key.DeleteValue(plan.RunValue.Name);
+            return true;
+        });
+        Step(left, "uninstall key", null, () =>
+        {
+            using (var key = Registry.CurrentUser.OpenSubKey(plan.UninstallKey)) if (key == null) return false;
+            Registry.CurrentUser.DeleteSubKeyTree(plan.UninstallKey);
+            return true;
+        });
+        foreach (var file in plan.Files)
+            Step(left, file == layout.Shortcut ? "shortcut" : "file", file == layout.Shortcut ? null : file, () =>
+            {
+                if (!File.Exists(file)) return false;
+                File.Delete(file);
+                return true;
+            });
+        foreach (var folder in plan.Folders)
+            Step(left, "folder", folder, () =>
+            {
+                if (!Directory.Exists(folder)) return false;
+                DeleteFolder(folder);
+                return true;
+            });
+        if (keepSettings) log($"uninstall: settings kept in {layout.DataFolder}");
+        return left;
+    }
+
+    void Step(List<string> left, string what, string? path, Func<bool> remove)
+    {
+        var detail = path == null ? "" : " " + path;
+        try { log($"uninstall: {what} {(remove() ? "removed" : "not there")}{detail}"); }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or System.Security.SecurityException)
+        {
+            log($"uninstall: {what} not removed{detail}: {e.Message}");
+            left.Add(path ?? what);
+        }
+    }
+
+    /// A process that just quit (the app's web view helpers, with the data folder) can hold files for a moment.
+    static void DeleteFolder(string folder)
+    {
+        for (var attempt = 1; ; attempt++)
+            try { Directory.Delete(folder, true); return; }
+            catch (Exception e) when (attempt < 10 && e is IOException or UnauthorizedAccessException) { Thread.Sleep(300); }
+    }
+
+    /// W5 selects our screen saver and remembers the one before; uninstall puts that back here.
+    static void RestoreSaver() { }
+
+    /// Stage 2's last step: a hidden cmd deletes this copy once it has exited. Only a copy stage 1 made.
+    static void DeleteSelf(Action<string> say)
+    {
+        var self = Environment.ProcessPath;
+        if (self == null || !Path.GetFileName(self).StartsWith(StageTwoPrefix, StringComparison.OrdinalIgnoreCase)) return;
+        try
+        {
+            Process.Start(new ProcessStartInfo(Path.Combine(Environment.SystemDirectory, "cmd.exe"), $"/c ping -n 3 localhost >nul & del \"{self}\"")
+                { CreateNoWindow = true, UseShellExecute = false, WorkingDirectory = Path.GetTempPath() });
+            say($"uninstall: done; {Path.GetFileName(self)} deletes itself");
+        }
+        catch (System.ComponentModel.Win32Exception e) { say($"uninstall: couldn't delete {self}: {e.Message}"); }
     }
 }

@@ -2,8 +2,9 @@ using System.Windows.Forms;
 
 namespace Wallpapers;
 
-/// Modes (SPEC §10.25.4): the app [--just-run] · --install · --quit · --reload · --settings · --dump-displays ·
-/// --selftest [--bad-web-root] (and --cover-for-test, the self-test's covering window: coverage ignores our own process's).
+/// Modes (SPEC §10.25.4): the app [--just-run] · --install · --uninstall [--keep-settings|--delete-settings] · --quit ·
+/// --reload · --settings · --dump-displays · --selftest [--bad-web-root] (and --cover-for-test, the self-test's covering
+/// window: coverage ignores our own process's; --uninstall-stage2 <root>, the %TEMP% copy that removes the install).
 static class Program
 {
     [STAThread]
@@ -11,6 +12,8 @@ static class Program
     {
         if (args is ["--cover-for-test", var rect]) return SelfTest.Cover(rect);
         var install = InstallArgs.Parse(args);
+        // Before paths, the log and the mutex: it runs from %TEMP%, logs there, and may delete the data folder.
+        if (install.Mode == InstallMode.UninstallStage2) return Install.Stage2(install);
         var paths = AppPaths.Resolve(args);
         var selfTest = paths.Flavor == "test";
         if (selfTest)
@@ -41,10 +44,17 @@ static class Program
             Log.Info($"--dump-displays: wrote displays.json (with paths, names and keys) and tree.json to {paths.Root}");
             return 0;
         }
-        if (install.Mode == InstallMode.Install)
+        if (install.Mode is InstallMode.Install or InstallMode.Uninstall)
         {
-            // Quiet: make win-install, or a script. Only the normal flavor installs.
-            if (App.LayoutFor(paths.Flavor) is not { } layout || selfTest) Log.Info($"install: ignored ({paths.Flavor})");
+            // Quiet install: make win-install, or a script. Uninstall: Settings → Apps, make win-uninstall. Only the
+            // normal flavor installs or uninstalls.
+            var verb = install.Mode == InstallMode.Install ? "install" : "uninstall";
+            if (App.LayoutFor(paths.Flavor) is not { } layout || selfTest) Log.Info($"{verb}: ignored ({paths.Flavor})");
+            else if (install.Mode == InstallMode.Uninstall)
+            {
+                if (new Install(layout, Log.Info).StartUninstall(install.KeepSettings) is { } why) { Log.Error($"uninstall: failed: {why}"); return 1; }
+                return 0;
+            }
             else
             {
                 var installer = new Install(layout, Log.Info);

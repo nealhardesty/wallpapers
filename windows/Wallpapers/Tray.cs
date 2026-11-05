@@ -469,9 +469,38 @@ sealed class Tray : IDisposable
     void About()
     {
         var runtime = app.Desktop.Environment?.BrowserVersionString ?? "not loaded";
-        MessageBox.Show(
-            $"Wallpapers {App.Version}\n\nWebView2 runtime {runtime}\nData folder: {app.Paths.Root}\nWallpapers folder: {app.Paths.WebRoot}",
-            "About Wallpapers", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        var installer = app.Installer;
+        var installed = installer?.InstalledHere == true;
+        var close = TaskDialogButton.Close;
+        var uninstall = new TaskDialogButton("&Uninstall…");
+        // The project page opens in the browser and leaves About open.
+        var homepage = new TaskDialogButton("&Project Page") { AllowCloseDialog = false };
+        homepage.Click += (_, _) => Shell.Open(App.Homepage!);
+        using var appIcon = LoadIcon();
+        var page = new TaskDialogPage
+        {
+            Caption = "About Wallpapers",
+            Heading = $"Wallpapers {App.Version.Split('+')[0]}",
+            Text = $"Version {App.Version}\nWebView2 runtime {runtime}\nData folder: {app.Paths.Root}\nWallpapers folder: {app.Paths.WebRoot}\n\n" +
+                (installed ? $"Installed in {installer!.Layout.Root}" : $"Running from {AppContext.BaseDirectory.TrimEnd('\\')} (not installed)"),
+            Buttons = { close },
+            DefaultButton = close,
+            AllowCancel = true,
+            Icon = new TaskDialogIcon(appIcon),
+        };
+        if (installed) page.Buttons.Add(uninstall);
+        if (App.Homepage != null) page.Buttons.Add(homepage);
+        if (TaskDialog.ShowDialog(page, TaskDialogStartupLocation.CenterScreen) != uninstall) return;
+        // Stage 2 asks keep or delete, then asks this app to quit.
+        if (installer!.StartUninstall(null) is { } why)
+            TaskDialog.ShowDialog(new TaskDialogPage
+            {
+                Caption = "About Wallpapers",
+                Heading = "Couldn't uninstall",
+                Text = $"{why}.",
+                AllowCancel = true,
+                Icon = TaskDialogIcon.Warning,
+            }, TaskDialogStartupLocation.CenterScreen);
     }
 
     /// A reason the desktop can't be drawn is said once, as a balloon (it's in the log too).
