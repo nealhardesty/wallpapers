@@ -738,6 +738,52 @@ const STAGE_CHECKS = {
         if (Math.max(...avg) < 6) record(`nothing was drawn: ${avg}`);
         return true;
     }]],
+    // The Cat vs. the Ornament: alive on frame one; B swings the ornament; T
+    // sends a cat up and the tree comes down, the lights go out, ornaments
+    // everywhere, then the fade and it's up again for the next cat; with
+    // Topple off it stays up; a tap shines a dot that a cat chases.
+    'cat-ornament': [['the ornament swings, the tree falls and is put back, a cat chases the dot', async () => {
+        const at = '&seed=7&date=2026-12-10T20:00';
+        if (!await stageWith('cat-ornament', { configVersion: 1, cats: ['ras', 'butters', 'ibbie'], mischief: 0 }, at)) return record('no boot');
+        const st = () => evaluate('JSON.parse(JSON.stringify(WP.stage.manager.debugState()))');
+        let s = await st();
+        if (s.cats.length !== 3) record(`${s.cats.length} cats in the room, not 3`);
+        if (!['stare', 'lurk'].includes(s.cats.find(c => c.lead)?.task)) record(`the lead isn't at the ornament on frame one: ${JSON.stringify(s.cats)}`);
+        if (s.tree.state !== 'still' || !s.pendulum.hung) record(`the tree on frame one: ${JSON.stringify(s.tree)}`);
+        if (!s.cats.some(c => c.name === 'Ras The Destroyer')) record(`names: ${s.cats.map(c => c.name)}`);
+        // B: a swat.
+        await evaluate('WP.stage.manager.pendulum.omega = 0; WP.stage.manager.pendulum.theta = 0');
+        await press('b');
+        const swung = await waitFor(async () => Math.abs((await st()).pendulum.theta) > 0.05, 4000);
+        if (!swung) record(`B didn't swing the ornament: ${JSON.stringify((await st()).pendulum)}`);
+        await shoot('cat-ornament-bap');
+        // T: up the tree, and down it comes.
+        await press('t');
+        if (!await waitFor(async () => (await st()).tree.state === 'fall', 9000)) return record(`the tree never fell: ${JSON.stringify(await st())}`);
+        if (!await waitFor(async () => (await st()).tree.state === 'down', 5000)) return record('the tree never landed');
+        await sleep(800);
+        s = await st();
+        if (s.loose < 6) record(`only ${s.loose} things came off the tree`);
+        if (s.tree.lights !== 0) record('the lights stayed on');
+        if (s.cats.find(c => c.lead)?.task !== 'innocent') record(`after the fall the culprit is ${s.cats.find(c => c.lead)?.task}, not innocent`);
+        await shoot('cat-ornament-fallen');
+        const lead = s.lead;
+        if (!await waitFor(async () => (await st()).tree.state === 'still' && !(await st()).fade, 20000)) return record(`never put back: ${JSON.stringify((await st()).tree)}`);
+        s = await st();
+        if (s.loose || !s.pendulum.hung) record(`after the reset: ${s.loose} loose, hung ${s.pendulum.hung}`);
+        if (s.lead === lead) record('the same cat kept the ornament after the reset');
+        // Topple off: a climb, and the tree stays up.
+        if (!await stageWith('cat-ornament', { configVersion: 1, cats: ['turkey', 'ibbie'], topple: false }, at)) return record('no boot with topple off');
+        await press('t');
+        await sleep(8000);
+        s = await st();
+        if (s.tree.state === 'fall' || s.tree.state === 'down') record('the tree fell with Topple off');
+        // A tap: the dot, and a cat after it.
+        await mouse('mousePressed', 300, 700);
+        await mouse('mouseReleased', 300, 700);
+        if (!await waitFor(async () => (await st()).cats.some(c => c.task === 'chase'), 2000)) record(`nobody chased the dot: ${JSON.stringify((await st()).cats)}`);
+        return true;
+    }]],
     // 8.2: one full repaint per morph step, none while a pattern holds. On
     // Low there's no sheen, so a hold sends no frames at all.
     girih: [['one repaint per morph step, none while holding', async () => {

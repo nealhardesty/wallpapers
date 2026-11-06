@@ -30,6 +30,8 @@ const OVERRIDES = {
     girih: { configVersion: 1, baseTiling: '3.12.12', scale: 340 },
     'stained-glass': { configVersion: 1, light: 'afternoon' },
     orrery: { configVersion: 1, view: 'tilted', drift: false, showInfo: false, showLabels: false, planetSize: 1.4 },
+    // Moofy's grin under the tree, Ras at the ornament, Butters belly-up.
+    'cat-ornament': { configVersion: 1, cats: ['moofy', 'ras', 'butters'], inRoom: 3, catSize: 1.2 },
 };
 // URL parameters for a better picture: satellites as its sample station
 // passes overhead before dawn, weather's sample at a golden dusk (thumb mode never fetches, so it's the sample),

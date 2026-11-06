@@ -37,6 +37,7 @@ Click one to see it live.
 | [<img src="web/wallpapers/lanterns/thumb.webp" width="200" alt="Lantern Festival">](https://nealhardesty.github.io/wallpapers/?w=lanterns)<br>🏮 Lantern Festival | [<img src="web/wallpapers/rainy-window/thumb.webp" width="200" alt="Rainy Window">](https://nealhardesty.github.io/wallpapers/?w=rainy-window)<br>🪟 Rainy Window | [<img src="web/wallpapers/night-train/thumb.webp" width="200" alt="Night Train">](https://nealhardesty.github.io/wallpapers/?w=night-train)<br>🚆 Night Train | [<img src="web/wallpapers/fireworks/thumb.webp" width="200" alt="Fireworks">](https://nealhardesty.github.io/wallpapers/?w=fireworks)<br>🎆 Fireworks |
 | [<img src="web/wallpapers/lighthouse/thumb.webp" width="200" alt="Lighthouse">](https://nealhardesty.github.io/wallpapers/?w=lighthouse)<br>🌊 Lighthouse | [<img src="web/wallpapers/wiki-pond/thumb.webp" width="200" alt="Wiki Pond">](https://nealhardesty.github.io/wallpapers/?w=wiki-pond)<br>🪷 Wiki Pond | [<img src="web/wallpapers/satellites/thumb.webp" width="200" alt="Satellites">](https://nealhardesty.github.io/wallpapers/?w=satellites)<br>🛰️ Satellites | [<img src="web/wallpapers/jellyfin/thumb.webp" width="200" alt="Jellyfin">](https://nealhardesty.github.io/wallpapers/?w=jellyfin)<br>📺 Jellyfin |
 | [<img src="web/wallpapers/harvest/thumb.webp" width="200" alt="Harvest Valley">](https://nealhardesty.github.io/wallpapers/?w=harvest)<br>🌾 Harvest Valley | [<img src="web/wallpapers/weather/thumb.webp" width="200" alt="Weather">](https://nealhardesty.github.io/wallpapers/?w=weather)<br>🌦️ Weather | [<img src="web/wallpapers/world-clock/thumb.webp" width="200" alt="World Clock">](https://nealhardesty.github.io/wallpapers/?w=world-clock)<br>🌍 World Clock | [<img src="web/wallpapers/orrery/thumb.webp" width="200" alt="Orrery">](https://nealhardesty.github.io/wallpapers/?w=orrery)<br>🪐 Orrery |
+| [<img src="web/wallpapers/cat-ornament/thumb.webp" width="200" alt="The Cat vs. the Ornament">](https://nealhardesty.github.io/wallpapers/?w=cat-ornament)<br>🐾 The Cat vs. the Ornament | | | |
 
 The **Fireplace** 🔥 burns wood you'd recognise: furrowed oak, papery birch,
 scaly pine or bleached driftwood (following its Wood Type), round or split,
@@ -54,6 +55,18 @@ night train, fireworks (with a New Year's countdown), a lighthouse that
 keeps a real light's rhythm, every Wikipedia edit as a ripple on a pond, and
 the real satellites crossing your sky. Last, **Jellyfin** 📺 plays your own
 server's videos in a frame of your choice (see below). And for Thanksgiving, **Harvest Valley** 🌾: see below.
+
+**The Cat vs. the Ornament** 🐾 is a classic Christmas problem. A tree in a
+warm room, one ornament hanging low, and nine cats taking turns with it.
+Moofy lurks under the boughs with only his grin showing; Butters slow-blinks
+at you; Ras The Destroyer swats the ornament while making eye contact; Ibbie
+sleeps in the empty box; Die Fleder Maus has the zoomies; Turkey lounges
+belly-up; Harry (or Indiana Jones, or Friskies) plays; the Persian judges.
+Now and then one stares at the ornament for an uncomfortably long time, and
+now and then one goes up the tree, and the tree comes down: ornaments
+everywhere, the lights out, a cat with no idea what happened. Then a fade,
+and it's up again. Tap for a laser dot. In December, Seasonal takes turns
+between this and the Advent calendar.
 
 **Weather** 🌦️ is the forecast for your place from Open-Meteo (no key),
 over a sky that is the weather outside: drifting clouds, rain or snow,
@@ -326,8 +339,9 @@ moon. `?date=2026-11-26T17:00` shows any date and hour.
 
 You see only the wallpaper. On first run it's **Seasonal**: snow from January to
 April, the fish tank in May, fireflies in summer, falling leaves in
-September, Halloween in October, Harvest Valley in November and the advent
-calendar in December.
+September, Halloween in October, Harvest Valley in November, and in
+December the Christmas wallpapers, a different one each day (the advent
+calendar and The Cat vs. the Ornament).
 
 | Key | Action |
 |---|---|
@@ -394,7 +408,8 @@ you tick it, then seven, with the rest folded away:
   one · Rainy Window `W` wipe · Fireworks Space or `L` launch, `G` finale ·
   Lighthouse `L` next light, `S` sea state · Satellites `N` next station pass ·
   Harvest Valley `G` wait for the Great Pumpkin, `H` call the geese, `W` a gust,
-  `S` a cat chases a squirrel, `M` what the moon is doing · Weather `V` next view (days, hours, now), `U` °C or °F,
+  `S` a cat chases a squirrel, `M` what the moon is doing · The Cat vs. the Ornament `N` the next cat's
+  turn, `B` bap the ornament, `T` up the tree, `Z` the zoomies · Weather `V` next view (days, hours, now), `U` °C or °F,
   `R` refresh now · World Clock `V` next view (map, faces, board), `M` centre
   the map on the next place, `L` next map look · Orrery `=`/`+` faster, `-` slower,
   `0` back to now, `L` look, `S` scale, `V` from above or tilted.
@@ -403,6 +418,7 @@ you tick it, then seven, with the rest folded away:
 feed them in settings), Murmuration (you're the falcon), Lantern Festival,
 Rainy Window (draw in the fog), Fireworks, Pixel Room (the cat and the lamp),
 Harvest Valley (shake an apple tree; tap the scarecrow, or the sky for geese),
+The Cat vs. the Ornament (a laser dot for the cats),
 Satellites (what's that one?), Weather (a day's hours; tap outside to go back),
 World Clock (a city becomes home, and the map turns to it; tap it again to go back) and
 the Orrery (tap a planet for its card; drag the tilted view). Each has a setting to ignore touch. On

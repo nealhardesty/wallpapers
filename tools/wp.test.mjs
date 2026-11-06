@@ -20,17 +20,24 @@ const plain = value => JSON.parse(JSON.stringify(value));
 
 test('seasons: the agreed wallpaper for every month', () => {
     const expected = ['snow', 'snow', 'snow', 'snow', 'fishtank', 'fireflies', 'fireflies', 'fireflies', 'leaves', 'halloween', 'harvest', 'advent'];
-    expected.forEach((id, month) => assert.equal(WP.seasonalFor(new Date(2026, month, 15)), id, `month ${month + 1}`));
+    expected.forEach((id, month) => assert.equal(WP.seasonalFor(new Date(2026, month, 1)), id, `month ${month + 1}`));
 });
 
-test('seasons: New Year rolls advent over to snow', () => {
-    assert.equal(WP.seasonalFor(new Date(2026, 11, 31, 23, 59, 59)), 'advent');
+test('seasons: December takes turns, one Christmas wallpaper a day', () => {
+    const list = WP.SEASONS[11];
+    assert.ok(Array.isArray(list) && list.length >= 2 && list[0] === 'advent', 'December is a list, Advent first');
+    for (let day = 1; day <= 31; day++) assert.equal(WP.seasonalFor(new Date(2026, 11, day, 12)), list[(day - 1) % list.length], `Dec ${day}`);
+    assert.notEqual(WP.seasonalFor(new Date(2026, 11, 1)), WP.seasonalFor(new Date(2026, 11, 2)), 'the 1st and the 2nd differ');
+});
+
+test('seasons: New Year rolls December over to snow', () => {
+    assert.ok(WP.SEASONS[11].includes(WP.seasonalFor(new Date(2026, 11, 31, 23, 59, 59))));
     assert.equal(WP.seasonalFor(new Date(2027, 0, 1, 0, 0, 0)), 'snow');
 });
 
 test('seasons: every seasonal wallpaper exists and can be shown', () => {
     const showable = WP.showable().map(entry => entry.id);
-    for (const id of new Set(WP.SEASONS)) assert.ok(showable.includes(id), id);
+    for (const id of new Set(WP.SEASONS.flat())) assert.ok(showable.includes(id), id);
 });
 
 test('host kind: android, windows, the saver, the extension, else standalone', () => {

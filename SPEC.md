@@ -23,12 +23,13 @@ wallpapers' only home. They run in three hosts:
 > measurements on a real phone (6.2's numbers, 6.4a), the first signed
 > release (6.6), the switch-over itself (7.2), and trying Phase 8's touch
 > and location, and Jellyfin, on a phone. The player, the stage, the panel
-> and all 37 wallpapers run from `web/index.html`, as a Chrome new-tab extension, on
+> and all 38 wallpapers run from `web/index.html`, as a Chrome new-tab extension, on
 > GitHub Pages at https://nealhardesty.github.io/wallpapers/, and as an
 > Android live wallpaper. Every wallpaper is tiered and within budget.
 > Phase 11 (Harvest Valley, §10.22) added the 34th wallpaper for Thanksgiving.
 > Weather (§10.2), World Clock (§10.3) and the Orrery (§10.26) were built
-> 2026-11-05, making 37.
+> 2026-11-05, making 37. The Cat vs. the Ornament (§10.27, 2026-11-06) is
+> the first of four Christmas wallpapers, making 38.
 > Phase 10, the clock overlay (§4.9), was built 2026-10-28; §10 holds the
 > other ideas.
 > Windows (§10.25): the W0 spikes passed, and W1 (the desktop core: behind
@@ -131,6 +132,12 @@ Added in November 2026, drawn in code (design in §10.2):
 | `weather` | weather-data.js, weather-scenes.js, weather.js | ~1.9k lines | Network: `api.open-meteo.com` (+ the panel's geocoder); needs location; a labelled sample offline; pure data rules (`WeatherData`), unit-tested; interactive (tap a day); keys V, U, R |
 | `world-clock` | world-land.js, world-atlas.js (generated), world-cities.js, world-clock-math.js, world-clock-art.js, world-clock-map.js, world-clock-faces.js, world-clock-board.js, world-clock.js | ~2.3k lines | No network; Natural Earth land (public domain); the sun, moon, terminator and zones (`WorldClockMath`), unit-tested; follows `host.now()`; interactive (tap a city); keys V, M, L |
 | `orrery` | orrery-math.js, orrery-art.js, orrery-looks.js, orrery.js | ~2.3k lines | No network; Standish's Keplerian elements, the Moon, Jupiter's four, the zodiac and the seasons (`OrreryMath`), unit-tested; follows `host.now()` or time-lapse; interactive (tap a planet, drag the tilted view); keys = + − 0 L S V (§10.26) |
+
+Added for Christmas, drawn in code (design in §10.27):
+
+| id | Files | Size | Notes |
+|---|---|---|---|
+| `cat-ornament` | cat-ornament-logic.js, cat-ornament-cats.js, cat-ornament-room.js, cat-ornament.js | ~2.2k lines | Interactive (a tap's laser dot); nine named cats on one vector rig; the roster, the pendulum, the fall and the odds (`CatOrnamentLogic`), unit-tested; follows `host.now()` (Christmas Eve and Day); keys N, B, T, Z |
 
 About 1.7 MB of JavaScript in total. **Not imported:** links, weather, clocks,
 search/omniprompt, custom links, status bar, Docker/nginx, the homepage's
@@ -367,9 +374,11 @@ Phase 4 and 6 take it:
   | Sep | leaves |
   | Oct | halloween |
   | Nov | harvest |
-  | Dec | advent (wins over snow's Dec–Apr) |
+  | Dec | advent, cat-ornament: one a day, in turn (wins over snow's Dec–Apr) |
 
-  It uses the local calendar month, so it is Northern-Hemisphere only.
+  It uses the local calendar month, so it is Northern-Hemisphere only. A
+  month may list several (December's Christmas wallpapers): the day of the
+  month picks one, in turn, so it changes at midnight like the month does.
 
 ### 4.3 Host (`WP.host`, built in `core/stage.js`)
 
@@ -806,6 +815,7 @@ and the commits.
 | weather | — | Sky a quarter-size gradient on its own layer, painted only when it changes; the forecast one cached layer, rebuilt once a minute; clouds, rain, snow × density, pooled; with nothing moving in the sky, only the scenes' squares repaint; ≤ 20 fps through idleUntil, once a minute under reduced motion |
 | world-clock | `cityLights`, `twilight` (medium) | Background, land and graticule per resize and look; the night once a minute (a 1° altitude grid scaled up, or polygons), lights masked into it; a composed base per centre; once a second, idle between; only recentring, flaps and crossfades take more frames; stars and city lights × density |
 | orrery | `glow`, `belt` (medium) | Starfield, paper or study per resize and look; the plane (orbits, zodiac ring, a quiet belt band) cached per camera; sprites per size bucket (planets, gears); live and still it draws once a minute, with the corona and the belt shimmering at ~7 fps in deep space unless motion is reduced or the effects are shed; belt rocks × density, eased; time-lapse and drift at the slow-motion rate |
+| cat-ornament | `firelight` (high) | Room, the fire's and the tree's glow and the standing tree (halos, ornaments, star) one layer; bulbs twinkle over it; a still cat is a cached picture (quantized, at most every 0.15 s); a calm room paced at 15 fps (30 on a fast display) via idleUntil; physics on a 60 Hz step |
 | harvest | `mist`, `beams` (medium) | Land is one baked layer per resize; trees, leaves, apples, geese and clouds are baked sprites; the world is washed once per frame with the hour's light; leaves, apples, smoke, sparks and flocks × density; squirrels × (0.5 + 0.5 density) |
 
 #### In the panel
@@ -3189,6 +3199,69 @@ orbits, the IAU zodiac and the seasons (`OrreryMath`, Task 5,
   on the Earth's ray from the Sun at every scale and view; `=`, `-`, `0` and
   the toast; far dates clamped, flagged and finite; cards; drag; a phone
   and a taskbar inset; the idle and running frame rates.
+
+### 10.27 The Cat vs. the Ornament (`cat-ornament`, owner request, November 2026)
+
+The first of four Christmas wallpapers the owner sketched (then The Last
+Bulb on the Strand, Frost on the Glass, A Very Small Christmas). A classic
+Christmas problem: a tree in a warm room, one ornament hanging low, and the
+household's cats taking turns with it.
+
+- **The cats** are the owner's own, by name (the owner asked for them in the
+  public repo), each on one vector rig (`cat-ornament-cats.js`): a
+  skeleton in cat units, blended between seven poses (sit, stand, crouch,
+  loaf, curl, belly-up, rearing), the body a chest, a haunch and the hull
+  between them under one outline; coats are clipped markings; the face is
+  front-on, with eyes, lids and a mouth each wears its own way. The roster
+  (`CatOrnamentLogic.ROSTER`): **Moofy** (black Maine Coon/Ragdoll, fluffy,
+  lurks; a Cheshire grin that shines under the tree), **Butters** (chunky
+  buff tabby; slow blinks with hearts), **Waffles** (white with Holstein
+  patches, nosy), **Ras The Destroyer** (black tuxedo, the most trouble;
+  swats the ornament while making eye contact), **Ibbie** (grey tabby,
+  sleeps the most, likes the empty box), **Die Fleder Maus** (usually; else
+  **Maus**: a black and brown tortie with the zoomies), **Turkey** (large,
+  muscular grey mottled tabby; lounges belly-up; heavy, so his climbs always
+  bring the tree down), **Harry** (70%; else **Indiana Jones** or
+  **Friskies**: orange and white, playful; Indiana Jones knocks the
+  ornament the wrong way and it rolls after him), and the blue Persian
+  (**Kitty Toes**, **Cat Baloo** or **Poke Paws**, evenly; judges). Any
+  name can be replaced in the panel (a comma list picks at random).
+- **The director:** `inRoom` cats (1–5) from those enabled; one has the
+  ornament for `turnMinutes`, then the next (key N). It approaches, lurks
+  under the boughs (darkened, eyes and grin drawn again over the front
+  tier) or sits and stares, pupils widening ("…still staring at the
+  ornament", "This has been going on for some time"); then the roll
+  (`escalate`, by its trouble and `mischief`): swats (B), the ornament off
+  its hook (it bounces, rolls, gets chased, and after lying still for 40 s
+  goes back up), a climb (T), or it gives up and grooms. The others pick by
+  temperament (`idle`): sleep, loaf, lounge, the box, slow blinks, grooming,
+  watching, a wander, the zoomies (Z).
+- **The fall:** a climb rocks the tree (a spring); past 0.2 rad it falls as
+  a rod about the corner of its stand, bouncing to rest at 1.42 rad. The
+  ornaments fly off as it passes each one's angle, the star too, the
+  pendulum unhooks; the lights flicker, and on landing go out. The culprit
+  leaps clear and sits looking innocent ("…has no idea what happened
+  here", "Ras The Destroyer regrets nothing", "Turkey only meant to sit on
+  it"); sleepers startle; the Persian is unimpressed. After 9 s, a fade,
+  "Some time later…", everything back, and the next cat's turn. Topple off
+  (or reduced motion): the climber jumps down and the tree stays up.
+- **The room** (`cat-ornament-room.js`): red damask walls, a wainscot, a
+  window onto snowy roofs with snow falling (clipped to the panes), a cat's
+  portrait, plank floor, braided rug, tree skirt, presents, an open box
+  (THIS SIDE UP), a fire off to the side. Evening, day, or by the clock.
+- **Touch:** a tap or drag shines a laser dot; the nearest cat that's awake
+  (a sleeper less readily) chases and pounces, and the dot jumps away.
+- **Holidays:** captions on Christmas Eve ("Everyone is being very good.
+  Mostly.") and Day ("Merry Christmas from …").
+- **Cost:** see §4.8. Bench (phone, 4× throttle): 14–18% Low, ~25%
+  Medium. Smoke: frame one has the cast and the lead at the ornament; B
+  swings it; T brings the tree down (lights out, ornaments loose, the
+  culprit innocent) and the reset puts it back for another cat; Topple off
+  keeps it up; a tap's dot is chased. Unit: the roster and names (Harry's
+  70%, the Persian's evenly), the cast, the pendulum, the fall, the
+  director's odds, idling by temperament, the holidays.
+- **Seasonal:** December takes turns, a day each, between Advent and this
+  (§4.2); the other three join the list as they're built.
 
 ---
 
