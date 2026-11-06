@@ -959,7 +959,8 @@ class HarvestCat {
                 // from the same side, for a long nap on the nearest patch of ground.
                 this.wait -= dt;
                 if (this.wait <= 0) {
-                    const ground = m.catSpots.filter(s => !s.fixed && !s.roof);
+                    // On screen: a spot just past the edge would be a nap nobody sees.
+                    const ground = m.catSpots.filter(s => !s.fixed && !s.roof && s.x > 60 * m.u && s.x < m.W - 60 * m.u);
                     let spot = null, best = 1e9;
                     for (const s of ground) { const dd = Math.abs(s.x - this.x); if (dd < best) { best = dd; spot = s; } }
                     spot = spot || { x: harvestClamp(this.x, 60 * m.u, m.W - 60 * m.u), y: harvestClamp(this.y, m.meadowMin, m.meadowMax) };
