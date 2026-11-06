@@ -7,6 +7,7 @@ WP.defaults('cat-ornament', {
     turnMinutes: 3,         // how long each cat has the ornament before the next one's turn
     mischief: 0.5,          // 0 calm … 1 chaos: how often a stare becomes a swat, a fallen ornament, a climb
     topple: true,           // a climb can bring the tree down (then a fade, and it's up again)
+    tree: 'grand',          // the tree: 'cozy', 'grand' (wide and full), 'majestic' (wider still)
     time: 'evening',        // 'evening', 'live' (by the clock), 'day'
     lights: 'classic',      // the tree's lights: 'classic', 'warm', 'blue', 'candy'
     twinkle: 1,             // × how fast they twinkle

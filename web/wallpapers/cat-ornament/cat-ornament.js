@@ -86,7 +86,7 @@ class CatOrnamentAnimationManager {
         this.config = config;
         if (!this.running) return;
         const changed = keys => keys.some(k => JSON.stringify(old[k]) !== JSON.stringify(config[k]));
-        if (changed(['time', 'lights', 'ornaments', 'catSize'])) this.resize();
+        if (changed(['time', 'lights', 'ornaments', 'catSize', 'tree'])) this.resize();
         if (changed(['cats', 'inRoom', ...CatOrnamentLogic.ROSTER.map(c => this.nameKey(c.id))])) { this.buildCast(); this.seed(true); }
         if (changed(['topple']) && !config.topple && this.tree.state !== 'still') this.resetScene();
     }
@@ -112,7 +112,7 @@ class CatOrnamentAnimationManager {
         const W = this.W = innerWidth, H = this.H = innerHeight;
         this.canvas.width = Math.round(W * dpr);
         this.canvas.height = Math.round(H * dpr);
-        const L = this.layout = CatRoom.layout(W, H, this.host.insets || {});
+        const L = this.layout = CatRoom.layout(W, H, this.host.insets || {}, this.config.tree);
         L.u *= this.config.catSize;
         const random = WP.seededRandom(1225);
         // The ornament's side: toward the open floor.
@@ -126,9 +126,9 @@ class CatOrnamentAnimationManager {
             bulbs: palette.map(c => CatRoom.bulb(c, 11 * ou, dpr)),
             ornaments: this.treeArt.ornaments.map(o => CatRoom.ornament(ornamentColours[o.colour % ornamentColours.length], 8 * o.size, o.kind, dpr)),
             the: CatRoom.ornament(ornamentColours[0], 11 * ou, 'ball', dpr),
-            star: CatRoom.star(16 * ou, dpr),
-            treeGlow: CatRoom.glow(L.treeH * 0.75, '#ffb860', 0.32, dpr),
-            unlit: CatRoom.glow(L.treeH * 0.75, '#060306', 0.75, dpr),
+            star: CatRoom.star(this.treeArt.starR, dpr),
+            treeGlow: CatRoom.glow(this.glowR(), '#ffb860', 0.32, dpr),
+            unlit: CatRoom.glow(this.glowR(), '#060306', 0.75, dpr),
             fire: CatRoom.glow(Math.max(W, H) * 0.5, '#ff8a3a', 0.3, dpr),
             laser: CatRoom.glow(10 * ou, '#ff2a2a', 1, dpr),
             shadow: CatArt.shadowSprite(80 * L.u * dpr),
@@ -140,7 +140,7 @@ class CatOrnamentAnimationManager {
         this.lively = this.wants('firelight');
         const fr = Math.max(W, H) * 0.5;
         this.fireX = this.side < 0 ? W + fr * 0.35 : -fr * 0.35;
-        this.bg = CatRoom.background({ ...L, u: ou }, dpr, this.day, WP.seededRandom(1225), { fire: this.sprites.fire, glow: this.sprites.treeGlow, fireX: this.fireX });
+        this.bg = CatRoom.background({ ...L, u: ou }, dpr, this.day, WP.seededRandom(1225), { fire: this.sprites.fire, glow: this.sprites.treeGlow, glowR: this.glowR(), fireX: this.fireX });
         this.palette = palette;
         this.hookLocal = this.treeArt.hooks[this.side < 0 ? 0 : 1];
         this.tree = this.tree && prev ? this.tree : { phi: 0, omega: 0, state: 'still', lights: 1 };
@@ -157,12 +157,15 @@ class CatOrnamentAnimationManager {
         }
     }
 
+    // How far the tree's warm light reaches, round its middle.
+    glowR() { return Math.max(this.layout.treeH, this.layout.treeW * 1.2) * 0.75; }
+
     // ---- The tree's frame of reference ----------------------------------------------------
 
     // Where a point of the tree (local px) is now: it pivots on the corner
     // of its stand on the side it's leaning to.
     treePoint(lx, ly) {
-        const L = this.layout, t = this.tree, side = t.phi >= 0 ? 1 : -1, px = side * this.treeArt.w * 0.13;
+        const L = this.layout, t = this.tree, side = t.phi >= 0 ? 1 : -1, px = side * this.treeArt.pivot;
         const c = Math.cos(t.phi), s = Math.sin(t.phi), dx = lx - px;
         return { x: L.treeX + px + dx * c - ly * s, y: L.baseY + dx * s + ly * c };
     }
@@ -431,7 +434,7 @@ class CatOrnamentAnimationManager {
     // A point on the tree comes loose, moving as the tree is.
     fling(lx, ly, sprite, star) {
         const a = this.treePoint(lx, ly), t = this.tree, L = this.layout;
-        const side = t.phi >= 0 ? 1 : -1, px = L.treeX + side * this.treeArt.w * 0.13;
+        const side = t.phi >= 0 ? 1 : -1, px = L.treeX + side * this.treeArt.pivot;
         const rx = a.x - px, ry = a.y - L.baseY;
         this.loose.push({ x: a.x, y: a.y, vx: -ry * t.omega, vy: rx * t.omega, spin: 0, angle: Math.random() * 6, sprite, star,
             floor: Math.min(L.floor.y1, L.baseY + (8 + Math.random() * 46) * L.u), rest: 0 });
@@ -490,7 +493,7 @@ class CatOrnamentAnimationManager {
         if (this.config.snow) this.drawSnow(g);
         // The tree's warm light is in the room's layer; with the lights out, the room goes dim there.
         if (lights < 1) {
-            const r = L.treeH * 0.75;
+            const r = this.glowR();
             g.globalAlpha = (1 - lights) * (0.9 - this.day * 0.5);
             g.drawImage(this.sprites.unlit, L.treeX - r, L.baseY - L.treeH * 0.5 - r, r * 2, r * 2);
             g.globalAlpha = 1;
@@ -506,10 +509,10 @@ class CatOrnamentAnimationManager {
         // Who's where: behind the tree's front boughs (lurking, climbing), and in front.
         const behind = this.cats.filter(a => a.under), inFront = this.cats.filter(a => !a.under);
         // The tree.
-        if (standing) this.drawTree(g, null, lights, { bulbs: true });
-        else this.drawTree(g, lights > 0.5 ? art.lit : art.main, lights, { bulbs: true, ornaments: true, star: true });
+        if (standing) this.drawTree(g, null, lights, { bulbs: 'back' });
+        else this.drawTree(g, lights > 0.5 ? art.lit : art.main, lights, { bulbs: 'back', ornaments: true, star: true });
         for (const a of behind) this.drawCat(g, a);
-        this.drawTree(g, art.front, lights);
+        this.drawTree(g, lights > 0.5 ? art.frontLit : art.front, lights, { bulbs: 'front' });
         for (const a of behind) if (a.task.kind === 'lurk' || a.dark > 0.2) a.draw(g, { eyesOnly: true });
         // The presents, and the box.
         g.drawImage(this.presents.canvas, this.presents.x, this.presents.y, this.presents.w, this.presents.h);
@@ -546,7 +549,7 @@ class CatOrnamentAnimationManager {
     // The tree where it is now: its sprite, and as asked its bulbs, its ornaments (swaying unless `still`) and its star.
     drawTree(g, sprite, lights, parts = {}) {
         const L = this.layout, art = this.treeArt, t = this.tree, d = this.dpr;
-        const side = t.phi >= 0 ? 1 : -1, px = side * art.w * 0.13;
+        const side = t.phi >= 0 ? 1 : -1, px = side * art.pivot;
         g.save();
         g.translate(L.treeX + px, L.baseY);
         g.rotate(t.phi);
@@ -558,6 +561,7 @@ class CatOrnamentAnimationManager {
             const tw = this.config.twinkle;
             for (let i = 0; i < n; i++) {
                 const b = art.lights[i];
+                if (b.front !== (parts.bulbs === 'front')) continue;
                 const on = lights * (0.65 + 0.35 * Math.sin(this.time * b.rate * tw + b.phase));
                 if (on <= 0.02) { g.fillStyle = 'rgba(30,30,30,0.7)'; g.beginPath(); g.arc(b.x, b.y, 2.2 * L.u / this.config.catSize, 0, Math.PI * 2); g.fill(); continue; }
                 const k = b.colour % this.sprites.bulbs.length, r = 11 * L.u / this.config.catSize;
@@ -576,7 +580,7 @@ class CatOrnamentAnimationManager {
                 g.restore();
             });
         }
-        if (parts.star && !this.starOff) { const s = this.sprites.star, r = 16 * L.u / this.config.catSize * 1.3; g.drawImage(s, art.star.x - r, art.star.y - r, r * 2, r * 2); }
+        if (parts.star && !this.starOff) { const s = this.sprites.star, r = art.starR * 1.3; g.drawImage(s, art.star.x - r, art.star.y - r, r * 2, r * 2); }
         g.restore();
     }
 
@@ -612,7 +616,7 @@ class CatOrnamentAnimationManager {
         const r = o.sprite ? o.sprite.r : 12 * L.u;
         g.beginPath(); g.ellipse(o.x, o.floor + 1, r * 1.1, r * 0.3, 0, 0, Math.PI * 2); g.fill();
         g.save(); g.translate(o.x, o.y); g.rotate(o.angle);
-        if (o.star) { const s = this.sprites.star, rr = 16 * L.u / this.config.catSize * 1.3; g.drawImage(s, -rr, -rr - rr * 0.4, rr * 2, rr * 2); }
+        if (o.star) { const s = this.sprites.star, rr = this.treeArt.starR * 1.3; g.drawImage(s, -rr, -rr - rr * 0.4, rr * 2, rr * 2); }
         else { const s = o.sprite; g.drawImage(s.canvas, -s.cx, -s.cy - s.r * 0.9, s.w, s.h); }
         g.restore();
         g.globalAlpha = 1;

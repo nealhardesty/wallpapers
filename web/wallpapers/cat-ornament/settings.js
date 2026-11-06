@@ -17,6 +17,8 @@
         { key: 'captions', label: 'Captions', type: 'toggle', help: 'A line now and then: who’s lurking, who’s staring, who regrets nothing.' },
         { key: 'catSize', label: 'Cat size', type: 'range', min: 0.7, max: 1.4, step: 0.05, unit: '×', digits: 2 },
         { group: '🎄 The Tree and the Room' },
+        { key: 'tree', label: 'The tree', type: 'select', options: [['cozy', '🌲 Cozy'], ['grand', '🎄 Grand'], ['majestic', '✨ Majestic']],
+          help: 'Cozy is slim; Grand is wide and full, with more lights, ornaments and presents under it; Majestic is grander still, and on a phone all but touches the ceiling.' },
         { key: 'time', label: 'Time of day', type: 'select', options: [['evening', '🌙 Evening'], ['live', '🕰️ By the clock'], ['day', '☀️ Day']] },
         { key: 'lights', label: 'Lights', type: 'select', options: [['classic', '🌈 Classic colours'], ['warm', '✨ Warm white'], ['blue', '❄️ Icy blue'], ['candy', '🍬 Candy cane']] },
         { key: 'twinkle', label: 'Twinkle', type: 'range', min: 0, max: 3, step: 0.1, unit: '×', digits: 1, help: '0 holds them steady.' },

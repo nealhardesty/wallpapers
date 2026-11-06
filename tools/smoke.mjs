@@ -738,7 +738,7 @@ const STAGE_CHECKS = {
         if (Math.max(...avg) < 6) record(`nothing was drawn: ${avg}`);
         return true;
     }]],
-    // The Cat vs. the Ornament: alive on frame one; B swings the ornament; T
+    // The Cat vs. the Ornament: alive on frame one, the tree grand; B swings the ornament; T
     // sends a cat up and the tree comes down, the lights go out, ornaments
     // everywhere, then the fade and it's up again for the next cat; with
     // Topple off it stays up; a tap shines a dot that a cat chases.
@@ -751,6 +751,9 @@ const STAGE_CHECKS = {
         if (!['stare', 'lurk'].includes(s.cats.find(c => c.lead)?.task)) record(`the lead isn't at the ornament on frame one: ${JSON.stringify(s.cats)}`);
         if (s.tree.state !== 'still' || !s.pendulum.hung) record(`the tree on frame one: ${JSON.stringify(s.tree)}`);
         if (!s.cats.some(c => c.name === 'Ras The Destroyer')) record(`names: ${s.cats.map(c => c.name)}`);
+        // The default tree is the grand one: as wide as it's tall, and full of lights.
+        const tree = await evaluate('(a => ({ w: a.w, h: a.h, lights: a.lights.length, ornaments: a.ornaments.length }))(WP.stage.manager.treeArt)');
+        if (tree.w < tree.h * 0.9 || tree.lights < 100 || tree.ornaments < 20) record(`the tree is anemic: ${JSON.stringify(tree)}`);
         // B: a swat.
         await evaluate('WP.stage.manager.pendulum.omega = 0; WP.stage.manager.pendulum.theta = 0');
         await press('b');
