@@ -37,7 +37,7 @@ Click one to see it live.
 | [<img src="web/wallpapers/lanterns/thumb.webp" width="200" alt="Lantern Festival">](https://nealhardesty.github.io/wallpapers/?w=lanterns)<br>🏮 Lantern Festival | [<img src="web/wallpapers/rainy-window/thumb.webp" width="200" alt="Rainy Window">](https://nealhardesty.github.io/wallpapers/?w=rainy-window)<br>🪟 Rainy Window | [<img src="web/wallpapers/night-train/thumb.webp" width="200" alt="Night Train">](https://nealhardesty.github.io/wallpapers/?w=night-train)<br>🚆 Night Train | [<img src="web/wallpapers/fireworks/thumb.webp" width="200" alt="Fireworks">](https://nealhardesty.github.io/wallpapers/?w=fireworks)<br>🎆 Fireworks |
 | [<img src="web/wallpapers/lighthouse/thumb.webp" width="200" alt="Lighthouse">](https://nealhardesty.github.io/wallpapers/?w=lighthouse)<br>🌊 Lighthouse | [<img src="web/wallpapers/wiki-pond/thumb.webp" width="200" alt="Wiki Pond">](https://nealhardesty.github.io/wallpapers/?w=wiki-pond)<br>🪷 Wiki Pond | [<img src="web/wallpapers/satellites/thumb.webp" width="200" alt="Satellites">](https://nealhardesty.github.io/wallpapers/?w=satellites)<br>🛰️ Satellites | [<img src="web/wallpapers/jellyfin/thumb.webp" width="200" alt="Jellyfin">](https://nealhardesty.github.io/wallpapers/?w=jellyfin)<br>📺 Jellyfin |
 | [<img src="web/wallpapers/harvest/thumb.webp" width="200" alt="Harvest Valley">](https://nealhardesty.github.io/wallpapers/?w=harvest)<br>🌾 Harvest Valley | [<img src="web/wallpapers/weather/thumb.webp" width="200" alt="Weather">](https://nealhardesty.github.io/wallpapers/?w=weather)<br>🌦️ Weather | [<img src="web/wallpapers/world-clock/thumb.webp" width="200" alt="World Clock">](https://nealhardesty.github.io/wallpapers/?w=world-clock)<br>🌍 World Clock | [<img src="web/wallpapers/orrery/thumb.webp" width="200" alt="Orrery">](https://nealhardesty.github.io/wallpapers/?w=orrery)<br>🪐 Orrery |
-| [<img src="web/wallpapers/cat-ornament/thumb.webp" width="200" alt="The Cat vs. the Ornament">](https://nealhardesty.github.io/wallpapers/?w=cat-ornament)<br>🐾 The Cat vs. the Ornament | [<img src="web/wallpapers/last-bulb/thumb.webp" width="200" alt="The Last Bulb on the Strand">](https://nealhardesty.github.io/wallpapers/?w=last-bulb)<br>💡 The Last Bulb on the Strand | | |
+| [<img src="web/wallpapers/cat-ornament/thumb.webp" width="200" alt="The Cat vs. the Ornament">](https://nealhardesty.github.io/wallpapers/?w=cat-ornament)<br>🐾 The Cat vs. the Ornament | [<img src="web/wallpapers/last-bulb/thumb.webp" width="200" alt="The Last Bulb on the Strand">](https://nealhardesty.github.io/wallpapers/?w=last-bulb)<br>💡 The Last Bulb on the Strand | [<img src="web/wallpapers/frost/thumb.webp" width="200" alt="Frost on the Glass">](https://nealhardesty.github.io/wallpapers/?w=frost)<br>🧊 Frost on the Glass | |
 
 The **Fireplace** 🔥 burns wood you'd recognise: furrowed oak, papery birch,
 scaly pine or bleached driftwood (following its Wood Type), round or split,
@@ -75,8 +75,19 @@ lights, and stays lit a while, and works loose again; sometimes it
 flickers twice and thinks better of it. On Christmas Eve it lights first
 time. Once in a long while the whole strand goes out, and someone jiggles
 the last bulb until it all comes back. Tap a bulb to jiggle it. Nearly
-nothing moves, so it costs next to nothing. In December, Seasonal takes
-turns between this, the cats and the Advent calendar.
+nothing moves, so it costs next to nothing.
+
+**Frost on the Glass** 🧊: you're outside on a cold night, looking in. The
+room behind the window is out of focus, a warm lamp and a Christmas tree
+that's only the soft discs of its lights, and fern frost creeps in from the
+corners of each pane, crystal by crystal, glowing amber where the tree
+shines through it and glinting now and then. Someone inside draws in it
+with a fingertip (a heart, a star, a cat's paw print, NOEL backwards from
+out here) and it slowly frosts over again; after a long while the glass
+thaws from the middle and it all starts again. Snow falls outside, and now
+and then a flake sticks to the glass. Drag to draw in the frost; tap to
+breathe on it. In December, Seasonal takes turns between this, the bulb,
+the cats and the Advent calendar.
 
 **Weather** 🌦️ is the forecast for your place from Open-Meteo (no key),
 over a sky that is the weather outside: drifting clouds, rain or snow,
@@ -351,7 +362,8 @@ You see only the wallpaper. On first run it's **Seasonal**: snow from January to
 April, the fish tank in May, fireflies in summer, falling leaves in
 September, Halloween in October, Harvest Valley in November, and in
 December the Christmas wallpapers, a different one each day (the advent
-calendar, The Cat vs. the Ornament and The Last Bulb on the Strand).
+calendar, The Cat vs. the Ornament, The Last Bulb on the Strand and Frost on
+the Glass).
 
 | Key | Action |
 |---|---|
@@ -420,7 +432,8 @@ you tick it, then seven, with the rest folded away:
   Harvest Valley `G` wait for the Great Pumpkin, `H` call the geese, `W` a gust,
   `S` a cat chases a squirrel, `M` what the moon is doing · The Cat vs. the Ornament `N` the next cat's
   turn, `B` bap the ornament, `T` up the tree, `Z` the zoomies · The Last Bulb
-  `L` the last bulb tries (or gives up), `O` the strand out (or back), `D` a draft · Weather `V` next view (days, hours, now), `U` °C or °F,
+  `L` the last bulb tries (or gives up), `O` the strand out (or back), `D` a draft · Frost on the Glass `B` breathe on it,
+  `D` someone draws in it, `T` thaw (or frost over again) · Weather `V` next view (days, hours, now), `U` °C or °F,
   `R` refresh now · World Clock `V` next view (map, faces, board), `M` centre
   the map on the next place, `L` next map look · Orrery `=`/`+` faster, `-` slower,
   `0` back to now, `L` look, `S` scale, `V` from above or tilted.
@@ -430,7 +443,7 @@ feed them in settings), Murmuration (you're the falcon), Lantern Festival,
 Rainy Window (draw in the fog), Fireworks, Pixel Room (the cat and the lamp),
 Harvest Valley (shake an apple tree; tap the scarecrow, or the sky for geese),
 The Cat vs. the Ornament (a laser dot for the cats), The Last Bulb on the
-Strand (jiggle a bulb),
+Strand (jiggle a bulb), Frost on the Glass (draw in it; tap to breathe),
 Satellites (what's that one?), Weather (a day's hours; tap outside to go back),
 World Clock (a city becomes home, and the map turns to it; tap it again to go back) and
 the Orrery (tap a planet for its card; drag the tilted view). Each has a setting to ignore touch. On

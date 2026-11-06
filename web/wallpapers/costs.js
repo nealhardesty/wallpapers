@@ -7,6 +7,7 @@ WP.costs = {
     'cherry-blossoms': 1,
     'fireflies': 1,
     'fireplace': 2,
+    'frost': 1,
     'fireworks': 1,
     'fishtank': 2,
     'girih': 1,
