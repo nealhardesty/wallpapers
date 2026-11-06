@@ -784,6 +784,53 @@ const STAGE_CHECKS = {
         if (!await waitFor(async () => (await st()).cats.some(c => c.task === 'chase'), 2000)) record(`nobody chased the dot: ${JSON.stringify((await st()).cats)}`);
         return true;
     }]],
+    // The Last Bulb on the Strand: lit on frame one with the last bulb dark;
+    // still, it sends no frames at all; L makes it try (two flicks, then
+    // light), redrawing only its corner; O puts the whole strand out and the
+    // twist brings it back with the last bulb on; on Christmas Eve it lights
+    // first time; a tap on it jiggles it.
+    'last-bulb': [['idle when still, flick-flick-light in its corner, the strand out and back, Christmas Eve', async () => {
+        const st = () => evaluate('JSON.parse(JSON.stringify(WP.stage.manager.debugState()))');
+        if (!await stageWith('last-bulb', { configVersion: 1, stubborn: 0, outages: 'off', draft: 0 }, '&seed=7&date=2026-12-10T20:00')) return record('no boot');
+        let s = await st();
+        if (s.strand !== 'on' || s.strandLight !== 1 || s.last !== 'dark' || s.bulbs < 6) record(`frame one: ${JSON.stringify(s)}`);
+        await sleep(600);
+        const before = await evaluate('WP.host.frames.count');
+        await sleep(1500);
+        const idle = await evaluate('WP.host.frames.count') - before;
+        if (idle > 1) record(`${idle} frames while nothing moved (want none)`);
+        const corners = (await st()).stats.corner, fulls = (await st()).stats.full;
+        // L: it tries, and (Stubbornness 0) it lights after two flicks.
+        await evaluate(`window.__lb = []; (function rec() { const m = WP.stage.manager; if (m) window.__lb.push(m.last.power); if (window.__lb.length < 200) requestAnimationFrame(rec); })()`);
+        await press('l');
+        if (!await waitFor(async () => (await st()).last === 'lit', 4000)) return record(`L never lit it: ${JSON.stringify(await st())}`);
+        const powers = await evaluate('window.__lb');
+        let contacts = 0;
+        for (let i = 1; i < powers.length; i++) if (powers[i] > 0 && !(powers[i - 1] > 0)) contacts++;
+        if (contacts !== 3) record(`${contacts} contacts before it held (want two flicks, then on)`);
+        if (!await waitFor(async () => (await st()).lastLight >= 0.99, 1500)) record(`lit, but its light is ${(await st()).lastLight}`);
+        s = await st();
+        if (s.stats.corner - corners < 10 || s.stats.full !== fulls) record(`the flicker redrew ${s.stats.corner - corners} corners and ${s.stats.full - fulls} whole screens (want corners only)`);
+        if (!(s.next.last > 60)) record(`it isn't due to work loose for a while: ${JSON.stringify(s.next)}`);
+        await shoot('last-bulb-lit');
+        // O: the strand goes out; the twist brings it back, the last bulb on.
+        await press('o');
+        if (!await waitFor(async () => (await st()).strand === 'out', 2000)) return record(`O: ${JSON.stringify(await st())}`);
+        if (!await waitFor(async () => (s = await st()).strandLight < 0.01 && s.lastLight < 0.01, 1500)) record(`out, but lit: ${JSON.stringify(s)}`);
+        await shoot('last-bulb-out');
+        if (!await waitFor(async () => (await st()).strand === 'on' && (await st()).last === 'lit', 12000)) return record(`never came back: ${JSON.stringify(await st())}`);
+        // A tap on the last bulb jiggles it.
+        const p = await evaluate('(m => m.lastCentre())(WP.stage.manager)');
+        await mouse('mousePressed', p.x, p.y);
+        await mouse('mouseReleased', p.x, p.y);
+        if (!await waitFor(async () => (await st()).moving || (await st()).last === 'busy', 1500)) record('a tap on the last bulb did nothing');
+        // Christmas Eve: very stubborn, and it lights first time and stays.
+        if (!await stageWith('last-bulb', { configVersion: 1, stubborn: 0.9, outages: 'off', draft: 0 }, '&seed=7&date=2026-12-24T19:00')) return record('no boot on Christmas Eve');
+        if (!(await st()).eve) record('not Christmas Eve on the 24th at seven');
+        if (!await waitFor(async () => (await st()).last === 'lit', 7000)) return record(`on Christmas Eve it didn't light: ${JSON.stringify(await st())}`);
+        if ((await st()).next.last !== undefined) record('on Christmas Eve it means to go out again');
+        return true;
+    }]],
     // 8.2: one full repaint per morph step, none while a pattern holds. On
     // Low there's no sheen, so a hold sends no frames at all.
     girih: [['one repaint per morph step, none while holding', async () => {

@@ -16,6 +16,7 @@ WP.costs = {
     'jellyfin': 1,
     'koi-pond': 1,
     'lanterns': 1,
+    'last-bulb': 1,
     'leaves': 1,
     'lighthouse': 1,
     'matrix': 1,
