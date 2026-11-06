@@ -3188,9 +3188,12 @@ orbits, the IAU zodiac and the seasons (`OrreryMath`, Task 5,
   J2000; ecliptic longitude 266.84°, 5.6° south). The direction goes
   through the camera's rotation alone (`orient()`, no perspective): from
   above, longitude λ is at screen angle −λ; tilted, it turns with drags and
-  drift, and the far half of the globe's ecliptic circle is dashed, the
+  drift, and the far half of the globe's ecliptic circle is dashed (ticks
+  every 30°, longer at 0°, show it turning: a bare circle turning about its
+  own axis looks still; owner report 2026-11-06), the
   needle dimmer when it points away. Deep space: dark glass; brass: a ringed
-  globe on a stand on the plinth, its name engraved there; the chart: a
+  globe on a stand on the plinth, its name engraved there (GALACTIC CORE;
+  elsewhere "Galactic Core", the owner's name for it); the chart: a
   paper disc with hatching and degree ticks. It keeps below the readout
   (top left), above the plinth and clear of the chart's legend. A tap gives
   its card: the black hole, 26,700 light-years, its constellation and

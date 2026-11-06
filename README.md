@@ -131,8 +131,8 @@ Compressed, true or inner-planet distances, from above or tilted (drag to
 turn it). `=` runs time forward up to a year a second, `0` comes back to
 now. Tap a planet for how far it is, where it is among the stars, and
 whether it's retrograde. A little globe in a corner (pick which, or none)
-has a needle pointing at the centre of the galaxy, turning as the view
-does; the deep-space Milky Way band can be switched off.
+has a needle pointing at the Galactic Core, turning as the view does (its
+ticks turn with it); the deep-space Milky Way band can be switched off.
 
 Also: **Seasonal** 📅 picks by month (the default), **Blank** ⬛ is just
 black, and the **Bing Image of the Day** 🖼️ shows Bing's photo with its
