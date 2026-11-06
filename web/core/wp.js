@@ -5,7 +5,8 @@
 (function (WP) {
     'use strict';
 
-    // Seasonal: the wallpaper for each calendar month (0 = January).
+    // Seasonal: the wallpaper for each calendar month (0 = January). A list
+    // takes turns, one a day: December's Christmas wallpapers.
     WP.SEASONS = [
         'snow', 'snow', 'snow', 'snow',          // Jan–Apr
         'fishtank',                              // May
@@ -13,10 +14,13 @@
         'leaves',                                // Sep
         'halloween',                             // Oct
         'harvest',                               // Nov
-        'advent',                                // Dec (wins over snow)
+        ['advent', 'cat-ornament'],              // Dec (wins over snow), a different one each day
     ];
 
-    WP.seasonalFor = date => WP.SEASONS[date.getMonth()];
+    WP.seasonalFor = date => {
+        const pick = WP.SEASONS[date.getMonth()];
+        return Array.isArray(pick) ? pick[(date.getDate() - 1) % pick.length] : pick;
+    };
 
     // URL parameters. They override for this page load only; nothing here
     // is ever persisted (SPEC §4.2).

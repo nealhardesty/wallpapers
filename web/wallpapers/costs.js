@@ -3,6 +3,7 @@
 WP.costs = {
     'advent': 2,
     'bing': 1,
+    'cat-ornament': 2,
     'cherry-blossoms': 1,
     'fireflies': 1,
     'fireplace': 2,
