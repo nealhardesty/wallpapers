@@ -36,6 +36,7 @@ WP.schema('harvest', [
     { key: 'squirrels', label: 'Squirrels', type: 'range', min: 0, max: 24, step: 1, when: config => config.orchard, help: 'They gather the fallen apples and acorns and carry them off the edge of the screen, and wander back in later' },
     { key: 'turkeys', label: 'Turkeys', type: 'range', min: 0, max: 16, step: 1, when: config => config.orchard },
     { key: 'cats', label: 'Cats', type: 'range', min: 0, max: 20, step: 1, help: 'Each its own colour, size and temperament. Mostly they sleep, on roofs, hay bales, pumpkins and porches' },
+    { key: 'catChases', label: 'Squirrel Chases', type: 'range', min: 0, max: 30, step: 1, unit: '/hr', when: config => config.cats > 0 && config.orchard, help: 'Now and then a cat crouches, wiggles, and chases a squirrel clean off the screen; it strolls back a while later and naps for a long time. 0: they only watch. (Press S to set one off)' },
     { group: '🍂 Leaves and Wind' },
     { key: 'leaves', label: 'Falling Leaves', type: 'range', min: 0, max: 400, step: 10, help: 'Leaves in the air at once at High; lower performance tiers have fewer' },
     { key: 'foliage', label: 'Autumn Colours', type: 'select', options: [['mixed', '🍁 Mixed'], ['golden', '🌾 Golden'], ['crimson', '🍎 Crimson'], ['russet', '🍂 Russet'], ['ember', '🔥 Ember'], ['burgundy', '🍷 Burgundy'], ['early', '🌿 Early autumn (still green)'], ['custom', '🎨 My own palette']], help: 'The colour of the trees, the leaves, the forested hills and the litter on the grass' },

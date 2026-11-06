@@ -673,6 +673,40 @@ const STAGE_CHECKS = {
         if (!returned) record('it never came back');
         else if (!edgeEntry) record('it came back from somewhere other than offscreen');
         return true;
+    }], ['a cat chases a squirrel off the screen, comes back, and naps', async () => {
+        if (!await stageWith('harvest', { configVersion: 1, apples: 0, acorns: 0, cats: 1 }, '&seed=8&date=2026-11-24T15:00')) return record('no boot');
+        // One squirrel sitting in the meadow, the rest away; the cat on the ground.
+        await evaluate(`(m => {
+            const y = (m.meadowMin + m.meadowMax) / 2, c = m.cats[0];
+            m.squirrels.forEach((q, i) => { q.drop(); q.state = i ? 'away' : 'sit'; q.wait = 1e6; });
+            Object.assign(m.squirrels[0], { x: m.W * 0.55, y });
+            c.spot = { x: m.W * 0.35, y }; c.fixedSpot = false; c.x = c.spot.x; c.y = y; c.state = 'sleep'; c.wait = 1e6;
+            m.chaseIn = 1e9;
+        })(WP.stage.manager)`);
+        const said = await evaluate('WP.stage.manager.chaseSquirrel()');
+        if (!/Squirrel!/.test(said)) return record(`C said ${JSON.stringify(said)}`);
+        const seen = [];
+        let last = null, jump = 0, shot = false;
+        const done = await waitFor(async () => {
+            const now = await evaluate(`(m => { const c = m.cats[0];
+                if (c.state === 'out' && c.wait > 0.5) c.wait = 0.5;           // don't wait out its errand
+                if (c.state === 'walk' && c.napAfter) { const d = c.target.x - c.x; if (Math.abs(d) > 30) c.x += d * 0.5; }   // nor its stroll home
+                return { x: c.x, y: c.y, state: c.state, squirrel: m.squirrels[0].state, w: m.W, naps: c.naps || 0, chasing: c.chasing }; })(WP.stage.manager)`);
+            if (seen[seen.length - 1] !== now.state) seen.push(now.state);
+            if (now.state === 'chase' && !shot) { shot = true; await shoot('harvest-chase'); }
+            if (last && last.state === now.state && now.state === 'chase' && last.x > 0 && last.x < now.w && now.x > 0 && now.x < now.w) jump = Math.max(jump, Math.hypot(now.x - last.x, now.y - last.y));
+            last = now;
+            return now.naps > 0;
+        }, 40000);
+        if (!done) return record(`no nap after the chase (states: ${seen.join(' → ')})`);
+        const order = ['stalk', 'chase', 'out', 'walk', 'sleep'].filter(st => seen.includes(st)).join();
+        if (order !== 'stalk,chase,out,walk,sleep') record(`the chase went ${seen.join(' → ')}`);
+        if (jump > 120) record(`the cat jumped ${Math.round(jump)} px mid-chase`);
+        const after = await evaluate('(m => ({ squirrel: m.squirrels[0].state, cat: m.cats[0].state, wait: m.cats[0].wait, x: m.cats[0].x, w: m.W }))(WP.stage.manager)');
+        if (after.squirrel !== 'away') record(`the squirrel wasn't chased off (it's ${after.squirrel})`);
+        if (after.cat !== 'sleep' || after.wait < 100 || after.x < 0 || after.x > after.w) record(`after the chase: ${JSON.stringify(after)}`);
+        await shoot('harvest-nap');
+        return true;
     }], ['the Great Pumpkin rises at night, and never by day', async () => {
         await cdp.send('Page.navigate', { url: `${WEB}/stage.html?w=harvest&seed=7&date=2026-11-24T14:00` });
         await waitFor(() => evaluate('WP.stage?.ready === true'));
@@ -1243,6 +1277,37 @@ const STAGE_CHECKS = {
             if (seen.join() !== 'map,faces,board,map') record(`views went ${seen.join(' → ')}`);
             return true;
         }],
+        ['stretched, zoomed on home, the sun or the moon; borders, provinces and city names', async () => {
+            const at = '&date=2026-11-05T17:50';
+            const view = () => evaluate(`(m => ({ ...m.layout, W: innerWidth, H: innerHeight, sun: m.sun, moon: m.moon, atlas: !!m.views.map.atlas }))(WP.stage.manager)`);
+            await stageWith('world-clock', { configVersion: 1, mapFit: 'stretch' }, at);
+            await sleep(400);
+            let v = await view();
+            if (Math.abs(v.top) > 0.5 || Math.abs(v.mapHeight - v.H) > 0.5) record(`stretched: the map is ${v.mapHeight} tall from ${v.top}, on a ${v.H} screen`);
+            if (await evaluate(DRAWN) < 2) record('stretched: nothing drawn');
+            await shoot('world-clock-stretched');
+            for (const zoomOn of ['home', 'sun', 'moon']) {
+                await stageWith('world-clock', { configVersion: 1, zoom: 3, zoomOn, mapStyle: 'atlas', borders: true, provinces: true, placeLabels: 'major' }, at);
+                await sleep(500);
+                v = await view();
+                if (v.mapWidth !== v.W * 3) record(`${zoomOn}: zoom 3 gives a map ${v.mapWidth} wide`);
+                if (v.top > 0.5 || v.top + v.mapHeight < v.H - 0.5) record(`${zoomOn}: zoomed, the map ${v.top}–${v.top + v.mapHeight} doesn't cover the screen`);
+                const want = zoomOn === 'home' ? await evaluate('WP.stage.manager.centerLon()') : v[zoomOn].lon;
+                if (Math.abs(((v.centre - want) % 360 + 540) % 360 - 180) > 0.01) record(`${zoomOn}: centred on ${v.centre}, not ${want}`);
+                if (!v.atlas) record(`${zoomOn}: borders on, but none drawn`);
+                if (!v.places.length) record(`${zoomOn}: no city names`);
+                if (await evaluate(DRAWN) < 2) record(`${zoomOn}: nothing drawn`);
+                await shoot(`world-clock-zoom-${zoomOn}`);
+            }
+            const names = async placeLabels => {
+                await stageWith('world-clock', { configVersion: 1, placeLabels }, at);
+                await sleep(300);
+                return (await view()).places;
+            };
+            const off = await names('off'), largest = await names('largest'), major = await names('major');
+            if (off.length || largest.length < 15 || major.length <= largest.length) record(`city names: ${off.length} off, ${largest.length} largest, ${major.length} major`);
+            return true;
+        }],
         ['every map look draws; L steps through them', async () => {
             for (const look of ['atlas', 'blueprint', 'paper']) {
                 await stageWith('world-clock', { configVersion: 1, mapStyle: look }, '&date=2026-11-05T17:50');
@@ -1590,6 +1655,62 @@ const STAGE_CHECKS = {
             if (!reasons.includes('battery')) record(`the stage's power reasons: ${reasons}`);
             if (battery > 0.7) record(`on battery: ${battery.toFixed(1)} fps (want the once-a-minute idle)`);
             await evaluate(`WP.power({ battery: { charging: true, level: 0.6 } })`);
+            return true;
+        }],
+        ['the galactic compass points at Sagittarius A*, in any corner; the Milky Way can go', async () => {
+            await stageWith('orrery', { configVersion: 1 }, '&date=2026-11-05T21:00');
+            await sleep(300);
+            const top = await counts('({ c: m.debugPositions().compass, lon: m.galaxyLon })');
+            if (!top.c) return record('no compass by default');
+            if (Math.abs(top.lon - 266.84) > 0.2) record(`the galactic centre is at ecliptic longitude ${top.lon.toFixed(2)}° (want 266.84°)`);
+            // From above, longitude λ is at screen angle −λ (y runs down).
+            const off = Math.abs(((top.c.dir + top.lon) % 360 + 540) % 360 - 180);
+            if (off > 1) record(`from above the needle is ${off.toFixed(1)}° off the galactic centre`);
+            // Every corner on screen, in every look; clear of the readout, the plinth and the legend.
+            for (const look of ['space', 'brass', 'chart']) {
+                for (const corner of ['top-left', 'top-right', 'bottom-left', 'bottom-right']) {
+                    await stageWith('orrery', { configVersion: 1, look, galaxyCompass: corner }, '&date=2026-11-05T21:00');
+                    await sleep(250);
+                    const p = await counts('({ c: m.debugPositions().compass, W: innerWidth, H: innerHeight, legend: m.legendBox, plinth: m.base ? innerHeight - m.base * 1.1 : null, readout: 16 * m.k + 12.5 * m.k * 4.4 })');
+                    const c = p.c, name = `${look} ${corner}`;
+                    if (!c) { record(`${name}: no compass`); continue; }
+                    if (c.x - c.r < 0 || c.x + c.r > p.W || c.y - c.r < 0 || c.y + c.r > p.H) record(`${name}: off screen at ${Math.round(c.x)},${Math.round(c.y)}`);
+                    if (corner === 'top-left' && c.y - c.r < p.readout) record(`${name}: over the readout`);
+                    if (p.plinth && corner.startsWith('bottom') && Math.abs(c.y + c.r * 1.5 - p.plinth) > 2) record(`${name}: not standing on the plinth`);
+                    const L = p.legend;
+                    if (L && c.x + c.r > L.x0 && c.x - c.r < L.x1 && c.y + c.r > L.y0 && c.y - c.r < L.y1) record(`${name}: over the legend`);
+                    if (look === 'brass' && corner === 'bottom-left') await shoot('orrery-compass-brass');
+                }
+            }
+            // Tilted, it turns with the camera.
+            await stageWith('orrery', { configVersion: 1, view: 'tilted', drift: false });
+            await sleep(300);
+            const a = await counts('m.debugPositions().compass.dir');
+            await drag([[700, 500], [800, 500], [900, 500]]);
+            const b = await counts('m.debugPositions().compass.dir');
+            if (Math.abs(((a - b) % 360 + 540) % 360 - 180) < 5) record(`turning the camera moved the needle ${(b - a).toFixed(1)}°`);
+            // A tap on it tells what it points at.
+            await stageWith('orrery', { configVersion: 1 }, '&date=2026-11-05T21:00');
+            await sleep(300);
+            const c = await counts('m.debugPositions().compass');
+            await mouse('mousePressed', c.x, c.y);
+            await mouse('mouseReleased', c.x, c.y);
+            await sleep(200);
+            const card = await counts('m.debugPositions().card');
+            if (!card?.title.includes('centre of the galaxy') || !/In our sky: Sagittarius/.test(card.lines.join(' | '))) record(`the compass's card: ${JSON.stringify(card)}`);
+            else await shoot('orrery-compass-card');
+            await stageWith('orrery', { configVersion: 1, galaxyCompass: 'off' });
+            await sleep(250);
+            if (await counts('m.debugPositions().compass')) record('the compass stayed when off');
+            // Without the Milky Way the sky is darker (and the stars still there).
+            const glow = await evaluate(AVERAGE);
+            await stageWith('orrery', { configVersion: 1, galaxyCompass: 'off', milkyWay: false });
+            await sleep(250);
+            const plain = await evaluate(AVERAGE);
+            const sum = v => v[0] + v[1] + v[2];
+            if (sum(plain) >= sum(glow)) record(`no Milky Way is no darker: ${plain} against ${glow}`);
+            if (await evaluate(DRAWN) < 2) record('no Milky Way: nothing drawn');
+            await shoot('orrery-no-milky-way');
             return true;
         }],
         ['still and live it idles; time-lapse and drift run', async () => {

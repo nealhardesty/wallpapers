@@ -69,8 +69,11 @@ real day and night, with twilight, the sun and the moon overhead and the city
 lights coming on, in four looks (night lights, atlas, blueprint, old paper).
 Or as analog faces, each dial that city's sky, or as a split-flap departures
 board that flips as the minutes turn. Pick cities in the panel, or add any
-time zone as `Label=Area/City`. No network, no location: "Here" is your
-device's time zone.
+time zone as `Label=Area/City`. The map can be stretched to fill the screen,
+or zoomed in (up to 8×) on home, or on wherever the sun or the moon is
+overhead, with country borders, states and provinces, and the biggest
+cities' names if you like. No network, no location: "Here" is your device's
+time zone.
 
 The **Orrery** 🪐 is the solar system as it is right now, computed in code:
 the eight planets (and Pluto, if you like), the Moon in its real phase,
@@ -80,7 +83,9 @@ chart with lines of sight showing where each planet is in tonight's sky.
 Compressed, true or inner-planet distances, from above or tilted (drag to
 turn it). `=` runs time forward up to a year a second, `0` comes back to
 now. Tap a planet for how far it is, where it is among the stars, and
-whether it's retrograde.
+whether it's retrograde. A little globe in a corner (pick which, or none)
+has a needle pointing at the centre of the galaxy, turning as the view
+does; the deep-space Milky Way band can be switched off.
 
 Also: **Seasonal** 📅 picks by month (the default), **Blank** ⬛ is just
 black, and the **Bing Image of the Day** 🖼️ shows Bing's photo with its
@@ -291,7 +296,8 @@ part of it. A village with smoking chimneys and a windmill, patchwork
 farmland, corn and a scarecrow with a crow, a pumpkin patch, an apple
 orchard whose apples and acorns fall, tumble and get carried off the edge of
 the screen by squirrels (who wander back in later), turkeys and sleepy cats
-about the meadow, flocks of small brown-and-black geese overhead, up to a hundred
+about the meadow (who, now and then, chase a squirrel clear off the screen,
+then come back for a long nap), flocks of small brown-and-black geese overhead, up to a hundred
 strong, sometimes several at once and sometimes with a few stragglers behind
 (a V that ripples wingbeat by wingbeat; the leader drops to the back now and
 then),
@@ -388,7 +394,7 @@ you tick it, then seven, with the rest folded away:
   one · Rainy Window `W` wipe · Fireworks Space or `L` launch, `G` finale ·
   Lighthouse `L` next light, `S` sea state · Satellites `N` next station pass ·
   Harvest Valley `G` wait for the Great Pumpkin, `H` call the geese, `W` a gust,
-  `M` what the moon is doing · Weather `V` next view (days, hours, now), `U` °C or °F,
+  `S` a cat chases a squirrel, `M` what the moon is doing · Weather `V` next view (days, hours, now), `U` °C or °F,
   `R` refresh now · World Clock `V` next view (map, faces, board), `M` centre
   the map on the next place, `L` next map look · Orrery `=`/`+` faster, `-` slower,
   `0` back to now, `L` look, `S` scale, `V` from above or tilted.
@@ -517,6 +523,7 @@ Run `make` to list every target.
 | `make cert` | Make a fresh self-signed certificate in `.cert/` (localhost and your LAN addresses) |
 | `make bing-json` | Fetch Bing's last eight images of the day into `web/bing.json`, so the Bing wallpaper works when served |
 | `make thumbnails` | Re-render the panel's wallpaper thumbnails (they're committed: review the changes) |
+| `make world-atlas` | Regenerate World Clock's borders, states and provinces and city names, `web/wallpapers/world-clock/world-atlas.js`, from Natural Earth (downloads it; `ATLAS=<folder>` to use copies you have). Committed; the same input gives the same file |
 | `make world-land` | Regenerate World Clock's coastline, `web/wallpapers/world-clock/world-land.js`, from Natural Earth's 1:110m land (downloads it; `LAND=<file>` to use a copy you have). Committed; the same input gives the same file |
 | `make icons` | Render `web/icons/icon.svg` to the PNG icons the extension and web app need (committed) |
 | `make screenshots` | Re-render the README's screenshots in `docs/` (committed: review the changes) |

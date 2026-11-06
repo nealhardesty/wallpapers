@@ -244,27 +244,28 @@ const OrreryArt = (() => {
 
     // ---- Backgrounds --------------------------------------------------------------
 
-    // Deep space: a dark gradient, a faint Milky Way band, and seeded stars
-    // (count × density), with a few bright ones glinting. W, H in device px.
-    function starfield(W, H, count, dpr) {
+    // Deep space: a dark gradient, a faint Milky Way band (unless `band` is
+    // false), and seeded stars (count × density), with a few bright ones
+    // glinting. W, H in device px.
+    function starfield(W, H, count, dpr, band = true) {
         const out = canvas(W, H), g = out.getContext('2d'), rand = random(4242);
         g.fillStyle = radial(g, W * 0.5, H * 0.45, Math.hypot(W, H) * 0.6, [[0, '#0a0f20'], [0.55, '#060914'], [1, '#03040a']]);
         g.fillRect(0, 0, W, H);
         // The Milky Way: soft blobs along a diagonal, then dust lanes.
-        const band = (t, off) => [W * t, H * (0.85 - 0.7 * t) + off];
+        const along = (t, off) => [W * t, H * (0.85 - 0.7 * t) + off];
         const blob = glow(64, [[0, 'rgba(150,160,210,0.16)'], [1, 'rgba(150,160,210,0)']]);
-        for (let i = 0; i < 220; i++) {
+        for (let i = 0; band && i < 220; i++) {
             const t = rand(), spread = (rand() - 0.5) * (rand() - 0.5) * H * 0.9;
-            const [x, y] = band(t, spread), s = (40 + rand() * 160) * dpr;
+            const [x, y] = along(t, spread), s = (40 + rand() * 160) * dpr;
             g.globalAlpha = 0.35 + rand() * 0.5;
             g.drawImage(blob, x - s / 2, y - s / 2, s, s);
         }
         g.globalAlpha = 1;
         const tints = ['#ffffff', '#dfe8ff', '#fff2dc', '#ffe0c0', '#cad8ff'];
         for (let i = 0; i < count; i++) {
-            const inBand = rand() < 0.45;
+            const inBand = band && rand() < 0.45;
             let x, y;
-            if (inBand) [x, y] = band(rand(), (rand() - 0.5) * (rand() - 0.5) * H * 0.7);
+            if (inBand) [x, y] = along(rand(), (rand() - 0.5) * (rand() - 0.5) * H * 0.7);
             else { x = rand() * W; y = rand() * H; }
             const mag = rand() ** 3;
             g.globalAlpha = 0.25 + mag * 0.75;
@@ -281,6 +282,85 @@ const OrreryArt = (() => {
         }
         g.globalAlpha = 1;
         return out;
+    }
+
+    // The galactic compass's globe, radius `px` (device px), in two sprites
+    // the needle goes between: `back` (the glass, or the paper disc and its
+    // shading) and `front` (the rim and the glint). `ink` and `paper` are the
+    // chart's colours.
+    function globe(px, look, ink, paper) {
+        const S = Math.ceil(px * 2.5) + 4, c = S / 2;
+        const back = canvas(S, S), front = canvas(S, S), b = back.getContext('2d'), f = front.getContext('2d');
+        const disc = g => { g.beginPath(); g.arc(c, c, px, 0, TAU); };
+        if (look === 'chart') {
+            disc(b);
+            b.fillStyle = paper;
+            b.fill();
+            // Hatching in the crescent away from the light (up and to the left).
+            b.save();
+            disc(b);
+            b.clip();
+            b.beginPath();
+            b.rect(0, 0, S, S);
+            b.arc(c - px * 0.32, c - px * 0.32, px * 1.02, 0, TAU);
+            b.clip('evenodd');
+            b.strokeStyle = ink;
+            b.globalAlpha = 0.35;
+            b.lineWidth = Math.max(0.6, px * 0.02);
+            for (let i = -px * 2; i < px * 2; i += Math.max(2.5, px * 0.09)) {
+                b.beginPath(); b.moveTo(c + i - px, c - px); b.lineTo(c + i + px, c + px); b.stroke();
+            }
+            b.restore();
+            // The rim, and a ring of degree ticks outside it.
+            f.strokeStyle = ink;
+            f.lineWidth = Math.max(1, px * 0.04);
+            disc(f); f.stroke();
+            f.lineWidth = Math.max(0.6, px * 0.02);
+            for (let i = 0; i < 72; i++) {
+                const a = i / 72 * TAU, l = i % 18 === 0 ? 0.16 : i % 2 === 0 ? 0.09 : 0.05;
+                f.beginPath();
+                f.moveTo(c + Math.cos(a) * px * 1.04, c + Math.sin(a) * px * 1.04);
+                f.lineTo(c + Math.cos(a) * px * (1.04 + l), c + Math.sin(a) * px * (1.04 + l));
+                f.stroke();
+            }
+            return { back, front };
+        }
+        const brass = look === 'brass';
+        disc(b);
+        b.fillStyle = radial(b, c - px * 0.25, c - px * 0.3, px * 1.3, brass
+            ? [[0, 'rgba(70,48,22,0.5)'], [0.65, 'rgba(26,16,7,0.72)'], [1, 'rgba(10,6,2,0.85)']]
+            : [[0, 'rgba(44,64,118,0.5)'], [0.65, 'rgba(14,22,50,0.7)'], [1, 'rgba(5,8,22,0.86)']]);
+        b.fill();
+        if (brass) {
+            // A brass meridian ring, engraved every 15°.
+            const ring = f.createLinearGradient(c - px, c - px, c + px, c + px);
+            ring.addColorStop(0, '#fff0b5'); ring.addColorStop(0.35, '#d6a650'); ring.addColorStop(0.7, '#8a5e1e'); ring.addColorStop(1, '#e2b65e');
+            f.strokeStyle = ring;
+            f.lineWidth = px * 0.11;
+            f.beginPath(); f.arc(c, c, px * 1.04, 0, TAU); f.stroke();
+            f.strokeStyle = 'rgba(40,24,6,0.7)';
+            f.lineWidth = Math.max(0.6, px * 0.018);
+            for (let i = 0; i < 24; i++) {
+                const a = i / 24 * TAU;
+                f.beginPath();
+                f.moveTo(c + Math.cos(a) * px * 0.99, c + Math.sin(a) * px * 0.99);
+                f.lineTo(c + Math.cos(a) * px * 1.09, c + Math.sin(a) * px * 1.09);
+                f.stroke();
+            }
+        } else {
+            f.strokeStyle = 'rgba(170,196,255,0.5)';
+            f.lineWidth = Math.max(1, px * 0.035);
+            disc(f); f.stroke();
+            // Light caught along the lower rim.
+            f.strokeStyle = 'rgba(190,210,255,0.22)';
+            f.lineWidth = px * 0.08;
+            f.beginPath(); f.arc(c, c, px * 0.9, 0.35, Math.PI - 0.35); f.stroke();
+        }
+        // The glint, up and to the left.
+        const hx = c - px * 0.38, hy = c - px * 0.42;
+        f.fillStyle = radial(f, hx, hy, px * 0.42, [[0, 'rgba(255,255,255,0.42)'], [0.5, 'rgba(255,255,255,0.1)'], [1, 'rgba(255,255,255,0)']]);
+        f.beginPath(); f.ellipse(hx, hy, px * 0.42, px * 0.3, -0.7, 0, TAU); f.fill();
+        return { back, front };
     }
 
     // An old chart's paper: parchment (warm, foxed, fibrous) or night (deep
@@ -371,5 +451,5 @@ const OrreryArt = (() => {
         return out;
     }
 
-    return { TAU, SANS, SERIF, SYMBOLS, clamp, smooth, rgb, css, mix, shade, canvas, random, radial, glow, sphere, corona, rays, sunDisc, gear, starfield, paper, study, walnut };
+    return { TAU, SANS, SERIF, SYMBOLS, clamp, smooth, rgb, css, mix, shade, canvas, random, radial, glow, sphere, corona, rays, sunDisc, gear, globe, starfield, paper, study, walnut };
 })();

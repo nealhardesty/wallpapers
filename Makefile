@@ -49,6 +49,9 @@ thumbnails: ## Regenerate the panel's wallpaper thumbnails (committed; review th
 world-land: ## Regenerate World Clock's coastline from Natural Earth's 1:110m land (downloads it; LAND=<file> to use a copy; committed)
 	@node tools/world-land.mjs $(LAND)
 
+world-atlas: ## Regenerate World Clock's borders, provinces and city labels from Natural Earth (downloads it; ATLAS=<folder> to use copies; committed)
+	@node tools/world-atlas.mjs $(ATLAS)
+
 icons: ## Render web/icons/icon.svg to the extension's and web app's PNGs (committed)
 	@node tools/icons.mjs
 

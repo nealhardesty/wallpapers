@@ -20,5 +20,7 @@ WP.defaults('orrery', {
     showPluto: false,
     skyLines: true,         // the chart's lines from the Earth to each planet
     showInfo: true,         // the corner readout
+    galaxyCompass: 'bottom-right',  // a globe whose needle points at the galaxy's centre: 'off', 'top-left', 'top-right', 'bottom-left', 'bottom-right'
+    milkyWay: true,         // deep space's band of the Milky Way behind the stars
     touch: true,            // tap a planet for its card; drag to turn the tilted view
 });

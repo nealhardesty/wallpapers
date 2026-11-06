@@ -57,6 +57,7 @@
               { keys: ['g'], label: 'Wait for the Great Pumpkin', run: valley => valley.waitForGreatPumpkin() },
               { keys: ['h'], label: 'Call the geese', run: valley => valley.callGeese() },
               { keys: ['w'], label: 'A gust of wind', run: valley => valley.blow() },
+              { keys: ['s'], label: 'A cat goes after a squirrel', run: valley => valley.chaseSquirrel() },
               { keys: ['m'], label: 'What is the moon doing?', run: valley => valley.moonReport() },
           ] },
         { id: 'neko', name: 'Neko', icon: '🐈', accent: '#f2c38b', scripts: ['neko/sprites.js', 'neko/hats.js', 'neko/neko.js'],
@@ -117,7 +118,7 @@
         // clockface.js (the clock overlay's zone helpers) loads first: the
         // maths reads WP.clockface when it's called.
         { id: 'world-clock', name: 'World Clock', icon: '🌍', accent: '#ffd479', background: '#06101c',
-          scripts: ['../core/clockface.js', 'world-clock/world-land.js', 'world-clock/world-cities.js', 'world-clock/world-clock-math.js', 'world-clock/world-clock-art.js',
+          scripts: ['../core/clockface.js', 'world-clock/world-land.js', 'world-clock/world-atlas.js', 'world-clock/world-cities.js', 'world-clock/world-clock-math.js', 'world-clock/world-clock-art.js',
               'world-clock/world-clock-map.js', 'world-clock/world-clock-faces.js', 'world-clock/world-clock-board.js', 'world-clock/world-clock.js'],
           settingsScripts: ['world-clock/world-cities.js'],
           make: host => new WorldClockAnimationManager(host), cost: 'low', motion: 'slow', interactive: true,

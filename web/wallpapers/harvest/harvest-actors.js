@@ -245,6 +245,13 @@ class HarvestSquirrel {
         this.go(e.x, e.y, 'flee');
     }
 
+    // Chased: drop everything and run off the edge on the far side from the cat.
+    chased(by) {
+        this.drop();
+        const m = this.m, margin = 50 * m.u, right = by.x < this.x;
+        this.go(right ? m.W + margin : -margin, harvestClamp(this.y + (Math.random() - 0.5) * 30 * m.u, m.meadowMin, m.meadowMax), 'flee');
+    }
+
     drop() {
         if (!this.apple) return;
         this.apple.carried = null;
@@ -845,8 +852,11 @@ const HARVEST_COATS = [
 // grass under a tree, the warm side of the bonfire after dark. It sleeps
 // for a long time, sits up, washes a paw, stretches, sleeps again; once in
 // a long while it gets up, stretches, and wanders to somewhere better. It
-// watches squirrels with great interest and does absolutely nothing about
-// them.
+// watches squirrels with great interest and, nearly always, does absolutely
+// nothing about them. Nearly: once in a while (the manager decides when) one
+// crouches, wiggles, and bolts after a squirrel, chasing it clean off the
+// edge of the screen; some time later it ambles back in, far too pleased with
+// itself, and naps for a long while.
 class HarvestCat {
     constructor(m, spot, coat, lazy) {
         this.m = m;
@@ -879,13 +889,14 @@ class HarvestCat {
         this.blink -= dt;
         if (this.blink < -0.14) this.blink = 2 + Math.random() * 5;
         this.ear = Math.max(0, this.ear - dt * 4);
-        const upright = ['sit', 'wash', 'watch', 'walk', 'stretch'].includes(this.state) ? 1 : this.state === 'loaf' ? 0.35 : 0;
+        const upright = ['sit', 'wash', 'watch', 'walk', 'stretch', 'chase'].includes(this.state) ? 1 : this.state === 'loaf' ? 0.35 : this.state === 'stalk' ? 0.15 : 0;
         this.pose += (upright - this.pose) * harvestEase(3.5, dt);
         // A squirrel in view, or a pointer close by.
         let watched = null;
-        for (const s of m.squirrels) if (s.state !== 'away' && Math.hypot(s.x - this.x, (s.y - this.y) * 1.5) < 150 * m.u) watched = s;
+        const busy = this.chasing || this.state === 'walk';
+        if (!busy) for (const s of m.squirrels) if (s.state !== 'away' && Math.hypot(s.x - this.x, (s.y - this.y) * 1.5) < 150 * m.u) watched = s;
         const near = m.pointer.active && Math.hypot(m.pointer.x - this.x, (m.pointer.y - this.y) * 1.3) < 55 * m.u;
-        if (watched && this.state !== 'walk' && this.state !== 'watch') { this.state = 'watch'; this.wait = 3 + Math.random() * 4; }
+        if (watched && this.state !== 'watch') { this.state = 'watch'; this.wait = 3 + Math.random() * 4; }
         if (watched) { this.dir = watched.x < this.x ? -1 : 1; this.ear = 1; }
         switch (this.state) {
             case 'sleep':
@@ -913,10 +924,63 @@ class HarvestCat {
                 if (this.wait <= 0 && !watched) { this.state = 'sit'; this.wait = 4 + Math.random() * 8; }
                 else if (this.wait <= 0) this.wait = 2;
                 break;
-            case 'walk': {
-                const t = this.target, speed = 22 * m.u * (this.spot.s || m.depth(this.y));
+            case 'stalk': {
+                // Low, still, eyes on it, tail lashing; the wiggle; then go.
+                const q = this.quarry;
+                if (q.state === 'away') { this.endChase(); break; }
+                this.dir = q.x < this.x ? -1 : 1;
+                this.ear = 1;
+                this.wait -= dt;
+                if (this.wait <= 0) { this.state = 'chase'; q.chased(this); }
+                break;
+            }
+            case 'chase': {
+                // After it at a gallop, a little slower than a squirrel, so
+                // it never quite catches up; and over the edge after it.
+                const q = this.quarry, m2 = 60 * m.u;
+                if (q.state !== 'away') this.target = { x: q.target ? q.target.x + Math.sign(q.target.x - this.x) * m2 : q.x, y: q.y };
+                const t = this.target, speed = 165 * m.u * m.depth(this.y);
                 const dx = t.x - this.x, dy = t.y - this.y, dist = Math.hypot(dx, dy * 1.5);
-                if (dist < 2 * m.u) { this.x = t.x; this.y = t.y; this.state = Math.random() < this.lazy ? 'loaf' : 'sit'; this.wait = 6 + Math.random() * 14; break; }
+                const off = this.x < -40 * m.u || this.x > m.W + 40 * m.u;
+                if (off || dist < 2 * m.u) {
+                    if (off) { this.state = 'out'; this.wait = 8 + Math.random() * 14; }
+                    else this.endChase();
+                    break;
+                }
+                const step = Math.min(dist, speed * dt);
+                this.x += dx / dist * step;
+                this.y += dy / dist * step / 1.5;
+                this.dir = dx < 0 ? -1 : 1;
+                this.gait += dt * 16;
+                break;
+            }
+            case 'out':
+                // Somewhere beyond the edge, up a tree, probably. Back in a while,
+                // from the same side, for a long nap on the nearest patch of ground.
+                this.wait -= dt;
+                if (this.wait <= 0) {
+                    const ground = m.catSpots.filter(s => !s.fixed && !s.roof);
+                    let spot = null, best = 1e9;
+                    for (const s of ground) { const dd = Math.abs(s.x - this.x); if (dd < best) { best = dd; spot = s; } }
+                    spot = spot || { x: harvestClamp(this.x, 60 * m.u, m.W - 60 * m.u), y: harvestClamp(this.y, m.meadowMin, m.meadowMax) };
+                    this.x = this.x < m.W / 2 ? -40 * m.u : m.W + 40 * m.u;
+                    this.y = harvestClamp(spot.y + (Math.random() - 0.5) * 20 * m.u, m.meadowMin, m.meadowMax);
+                    this.spot = spot;
+                    this.target = { x: spot.x, y: spot.y };
+                    this.chasing = false;
+                    this.quarry = null;
+                    this.napAfter = true;
+                    this.state = 'walk';
+                }
+                break;
+            case 'walk': {
+                const t = this.target, speed = 22 * m.u * (this.spot.s || m.depth(this.y)) * (this.napAfter ? 1.6 : 1);
+                const dx = t.x - this.x, dy = t.y - this.y, dist = Math.hypot(dx, dy * 1.5);
+                if (dist < 2 * m.u) {
+                    this.x = t.x; this.y = t.y;
+                    if (this.napAfter) { this.napAfter = false; this.state = 'sleep'; this.wait = 150 + Math.random() * 200; this.naps = (this.naps || 0) + 1; break; }
+                    this.state = Math.random() < this.lazy ? 'loaf' : 'sit'; this.wait = 6 + Math.random() * 14; break;
+                }
                 const step = Math.min(dist, speed * dt);
                 this.x += dx / dist * step;
                 this.y += dy / dist * step / 1.5;
@@ -948,6 +1012,30 @@ class HarvestCat {
         if (this.state === 'sleep' && Math.random() < 0.22) { this.state = 'stretch'; this.wait = 3; }
     }
 
+    // The manager's call: this squirrel, now. A crouch first, the longer
+    // the sleepier the cat was.
+    chase(squirrel) {
+        if (this.chasing || this.state === 'walk') return false;
+        this.wasAsleep = this.state === 'sleep';
+        this.chasing = true;
+        this.quarry = squirrel;
+        this.fixedSpot = false;
+        this.spot = { x: this.x, y: this.y };      // on the ground now, sized by depth
+        this.state = 'stalk';
+        this.wait = (this.wasAsleep ? 2.4 : 1.4) + Math.random() * 1.2;
+        this.stalkFor = this.wait;
+        this.zs = [];
+        return true;
+    }
+
+    // It got away before the cat was off the mark: sit and pretend that was the plan.
+    endChase() {
+        this.chasing = false;
+        this.quarry = null;
+        this.state = 'sit';
+        this.wait = 3 + Math.random() * 4;
+    }
+
     // Somewhere new, and a long amble to it.
     leave() {
         const m = this.m, spots = m.catSpots.filter(s => s !== this.spot);
@@ -961,20 +1049,39 @@ class HarvestCat {
     }
 
     draw(g) {
+        if (this.state === 'out') return;
         const m = this.m, px = 1.5 * m.u * (this.spot.s || m.depth(this.y)) * this.size;
         const c = this.coat, up = this.pose;
-        const walking = this.state === 'walk', sleeping = this.state === 'sleep';
+        // A gallop and a crouch both use the walking shapes: stretched and
+        // bounding, or flattened to the grass with the rear end wiggling.
+        const running = this.state === 'chase', stalking = this.state === 'stalk';
+        const walking = this.state === 'walk' || running || stalking, sleeping = this.state === 'sleep';
+        const tall = up > 0.5 && !walking;     // sitting up, not on the move
         const breath = 1 + Math.sin(this.t * 1.7) * 0.025 * (sleeping ? 1.5 : 0.7);
         g.save();
         g.translate(this.x, this.y);
         g.scale(this.dir * px, px);
+        if (running) {
+            const stride = Math.sin(this.gait);
+            g.translate(0, -Math.abs(stride) * 4);
+            g.scale(1 + stride * 0.12, 1 - stride * 0.08);
+        } else if (stalking) {
+            const wiggle = this.wait < 0.8 ? Math.sin(this.t * 30) * 0.7 : 0;
+            g.translate(wiggle, 2.6);
+        }
         // The tail: wrapped round the front when curled, upright and swaying when walking.
         const tw = Math.sin(this.tail) * (this.state === 'watch' ? 5 : 2.4);
         g.strokeStyle = c.body;
         g.lineWidth = 3.2;
         g.lineCap = 'round';
         g.beginPath();
-        if (walking) {
+        if (running) {
+            g.moveTo(-9, -8);
+            g.quadraticCurveTo(-18, -9, -24, -11 + tw * 0.5);   // streaming out behind
+        } else if (stalking) {
+            g.moveTo(-9, -6);
+            g.quadraticCurveTo(-16, -4, -20, -6 + Math.sin(this.t * 9) * 3);   // low and lashing
+        } else if (walking) {
             g.moveTo(-9, -8);
             g.quadraticCurveTo(-17, -12, -15 + tw * 0.4, -22);
         } else if (up > 0.5) {
@@ -991,15 +1098,15 @@ class HarvestCat {
         g.scale(1, breath);
         g.fillStyle = c.body;
         g.beginPath();
-        if (up > 0.5) g.ellipse(-1, -9, 6.5, 9, 0.05, 0, Math.PI * 2);
-        else if (walking) g.ellipse(0, -8, 10.5, 5.2, 0, 0, Math.PI * 2);
+        if (walking) g.ellipse(0, -8, 10.5, 5.2, 0, 0, Math.PI * 2);
+        else if (up > 0.5) g.ellipse(-1, -9, 6.5, 9, 0.05, 0, Math.PI * 2);
         else g.ellipse(0, -5.4 - (1 - up) * 0 + up * 2, 11, 5.8 + up * 3, 0, 0, Math.PI * 2);
         g.fill();
         g.restore();
         // Markings.
         g.save();
         g.beginPath();
-        if (up > 0.5) g.ellipse(-1, -9, 6.5, 9, 0.05, 0, Math.PI * 2);
+        if (tall) g.ellipse(-1, -9, 6.5, 9, 0.05, 0, Math.PI * 2);
         else g.ellipse(0, walking ? -8 : -5.4 + up * 2, walking ? 10.5 : 11, walking ? 5.2 : 5.8 + up * 3, 0, 0, Math.PI * 2);
         g.clip();
         if (c.tabby) {
@@ -1010,7 +1117,7 @@ class HarvestCat {
         if (c.patches) {
             c.patches.forEach((col, i) => { g.fillStyle = col; g.beginPath(); g.ellipse(-4 + i * 8, -7 - i * 1.5, 4.4, 3.4, 0.5 * i, 0, Math.PI * 2); g.fill(); });
         }
-        if (c.belly !== c.body) { g.fillStyle = c.belly; g.beginPath(); g.ellipse(up > 0.5 ? 3 : 5, up > 0.5 ? -7 : -3, up > 0.5 ? 3 : 6, up > 0.5 ? 6 : 3, 0, 0, Math.PI * 2); g.fill(); }
+        if (c.belly !== c.body) { g.fillStyle = c.belly; g.beginPath(); g.ellipse(tall ? 3 : 5, tall ? -7 : -3, tall ? 3 : 6, tall ? 6 : 3, 0, 0, Math.PI * 2); g.fill(); }
         g.restore();
         // Head, asleep on its paws or up and looking.
         const hx = walking ? 11 : up > 0.5 ? 3 : 9, hy = walking ? -12 : up > 0.5 ? -21 + this.stretch * 8 : -6.5 - up * 6;
@@ -1061,7 +1168,7 @@ class HarvestCat {
             g.ellipse(hx + 3, hy + 4.4 - Math.abs(Math.sin(this.wash)) * 3, 2, 2.6, 0, 0, Math.PI * 2);
             g.fill();
         }
-        if (c.socks) { g.fillStyle = c.belly; for (const px2 of [up > 0.5 ? 1 : 6, up > 0.5 ? 4 : 9]) { g.beginPath(); g.ellipse(px2, -1, 2, 1.2, 0, 0, Math.PI * 2); g.fill(); } }
+        if (c.socks) { g.fillStyle = c.belly; for (const px2 of [tall ? 1 : 6, tall ? 4 : 9]) { g.beginPath(); g.ellipse(px2, -1, 2, 1.2, 0, 0, Math.PI * 2); g.fill(); } }
         // Z's drift up from a sleeper.
         if (sleeping) {
             g.fillStyle = 'rgba(255,248,230,0.8)';
