@@ -38,6 +38,7 @@ class HarvestAnimationManager {
         this.turkeys = [];
         this.cats = [];
         this.catSpots = [];
+        this.chaseIn = null;            // seconds to the next cat-and-squirrel chase
         this.trees = [];
         this.drops = [];
         this.clouds = [];
@@ -124,6 +125,7 @@ class HarvestAnimationManager {
             this.seed();
         } else {
             if (changed(['squirrels', 'turkeys', 'cats', 'wind'])) this.buildCast();
+            if (changed(['catChases'])) this.chaseIn = null;
             if (changed(['clouds'])) this.buildClouds();
             if (changed(['sky', 'moonPhase', 'cycleMinutes'])) { this.pinKey = null; this.cycleBase = this.host.now().getTime() - this.time * 1000 * 86400 / (config.cycleMinutes * 60); this.moonCache = {}; }
             if (changed(['moonSize'])) this.moonCache = {};
@@ -331,6 +333,7 @@ class HarvestAnimationManager {
         this.sparks = [];
         this.buildCatSpots();
         for (const cat of this.cats) {
+            if (cat.chasing) continue;      // mid-chase it keeps its quarry
             let pool = this.catSpots.filter(s => !!s.fixed === !!cat.fixedSpot);
             if (!pool.length) { cat.fixedSpot = false; pool = this.catSpots.filter(s => !s.fixed); }
             let best = null, d = 1e9;
@@ -447,6 +450,7 @@ class HarvestAnimationManager {
         for (const s of this.squirrels) s.update(dt);
         for (const s of this.turkeys) s.update(dt);
         for (const s of this.cats) s.update(dt);
+        this.updateChase(dt);
         if (config.scarecrow && config.fields) this.scarecrow.update(dt);
         this.great.update(dt);
         this.updateSmoke(dt);
@@ -644,6 +648,38 @@ class HarvestAnimationManager {
     }
 
     // Keys, declared in the catalog.
+    // Now and then (catChases an hour, on average, never in the first
+    // three-quarters of a minute) a cat goes after a squirrel.
+    updateChase(dt) {
+        const rate = this.config.catChases;
+        if (!rate || !this.cats.length || !this.squirrels.length) return;
+        if (this.chaseIn === null) this.chaseIn = 45 + Math.random() * 3600 / rate;
+        this.chaseIn -= dt;
+        if (this.chaseIn > 0) return;
+        this.chaseIn = this.startChase() ? 3600 / rate * (0.5 + Math.random()) : 20;
+    }
+
+    // One chase at a time: the nearest cat off the roofs (one already
+    // watching counts as nearer) and a squirrel in plain view.
+    startChase() {
+        if (this.cats.some(c => c.chasing)) return false;
+        const u = this.u, cats = this.cats.filter(c => !c.chasing && c.state !== 'walk' && !c.spot.roof);
+        const prey = this.squirrels.filter(s => s.state !== 'away' && s.state !== 'flee' && s.x > 30 * u && s.x < this.W - 30 * u);
+        let best = null, d = Infinity;
+        for (const c of cats) for (const s of prey) {
+            const dd = Math.hypot(s.x - c.x, (s.y - c.y) * 1.5) * (c.state === 'watch' ? 0.5 : 1);
+            if (dd < d) { d = dd; best = [c, s]; }
+        }
+        return !!best && best[0].chase(best[1]);
+    }
+
+    chaseSquirrel() {
+        if (!this.cats.length) return 'No cats in this valley (Cats is at 0)';
+        if (!this.squirrels.length) return 'No squirrels to chase (they come with the orchard)';
+        if (this.cats.some(c => c.chasing)) return '🐈 Already on it';
+        return this.startChase() ? '🐈 Squirrel!' : '🐿️ No squirrel in sight just now';
+    }
+
     callGeese() {
         if (!this.config.geese) return 'No geese in this valley (Flocks is at 0)';
         this.flocks.spawn(0);

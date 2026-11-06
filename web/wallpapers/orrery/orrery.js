@@ -32,6 +32,10 @@ const ORRERY_LIGHT_MINUTES = 499.004784 / 60;   // per AU
 const ORRERY_SEASONS = [['march', 'March equinox'], ['june', 'June solstice'], ['september', 'September equinox'], ['december', 'December solstice']];
 // Ring poles (IAU, RA and Dec, degrees), for Saturn's and Uranus's rings.
 const ORRERY_POLES = { saturn: [40.589, 83.537], uranus: [257.311, -15.175] };
+// Sagittarius A*, the black hole at the galaxy's centre (RA and Dec J2000,
+// degrees), for the galactic compass. It's 26,700 light-years off, so it
+// has the same direction from the Sun, the Earth and every planet.
+const ORRERY_GALACTIC_CENTRE = [266.41683, -29.00781];
 
 class OrreryAnimationManager {
     constructor(host) {
@@ -49,6 +53,8 @@ class OrreryAnimationManager {
         this.fx = { glow: this.wants('glow') ? 1 : 0, belt: this.wants('belt') ? 1 : 0 };
         this.poles = {};
         for (const [id, [ra, dec]] of Object.entries(ORRERY_POLES)) this.poles[id] = this.pole(ra, dec);
+        this.galaxy = this.pole(...ORRERY_GALACTIC_CENTRE);
+        this.galaxyLon = (Math.atan2(this.galaxy.y, this.galaxy.x) * 180 / Math.PI + 360) % 360;
         this.makeBelt();
         this.beltShown = this.beltTarget();
         this.minute = -1;
@@ -167,7 +173,7 @@ class OrreryAnimationManager {
         if (changed('speed')) {
             if (config.speed === 'live') this.sim = this.clampTime(this.host.now().getTime());
         }
-        if (['look', 'scale', 'view', 'showPluto', 'chartPalette', 'zodiac', 'showZodiac'].some(changed)) this.crossfade();
+        if (['look', 'scale', 'view', 'showPluto', 'chartPalette', 'zodiac', 'showZodiac', 'milkyWay'].some(changed)) this.crossfade();
         if (['look', 'view', 'showZodiac'].some(changed)) { this.layers = {}; this.fit(); }
         if (changed('look') || changed('chartPalette')) this.layers = {};
         if (changed('planetSize') || changed('scale')) this.sprites = new Map();
@@ -446,6 +452,19 @@ class OrreryAnimationManager {
         return [(u.x - o.x) / 0.01, (u.y - o.y) / 0.01, (v.x - o.x) / 0.01, (v.y - o.y) / 0.01, o.x, o.y];
     }
 
+    // A direction (an ecliptic unit vector) through the camera's turn alone,
+    // with no perspective: screen x and y (CSS px per unit, y down) and
+    // depth (positive: away from us).
+    orient(v, out = {}) {
+        if (!this.tilted) { out.x = v.x; out.y = -v.y; out.d = -v.z; return out; }
+        const a = this.azimuth * Math.PI / 180, e = this.camera.el * Math.PI / 180;
+        const x1 = v.x * Math.cos(a) - v.y * Math.sin(a), y1 = v.x * Math.sin(a) + v.y * Math.cos(a);
+        out.x = x1;
+        out.y = -(y1 * Math.sin(e) + v.z * Math.cos(e));
+        out.d = y1 * Math.cos(e) - v.z * Math.sin(e);
+        return out;
+    }
+
     cameraKey() {
         return this.tilted ? `t|${this.azimuth.toFixed(3)}|${this.camera.el.toFixed(3)}|${this.R.toFixed(2)}` : `top|${this.R.toFixed(2)}`;
     }
@@ -495,7 +514,7 @@ class OrreryAnimationManager {
 
     // The last frame's projected positions, in CSS px, for tests.
     debugPositions() {
-        return { ...this.positions, ring: this.ringBox(), date: this.sim, readout: this.readoutLines, card: this.cardBox };
+        return { ...this.positions, ring: this.ringBox(), date: this.sim, readout: this.readoutLines, card: this.cardBox, compass: this.compass };
     }
 
     // The outer ring's bounding box on screen, in CSS px.
@@ -551,6 +570,15 @@ class OrreryAnimationManager {
             title = '☉ The Sun';
             lines.push(`${au(d)} from the Earth · ${lm(d)}`);
             lines.push(`In our sky: ${this.sky(scene.sunLon, scene.T)}`);
+        } else if (id === 'galaxy') {
+            const e = ((this.galaxyLon - scene.sunLon) % 360 + 540) % 360 - 180;
+            title = '✦ The centre of the galaxy';
+            lines.push('Sagittarius A*: a black hole of four million Suns');
+            lines.push('26,700 light-years away · 5.6° south of the ecliptic');
+            lines.push(`In our sky: ${this.sky(this.galaxyLon, scene.T)}`);
+            lines.push(`${Math.abs(e).toFixed(0)}° ${e >= 0 ? 'east' : 'west'} of the Sun, ${Math.abs(e) < 15 ? 'behind the Sun (it is every December)' : e > 0 ? 'in the evening sky' : 'in the morning sky'}`);
+            lines.push('The Sun goes round it every 230 million years');
+            return { title, lines };
         } else if (id === 'moon') {
             const m = scene.moon;
             title = '☾ The Moon';
@@ -593,6 +621,12 @@ class OrreryAnimationManager {
         const scene = this.scene;
         if (!scene?.sun) return;
         let best = null, bestD = Infinity;
+        const c = this.compass;
+        if (c && Math.hypot(c.x - x, c.y - y) <= c.r + 6) {
+            this.selected = this.selected === 'galaxy' ? null : 'galaxy';
+            this.wake();
+            return;
+        }
         const consider = (id, p, r) => {
             const d = Math.hypot(p.x - x, p.y - y);
             if (d <= Math.max(r + 6, 16 * this.k) && d < bestD) { best = id; bestD = d; }
@@ -722,7 +756,10 @@ class OrreryAnimationManager {
         }
         if (this.config.showTrails) look.trails?.(this, g, scene);
         look.bodies(this, g, scene, t);
+        this.legendBox = null;
         look.overlay?.(this, g, scene);
+        if (this.config.galaxyCompass !== 'off') this.drawCompass(g);
+        else this.compass = null;
         if (this.selected) this.drawCard(g, scene);
         else this.cardBox = null;
         if (this.config.showInfo) this.drawReadout(g, scene);
@@ -779,7 +816,8 @@ class OrreryAnimationManager {
 
     drawCard(g, scene) {
         const info = this.card(this.selected, scene);
-        const at = this.selected === 'sun' ? { x: scene.sun.x, y: scene.sun.y, r: scene.sun.px } : this.positions.bodies[this.selected];
+        const at = this.selected === 'sun' ? { x: scene.sun.x, y: scene.sun.y, r: scene.sun.px }
+            : this.selected === 'galaxy' ? this.compass : this.positions.bodies[this.selected];
         if (!info || !at) { this.selected = null; this.cardBox = null; return; }
         const th = this.look.theme(this), k = this.k, size = 12 * k, pad = 11 * k;
         g.font = `600 ${size * 1.25}px ${th.font}`;
@@ -815,5 +853,125 @@ class OrreryAnimationManager {
         g.fillStyle = th.cardDim;
         info.lines.forEach((line, i) => g.fillText(line, x + pad, y + pad + size * 1.6 + (i + 0.95) * size * 1.42));
         this.cardBox = { x, y, w, h, title: info.title, lines: info.lines };
+    }
+
+    // ---- The galactic compass ------------------------------------------------------------
+
+    // Where the globe goes: its corner of the safe area, below the readout,
+    // above the chart's legend, standing on the brass plinth. CSS px.
+    compassAt(g, th) {
+        const k = this.k, s = this.safe, corner = this.config.galaxyCompass, look = this.config.look;
+        const r = 30 * k, edge = (look === 'chart' ? 26 : 16) * k, labelH = 15 * k;
+        const left = corner.endsWith('left'), top = corner.startsWith('top'), plinth = !top && !!this.base;
+        const label = this.compassLabel(th, plinth);
+        g.font = label.font;
+        const half = Math.max(r * 1.2, g.measureText(label.text).width / 2 + 4 * k);
+        const x = left ? s.left + edge + half : s.right - edge - half;
+        let y;
+        if (top) {
+            // Under the readout, when it shares the corner.
+            const readout = this.config.showInfo && left ? 16 * k + 12.5 * k * 4.4 + 10 * k : edge;
+            y = s.top + readout + r;
+        } else if (plinth) {
+            y = s.bottom - this.base * 1.1 - r * 1.5;
+        } else {
+            y = s.bottom - edge - labelH - r;
+            const L = this.legendBox;
+            if (L && x + half > L.x0 && x - half < L.x1 && y + r + labelH > L.y0) y = L.y0 - 12 * k - labelH - r;
+        }
+        return { x, y, r, plinth, labelH, label };
+    }
+
+    // The globe's name: engraved in capitals on the brass plinth, or written under it.
+    compassLabel(th, plinth) {
+        const k = this.k;
+        if (plinth) return { text: 'GALACTIC CENTRE', font: `600 ${Math.min(10.5 * k, this.base * 0.32)}px ${th.font}` };
+        return { text: 'Galactic centre', font: `${this.config.look === 'chart' ? 'italic ' : ''}400 ${10.5 * k}px ${th.font}` };
+    }
+
+    // A glass globe whose needle points at Sagittarius A*: the direction is
+    // fixed among the stars, so it turns only with the camera.
+    drawCompass(g) {
+        const th = this.look.theme(this), k = this.k, d = this.dpr, look = this.config.look;
+        const { x, y, r, plinth, labelH, label } = this.compassAt(g, th);
+        const v = this.orient(this.galaxy);
+        // The brass stand, down to the plinth.
+        if (plinth) {
+            const foot = y + r * 1.5;
+            const gr = g.createLinearGradient(x - r * 0.5, 0, x + r * 0.5, 0);
+            gr.addColorStop(0, '#6e4714'); gr.addColorStop(0.4, '#fff0b5'); gr.addColorStop(1, '#8a5e1e');
+            g.fillStyle = gr;
+            g.fillRect(x - r * 0.07, y + r, r * 0.14, r * 0.5);
+            g.beginPath(); g.ellipse(x, foot - r * 0.05, r * 0.45, r * 0.11, 0, 0, Math.PI * 2); g.fill();
+        }
+        const art = this.sprite(`globe|${look}|${this.config.chartPalette}|${Math.round(r * d)}`, () => OrreryArt.globe(r * d, look, th.ink, th.card));
+        const S = art.back.width / d;
+        g.drawImage(art.back, x - S / 2, y - S / 2, S, S);
+        // The ecliptic inside it: the far half dashed, the near half drawn.
+        const p = {}, near = new Path2D(), far = new Path2D();
+        let prev = null;
+        for (let i = 0; i <= 48; i++) {
+            const a = i / 48 * Math.PI * 2;
+            this.orient({ x: Math.cos(a), y: Math.sin(a), z: 0 }, p);
+            const q = { x: x + p.x * r * 0.86, y: y + p.y * r * 0.86, d: p.d };
+            if (prev) { const path = prev.d + q.d > 0 ? far : near; path.moveTo(prev.x, prev.y); path.lineTo(q.x, q.y); }
+            prev = q;
+        }
+        g.strokeStyle = th.dim;
+        g.lineWidth = Math.max(0.8, 0.9 * k);
+        g.globalAlpha = 0.45;
+        g.setLineDash([2 * k, 2.5 * k]);
+        g.stroke(far);
+        g.setLineDash([]);
+        g.globalAlpha = 0.85;
+        const behind = v.d > 0;
+        if (!behind) g.stroke(near);
+        // The needle: gold to the centre, dim behind, foreshortened with the view.
+        const len = Math.hypot(v.x, v.y), ux = v.x / (len || 1), uy = v.y / (len || 1), w = r * 0.12;
+        const tip = { x: x + v.x * r * 0.86, y: y + v.y * r * 0.86 }, tail = { x: x - v.x * r * 0.34, y: y - v.y * r * 0.34 };
+        const half = (end, side, colour) => {
+            g.fillStyle = colour;
+            g.beginPath(); g.moveTo(end.x, end.y); g.lineTo(x - uy * w * side, y + ux * w * side); g.lineTo(x, y); g.closePath(); g.fill();
+        };
+        if (len > 0.05) {
+            g.globalAlpha = behind ? 0.3 : 0.45;
+            half(tail, 1, th.dim); half(tail, -1, th.ink);
+            g.globalAlpha = behind ? 0.7 : 1;
+            half(tip, 1, th.accent); half(tip, -1, OrreryArt.shade(th.accent, -0.3));
+        }
+        g.globalAlpha = 1;
+        g.fillStyle = th.ink;
+        g.beginPath(); g.arc(x, y, r * 0.08, 0, Math.PI * 2); g.fill();
+        if (behind) { g.globalAlpha = 0.85; g.stroke(near); g.globalAlpha = 1; }
+        // Where the line pierces the globe: a little four-point star.
+        const sx = x + v.x * r, sy = y + v.y * r, sr = r * 0.16;
+        g.globalAlpha = behind ? 0.45 : 1;
+        g.fillStyle = th.accent;
+        g.beginPath();
+        for (let i = 0; i < 8; i++) {
+            const a = i * Math.PI / 4, l = i % 2 ? sr * 0.3 : sr;
+            g.lineTo(sx + Math.cos(a) * l, sy + Math.sin(a) * l);
+        }
+        g.closePath(); g.fill();
+        g.globalAlpha = 1;
+        g.drawImage(art.front, x - S / 2, y - S / 2, S, S);
+        // Its name: engraved on the plinth, or under the globe.
+        const text = label.text;
+        g.textAlign = 'center';
+        g.textBaseline = 'middle';
+        g.font = label.font;
+        const ly = plinth ? this.safe.bottom - this.base * 0.55 : y + r * 1.12 + labelH * 0.55;
+        if (plinth) {
+            g.fillStyle = 'rgba(20,10,3,0.7)';
+            g.fillText(text, x + 0.8, ly + 0.8);
+            g.fillStyle = '#e2b65e';
+            g.fillText(text, x, ly);
+        } else {
+            if (th.halo) { g.lineWidth = 3 * k; g.strokeStyle = th.halo; g.lineJoin = 'round'; g.strokeText(text, x, ly); }
+            g.fillStyle = th.dim;
+            g.fillText(text, x, ly);
+        }
+        g.textBaseline = 'alphabetic';
+        this.compass = { x, y, r, dir: Math.atan2(v.y, v.x) * 180 / Math.PI, depth: v.d };
     }
 }

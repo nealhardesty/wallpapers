@@ -257,7 +257,7 @@ const OrreryLooks = (() => {
         background(app, g) {
             const { width: W, height: H } = g.canvas;
             const count = Math.round(W * H / app.dpr ** 2 / 900 * app.density);
-            g.drawImage(A.starfield(W, H, count, app.dpr), 0, 0);
+            g.drawImage(A.starfield(W, H, count, app.dpr, app.config.milkyWay), 0, 0);
         },
 
         plane(app, g, scene) {
@@ -635,10 +635,14 @@ const OrreryLooks = (() => {
             const ids = app.ids();
             const size = 11.5 * k;
             g.textBaseline = 'middle';
+            app.legendBox = null;
             if (side > 150 * k || below > 90 * k) {
                 const rows = side > 150 * k ? ids.map(id => [id]) : [ids.slice(0, Math.ceil(ids.length / 2)), ids.slice(Math.ceil(ids.length / 2))];
-                const colW = 92 * k, lineH = size * 1.6;
-                const x0 = side > 150 * k ? s.right - 24 * k - colW : (s.left + s.right) / 2 - rows[0].length * colW / 2;
+                const colW = 92 * k, lineH = size * 1.6, title = 'From above the ecliptic', titleFont = `italic ${size * 0.92}px ${A.SERIF}`;
+                // As wide as its columns, or its title (from above) if that's wider.
+                g.font = titleFont;
+                const width = Math.max(Math.max(...rows.map(r => r.length)) * colW, app.tilted ? 0 : g.measureText(title).width);
+                const x0 = side > 150 * k ? s.right - 24 * k - width : (s.left + s.right) / 2 - width / 2;
                 const y0 = s.bottom - 24 * k - rows.length * lineH;
                 g.fillStyle = `${ink.faint}0.85)`;
                 g.textAlign = 'left';
@@ -649,10 +653,12 @@ const OrreryLooks = (() => {
                     g.font = `italic ${size}px ${A.SERIF}`;
                     g.fillText(OrreryMath.PLANETS[id].name, x + size * 1.5, y);
                 }));
+                // Where it is, so the galactic compass keeps clear.
+                app.legendBox = { x0: x0, x1: x0 + width, y0: y0 - lineH * (app.tilted ? 0.6 : 1.7), y1: y0 + rows.length * lineH };
                 if (!app.tilted) {
-                    g.font = `italic ${size * 0.92}px ${A.SERIF}`;
+                    g.font = titleFont;
                     g.fillStyle = `${ink.faint}0.6)`;
-                    g.fillText('From above the ecliptic', x0, y0 - lineH * 1.1);
+                    g.fillText(title, x0, y0 - lineH * 1.1);
                 }
             }
         },

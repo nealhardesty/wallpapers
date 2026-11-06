@@ -95,6 +95,16 @@ class WorldClockAnimationManager {
         return WORLD_CITIES.find(city => city.id === c)?.lon ?? 0;
     }
 
+    // Its latitude, for a zoomed map: the same place's.
+    centerLat() {
+        if (this.home) return this.homePlace()?.lat ?? 0;
+        const c = this.config.center;
+        if (c === 'greenwich') return WORLD_CLOCK_GREENWICH.lat;
+        if (c === 'pacific') return 0;
+        if (c === 'local' || !c) return this.locate('local').lat;
+        return WORLD_CITIES.find(city => city.id === c)?.lat ?? 0;
+    }
+
     centers() {
         return ['local', 'greenwich', 'pacific', ...this.config.cities.filter(id => id !== 'local' && id !== 'utc' && WORLD_CITIES.some(c => c.id === id))];
     }

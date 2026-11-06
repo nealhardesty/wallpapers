@@ -1,5 +1,8 @@
 // World Clock's map: the world in equirectangular projection, filling the
-// width, letterboxed into the sky above and below on tall screens.
+// width, letterboxed into the sky above and below on tall screens; or
+// stretched to the screen's height (mapFit), or zoomed in (zoom) on the
+// home, the sun or the moon (zoomOn). Borders, provinces and the biggest
+// cities' names come from world-atlas.js.
 //
 // Layers, each cached, built when the map is first drawn:
 //   - the land and sea, with the graticule, for the whole world from 180°W,
@@ -18,6 +21,12 @@
 // pixel ratio): soft fills and hairlines don't show it, and at full
 // resolution a 2560×1440 screen at 2× held half a gigabyte of canvases.
 // The labels draw on the screen's own canvas, at full resolution.
+//
+// Zoomed, the whole world at that scale would be far too big to keep, so
+// the land and the night layers are the screen's size instead, drawn for
+// the view (each copy of the world that shows, eachCopy()) and redrawn when
+// the view moves; the centre then jumps rather than eases, and Android's
+// page swipes don't pan it.
 
 const WORLD_CLOCK_LOOKS = {
     'night-lights': {
@@ -25,6 +34,7 @@ const WORLD_CLOCK_LOOKS = {
         land: '#303845', inner: 'rgba(255,255,255,0.04)', coast: 'rgba(150,178,215,0.42)',
         grid: 'rgba(130,170,230,0.10)', tropic: 'rgba(255,212,121,0.18)', night: [2, 5, 14], dark: 0.7,
         lights: '#ffcf86', lightsAlpha: 1, sunGlow: 0.10,
+        border: 'rgba(176,200,236,0.42)', province: 'rgba(176,200,236,0.22)', halo: 'rgba(3,8,18,0.78)',
         ink: '#f2f6ff', dim: 'rgba(214,226,246,0.72)', card: 'rgba(7,14,27,0.80)', edge: 'rgba(160,190,235,0.20)',
         accent: '#ffd479', dot: '#ffe2a0', leader: 'rgba(205,220,245,0.38)', font: 'sans',
     },
@@ -33,6 +43,7 @@ const WORLD_CLOCK_LOOKS = {
         land: 'latitude', inner: 'rgba(255,255,255,0.22)', coast: 'rgba(84,96,64,0.55)',
         grid: 'rgba(40,86,130,0.17)', tropic: 'rgba(176,82,40,0.38)', night: [12, 24, 64], dark: 0.52,
         lights: '#ffe7a6', lightsAlpha: 0.9, sunGlow: 0,
+        border: 'rgba(122,52,84,0.6)', province: 'rgba(90,78,64,0.38)', halo: 'rgba(255,255,255,0.72)',
         ink: '#18222e', dim: 'rgba(30,44,60,0.74)', card: 'rgba(255,255,255,0.88)', edge: 'rgba(30,60,90,0.20)',
         accent: '#d9701f', dot: '#c0392b', leader: 'rgba(30,50,70,0.45)', font: 'sans', labels: true,
     },
@@ -41,6 +52,7 @@ const WORLD_CLOCK_LOOKS = {
         land: 'rgba(170,225,255,0.10)', inner: null, coast: '#a6e3ff',
         grid: 'rgba(170,222,255,0.22)', fine: 'rgba(170,222,255,0.08)', tropic: 'rgba(255,255,255,0.42)', night: [3, 14, 42], dark: 0.5,
         lights: '#dcf7ff', lightsAlpha: 0.85, line: 'rgba(200,240,255,0.85)', sunGlow: 0,
+        border: 'rgba(206,242,255,0.62)', province: 'rgba(206,242,255,0.3)', halo: 'rgba(7,29,54,0.82)',
         ink: '#ecf9ff', dim: 'rgba(200,236,255,0.78)', card: 'rgba(9,50,94,0.86)', edge: 'rgba(166,227,255,0.6)',
         accent: '#ffd479', dot: '#ffffff', leader: 'rgba(200,240,255,0.55)', font: 'sans', labels: true,
     },
@@ -49,6 +61,7 @@ const WORLD_CLOCK_LOOKS = {
         land: '#d9c393', inner: 'rgba(120,88,40,0.10)', coast: '#4b3a26', grain: 'rgba(90,64,30,0.10)',
         grid: 'rgba(80,60,38,0.24)', tropic: 'rgba(150,46,30,0.45)', night: [58, 40, 22], dark: 0.30, hatch: 'rgba(52,36,20,0.42)',
         lights: '#8c3a1a', lightsAlpha: 0.55, sunGlow: 0,
+        border: 'rgba(118,42,30,0.6)', province: 'rgba(75,58,38,0.36)', halo: 'rgba(240,228,200,0.78)',
         ink: '#2c2015', dim: 'rgba(52,38,24,0.75)', card: 'rgba(247,239,219,0.93)', edge: 'rgba(80,60,38,0.5)',
         accent: '#9c2f1f', dot: '#9c2f1f', leader: 'rgba(60,44,28,0.55)', font: 'serif', labels: true,
     },
@@ -76,18 +89,71 @@ class WorldClockMap {
     // ---- Geometry ----------------------------------------------------------------
 
     resize() {
-        const { W, safe } = this.app;
-        this.mw = W;
-        this.mh = W / 2;
+        const { W, safe, config } = this.app;
         const room = safe.bottom - safe.top;
-        if (this.mh <= room) this.top = safe.top + (room - this.mh) / 2;
-        else {
-            // Too wide to fit: crop, keeping about 12°N in the middle.
-            const middle = (90 - 12) / 180 * this.mh;
-            this.top = WorldClockArt.clamp(safe.top + room / 2 - middle, safe.bottom - this.mh, safe.top);
-        }
+        this.zoom = WorldClockArt.clamp(config.zoom || 1, 1, 8);
+        this.zoomed = this.zoom > 1;
+        this.mw = W * this.zoom;
+        this.mh = config.mapFit === 'stretch' ? room * this.zoom : this.mw / 2;
+        // Line widths and dashes grow a little as it zooms, not all the way.
+        this.lw = W * Math.sqrt(this.zoom);
+        // Too wide to fit: crop, keeping about 12°N in the middle; zoomed, the focus.
+        this.top = this.fitTop(this.zoomed ? this.focus().lat : 12);
+        if (this.zoomed) this.centre = this.focus().lon;
         this.paths();
+        this.atlas = null;
+        this.placeKey = null;
         this.base = null;   // built on the next draw
+    }
+
+    // Where the map's top edge (90°N) goes: centred in the safe area when
+    // the map is shorter, else with `lat` as near the middle as its edges allow.
+    fitTop(lat) {
+        const { safe } = this.app, room = safe.bottom - safe.top;
+        if (this.mh <= room) return safe.top + (room - this.mh) / 2;
+        return WorldClockArt.clamp(safe.top + room / 2 - this.y(lat), safe.bottom - this.mh, safe.top);
+    }
+
+    // What the map is centred on: the home (or the Centred-on setting), or,
+    // zoomed in on them, where the sun or the moon is overhead.
+    focus() {
+        const app = this.app, on = app.config.zoomOn;
+        if (this.zoomed && on === 'sun') return app.sun || WorldClockMath.subsolar(app.host.now());
+        if (this.zoomed && on === 'moon') return app.moon || WorldClockMath.sublunar(app.host.now());
+        return { lon: app.centerLon(), lat: app.centerLat() };
+    }
+
+    targetLon() { return this.focus().lon + (this.zoomed ? 0 : (this.app.scroll - 0.5) * 60); }
+
+    // Zoomed, the view goes straight to the focus (each move redraws the layers).
+    follow() {
+        if (!this.zoomed) return;
+        const centre = this.focus().lon, top = this.fitTop(this.focus().lat);
+        if (centre !== this.centre || top !== this.top) { this.centre = centre; this.top = top; this.stale = true; }
+    }
+
+    viewKey() { return this.zoomed ? `${this.centre}|${this.top}` : 'world'; }
+
+    // Draw the world into a layer: once (the whole world, at the layer's
+    // scale), or zoomed, once for each copy of it that shows on the screen,
+    // with g's transform set from world px to the layer's. `this.copy` is
+    // that copy's rectangle of the world on screen, for anything scattered.
+    eachCopy(g, draw) {
+        const ms = this.ms, { W, H } = this.app;
+        if (!this.zoomed) {
+            this.copy = { x: 0, y: 0, w: this.mw, h: this.mh };
+            g.setTransform(ms, 0, 0, ms, 0, 0);
+            draw();
+            return;
+        }
+        const left0 = W / 2 - this.x(this.centre);
+        for (let n = -1; n <= 1; n++) {
+            const left = left0 + n * this.mw;
+            if (left >= W || left + this.mw <= 0) continue;
+            this.copy = { x: -left, y: -this.top, w: W, h: H };
+            g.setTransform(ms, 0, 0, ms, left * ms, this.top * ms);
+            draw();
+        }
     }
 
     x(lon) { return (lon + 180) / 360 * this.mw; }
@@ -119,10 +185,30 @@ class WorldClockMap {
         }
     }
 
+    // The borders (firm, and disputed), and the states and provinces, as
+    // paths in world px; decoded only when asked for.
+    atlasPaths() {
+        if (this.atlas) return this.atlas;
+        const path = (lines = []) => {
+            const p = new Path2D();
+            for (const flat of lines) {
+                let x = 0, y = 0;
+                for (let i = 0; i + 1 < flat.length; i += 2) {
+                    x += flat[i]; y += flat[i + 1];
+                    i ? p.lineTo(this.x(x / 10), this.y(y / 10)) : p.moveTo(this.x(x / 10), this.y(y / 10));
+                }
+            }
+            return p;
+        };
+        const has = typeof WORLD_BORDERS !== 'undefined';
+        this.atlas = { borders: path(has ? WORLD_BORDERS : []), disputed: path(has ? WORLD_DISPUTED : []), provinces: path(has ? WORLD_PROVINCES : []) };
+        return this.atlas;
+    }
+
     // ---- Cached layers ------------------------------------------------------------
 
     layers() {
-        const { W, H, dpr } = this.app, mw = this.mw, mh = this.mh;
+        const { W, H, dpr } = this.app, mw = this.zoomed ? W : this.mw, mh = this.zoomed ? H : this.mh;
         const ms = this.ms = Math.min(dpr, 4096 / mw, Math.sqrt(WORLD_CLOCK_LAYER_PIXELS / (W * H + 2 * mw * mh)));
         const size = (c, w, h) => { if (!c || c.width !== Math.round(w) || c.height !== Math.round(h)) return WorldClockArt.canvas(w, h); c.getContext('2d').clearRect(0, 0, c.width, c.height); return c; };
         this.landLayer = size(this.landLayer, mw * ms, mh * ms);
@@ -133,6 +219,7 @@ class WorldClockMap {
         this.drawLand();
         this.sprites();
         this.nightAt = -1;
+        this.placeKey = null;
         this.stale = true;
     }
 
@@ -143,8 +230,11 @@ class WorldClockMap {
 
     configure(old, config) {
         const changed = key => old[key] !== config[key];
-        if (changed('mapStyle') || changed('showGrid')) this.base = null;
+        if (changed('mapFit') || changed('zoom')) this.resize();
+        else if (changed('mapStyle') || changed('showGrid') || changed('borders') || changed('provinces')) this.base = null;
         else if (changed('twilight') || changed('cityLights')) this.nightAt = -1;
+        if (changed('zoomOn')) this.follow();
+        this.placeKey = null;
         this.stale = true;
     }
 
@@ -209,20 +299,26 @@ class WorldClockMap {
     }
 
     drawLand() {
-        const { k, config } = this.app, look = this.look, mw = this.mw, mh = this.mh, ms = this.ms;
         const g = this.landLayer.getContext('2d');
-        g.setTransform(ms, 0, 0, ms, 0, 0);
+        g.setTransform(1, 0, 0, 1, 0, 0);
+        g.clearRect(0, 0, this.landLayer.width, this.landLayer.height);
+        this.eachCopy(g, () => this.paintLand(g));
+        this.drawnView = this.viewKey();
+    }
+
+    paintLand(g) {
+        const { k, config } = this.app, look = this.look, mw = this.mw, mh = this.mh, lw = this.lw;
         const sea = g.createLinearGradient(0, 0, 0, mh);
         sea.addColorStop(0, look.sea[0]);
         sea.addColorStop(1, look.sea[1]);
         g.fillStyle = sea;
         g.fillRect(0, 0, mw + 1, mh + 1);   // past the canvas's rounding: the layer is opaque to its edge
         g.lineJoin = g.lineCap = 'round';
-        const hair = Math.max(0.6, mw / 2000);
+        const hair = Math.max(0.6, lw / 2000);
         if (look.seaGlow) {
             // Shallows: the coast drawn wide and faint, twice.
             g.strokeStyle = look.seaGlow;
-            for (const w of [mw / 180, mw / 420]) { g.lineWidth = w; g.stroke(this.coastPath); }
+            for (const w of [lw / 180, lw / 420]) { g.lineWidth = w; g.stroke(this.coastPath); }
         }
         if (look.land === 'latitude') {
             const land = g.createLinearGradient(0, 0, 0, mh);
@@ -234,7 +330,7 @@ class WorldClockMap {
             g.save();
             g.clip(this.landPath, 'evenodd');
             g.strokeStyle = look.inner;
-            for (const w of [mw / 260, mw / 600]) { g.lineWidth = w; g.stroke(this.coastPath); }
+            for (const w of [lw / 260, lw / 600]) { g.lineWidth = w; g.stroke(this.coastPath); }
             g.restore();
         }
         if (look.grain) {
@@ -242,12 +338,35 @@ class WorldClockMap {
             g.clip(this.landPath, 'evenodd');
             const rand = WorldClockArt.random(11);
             g.fillStyle = look.grain;
-            for (let i = 0, n = Math.round(mw * mh / 120); i < n; i++) g.fillRect(rand() * mw, rand() * mh, 1, 1);
+            const c = this.copy;
+            for (let i = 0, n = Math.round(c.w * c.h / 120); i < n; i++) g.fillRect(c.x + rand() * c.w, c.y + rand() * c.h, 1, 1);
             g.restore();
         }
         g.strokeStyle = look.coast;
         g.lineWidth = hair * (look.font === 'serif' ? 1.3 : 1);
         g.stroke(this.coastPath);
+        if (config.borders || config.provinces) {
+            // On the land only: the lines run a little past the coarser coast.
+            const atlas = this.atlasPaths();
+            g.save();
+            g.clip(this.landPath, 'evenodd');
+            if (config.provinces) {
+                g.strokeStyle = look.province;
+                g.lineWidth = hair * 0.8;
+                g.setLineDash([lw / 500, lw / 700]);
+                g.stroke(atlas.provinces);
+            }
+            if (config.borders) {
+                g.strokeStyle = look.border;
+                g.lineWidth = hair * 1.25;
+                g.setLineDash([]);
+                g.stroke(atlas.borders);
+                g.setLineDash([lw / 300, lw / 400]);
+                g.stroke(atlas.disputed);
+            }
+            g.setLineDash([]);
+            g.restore();
+        }
         if (config.showGrid) this.drawGrid(g, k, hair);
     }
 
@@ -272,7 +391,7 @@ class WorldClockMap {
         const tilt = 23.44;
         g.strokeStyle = look.tropic;
         g.lineWidth = hair * 1.2;
-        g.setLineDash([mw / 300, mw / 400]);
+        g.setLineDash([this.lw / 300, this.lw / 400]);
         g.beginPath();
         for (const lat of [tilt, -tilt, 90 - tilt, tilt - 90]) { g.moveTo(0, this.y(lat)); g.lineTo(mw, this.y(lat)); }
         g.stroke();
@@ -305,7 +424,7 @@ class WorldClockMap {
         const look = this.look, mw = this.mw;
         const rand = WorldClockArt.random(1234);
         const gauss = () => (rand() + rand() + rand() - 1.5) * 1.15;
-        const density = this.app.density, dot = Math.max(0.7, mw / 1600);
+        const density = this.app.density, dot = Math.max(0.7, this.lw / 1600);
         const specks = [];
         const speck = (lon, lat, a, r = dot) => specks.push({ lon, lat, x: this.x(lon) - r / 2, y: this.y(lat) - r / 2, r, a: a * look.lightsAlpha });
         for (const city of WORLD_CITIES) {
@@ -330,7 +449,7 @@ class WorldClockMap {
     // its own sun is deep (soft) or on past the twilight's depth (sharp);
     // the terminator line.
     drawNight(date) {
-        const app = this.app, look = this.look, ms = this.ms, mw = this.mw;
+        const app = this.app, look = this.look, ms = this.ms, mw = this.mw, mh = this.mh, lw = this.lw;
         const sun = WorldClockMath.subsolar(date);
         const bands = app.fx('twilight');
         const soft = bands && app.config.twilight === 'soft';
@@ -374,22 +493,20 @@ class WorldClockMap {
                 ? [0, 6, 12, 18].map((depth, i) => [depth ? WorldClockMath.twilight(date, depth, 240) : WorldClockMath.terminator(date, 240), share[i] * A / total])
                 : [[WorldClockMath.terminator(date, 240), A]];
         }
-        const darkness = () => {
+        const darkness = () => this.eachCopy(g, () => {
             if (soft) {
-                g.setTransform(1, 0, 0, 1, 0, 0);
                 g.imageSmoothingEnabled = true;
                 g.imageSmoothingQuality = 'high';
-                g.drawImage(this.grid, 0, 0, w, h);
+                g.drawImage(this.grid, 0, 0, mw, mh);
                 return;
             }
-            g.setTransform(ms, 0, 0, ms, 0, 0);
             for (const [rings, a] of shapes) {
                 g.fillStyle = `rgba(${r},${gr},${b},${a})`;
                 g.beginPath();
                 for (const ring of rings) ring.forEach(([lon, lat], i) => i ? g.lineTo(this.x(lon), this.y(lat)) : g.moveTo(this.x(lon), this.y(lat)));
                 g.fill();
             }
-        };
+        });
         darkness();
         if (look.hatch) {
             // Engraved night: diagonal hatching where it's dark.
@@ -415,36 +532,45 @@ class WorldClockMap {
         if (lights) {
             if (!this.specks) this.specks = this.scatter();
             const deep = bands ? 4 : 0.5;
-            g.save();
-            g.setTransform(ms, 0, 0, ms, 0, 0);
-            g.clip(this.landPath, 'evenodd');
-            g.fillStyle = look.lights;
+            const lit = [];
             for (const p of this.specks) {
                 const alt = WorldClockMath.sunAltitude(p.lat, p.lon, date, sun);
                 const on = soft ? S(-2.5, -10, alt) : alt < -deep ? 1 : 0;
-                if (!on) continue;
-                g.globalAlpha = p.a * on;
-                g.fillRect(p.x, p.y, p.r, p.r);
+                if (on) lit.push([p, on]);
             }
-            g.restore();
+            this.eachCopy(g, () => {
+                const c = this.copy;
+                g.save();
+                g.clip(this.landPath, 'evenodd');
+                g.fillStyle = look.lights;
+                for (const [p, on] of lit) {
+                    if (p.x + p.r < c.x || p.x > c.x + c.w || p.y + p.r < c.y || p.y > c.y + c.h) continue;
+                    g.globalAlpha = p.a * on;
+                    g.fillRect(p.x, p.y, p.r, p.r);
+                }
+                g.restore();
+            });
+            g.globalAlpha = 1;
         }
         if (look.line) {
             // The terminator itself, dashed, without the map's edges.
-            g.setTransform(ms, 0, 0, ms, 0, 0);
-            g.strokeStyle = look.line;
-            g.lineWidth = Math.max(0.8, mw / 1600);
-            g.setLineDash([mw / 260, mw / 360]);
-            g.beginPath();
-            for (const ring of WorldClockMath.terminator(date, 240)) {
-                for (let i = 0; i < ring.length; i++) {
-                    const [a0, b0] = ring[i], [a1, b1] = ring[(i + 1) % ring.length];
-                    if ((Math.abs(b0) >= 89.99 && Math.abs(b1) >= 89.99) || (a0 === a1 && Math.abs(a0) >= 179.99)) continue;
-                    g.moveTo(this.x(a0), this.y(b0));
-                    g.lineTo(this.x(a1), this.y(b1));
+            const rings = WorldClockMath.terminator(date, 240);
+            this.eachCopy(g, () => {
+                g.strokeStyle = look.line;
+                g.lineWidth = Math.max(0.8, lw / 1600);
+                g.setLineDash([lw / 260, lw / 360]);
+                g.beginPath();
+                for (const ring of rings) {
+                    for (let i = 0; i < ring.length; i++) {
+                        const [a0, b0] = ring[i], [a1, b1] = ring[(i + 1) % ring.length];
+                        if ((Math.abs(b0) >= 89.99 && Math.abs(b1) >= 89.99) || (a0 === a1 && Math.abs(a0) >= 179.99)) continue;
+                        g.moveTo(this.x(a0), this.y(b0));
+                        g.lineTo(this.x(a1), this.y(b1));
+                    }
                 }
-            }
-            g.stroke();
-            g.setLineDash([]);
+                g.stroke();
+                g.setLineDash([]);
+            });
         }
         this.nightAt = Math.floor(date.getTime() / 60000);
     }
@@ -456,7 +582,8 @@ class WorldClockMap {
     update(dt) {
         const app = this.app;
         if (app.config.view !== 'map') return false;
-        const target = app.centerLon() + (app.scroll - 0.5) * 60;
+        if (this.zoomed) { this.follow(); return false; }
+        const target = this.targetLon();
         if (this.centre === null || app.host.reducedMotion) { if (this.centre !== target) this.stale = true; this.centre = target; return false; }
         const d = ((target - this.centre) % 360 + 540) % 360 - 180;
         if (Math.abs(d) < 0.05) { if (d) { this.centre = target; this.stale = true; } return false; }
@@ -472,6 +599,8 @@ class WorldClockMap {
     // all clipped to whole pixels so nothing builds up at the band's edges.
     composeBase(date) {
         const app = this.app, { W } = app, look = this.look, ms = this.ms;
+        // Zoomed, the layers are of the view: redrawn when it moves.
+        if (this.drawnView !== this.viewKey()) { this.drawLand(); this.nightAt = -1; }
         if (this.nightAt !== Math.floor(date.getTime() / 60000)) this.drawNight(date);
         const g = this.base.getContext('2d');
         g.setTransform(1, 0, 0, 1, 0, 0);
@@ -480,9 +609,10 @@ class WorldClockMap {
         const x0 = Math.round((((shift % this.mw) + this.mw) % this.mw) * ms), y0 = Math.round(this.top * ms), w = this.landLayer.width;
         g.save();
         g.beginPath();
-        g.rect(0, y0, this.base.width, this.landLayer.height);
+        g.rect(0, y0, this.base.width, this.zoomed ? Math.round(this.mh * ms) : this.landLayer.height);
         g.clip();
         for (const layer of [this.landLayer, this.night]) {
+            if (this.zoomed) { g.drawImage(layer, 0, 0); continue; }
             g.drawImage(layer, x0, y0);
             g.drawImage(layer, x0 - w, y0);
         }
@@ -603,7 +733,8 @@ class WorldClockMap {
     // minute, never per frame).
     prepare(date) {
         if (this.app.config.view !== 'map') return;
-        if (this.centre === null) this.centre = this.app.centerLon() + (this.app.scroll - 0.5) * 60;
+        if (this.centre === null) this.centre = this.targetLon();
+        this.follow();
         if (!this.base) this.layers();
         if (this.stale || this.nightAt !== Math.floor(date.getTime() / 60000)) {
             this.composeBase(date);
@@ -613,15 +744,18 @@ class WorldClockMap {
 
     draw(g, date) {
         const app = this.app, { k, dpr } = app, look = this.look, font = this.font;
-        if (this.centre === null) this.centre = app.centerLon() + (app.scroll - 0.5) * 60;
+        if (this.centre === null) this.centre = this.targetLon();
         if (!this.base) this.layers();
         if (this.stale || this.nightAt !== Math.floor(date.getTime() / 60000)) this.composeBase(date);
         g.setTransform(1, 0, 0, 1, 0, 0);
         g.drawImage(this.base, 0, 0, g.canvas.width, g.canvas.height);
         g.setTransform(dpr, 0, 0, dpr, 0, 0);
 
+        if (app.config.placeLabels && app.config.placeLabels !== 'off') this.drawPlaces(g);
         this.hero = this.drawHero(g, date);
-        const dots = app.infos.map(info => ({ info, ...this.screen(info.place.lon, info.place.lat) }));
+        // Zoomed in, only the places in view.
+        const s = app.safe, inView = d => !this.zoomed || (d.x > s.left - 4 && d.x < s.right + 4 && d.y > s.top - 4 && d.y < s.bottom + 4);
+        const dots = app.infos.map(info => ({ info, ...this.screen(info.place.lon, info.place.lat) })).filter(inView);
         const cards = this.cards = this.place(g, dots);
 
         // Leader lines, then dots, then cards.
@@ -655,7 +789,60 @@ class WorldClockMap {
             this.card(g, c, font);
             bottom = Math.max(bottom, c.y + c.h);
         }
-        return { bottom, cards: cards.map(c => ({ id: c.info.id, x: c.x, y: c.y, w: c.w, h: c.h, text: [c.info.name, c.info.text, c.detail].join(' | ') })), centre: this.centre, top: this.top, mapHeight: this.mh };
+        return { bottom, cards: cards.map(c => ({ id: c.info.id, x: c.x, y: c.y, w: c.w, h: c.h, text: [c.info.name, c.info.text, c.detail].join(' | ') })), centre: this.centre, top: this.top, mapHeight: this.mh, mapWidth: this.mw, places: this.placeList?.map(p => p.name) || [] };
+    }
+
+    // The biggest cities' names (each country's largest, and with 'major'
+    // every city over three million), biggest first, each to the right of
+    // its dot or else the left, skipping any that would overlap one already
+    // placed or sit on one of the clock's own cities. Laid out again only
+    // when the view changes.
+    layoutPlaces(g) {
+        const app = this.app, { safe, k } = app, mode = app.config.placeLabels;
+        const key = `${mode}|${this.viewKey()}|${this.centre}|${this.mw}|${this.mh}|${this.top}|${k}|${app.infos.map(i => i.id).join()}`;
+        if (this.placeKey === key) return this.placeList;
+        const size = 9.5 * k, h = size * 1.25, gap = 4 * k, list = [], boxes = [];
+        const own = app.infos.map(i => this.screen(i.place.lon, i.place.lat));
+        const overlaps = b => boxes.some(o => b.x < o.x + o.w && o.x < b.x + b.w && b.y < o.y + o.h && o.y < b.y + b.h);
+        for (const [name, lon, lat, , flags] of (typeof WORLD_PLACES === 'undefined' ? [] : WORLD_PLACES)) {
+            if (mode === 'largest' && !(flags & 1)) continue;
+            const p = this.screen(lon / 10, lat / 10);
+            if (p.x < safe.left || p.x > safe.right || p.y < safe.top || p.y > safe.bottom) continue;
+            if (own.some(o => Math.hypot(o.x - p.x, o.y - p.y) < 12 * k)) continue;
+            const capital = !!(flags & 2), font = `${capital ? 600 : 400} ${size}px ${this.font}`;
+            g.font = font;
+            const w = g.measureText(name).width;
+            const dot = { x: p.x - 2.5 * k, y: p.y - 2.5 * k, w: 5 * k, h: 5 * k };
+            for (const box of [{ x: p.x + gap, y: p.y - h / 2, w, h }, { x: p.x - gap - w, y: p.y - h / 2, w, h }]) {
+                if (box.x < safe.left + 2 || box.x + w > safe.right - 2 || box.y < safe.top + 2 || box.y + h > safe.bottom - 2) continue;
+                if (overlaps(box) || overlaps(dot)) continue;
+                boxes.push(box, dot);
+                list.push({ name, x: p.x, y: p.y, box, font, capital });
+                break;
+            }
+        }
+        this.placeKey = key;
+        this.placeList = list;
+        return list;
+    }
+
+    drawPlaces(g) {
+        const look = this.look, k = this.app.k, list = this.layoutPlaces(g);
+        g.textBaseline = 'middle';
+        g.textAlign = 'left';
+        g.lineJoin = 'round';
+        for (const p of list) {
+            g.fillStyle = p.capital ? look.ink : look.dim;
+            g.beginPath();
+            g.arc(p.x, p.y, (p.capital ? 1.9 : 1.5) * k, 0, Math.PI * 2);
+            g.fill();
+            g.font = p.font;
+            g.lineWidth = 3 * k;
+            g.strokeStyle = look.halo;
+            g.strokeText(p.name, p.box.x, p.box.y + p.box.h / 2);
+            g.fillText(p.name, p.box.x, p.box.y + p.box.h / 2);
+        }
+        g.textBaseline = 'alphabetic';
     }
 
     card(g, c, font) {

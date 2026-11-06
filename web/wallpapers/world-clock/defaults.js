@@ -17,6 +17,12 @@ WP.defaults('world-clock', {
     showGrid: true,         // the graticule, the tropics and the polar circles
     showSun: true,
     showMoon: true,
+    mapFit: 'fit',          // 'fit' (the whole world, with the sky above and below), 'stretch' (stretched to the screen's height)
+    zoom: 1,                // ×: 1 is the whole world across the screen
+    zoomOn: 'home',         // what a zoomed map follows: 'home' (the centre, or a tapped city), 'sun', 'moon'
+    borders: false,         // the borders between countries
+    provinces: false,       // states and provinces: the US, Canada, Japan, Australia and much of Europe
+    placeLabels: 'off',     // 'off', 'largest' (each country's largest city), 'major' (and every city over three million)
     faceStyle: 'classic',   // 'classic', 'modern', 'minimal'
     scale: 1,               // the size of the labels, faces' text and the board
     touch: true,            // tap a city to make it home
