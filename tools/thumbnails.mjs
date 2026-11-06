@@ -36,6 +36,8 @@ const OVERRIDES = {
     'last-bulb': { configVersion: 1, size: 1.6, sag: 0.7, roomLight: 0.25 },
     // One big pane, well frosted, the tree glowing through.
     frost: { configVersion: 1, window: 'single', coverage: 0.8, frameColour: 'red' },
+    // A bit bigger, so the tree, the presents and the train read in a tile.
+    'small-christmas': { configVersion: 1, treeSize: 'medium', pixelSize: 1.5 },
 };
 // URL parameters for a better picture: satellites as its sample station
 // passes overhead before dawn, weather's sample at a golden dusk (thumb mode never fetches, so it's the sample),

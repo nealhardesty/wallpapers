@@ -879,6 +879,52 @@ const STAGE_CHECKS = {
         if (s.stats.thaws !== 1 || s.phaseT > 5) record(`after the thaw: ${JSON.stringify(s)}`);
         return true;
     }]],
+    // A Very Small Christmas: a small canvas scaled up pixelated, at its
+    // retro frame rate; T sends the train round and it parks again; M moves
+    // house (the track packs away, everyone hops, the track lays itself
+    // down); a tap on the floor moves the tree there; S sends the sleigh;
+    // on Christmas Day there are more presents.
+    'small-christmas': [['pixelated, twelve frames a second, the train goes round, moving house, the sleigh', async () => {
+        const st = () => evaluate('JSON.parse(JSON.stringify(WP.stage.manager.debugState()))');
+        const settings = { configVersion: 1, laps: 1, trainSpeed: 2.5, moveMinutes: 0, train: false, sleigh: 'never' };
+        if (!await stageWith('small-christmas', settings, '&seed=7&date=2026-12-10T20:00')) return record('no boot');
+        let s = await st();
+        const canvas = await evaluate('(m => ({ w: m.canvas.width, h: m.canvas.height, css: m.canvas.style.width, look: m.canvas.style.imageRendering }))(WP.stage.manager)');
+        if (canvas.w !== s.bw || canvas.w > 700 || canvas.look !== 'pixelated') record(`the canvas: ${JSON.stringify(canvas)}`);
+        if (s.lights < 6 || s.presents !== 3 || s.track !== 1) record(`frame one: ${JSON.stringify(s)}`);
+        await sleep(500);
+        const before = await evaluate('WP.host.frames.count');
+        await sleep(2000);
+        const frames = await evaluate('WP.host.frames.count') - before;
+        if (frames > 30 || frames < 12) record(`${frames} frames in 2 s (want about 24)`);
+        // T: once round, and parked where it started.
+        const parked = s.trainS;
+        await press('t');
+        if (!(await st()).train) return record('T: the train stayed put');
+        if (!await waitFor(async () => !(s = await st()).train, 12000)) return record(`the train never stopped: ${JSON.stringify(s)}`);
+        if (s.stats.laps !== 1 || Math.abs(s.trainS - parked) > 0.01) record(`after its lap: ${s.stats.laps} laps, parked at ${s.trainS} (was ${parked})`);
+        // M: moving house.
+        const x0 = s.setX;
+        await press('m');
+        if (!await waitFor(async () => (await st()).moving === 'hop', 3000)) return record(`M: ${JSON.stringify(await st())}`);
+        if ((await st()).track !== 0) record('the track wasn’t packed away for the move');
+        await shoot('small-christmas-hop');
+        if (!await waitFor(async () => !(s = await st()).moving, 20000)) return record(`never settled in: ${JSON.stringify(s)}`);
+        if (s.setX === x0 || s.track !== 1) record(`moved from ${x0} to ${s.setX}, track ${s.track}`);
+        // A tap on the floor: the tree moves there.
+        const px = s.px, target = Math.max(s.setX < s.bw / 2 ? s.bw * 0.8 : s.bw * 0.2, 40);
+        await mouse('mousePressed', target * px, (s.bh - 6) * px);
+        await mouse('mouseReleased', target * px, (s.bh - 6) * px);
+        if (!await waitFor(async () => (await st()).moving !== null, 2000)) record('a tap on the floor didn’t move the tree');
+        else if (!await waitFor(async () => !(s = await st()).moving, 20000) || Math.abs(s.setX - Math.round(target)) > 1) record(`the tap moved it to ${s.setX}, not ${Math.round(target)}`);
+        // S: the sleigh, even with it set to never.
+        await press('s');
+        if (!(await st()).sleigh) record('S: no sleigh');
+        // Christmas Day: three more presents.
+        if (!await stageWith('small-christmas', { ...settings, sleigh: 'sometimes' }, '&seed=7&date=2026-12-25T09:00')) return record('no boot on Christmas Day');
+        if ((await st()).presents !== 6) record(`Christmas Day: ${(await st()).presents} presents (want 6)`);
+        return true;
+    }]],
     // 8.2: one full repaint per morph step, none while a pattern holds. On
     // Low there's no sheen, so a hold sends no frames at all.
     girih: [['one repaint per morph step, none while holding', async () => {

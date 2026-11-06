@@ -1,0 +1,27 @@
+// Settings for A Very Small Christmas, as the panel shows them (SPEC §4.4).
+// The values and their defaults live in defaults.js.
+WP.schema('small-christmas', [
+    { group: '🎄 The Tree' },
+    { key: 'treeSize', label: 'Size', type: 'select', options: [['tiny', '🌱 Tiny'], ['small', '🎄 Small'], ['medium', '🌲 A bit bigger']] },
+    { key: 'lightPattern', label: 'Lights blink', type: 'select', options: [['twinkle', '✨ Twinkle'], ['chase', '🏃 Chase'], ['alternate', '🔀 Alternate'], ['together', '💡 All together'], ['steady', '🔆 Steady']], help: 'L (or a tap on the tree) jingles it.' },
+    { key: 'lights', label: 'Light colours', type: 'select', options: [['classic', '🌈 Classic'], ['warm', '🕯️ Warm'], ['blue', '❄️ Blue'], ['candy', '🍬 Candy cane']] },
+    { key: 'garland', label: 'Garland', type: 'toggle' },
+    { key: 'ornaments', label: 'Ornaments', type: 'toggle' },
+    { key: 'presents', label: 'Presents', type: 'range', min: 0, max: 6, step: 1, help: 'Three more turn up on Christmas Day.' },
+    { key: 'moveMinutes', label: 'Moves house about every', type: 'range', min: 0, max: 30, step: 1, unit: ' min', help: 'The track packs away and everyone hops somewhere new. 0 stays put; M moves now, or tap the floor.' },
+    { group: '🚂 The Train' },
+    { key: 'train', label: 'It goes round', type: 'toggle', help: 'T sends it now, or tap it.' },
+    { key: 'trainMinutes', label: 'About every', type: 'range', min: 1, max: 20, step: 1, unit: ' min', when: config => config.train },
+    { key: 'laps', label: 'Laps', type: 'range', min: 1, max: 6, step: 1, when: config => config.train },
+    { key: 'trainSpeed', label: 'Speed', type: 'range', min: 0.5, max: 2.5, step: 0.1, unit: '×', digits: 1, when: config => config.train },
+    { key: 'cars', label: 'Cars', type: 'range', min: 0, max: 3, step: 1, help: 'A tender, a car with a present, a caboose.' },
+    { group: '👾 The Screen' },
+    { key: 'palette', label: 'Colours', type: 'select', options: [['night', '🌃 Night (full colour)'], ['pocket', '🟩 Pocket (four greens)'], ['amber', '🟧 Amber screen'], ['ink', '⬜ Four greys']] },
+    { key: 'pixelSize', label: 'Pixel size', type: 'range', min: 0.5, max: 2, step: 0.25, unit: '×', digits: 2, help: 'Bigger pixels make everything bigger, and chunkier.' },
+    { key: 'fps', label: 'Frame rate', type: 'range', min: 6, max: 30, step: 1, unit: ' fps', help: 'Low is retro (and cheap).' },
+    { key: 'snow', label: 'Snow', type: 'range', min: 0, max: 1, step: 0.05, scale: 100, unit: '%', digits: 0 },
+    { key: 'sky', label: 'Stars and moon', type: 'toggle' },
+    { key: 'scanlines', label: 'Scanlines', type: 'toggle', help: 'An old screen’s lines.' },
+    { key: 'sleigh', label: 'A sleigh crosses the sky', type: 'select', options: [['sometimes', '🦌 Sometimes (often on Christmas Eve)'], ['eve', '🎅 Only on Christmas Eve'], ['never', '🚫 Never']], help: 'S sends it now.' },
+    { key: 'touch', label: 'Taps', type: 'toggle', help: 'The tree jingles, the train goes round, the floor is where the tree moves to. Off ignores touch.' },
+]);

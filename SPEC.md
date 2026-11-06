@@ -23,7 +23,7 @@ wallpapers' only home. They run in three hosts:
 > measurements on a real phone (6.2's numbers, 6.4a), the first signed
 > release (6.6), the switch-over itself (7.2), and trying Phase 8's touch
 > and location, and Jellyfin, on a phone. The player, the stage, the panel
-> and all 40 wallpapers run from `web/index.html`, as a Chrome new-tab extension, on
+> and all 41 wallpapers run from `web/index.html`, as a Chrome new-tab extension, on
 > GitHub Pages at https://nealhardesty.github.io/wallpapers/, and as an
 > Android live wallpaper. Every wallpaper is tiered and within budget.
 > Phase 11 (Harvest Valley, §10.22) added the 34th wallpaper for Thanksgiving.
@@ -31,7 +31,8 @@ wallpapers' only home. They run in three hosts:
 > 2026-11-05, making 37. The Cat vs. the Ornament (§10.27, 2026-11-06) is
 > the first of four Christmas wallpapers, making 38; The Last Bulb on the
 > Strand (§10.28, 2026-11-06) the second, making 39; Frost on the Glass
-> (§10.29, 2026-11-06) the third, making 40.
+> (§10.29, 2026-11-06) the third, making 40; A Very Small Christmas
+> (§10.30, 2026-11-06) the fourth, making 41.
 > Phase 10, the clock overlay (§4.9), was built 2026-10-28; §10 holds the
 > other ideas.
 > Windows (§10.25): the W0 spikes passed, and W1 (the desktop core: behind
@@ -135,13 +136,14 @@ Added in November 2026, drawn in code (design in §10.2):
 | `world-clock` | world-land.js, world-atlas.js (generated), world-cities.js, world-clock-math.js, world-clock-art.js, world-clock-map.js, world-clock-faces.js, world-clock-board.js, world-clock.js | ~2.3k lines | No network; Natural Earth land (public domain); the sun, moon, terminator and zones (`WorldClockMath`), unit-tested; follows `host.now()`; interactive (tap a city); keys V, M, L |
 | `orrery` | orrery-math.js, orrery-art.js, orrery-looks.js, orrery.js | ~2.3k lines | No network; Standish's Keplerian elements, the Moon, Jupiter's four, the zodiac and the seasons (`OrreryMath`), unit-tested; follows `host.now()` or time-lapse; interactive (tap a planet, drag the tilted view); keys = + − 0 L S V (§10.26) |
 
-Added for Christmas, drawn in code (designs in §10.27–§10.29):
+Added for Christmas, drawn in code (designs in §10.27–§10.30):
 
 | id | Files | Size | Notes |
 |---|---|---|---|
 | `cat-ornament` | cat-ornament-logic.js, cat-ornament-cats.js, cat-ornament-room.js, cat-ornament.js | ~2.2k lines | Interactive (a tap's laser dot); nine named cats on one vector rig; the roster, the pendulum, the fall and the odds (`CatOrnamentLogic`), unit-tested; follows `host.now()` (Christmas Eve and Day); keys N, B, T, Z |
 | `last-bulb` | last-bulb-logic.js, last-bulb-art.js, last-bulb.js | ~1.1k lines | Interactive (tap a bulb to jiggle it); a C9 strand whose last bulb is loose; the flicker scripts, the filament and the strand's shape (`LastBulbLogic`), unit-tested; follows `host.now()` (Christmas Eve and Day); keys L, O, D |
 | `frost` | frost-logic.js, frost-art.js, frost.js | ~1k lines | Interactive (drag to draw in the frost, tap to breathe on it); fern frost grown tip by tip on an occupancy grid, the window and the doodles (`FrostLogic`), unit-tested; follows `host.now()` (Christmas Eve and Day); keys B, D, T |
+| `small-christmas` | small-christmas-logic.js, small-christmas-art.js, small-christmas.js | ~800 lines | Interactive (tap the tree, the train, the floor); pixel art at its own resolution, scaled up pixelated; palettes, blink patterns, the train's oval and the hops (`SmallXmasLogic`), unit-tested; follows `host.now()` (the sleigh on Christmas Eve, presents on Christmas Day); keys T, M, L, S |
 
 About 1.7 MB of JavaScript in total. **Not imported:** links, weather, clocks,
 search/omniprompt, custom links, status bar, Docker/nginx, the homepage's
@@ -378,7 +380,7 @@ Phase 4 and 6 take it:
   | Sep | leaves |
   | Oct | halloween |
   | Nov | harvest |
-  | Dec | advent, cat-ornament, last-bulb, frost: one a day, in turn (wins over snow's Dec–Apr) |
+  | Dec | advent, cat-ornament, last-bulb, frost, small-christmas: one a day, in turn (wins over snow's Dec–Apr) |
 
   It uses the local calendar month, so it is Northern-Hemisphere only. A
   month may list several (December's Christmas wallpapers): the day of the
@@ -822,6 +824,7 @@ and the commits.
 | cat-ornament | `firelight` (high) | Room, the fire's and the tree's glow and the standing tree (halos, ornaments, star) one layer; bulbs twinkle over it; a still cat is a cached picture (quantized, at most every 0.15 s); a calm room paced at 15 fps (30 on a fast display) via idleUntil; physics on a 60 Hz step |
 | last-bulb | — | The wall (painted at full light, multiplied by a light map of every bulb's pool) baked lit, dark (the strand out) and, for the corner round the last bulb, lit by it too; bulbs, the tag and the plug are sprites (dark, lit with its bloom, ember); still, it sends no frames at all (idleUntil the next event); a flicker redraws only that corner; a draft swings the bulbs at 30 fps on a 60 Hz step |
 | frost | `glints` (medium) | Three canvases: the room and frost (redrawn ten times a second at most, six on a slow tier), the frame (baked once) and the snow (every frame, only while it's snowing, else idleUntil the next tenth); the room's blur, the bokeh discs and the frost's backlit colour baked per resize; frost accumulates on a mask (new ice only) and is re-tinted through it when it changes; tips capped at 9,000 × density; a render-scale change keeps the frost, rescaled; snow × density |
+| small-christmas | — | The canvas is the picture's own pixels (a few hundred across), scaled up by CSS with `image-rendering: pixelated`, so a frame is tiny; 12 fps by default (a setting), idleUntil between frames; sky, moon and snow floor one baked layer; every sprite baked per palette; scanlines a baked overlay canvas; snow × density |
 | harvest | `mist`, `beams` (medium) | Land is one baked layer per resize; trees, leaves, apples, geese and clouds are baked sprites; the world is washed once per frame with the hour's light; leaves, apples, smoke, sparks and flocks × density; squirrels × (0.5 + 0.5 density) |
 
 #### In the panel
@@ -3378,6 +3381,57 @@ soft discs of its lights.
   rules, growth (on the glass, sixty degree branches, four generations, no
   stacked dabs), every doodle traces and NOEL is mirrored, the festive days.
 - **Seasonal:** December's list (§4.2).
+
+### 10.30 A Very Small Christmas (`small-christmas`, owner request, November 2026)
+
+The last of the owner's four Christmas wallpapers. A little pixel-art tree
+near the bottom of a big dark screen, on a strip of snow, with presents
+and a toy train parked on its oval of track. Retro, and cozy.
+
+- **Pixels:** the canvas is the picture at its own resolution (about 320 ×
+  200 on a laptop; a pixel is 3 CSS px or more, × `pixelSize`) and CSS
+  scales it up pixelated. Drawn a pixel at a time into sprites; ordered
+  (Bayer) dithering for the sky's fall toward the horizon and the snow's
+  shading. A retro 12 frames a second (`fps`, 6–30).
+- **The tree** (`SmallXmasArt.tree`, tiny, small or a bit bigger): tiers
+  widening downward, lit from the left with a checkered shade on the right,
+  a dark edge under each tier, snow on its shoulders, a gold garland,
+  pixel ornaments, a star whose arms reach out now and then, a red pot.
+  Its bulbs blink: twinkle, chase, alternate, all together or steady
+  (`lit()`, a pure function of time, so twinkle is drawn, not rolled), with
+  a soft pixel of glow round each lit bulb in full colour.
+- **The train:** an engine (wheels in two frames), a tender, a car with a
+  present and a caboose with lit windows. Every couple of minutes it toots
+  (smoke puffs from the stack) and goes round `laps` times on an oval kept
+  as a table of distance along it, so the cars keep their spacing on the
+  bends, easing out of and back into its spot behind the tree. Everything
+  on the floor is drawn back to front by where it stands, so the train
+  passes behind the tree and in front of the presents.
+- **Moving house** (`moveMinutes`): the track packs itself away pixel by
+  pixel, the tree hops along the floor to somewhere new (squashing a pixel
+  as it lands, leaving footprints), the presents and then the train's cars
+  hop after it in a line like ducklings, and the track lays itself down
+  again round it.
+- **The sky:** twinkling stars, a crescent moon, pixel snow, and now and
+  then (`sleigh`: sometimes, Christmas Eve only, never) a sleigh and two
+  reindeer, the leader's nose red, crossing with a trail of sparkles; on
+  Christmas Eve night it comes every couple of minutes. On Christmas Day
+  there are three more presents.
+- **Palettes:** the full-colour night, or the night mapped by brightness
+  onto four-shade screens: pocket (four greens), amber, or four greys (the
+  bulbs then blink between the two brightest shades). Optional scanlines.
+- **Touch:** tap the tree to jingle it (it shakes, the lights chase fast),
+  the train to send it round (or toot), the floor to move the tree there.
+  Keys T (train), M (move), L (jingle), S (the sleigh, whatever the setting).
+- **Cost:** see §4.8. Bench (phone, 4× throttle): 4.6% Low, 5.3% Medium.
+  Smoke: a small canvas, pixelated; about 12 frames a second; T once round
+  and parked exactly where it was; M packs the track, hops, and lays it;
+  a tap on the floor moves the tree there; S flies the sleigh; Christmas
+  Day has six presents. Unit: the palettes (exactly four shades, sky
+  darkest, snow lightest, lights still blink), the patterns, the oval
+  (its length against Ramanujan's, the way round, wrapping), the hops and
+  the new spot, the special days.
+- **Seasonal:** December's list (§4.2), now all five.
 
 ---
 
