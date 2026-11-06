@@ -23,13 +23,14 @@ wallpapers' only home. They run in three hosts:
 > measurements on a real phone (6.2's numbers, 6.4a), the first signed
 > release (6.6), the switch-over itself (7.2), and trying Phase 8's touch
 > and location, and Jellyfin, on a phone. The player, the stage, the panel
-> and all 38 wallpapers run from `web/index.html`, as a Chrome new-tab extension, on
+> and all 39 wallpapers run from `web/index.html`, as a Chrome new-tab extension, on
 > GitHub Pages at https://nealhardesty.github.io/wallpapers/, and as an
 > Android live wallpaper. Every wallpaper is tiered and within budget.
 > Phase 11 (Harvest Valley, §10.22) added the 34th wallpaper for Thanksgiving.
 > Weather (§10.2), World Clock (§10.3) and the Orrery (§10.26) were built
 > 2026-11-05, making 37. The Cat vs. the Ornament (§10.27, 2026-11-06) is
-> the first of four Christmas wallpapers, making 38.
+> the first of four Christmas wallpapers, making 38; The Last Bulb on the
+> Strand (§10.28, 2026-11-06) the second, making 39.
 > Phase 10, the clock overlay (§4.9), was built 2026-10-28; §10 holds the
 > other ideas.
 > Windows (§10.25): the W0 spikes passed, and W1 (the desktop core: behind
@@ -133,11 +134,12 @@ Added in November 2026, drawn in code (design in §10.2):
 | `world-clock` | world-land.js, world-atlas.js (generated), world-cities.js, world-clock-math.js, world-clock-art.js, world-clock-map.js, world-clock-faces.js, world-clock-board.js, world-clock.js | ~2.3k lines | No network; Natural Earth land (public domain); the sun, moon, terminator and zones (`WorldClockMath`), unit-tested; follows `host.now()`; interactive (tap a city); keys V, M, L |
 | `orrery` | orrery-math.js, orrery-art.js, orrery-looks.js, orrery.js | ~2.3k lines | No network; Standish's Keplerian elements, the Moon, Jupiter's four, the zodiac and the seasons (`OrreryMath`), unit-tested; follows `host.now()` or time-lapse; interactive (tap a planet, drag the tilted view); keys = + − 0 L S V (§10.26) |
 
-Added for Christmas, drawn in code (design in §10.27):
+Added for Christmas, drawn in code (designs in §10.27 and §10.28):
 
 | id | Files | Size | Notes |
 |---|---|---|---|
 | `cat-ornament` | cat-ornament-logic.js, cat-ornament-cats.js, cat-ornament-room.js, cat-ornament.js | ~2.2k lines | Interactive (a tap's laser dot); nine named cats on one vector rig; the roster, the pendulum, the fall and the odds (`CatOrnamentLogic`), unit-tested; follows `host.now()` (Christmas Eve and Day); keys N, B, T, Z |
+| `last-bulb` | last-bulb-logic.js, last-bulb-art.js, last-bulb.js | ~1.1k lines | Interactive (tap a bulb to jiggle it); a C9 strand whose last bulb is loose; the flicker scripts, the filament and the strand's shape (`LastBulbLogic`), unit-tested; follows `host.now()` (Christmas Eve and Day); keys L, O, D |
 
 About 1.7 MB of JavaScript in total. **Not imported:** links, weather, clocks,
 search/omniprompt, custom links, status bar, Docker/nginx, the homepage's
@@ -374,7 +376,7 @@ Phase 4 and 6 take it:
   | Sep | leaves |
   | Oct | halloween |
   | Nov | harvest |
-  | Dec | advent, cat-ornament: one a day, in turn (wins over snow's Dec–Apr) |
+  | Dec | advent, cat-ornament, last-bulb: one a day, in turn (wins over snow's Dec–Apr) |
 
   It uses the local calendar month, so it is Northern-Hemisphere only. A
   month may list several (December's Christmas wallpapers): the day of the
@@ -816,6 +818,7 @@ and the commits.
 | world-clock | `cityLights`, `twilight` (medium) | Background, land and graticule per resize and look; the night once a minute (a 1° altitude grid scaled up, or polygons), lights masked into it; a composed base per centre; once a second, idle between; only recentring, flaps and crossfades take more frames; stars and city lights × density |
 | orrery | `glow`, `belt` (medium) | Starfield, paper or study per resize and look; the plane (orbits, zodiac ring, a quiet belt band) cached per camera; sprites per size bucket (planets, gears); live and still it draws once a minute, with the corona and the belt shimmering at ~7 fps in deep space unless motion is reduced or the effects are shed; belt rocks × density, eased; time-lapse and drift at the slow-motion rate |
 | cat-ornament | `firelight` (high) | Room, the fire's and the tree's glow and the standing tree (halos, ornaments, star) one layer; bulbs twinkle over it; a still cat is a cached picture (quantized, at most every 0.15 s); a calm room paced at 15 fps (30 on a fast display) via idleUntil; physics on a 60 Hz step |
+| last-bulb | — | The wall (painted at full light, multiplied by a light map of every bulb's pool) baked lit, dark (the strand out) and, for the corner round the last bulb, lit by it too; bulbs, the tag and the plug are sprites (dark, lit with its bloom, ember); still, it sends no frames at all (idleUntil the next event); a flicker redraws only that corner; a draft swings the bulbs at 30 fps on a 60 Hz step |
 | harvest | `mist`, `beams` (medium) | Land is one baked layer per resize; trees, leaves, apples, geese and clouds are baked sprites; the world is washed once per frame with the hour's light; leaves, apples, smoke, sparks and flocks × density; squirrels × (0.5 + 0.5 density) |
 
 #### In the panel
@@ -3262,6 +3265,61 @@ household's cats taking turns with it.
   director's odds, idling by temperament, the holidays.
 - **Seasonal:** December takes turns, a day each, between Advent and this
   (§4.2); the other three join the list as they're built.
+
+### 10.28 The Last Bulb on the Strand (`last-bulb`, owner request, November 2026)
+
+The second of the owner's four Christmas wallpapers. A strand of old C9
+bulbs hangs in shallow swags from brass cup hooks along a picture rail at
+the top of the wall, every bulb pooling its colour on the wall below. The
+last one, on the tail where the wire drops off the final hook, is loose.
+Subtle on purpose: almost nothing moves, and when something does it's small.
+
+- **The last bulb** (a script of `[power, seconds]` steps, `LastBulbLogic`):
+  dark; every `tryEvery` minutes or so it makes contact twice, briefly
+  (35–100 ms, about a third of a second apart, the second sometimes weaker)
+  and then either holds and lights, or (`stubborn`, 35%) doesn't, now and
+  then with a feeble third, and tries again within the minute. Lit, it
+  stays about `staysLit` minutes, dipping for a moment now and then (it's
+  still loose), and goes out with one last flutter.
+- **The filament:** power doesn't switch the light; a tungsten filament
+  heats in ~40 ms and cools in ~110 (an exact exponential per frame, so any
+  frame rate gives the same curve), and its light goes as temperature^2.4.
+  So a flick is a soft blink that never reaches full brightness, and a warm
+  or cooling filament glows orange (an "ember" sprite over the dark bulb).
+- **Christmas Eve** from 5 pm, and all Christmas Day (`christmasEve`, on by
+  default): it lights first time, and stays lit. No outages either.
+- **The whole strand goes out** (`outages`: rare ≈ every 25 min, sometimes
+  ≈ 8): a stutter, then dark for a few seconds; then someone off screen
+  twists the last bulb (it jiggles on its socket, the tail swings), and the
+  strand flickers twice and comes back: with the last bulb, for once, on.
+- **Drafts** (`draft`): a pulse that travels along the strand, swinging
+  each bulb on its socket (a damped spring) and the tail like a pendulum.
+  None come by themselves under reduced motion (D still sends one).
+- **Touch:** tap a bulb to jiggle it; tap the last one and it may take
+  (85%), or, lit, may work loose (40%) or just dip. During an outage, a tap
+  on it is the twist.
+- **The art** (`last-bulb-art.js`): painted ceramic or clear ribbed glass
+  (the filament and its lead wires showing), a green socket, a brass base,
+  a twisted-pair wire with its shadow, the end plug dangling past the last
+  socket, and a kraft-paper tag tied to the last hook that says "jiggle".
+  The wall is old plaster, knotty pine, brick or green striped wallpaper,
+  painted at full light and multiplied by a light map (the room's ambient,
+  `roomLight`, plus a pool of each bulb's colour), so a red bulb reddens
+  cream plaster and barely shows on green paper.
+- **Colours:** vintage (red, green, blue, orange, gold), warm white,
+  red-green, blue-white, candy cane, all red, all blue, or the user's own;
+  the last bulb takes its place in the pattern or a colour of its own (the
+  one replacement from a different box). Its end, left or right.
+- **Cost:** see §4.8. Bench (phone, 4× throttle): 0.4% Low, ~8.5% Medium.
+  Smoke: frame one is lit with the last bulb dark; no frames while still;
+  L gives exactly two flicks then light, redrawing only the corner; O puts
+  the strand out and the twist brings it back with the last bulb on; a tap
+  on it jiggles it; on Christmas Eve, even at 90% stubborn, it lights and
+  isn't due to go out. Unit: palettes, the attempt scripts (always two
+  flicks), playback, the filament (frame-rate independent, heats faster
+  than it cools, a flick is a soft blink), the layout (swags, the tail,
+  mirroring), Christmas Eve's hours.
+- **Seasonal:** December's list (§4.2).
 
 ---
 

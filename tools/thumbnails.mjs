@@ -32,6 +32,8 @@ const OVERRIDES = {
     orrery: { configVersion: 1, view: 'tilted', drift: false, showInfo: false, showLabels: false, planetSize: 1.4 },
     // Moofy's grin under the tree, Ras at the ornament, Butters belly-up.
     'cat-ornament': { configVersion: 1, cats: ['moofy', 'ras', 'butters'], inRoom: 3, catSize: 1.2 },
+    // Big bulbs to read at thumbnail size; the last one still dark.
+    'last-bulb': { configVersion: 1, size: 1.6, sag: 0.7, roomLight: 0.25 },
 };
 // URL parameters for a better picture: satellites as its sample station
 // passes overhead before dawn, weather's sample at a golden dusk (thumb mode never fetches, so it's the sample),
