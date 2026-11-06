@@ -14,7 +14,7 @@
         'leaves',                                // Sep
         'halloween',                             // Oct
         'harvest',                               // Nov
-        ['advent', 'cat-ornament', 'last-bulb'], // Dec (wins over snow), a different one each day
+        ['advent', 'cat-ornament', 'last-bulb', 'frost'],   // Dec (wins over snow), a different one each day
     ];
 
     WP.seasonalFor = date => {

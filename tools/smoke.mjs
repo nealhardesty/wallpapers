@@ -831,6 +831,54 @@ const STAGE_CHECKS = {
         if ((await st()).next.last !== undefined) record('on Christmas Eve it means to go out again');
         return true;
     }]],
+    // Frost on the Glass: frost on frame one, and it keeps creeping in;
+    // with no snow it paces itself at ten frames a second at most; D draws in
+    // it (the glass under the line is clear afterwards); B breathes on it; a
+    // drag clears a line that later grows back; T thaws it, and it starts
+    // again from the corners.
+    frost: [['frost grows, someone draws in it, breath, a finger, the thaw', async () => {
+        const st = () => evaluate('JSON.parse(JSON.stringify(WP.stage.manager.debugState()))');
+        const alphaAt = (x, y) => evaluate(`(m => m.mask.getContext('2d').getImageData(Math.round(${x} * m.dpr), Math.round(${y} * m.dpr), 1, 1).data[3])(WP.stage.manager)`);
+        if (!await stageWith('frost', { configVersion: 1, snow: 0, doodles: false }, '&seed=7&date=2026-12-10T20:00')) return record('no boot');
+        let s = await st();
+        if (s.phase !== 'grow' || s.stats.segments < 2000 || s.spots < 50) record(`frame one: ${JSON.stringify(s)}`);
+        const seg = s.stats.segments;
+        await sleep(600);
+        const before = await evaluate('WP.host.frames.count');
+        await sleep(2000);
+        const frames = await evaluate('WP.host.frames.count') - before;
+        if (frames > 26) record(`${frames} frames in 2 s with no snow (want ten a second at most)`);
+        if ((await st()).stats.segments <= seg) record('the frost stopped growing');
+        // D: a heart drawn in it; the glass under its line is clear after.
+        await press('d');
+        const path = await evaluate('(m => m.doodling && m.doodling.path.filter(p => !p.lift).map(p => ({ x: p.x, y: p.y })))(WP.stage.manager)');
+        if (!path?.length) return record(`D drew nothing: ${JSON.stringify(await st())}`);
+        if (!await waitFor(async () => !(await st()).doodling, 15000)) return record('the doodle never finished');
+        const mid = path[Math.floor(path.length / 2)];
+        const left = await alphaAt(mid.x, mid.y);
+        if (left > 40) record(`the doodle's line still has frost on it (alpha ${left})`);
+        await shoot('frost-doodle');
+        // B: breath fogs the glass for a moment.
+        await press('b');
+        if (!(await evaluate('WP.stage.manager.fogs.length'))) record('B: no breath on the glass');
+        // A drag: a cleared line, and new crystals queued to grow back into it.
+        const tips = (await st()).tips;
+        const p = await evaluate('(m => { const q = m.L.panes[0]; return { x: q.x + 30, y: q.y + 30 }; })(WP.stage.manager)');
+        await cdp.send('Input.dispatchMouseEvent', { type: 'mousePressed', x: p.x, y: p.y, button: 'left', buttons: 1, clickCount: 1 });
+        for (let i = 1; i <= 12; i++) await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: p.x + i * 12, y: p.y + i * 6, button: 'left', buttons: 1 });
+        await cdp.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: p.x + 144, y: p.y + 72, button: 'left', buttons: 0, clickCount: 1 });
+        await sleep(300);
+        if ((await st()).tips <= tips) record('a drag left nothing to grow back');
+        if (await alphaAt(p.x + 72, p.y + 36) > 40) record('a drag left the frost under it');
+        // T: the thaw, and frost from the corners again.
+        await press('t');
+        if ((await st()).phase !== 'thaw') return record(`T: ${JSON.stringify(await st())}`);
+        await evaluate('WP.stage.manager.phaseT = 39.5');
+        if (!await waitFor(async () => (await st()).phase === 'grow', 3000)) return record(`the thaw never ended: ${JSON.stringify(await st())}`);
+        s = await st();
+        if (s.stats.thaws !== 1 || s.phaseT > 5) record(`after the thaw: ${JSON.stringify(s)}`);
+        return true;
+    }]],
     // 8.2: one full repaint per morph step, none while a pattern holds. On
     // Low there's no sheen, so a hold sends no frames at all.
     girih: [['one repaint per morph step, none while holding', async () => {

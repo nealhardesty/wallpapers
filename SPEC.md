@@ -23,14 +23,15 @@ wallpapers' only home. They run in three hosts:
 > measurements on a real phone (6.2's numbers, 6.4a), the first signed
 > release (6.6), the switch-over itself (7.2), and trying Phase 8's touch
 > and location, and Jellyfin, on a phone. The player, the stage, the panel
-> and all 39 wallpapers run from `web/index.html`, as a Chrome new-tab extension, on
+> and all 40 wallpapers run from `web/index.html`, as a Chrome new-tab extension, on
 > GitHub Pages at https://nealhardesty.github.io/wallpapers/, and as an
 > Android live wallpaper. Every wallpaper is tiered and within budget.
 > Phase 11 (Harvest Valley, §10.22) added the 34th wallpaper for Thanksgiving.
 > Weather (§10.2), World Clock (§10.3) and the Orrery (§10.26) were built
 > 2026-11-05, making 37. The Cat vs. the Ornament (§10.27, 2026-11-06) is
 > the first of four Christmas wallpapers, making 38; The Last Bulb on the
-> Strand (§10.28, 2026-11-06) the second, making 39.
+> Strand (§10.28, 2026-11-06) the second, making 39; Frost on the Glass
+> (§10.29, 2026-11-06) the third, making 40.
 > Phase 10, the clock overlay (§4.9), was built 2026-10-28; §10 holds the
 > other ideas.
 > Windows (§10.25): the W0 spikes passed, and W1 (the desktop core: behind
@@ -134,12 +135,13 @@ Added in November 2026, drawn in code (design in §10.2):
 | `world-clock` | world-land.js, world-atlas.js (generated), world-cities.js, world-clock-math.js, world-clock-art.js, world-clock-map.js, world-clock-faces.js, world-clock-board.js, world-clock.js | ~2.3k lines | No network; Natural Earth land (public domain); the sun, moon, terminator and zones (`WorldClockMath`), unit-tested; follows `host.now()`; interactive (tap a city); keys V, M, L |
 | `orrery` | orrery-math.js, orrery-art.js, orrery-looks.js, orrery.js | ~2.3k lines | No network; Standish's Keplerian elements, the Moon, Jupiter's four, the zodiac and the seasons (`OrreryMath`), unit-tested; follows `host.now()` or time-lapse; interactive (tap a planet, drag the tilted view); keys = + − 0 L S V (§10.26) |
 
-Added for Christmas, drawn in code (designs in §10.27 and §10.28):
+Added for Christmas, drawn in code (designs in §10.27–§10.29):
 
 | id | Files | Size | Notes |
 |---|---|---|---|
 | `cat-ornament` | cat-ornament-logic.js, cat-ornament-cats.js, cat-ornament-room.js, cat-ornament.js | ~2.2k lines | Interactive (a tap's laser dot); nine named cats on one vector rig; the roster, the pendulum, the fall and the odds (`CatOrnamentLogic`), unit-tested; follows `host.now()` (Christmas Eve and Day); keys N, B, T, Z |
 | `last-bulb` | last-bulb-logic.js, last-bulb-art.js, last-bulb.js | ~1.1k lines | Interactive (tap a bulb to jiggle it); a C9 strand whose last bulb is loose; the flicker scripts, the filament and the strand's shape (`LastBulbLogic`), unit-tested; follows `host.now()` (Christmas Eve and Day); keys L, O, D |
+| `frost` | frost-logic.js, frost-art.js, frost.js | ~1k lines | Interactive (drag to draw in the frost, tap to breathe on it); fern frost grown tip by tip on an occupancy grid, the window and the doodles (`FrostLogic`), unit-tested; follows `host.now()` (Christmas Eve and Day); keys B, D, T |
 
 About 1.7 MB of JavaScript in total. **Not imported:** links, weather, clocks,
 search/omniprompt, custom links, status bar, Docker/nginx, the homepage's
@@ -376,7 +378,7 @@ Phase 4 and 6 take it:
   | Sep | leaves |
   | Oct | halloween |
   | Nov | harvest |
-  | Dec | advent, cat-ornament, last-bulb: one a day, in turn (wins over snow's Dec–Apr) |
+  | Dec | advent, cat-ornament, last-bulb, frost: one a day, in turn (wins over snow's Dec–Apr) |
 
   It uses the local calendar month, so it is Northern-Hemisphere only. A
   month may list several (December's Christmas wallpapers): the day of the
@@ -819,6 +821,7 @@ and the commits.
 | orrery | `glow`, `belt` (medium) | Starfield, paper or study per resize and look; the plane (orbits, zodiac ring, a quiet belt band) cached per camera; sprites per size bucket (planets, gears); live and still it draws once a minute, with the corona and the belt shimmering at ~7 fps in deep space unless motion is reduced or the effects are shed; belt rocks × density, eased; time-lapse and drift at the slow-motion rate |
 | cat-ornament | `firelight` (high) | Room, the fire's and the tree's glow and the standing tree (halos, ornaments, star) one layer; bulbs twinkle over it; a still cat is a cached picture (quantized, at most every 0.15 s); a calm room paced at 15 fps (30 on a fast display) via idleUntil; physics on a 60 Hz step |
 | last-bulb | — | The wall (painted at full light, multiplied by a light map of every bulb's pool) baked lit, dark (the strand out) and, for the corner round the last bulb, lit by it too; bulbs, the tag and the plug are sprites (dark, lit with its bloom, ember); still, it sends no frames at all (idleUntil the next event); a flicker redraws only that corner; a draft swings the bulbs at 30 fps on a 60 Hz step |
+| frost | `glints` (medium) | Three canvases: the room and frost (redrawn ten times a second at most, six on a slow tier), the frame (baked once) and the snow (every frame, only while it's snowing, else idleUntil the next tenth); the room's blur, the bokeh discs and the frost's backlit colour baked per resize; frost accumulates on a mask (new ice only) and is re-tinted through it when it changes; tips capped at 9,000 × density; a render-scale change keeps the frost, rescaled; snow × density |
 | harvest | `mist`, `beams` (medium) | Land is one baked layer per resize; trees, leaves, apples, geese and clouds are baked sprites; the world is washed once per frame with the hour's light; leaves, apples, smoke, sparks and flocks × density; squirrels × (0.5 + 0.5 density) |
 
 #### In the panel
@@ -3319,6 +3322,61 @@ Subtle on purpose: almost nothing moves, and when something does it's small.
   flicks), playback, the filament (frame-rate independent, heats faster
   than it cools, a flick is a soft blink), the layout (swags, the tail,
   mirroring), Christmas Eve's hours.
+- **Seasonal:** December's list (§4.2).
+
+### 10.29 Frost on the Glass (`frost`, owner request, November 2026)
+
+The third of the owner's four Christmas wallpapers. We're outside on a
+cold night, looking in through a frosted window: behind the glass a warm
+room out of focus, and a Christmas tree that's only a dark cone and the
+soft discs of its lights.
+
+- **The frost** (`FrostLogic.grow`) grows tip by tip. Seeds sit along every
+  pane's edges, deeper toward the corners (the coldest glass), with fans
+  of long stems from each corner; corners start at once, mid-edges later,
+  over the first half of `growMinutes`. Each tip steps about a pixel and a
+  half at a time with a little wander and drops side branches on both
+  sides at ice's sixty degrees, each a share of what its parent has left,
+  four generations down: fern frost. A coarse occupancy grid stops a tip
+  where another stem's ice is as coarse as its own (a stem runs on through
+  a neighbour's twigs, a twig stops at anything), which is what fills the
+  glass without a tangle. Ice is laid a pixel or so at a time (a slow tip
+  would otherwise stack dabs into bright balls), with a milky haze where
+  it's dense and places for glints.
+- **The light:** the frost is a mask over its own colour, a cold
+  blue-white plus the room blurred and shone through, so it glows amber in
+  front of the tree and stays cold in dark corners. Glints: light catching
+  a facet now and then (`sparkle`, an effect shed on Low).
+- **Doodles** (`doodles`, about every `doodleMinutes`): someone inside
+  draws with a fingertip where there's frost to draw in: a heart, a star, a
+  smiley, a cat's paw print, a tree, or NOEL, written left to right from
+  inside and so backwards from out here. Christmas Eve and Day: trees,
+  stars and hearts. A minute or two later new crystals grow back into the
+  line.
+- **The thaw** (`cycleMinutes`, 30; 0 never): the room's warmth clears each
+  pane from the middle out over 40 s, and frost starts again from the
+  corners.
+- **Touch:** drag to draw in the frost; tap to breathe on the glass (a
+  round clear patch, fogged for a few seconds). Both grow back.
+- **The room** (`frost-art.js`): painted sharp at a quarter size and blurred
+  up: warm walls, a lamp, the fire's glow off to one side, a sofa's back,
+  the tree in tiers. Its lights wind round it in a spiral, the nearer ones
+  bigger; each a bokeh disc, brighter at its rim, twinkling slowly
+  (`twinkle`), with a star and a few far lamps. Warm, coloured, icy blue or
+  candlelight; the tree left, middle or right; `blur` sizes the discs.
+- **The window:** one, two, four or six panes (turned for portrait), the
+  frame white, wood, green or red, moonlit, its bevels catching the room's
+  light; snow drifted on the sill and on each glazing bar, glittering.
+  Snow falls outside (`snow`), a few big soft flakes close by, and now and
+  then a flake sticks to the glass as a six-armed crystal and fades.
+- **Cost:** see §4.8. Bench (phone, 4× throttle): 8.3% Low, 16.7% Medium;
+  a thaw or a doodle about 17–27% on Medium. Smoke: frost on frame one and
+  growing; ten frames a second at most with no snow; D draws and the glass
+  under the line is clear after; B fogs it; a drag clears a line and
+  queues regrowth; T thaws and it starts again. Unit: panes by kind and
+  orientation, seeds (on the edges, corners first and furthest), the grid's
+  rules, growth (on the glass, sixty degree branches, four generations, no
+  stacked dabs), every doodle traces and NOEL is mirrored, the festive days.
 - **Seasonal:** December's list (§4.2).
 
 ---
