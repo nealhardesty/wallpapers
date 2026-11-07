@@ -3254,6 +3254,22 @@ household's cats taking turns with it.
   it"); sleepers startle; the Persian is unimpressed. After 9 s, a fade,
   "Some time later…", everything back, and the next cat's turn. Topple off
   (or reduced motion): the climber jumps down and the tree stays up.
+- **The tree** (`tree`: cozy, grand (default), majestic; owner request,
+  2026-11-06: "an impressive tree, much wider"). `CatRoom.TREES` sets how
+  wide it is for its height (0.6, 1, 1.2), how much taller it may be on a
+  phone, and where it stands; on a phone it fills the width but never
+  overflows it. Its tiers (6 + 1.4 × width/0.6h of them) are drawn from the
+  bottom up, each skirt hanging over the tier below: a rounded cone with a
+  fringe of drooping tips, lower in the middle, shaded like a cone lit from
+  the window side, and darker where the tier above hangs over it. Each is
+  needled with sprigs batched into four Path2Ds by brightness (one stroke
+  each), with more sprigs hanging past its edge. Lights and ornaments go by
+  area: 70 lights on the cozy tree and up to 180, with up to 36 ornaments.
+  Under a grand tree there are eight presents in two rows. The front
+  sprite is everything below the lowest tier's top, feathered over 12u so
+  no seam shows; bulbs near or below that line are drawn after it. The
+  stand, and so the pivot it tips over on, scale with the height, not the
+  width.
 - **The room** (`cat-ornament-room.js`): red damask walls, a wainscot, a
   window onto snowy roofs with snow falling (clipped to the panes), a cat's
   portrait, plank floor, braided rug, tree skirt, presents, an open box
@@ -3262,8 +3278,8 @@ household's cats taking turns with it.
   (a sleeper less readily) chases and pounces, and the dot jumps away.
 - **Holidays:** captions on Christmas Eve ("Everyone is being very good.
   Mostly.") and Day ("Merry Christmas from …").
-- **Cost:** see §4.8. Bench (phone, 4× throttle): 14–18% Low, ~25%
-  Medium. Smoke: frame one has the cast and the lead at the ornament; B
+- **Cost:** see §4.8. Bench (phone, 4× throttle): 14–18% Low, ~25–40%
+  Medium (the grand tree measured 15.7% and 30.5%; the old one 13.6% and 42%). Smoke: frame one has the cast and the lead at the ornament; B
   swings it; T brings the tree down (lights out, ornaments loose, the
   culprit innocent) and the reset puts it back for another cat; Topple off
   keeps it up; a tap's dot is chased. Unit: the roster and names (Harry's

@@ -65,7 +65,9 @@ belly-up; Harry (or Indiana Jones, or Friskies) plays; the Persian judges.
 Now and then one stares at the ornament for an uncomfortably long time, and
 now and then one goes up the tree, and the tree comes down: ornaments
 everywhere, the lights out, a cat with no idea what happened. Then a fade,
-and it's up again. Tap for a laser dot.
+and it's up again. Tap for a laser dot. The tree is Grand by default, wide
+and full, with up to 180 lights and a pile of presents. Choose Cozy for a
+slim tree or Majestic for the biggest.
 
 **The Last Bulb on the Strand** 💡 is a string of old C9 bulbs hung along
 the top of the wall, every one pooling its colour on the plaster. Except
