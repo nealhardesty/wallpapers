@@ -1887,7 +1887,7 @@ const STAGE_CHECKS = {
             await mouse('mouseReleased', c.x, c.y);
             await sleep(200);
             const card = await counts('m.debugPositions().card');
-            if (!card?.title.includes('centre of the galaxy') || !/In our sky: Sagittarius/.test(card.lines.join(' | '))) record(`the compass's card: ${JSON.stringify(card)}`);
+            if (!card?.title.includes('Galactic Core') || !/In our sky: Sagittarius/.test(card.lines.join(' | '))) record(`the compass's card: ${JSON.stringify(card)}`);
             else await shoot('orrery-compass-card');
             await stageWith('orrery', { configVersion: 1, galaxyCompass: 'off' });
             await sleep(250);

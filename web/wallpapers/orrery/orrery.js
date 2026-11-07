@@ -572,7 +572,7 @@ class OrreryAnimationManager {
             lines.push(`In our sky: ${this.sky(scene.sunLon, scene.T)}`);
         } else if (id === 'galaxy') {
             const e = ((this.galaxyLon - scene.sunLon) % 360 + 540) % 360 - 180;
-            title = '✦ The centre of the galaxy';
+            title = '✦ The Galactic Core';
             lines.push('Sagittarius A*: a black hole of four million Suns');
             lines.push('26,700 light-years away · 5.6° south of the ecliptic');
             lines.push(`In our sky: ${this.sky(this.galaxyLon, scene.T)}`);
@@ -885,8 +885,8 @@ class OrreryAnimationManager {
     // The globe's name: engraved in capitals on the brass plinth, or written under it.
     compassLabel(th, plinth) {
         const k = this.k;
-        if (plinth) return { text: 'GALACTIC CENTRE', font: `600 ${Math.min(10.5 * k, this.base * 0.32)}px ${th.font}` };
-        return { text: 'Galactic centre', font: `${this.config.look === 'chart' ? 'italic ' : ''}400 ${10.5 * k}px ${th.font}` };
+        if (plinth) return { text: 'GALACTIC CORE', font: `600 ${Math.min(10.5 * k, this.base * 0.32)}px ${th.font}` };
+        return { text: 'Galactic Core', font: `${this.config.look === 'chart' ? 'italic ' : ''}400 ${10.5 * k}px ${th.font}` };
     }
 
     // A glass globe whose needle points at Sagittarius A*: the direction is
@@ -926,6 +926,21 @@ class OrreryAnimationManager {
         g.globalAlpha = 0.85;
         const behind = v.d > 0;
         if (!behind) g.stroke(near);
+        // Ticks every 30° round it, pointing in, longer at 0° (the first point of Aries,
+        // where the zodiac starts): a circle turning about its own axis looks
+        // still, so these are what show the globe turning with the camera.
+        for (let i = 0; i < 12; i++) {
+            const a = i / 12 * Math.PI * 2;
+            this.orient({ x: Math.cos(a), y: Math.sin(a), z: 0 }, p);
+            const l = i ? 0.13 : 0.26, ax = x + p.x * r * 0.86, ay = y + p.y * r * 0.86;
+            g.globalAlpha = p.d > 0 ? 0.4 : 1;
+            g.strokeStyle = i ? th.dim : th.ink;
+            g.lineWidth = Math.max(1, (i ? 1.2 : 1.8) * k);
+            g.beginPath(); g.moveTo(ax + p.x * r * 0.04, ay + p.y * r * 0.04); g.lineTo(ax - p.x * r * l, ay - p.y * r * l); g.stroke();
+        }
+        g.globalAlpha = 0.85;
+        g.strokeStyle = th.dim;
+        g.lineWidth = Math.max(0.8, 0.9 * k);
         // The needle: gold to the centre, dim behind, foreshortened with the view.
         const len = Math.hypot(v.x, v.y), ux = v.x / (len || 1), uy = v.y / (len || 1), w = r * 0.12;
         const tip = { x: x + v.x * r * 0.86, y: y + v.y * r * 0.86 }, tail = { x: x - v.x * r * 0.34, y: y - v.y * r * 0.34 };

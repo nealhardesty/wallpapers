@@ -30,7 +30,7 @@ WP.schema('orrery', [
       help: 'The constellations are where the planets really are among the stars; the signs are 30° slices measured from the equinox, which drifts.' },
     { key: 'skyLines', label: 'Lines of sight from the Earth', type: 'toggle', help: 'Where to look in the sky for each planet tonight (the star chart, or a tapped planet).' },
     { key: 'showInfo', label: 'The date and the Moon', type: 'toggle', help: 'The corner readout: the date, the next equinox or solstice, the Moon’s phase, which planets are retrograde.' },
-    { key: 'galaxyCompass', label: 'Compass to the galaxy’s centre', type: 'select',
+    { key: 'galaxyCompass', label: 'Compass to the Galactic Core', type: 'select',
       options: [['off', '🚫 Off'], ['top-left', '↖️ Top left'], ['top-right', '↗️ Top right'], ['bottom-left', '↙️ Bottom left'], ['bottom-right', '↘️ Bottom right']],
       help: 'A glass globe in a corner whose needle points at Sagittarius A*, the black hole 26,700 light-years away at the heart of the Milky Way, as seen in this view (it turns with the tilted camera). Tap it for more.' },
     { group: '⏩ Time' },
