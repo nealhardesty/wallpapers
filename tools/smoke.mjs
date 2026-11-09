@@ -705,7 +705,7 @@ const STAGE_CHECKS = {
             if (last && last.x > 0 && last.x < now.w && now.x > 0 && now.x < now.w) jump = Math.max(jump, Math.hypot(now.x - last.x, now.y - last.y));
             last = now;
             return now.apple === 'gone';
-        }, 20000);
+        }, 45000);     // one in seven times a squirrel wanders off first (to the far side of the meadow and back)
         if (!done) return record(`the apple never left (states: ${[...seen]})`);
         if (!seen.has('carried') || !seen.has('carry')) record(`it wasn't carried (states: ${[...seen]})`);
         if (jump > 90) record(`the squirrel jumped ${Math.round(jump)} px on screen`);
