@@ -2598,7 +2598,24 @@ no village, no orchard, no day (only the moon), and so on.
   follows the first, up to a cap of 4 + flocks-per-hour/15), a flock of six or
   more often has one to three stragglers well behind it, wingbeat a little
   quicker and never quite catching up, and a lone goose crosses now and then; the lead goose drops to the back (offsets ease, so it
-  glides round the outside), and the whole flock glides now and then; squirrels who
+  glides round the outside), and the flock glides now and then, the glide
+  starting at the leader and running back down each arm. **Each goose is its
+  own bird** (`irregularity`, 0..2, default 1; 0 is a drilled V): its own
+  wingbeat rate, a few percent either side of the flock's, phase-coupled to
+  a beat behind the goose ahead with a strength that comes and goes, so the
+  ripple drifts out of step and locks back in (the coupling reads the phases
+  at the start of the step, or at 10 fps it lags a third of a beat); short solo
+  glides, then a quicker beat to catch up; its place held on a soft,
+  overshooting spring with a slow random-walk wander, and its own pitch as it
+  rises and sinks in it; the V breathing open and drawn in; jinks that the
+  geese behind take up a moment later, smaller each time; gusts jostling the
+  tips of the arms most; neighbours overtaking one another, swinging wide to
+  pass; a ragged flock pulling itself into a V, the furthest forward leading;
+  and **whiffling**: now and then a goose rolls belly-up and side-slips to shed
+  height, then rights itself, and sometimes the ones behind follow (`R` sets
+  one off). `fit` keeps room for all of it (the widest breath and the most
+  straying allowed, `slack`, both fixed when the flock spawns), so no goose
+  ever dips behind the hills; squirrels who
   gather fallen apples and acorns in both paws and carry them off the nearest
   edge of the screen (never appearing or vanishing in place: they walk out,
   and walk back in from an edge a few seconds later; some acorns are eaten

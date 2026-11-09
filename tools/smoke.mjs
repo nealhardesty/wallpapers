@@ -612,21 +612,78 @@ const STAGE_CHECKS = {
         if (r.flocks < 3) record(`only ${r.flocks} flocks at once`);
         if (r.n < 1 || r.n > 3 || !r.sameWay) record(`stragglers: ${JSON.stringify(r)}`);
         if (r.behind <= 0) record(`the stragglers aren't behind their flock (${Math.round(r.behind)} px)`);
-        // A minute and a half of flying, many flocks of every size and shape: none dips behind the hills.
+        // A minute and a half of flying, many flocks of every size and shape, as
+        // wild as they come (gusts, dodges, whiffles): none dips behind the hills.
         const low = await evaluate(`(m => {
             const f = m.flocks, ridge = m.L.hz - m.L.Hu * 0.157;
+            m.config.irregularity = 2;
             for (let i = 0; i < 36; i++) f.spawn(Math.random(), { n: [3, 8, 15, 30, 60, 100][i % 6], type: ['v', 'line', 'ragged'][i % 3] });
             let lowest = -1e9, worst = null;
             for (let step = 0; step < 900; step++) {
+                if (step % 60 === 0) m.gust = 2;
+                for (const fl of f.flocks) if (step % 25 === 0 && fl.n >= 3) f.whiffle(fl, fl.bySlot[fl.n - 1], true);
                 f.update(0.1);
+                m.gust = Math.max(0, m.gust - 0.035);
                 for (const fl of f.flocks) for (const b of fl.birds) {
-                    const y = fl.y + b.ox * Math.sin(fl.tilt) + b.oy * Math.cos(fl.tilt) + fl.len * 0.5 + fl.len * 0.09;     // where it's drawn: tilted with the flock, swaying
+                    const y = f.pos(fl, b).y + fl.len * 0.5;     // where it's drawn, its lowest wingtip
                     if (y > lowest) { lowest = y; worst = { n: fl.n, type: fl.type }; }
                 }
             }
             return { lowest, ridge, worst };
         })(WP.stage.manager)`);
         if (low.lowest > low.ridge) record(`a goose flew down to ${Math.round(low.lowest)}, behind the hills (the ridge is at ${Math.round(low.ridge)}): ${JSON.stringify(low.worst)}`);
+        return true;
+    }], ['geese are each their own bird: wingbeats drift and lock, they dodge and whiffle, and 0 is a drilled V', async () => {
+        await cdp.send('Page.navigate', { url: `${WEB}/stage.html?w=harvest&seed=11&date=2026-11-24T14:00` });
+        await waitFor(() => evaluate('WP.stage?.ready === true'));
+        const r = await evaluate(`(m => {
+            const F = m.flocks, wrap = d => d - Math.round(d);
+            m.config.irregularity = 1;
+            F.flocks = [];
+            const f = F.spawn(0.2, { n: 15, type: 'v' });
+            f.nextGlide = 1e9;
+            // How far each goose is from a beat behind the one ahead: tracked over a minute.
+            let maxSlip = 0, sumSlip = 0, samples = 0, maxStray = 0, rolled = 0, flipped = false;
+            for (let i = 0; i < 600; i++) {
+                if (i === 300) F.whiffle(f, f.bySlot[3], false);
+                F.update(0.1);
+                for (const b of f.birds) {
+                    if (b.roll >= 0) rolled++;
+                    if (b.slot === 0 || b.gliding) continue;
+                    const a = f.bySlot[f.ahead[b.slot]];
+                    if (a.gliding) continue;
+                    const slip = Math.abs(wrap(a.phase - (f.ranks[b.slot] - f.ranks[a.slot]) * 0.07 - b.phase));
+                    maxSlip = Math.max(maxSlip, slip); sumSlip += slip; samples++;
+                    maxStray = Math.max(maxStray, Math.hypot(b.px - b.ox * f.bx, b.py - b.oy * f.by) / f.len);
+                }
+            }
+            const rates = f.birds.map(b => b.dev);
+            // A drilled V: no wander, no dodges, every goose on its slot and in step.
+            m.config.irregularity = 0;
+            F.flocks = [];
+            const g = F.spawn(0.2, { n: 15, type: 'v' });
+            g.nextGlide = 1e9; g.turn = 1e9;
+            let tidyStray = 0, tidySlip = 0;
+            for (let i = 0; i < 600; i++) {
+                F.update(0.1);
+                if (i < 100) continue;
+                for (const b of g.birds) {
+                    tidyStray = Math.max(tidyStray, Math.hypot(b.px - b.ox, b.py - b.oy) / g.len);
+                    if (!b.slot) continue;
+                    const a = g.bySlot[g.ahead[b.slot]];
+                    tidySlip = Math.max(tidySlip, Math.abs(wrap(a.phase - (g.ranks[b.slot] - g.ranks[a.slot]) * 0.07 - b.phase)));
+                }
+            }
+            m.config.irregularity = 1;
+            return { spread: Math.max(...rates) - Math.min(...rates), maxSlip, meanSlip: sumSlip / samples, maxStray, rolled, tidyStray, tidySlip };
+        })(WP.stage.manager)`);
+        if (r.spread < 0.04) record(`the geese share one wingbeat rate (spread ${r.spread.toFixed(3)})`);
+        if (r.maxSlip < 0.15) record(`the wingbeats never drift out of step (max slip ${r.maxSlip.toFixed(3)} of a beat)`);
+        if (r.meanSlip > 0.2) record(`the wingbeats never lock back in (mean slip ${r.meanSlip.toFixed(3)} of a beat)`);
+        if (r.maxStray < 0.2) record(`the geese sit rigidly in their places (max stray ${r.maxStray.toFixed(2)} body-lengths)`);
+        if (r.rolled < 5) record('a goose was told to whiffle and never rolled over');
+        if (r.tidyStray > 0.15 || r.tidySlip > 0.02) record(`at irregularity 0 the V isn't drilled: stray ${r.tidyStray.toFixed(2)}, slip ${r.tidySlip.toFixed(3)}`);
+        console.log(`    harvest geese: rates spread ${(r.spread * 100).toFixed(1)}%, slip ${r.meanSlip.toFixed(2)} mean / ${r.maxSlip.toFixed(2)} max of a beat, stray up to ${r.maxStray.toFixed(2)} lengths; at 0: ${r.tidyStray.toFixed(3)}, ${r.tidySlip.toFixed(3)}`);
         return true;
     }], ['a squirrel carries an apple off the edge of the screen, and never jumps', async () => {
         // No apples or acorns of their own falling meanwhile, so the squirrel has only the one.

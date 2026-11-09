@@ -56,6 +56,7 @@
           keys: [
               { keys: ['g'], label: 'Wait for the Great Pumpkin', run: valley => valley.waitForGreatPumpkin() },
               { keys: ['h'], label: 'Call the geese', run: valley => valley.callGeese() },
+              { keys: ['r'], label: 'A goose whiffles (rolls over to lose height)', run: valley => valley.whiffle() },
               { keys: ['w'], label: 'A gust of wind', run: valley => valley.blow() },
               { keys: ['s'], label: 'A cat goes after a squirrel', run: valley => valley.chaseSquirrel() },
               { keys: ['m'], label: 'What is the moon doing?', run: valley => valley.moonReport() },

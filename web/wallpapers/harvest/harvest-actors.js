@@ -12,11 +12,30 @@ const harvestEase = (rate, dt) => 1 - Math.exp(-rate * dt);
 // Flocks cross the sky: mostly in a V with arms of unequal length, sometimes
 // in a single slanting line, sometimes loose and ragged. They don't fly a
 // ruler's line: each flock climbs and sinks and banks on its own slow
-// curve, and its geese ripple their wingbeats down the formation, each a
-// beat behind the one ahead, with an easy sway in their places. Now and
-// then the whole flock stops flapping and glides. In a V the lead goose
-// tires and drops to the back (the offsets ease, so it really does glide
-// round the outside). Far flocks are small, and paler with distance.
+// curve. In a V the lead goose tires and drops to the back (the offsets ease,
+// so it really does glide round the outside). Far flocks are small, and paler
+// with distance.
+//
+// No two geese are the same bird. `irregularity` (0..2) sets how much of
+// this there is; at 0 a flock flies as a tidy, drilled V.
+//   - Wingbeats: each goose has its own natural rate, a few percent either
+//     side of the flock's, and tries to keep a beat behind the goose ahead
+//     of it (to ride that bird's upwash). How hard it tries comes and goes,
+//     so the ripple down each arm drifts out of step and locks back in.
+//   - Glides: a glide starts with the leader and runs back down each arm,
+//     and single geese rest their wings for a moment on their own. After a
+//     glide a goose flaps a little quicker to catch up.
+//   - Places: each goose holds its slot on a soft spring that overshoots,
+//     and wanders about it on a slow random walk; it noses up or down as it
+//     rises or sinks in its place. The V breathes: it opens out and loosens,
+//     then draws in again.
+//   - Dodges: now and then a goose jinks, and the geese behind it flinch the
+//     same way a moment later, less each time, so a shiver runs down the arm.
+//     A gust jostles the whole flock, the tips of the arms the most.
+//   - Neighbours trade places, and a ragged flock pulls itself into a V.
+//   - Whiffling: once in a while a goose rolls upside down and side-slips to
+//     shed height, then rights itself (real geese do this, coming in to land).
+//     Sometimes the geese behind it catch the idea.
 class HarvestFlocks {
     constructor(m) {
         this.m = m;
@@ -33,11 +52,14 @@ class HarvestFlocks {
     // At most this many flocks cross at once.
     cap() { return 4 + Math.floor(this.m.config.geese / 15); }
 
+    // How irregular the geese are, 0..2.
+    irr() { return harvestClamp(this.m.config.irregularity ?? 1, 0, 2); }
+
     // A flock, entering from a side; `at` (0..1) starts it part-way across.
     // `o` can fix its size, direction, distance, height and type, how far
     // behind the edge it starts, and how much faster it flaps: for stragglers.
     spawn(at = 0, o = {}) {
-        const m = this.m, W = m.W, u = m.u, dir = o.dir ?? (Math.random() < 0.5 ? -1 : 1);
+        const m = this.m, W = m.W, u = m.u, dir = o.dir ?? (Math.random() < 0.5 ? -1 : 1), irr = this.irr();
         const n = o.n ?? this.size(), scale = o.scale ?? 0.5 + Math.random() * 0.65, roll = Math.random();
         const type = o.type ?? (n < 5 || roll < 0.7 ? 'v' : roll < 0.85 ? 'line' : 'ragged'), behind = o.behind || 0;
         // A really big flock gets tighter, smaller birds, so it still fits the sky.
@@ -49,27 +71,41 @@ class HarvestFlocks {
             speed: (46 + Math.random() * 26) * u * (0.55 + scale * 0.5) * (o.speed ?? 1),
             climb: (Math.random() - 0.5) * 0.1, wave: Math.random() * 6, wave2: Math.random() * 6,
             turn: 10 + Math.random() * 14, rate: (2.7 - 0.7 * scale + (Math.random() - 0.5) * 0.3) * (o.rate ?? 1),
-            glide: 0, nextGlide: 6 + Math.random() * 12, tilt: 0, birds: [], offsets: [], ranks: [],
+            glideAt: -1e9, glideLen: 0, nextGlide: 6 + Math.random() * 12, tilt: 0, birds: [], offsets: [], ranks: [],
+            // How far a goose may stray from its place, up or down: `fit` keeps this much room.
+            slack: len * (0.1 + 0.6 * irr), breath: Math.min(1, irr), bx: 1, by: 1, gustSeen: m.gust || 0, kicks: [],
+            nextSwap: 15 + Math.random() * 30, nextWhiffle: 20 + Math.random() * 120,
+            organize: type === 'ragged' && n >= 5 ? 12 + Math.random() * 25 : Infinity,
         };
         this.layout(f);
-        this.fit(f);
+        this.fit(f, this.spread(f));
         f.y = o.y === undefined ? f.top + Math.random() * Math.max(0, f.bottom - f.top) : harvestClamp(o.y, f.top, f.bottom);
         for (let k = 0; k < n; k++) {
-            f.birds.push({ slot: k, ox: f.offsets[k][0], oy: f.offsets[k][1], jit: (Math.random() - 0.5) * 0.06, p1: Math.random() * 6, p2: Math.random() * 6 });
+            const [ox, oy] = f.offsets[k], jit = (Math.random() - 0.5) * 0.06;
+            f.birds.push({
+                slot: k, ox, oy, px: ox, py: oy, vx: 0, vy: 0, wx: 0, wy: 0, p1: Math.random() * 6, p2: Math.random() * 6,
+                // Already on the wing: in step with the flock, a beat behind the goose ahead.
+                phase: 7 - f.ranks[k] * 0.07 + jit, dev: (Math.random() - 0.5) * 0.12, att: Math.random() * 6, attRate: 0.08 + Math.random() * 0.1,
+                solo: 0, nextSolo: 8 + Math.random() * 40, boost: 0, gliding: false,
+                nextDodge: 10 + Math.random() * 60, roll: -1, rollLen: 1, rollFull: false,
+            });
         }
+        this.index(f);
         this.flocks.push(f);
         return f;
     }
 
     // Fit a flock into the sky: the band its leader may fly in keeps every
-    // goose, however far back along a tilted V it sits, above the highest
-    // ridge of the hills (they must never be clipped by it) and below the top
-    // of the screen. A very big flock that can't fit is flattened to.
-    fit(f) {
-        const m = this.m, hz = m.L.hz, len = f.len;
+    // goose, however far back along a tilted V it sits and however far it
+    // strays from its place, above the highest ridge of the hills (they must
+    // never be clipped by it) and below the top of the screen. A very big
+    // flock that can't fit is flattened to. `extra` are offsets it is still
+    // easing away from, when it changes shape.
+    fit(f, extra = []) {
+        const m = this.m, hz = m.L.hz, len = f.len, all = f.offsets.concat(extra);
         const topLimit = hz * 0.05 + len, bottomLimit = hz - m.L.Hu * 0.175 - len * 0.6;
-        const tiltY = Math.max(...f.offsets.map(o => Math.abs(o[0]))) * 0.17 + len * 0.2;     // the flock's tilt and the sway
-        let up = Math.max(0, ...f.offsets.map(o => -o[1])), down = Math.max(0, ...f.offsets.map(o => o[1]));
+        const tiltY = Math.max(...all.map(o => Math.abs(o[0]))) * 0.17 + len * 0.2 + f.slack;     // the flock's tilt, the sway and the straying
+        let up = Math.max(0, ...all.map(o => -o[1])), down = Math.max(0, ...all.map(o => o[1]));
         const room = bottomLimit - topLimit - 2 * tiltY;
         if (up + down > room * 0.95 && up + down > 0) {
             const k = Math.max(0.12, room * 0.95 / (up + down));
@@ -78,6 +114,11 @@ class HarvestFlocks {
         }
         f.top = topLimit + up + tiltY;
         f.bottom = Math.max(f.top, bottomLimit - down - tiltY);
+    }
+
+    // The flock's slots at their widest, when the V breathes out: room `fit` keeps.
+    spread(f) {
+        return f.offsets.map(([x, y]) => [x * (1 + 0.08 * f.breath), y * (1 + 0.16 * f.breath)]);
     }
 
     // One to three stragglers, well behind a flock: hurrying a little harder
@@ -90,28 +131,76 @@ class HarvestFlocks {
         });
     }
 
-    // Where each slot sits, in the flock's own frame (x forward, y down), and
-    // how far back it is, for the ripple.
+    // Where each slot sits, in the flock's own frame (x forward, y down), how
+    // far back it is (for the ripple), and which slot it follows (the goose
+    // whose wingbeat and whose flinches it takes up).
     layout(f) {
         const n = f.n, dx = f.len * 0.95 * f.gap, dy = f.len * 0.62 * f.gap;
         f.offsets = [[0, 0]];
         f.ranks = [0];
+        f.ahead = [-1];
         if (f.type === 'v') {
             const left = Math.round((n - 1) * (0.4 + Math.random() * 0.2));
-            let l = 0, r = 0;
+            let l = 0, r = 0, lastL = 0, lastR = 0;
             for (let k = 1; k < n; k++) {
                 const useLeft = l < left && (r >= n - 1 - left || l <= r);
-                if (useLeft) { l++; f.offsets.push([-l * dx, -l * dy]); f.ranks.push(l); } else { r++; f.offsets.push([-r * dx, r * dy]); f.ranks.push(r); }
+                if (useLeft) { l++; f.offsets.push([-l * dx, -l * dy]); f.ranks.push(l); f.ahead.push(lastL); lastL = k; } else { r++; f.offsets.push([-r * dx, r * dy]); f.ranks.push(r); f.ahead.push(lastR); lastR = k; }
             }
         } else if (f.type === 'line') {
-            for (let k = 1; k < n; k++) { f.offsets.push([-k * dx * 0.85, k * dy * 0.7]); f.ranks.push(k); }
+            for (let k = 1; k < n; k++) { f.offsets.push([-k * dx * 0.85, k * dy * 0.7]); f.ranks.push(k); f.ahead.push(k - 1); }
         } else {
             for (let k = 1; k < n; k++) {
                 const a = k * 2.399963, r = Math.sqrt(k) * f.len * 0.85 * f.gap;
-                f.offsets.push([-Math.abs(Math.cos(a)) * r * 1.5 - f.len * 0.3, Math.sin(a) * r * 0.75]);
-                f.ranks.push(Math.sqrt(k) * 1.3);
+                const o = [-Math.abs(Math.cos(a)) * r * 1.5 - f.len * 0.3, Math.sin(a) * r * 0.75];
+                // Follows the nearest goose further forward.
+                let best = 0, bd = Infinity;
+                for (let j = 0; j < k; j++) {
+                    const q = f.offsets[j], d = (q[0] - o[0]) ** 2 + (q[1] - o[1]) ** 2;
+                    if (q[0] > o[0] && d < bd) { bd = d; best = j; }
+                }
+                f.offsets.push(o); f.ranks.push(Math.sqrt(k) * 1.3); f.ahead.push(best);
             }
         }
+        f.behind = f.offsets.map(() => []);
+        for (let k = 1; k < n; k++) f.behind[f.ahead[k]].push(k);
+    }
+
+    // Which goose is in which slot, after places change.
+    index(f) {
+        f.bySlot = [];
+        for (const b of f.birds) f.bySlot[b.slot] = b;
+    }
+
+    // A goose jinks: a shove to its velocity (in the flock's frame, in
+    // body-lengths a second). The geese behind it flinch the same way a
+    // moment later, a little less each time.
+    kick(f, b, vx, vy) {
+        b.vx += vx * f.len;
+        b.vy += vy * f.len;
+        if (Math.hypot(vx, vy) < 0.4) return;
+        for (const slot of f.behind[b.slot]) f.kicks.push({ at: f.t + 0.18 + Math.random() * 0.14, slot, vx: vx * 0.62, vy: vy * 0.62 });
+    }
+
+    // A goose rolls over: upside down and back (or right round), dropping as
+    // it side-slips, wings held out. Sometimes the ones behind follow suit.
+    whiffle(f, b, cascade = Math.random() < 0.3) {
+        if (!b || b.roll >= 0) return false;
+        b.roll = 0;
+        b.rollLen = 0.9 + Math.random() * 0.7;
+        b.rollFull = Math.random() < 0.35;
+        b.vy += f.len * (2 + Math.random() * 0.8);
+        b.vx -= f.len * 0.4;
+        if (cascade) {
+            let slot = b.slot, delay = 0;
+            for (let i = 0; i < 1 + Math.floor(Math.random() * 3); i++) {
+                const next = f.behind[slot];
+                if (!next?.length) break;
+                slot = next[Math.floor(Math.random() * next.length)];
+                delay += 0.25 + Math.random() * 0.45;
+                f.kicks.push({ at: f.t + delay, slot, whiffle: true });
+            }
+        }
+        return true;
     }
 
     update(dt) {
@@ -132,6 +221,7 @@ class HarvestFlocks {
         }
         // A lone goose now and then, going its own way.
         if (this.flocks.length < this.cap() && Math.random() < dt / 150) this.spawn(0, { n: 1 + Math.floor(Math.random() * 2), type: 'ragged' });
+        const irr = this.irr();
         for (const f of this.flocks) {
             f.t += dt;
             // A curved path: speed swells and eases, and the flock climbs and
@@ -140,6 +230,7 @@ class HarvestFlocks {
             const vy = speed * (f.climb + 0.05 * Math.sin(f.t * 0.23 + f.wave2) + 0.018 * Math.sin(f.t * 0.61 + f.wave));
             f.x += f.dir * speed * dt;
             f.y += vy * dt;
+            f.vel = speed;
             // Near an edge of its band, a flock turns back (never more steeply than it started).
             if (f.y < f.top + 6 * m.u) f.climb = Math.max(f.climb, 0.03);
             if (f.y > f.bottom - 6 * m.u) f.climb = Math.min(f.climb, -0.03);
@@ -151,36 +242,183 @@ class HarvestFlocks {
                 if (f.turn <= 0) {
                     f.turn = 12 + Math.random() * 14;
                     for (const b of f.birds) b.slot = b.slot === 0 ? f.n - 1 : b.slot - 1;
+                    this.index(f);
                 }
             }
-            // A glide: wings out, still, for a few seconds.
-            if (f.glide > 0) f.glide -= dt;
-            else if ((f.nextGlide -= dt) <= 0) { f.glide = 2 + Math.random() * 2; f.nextGlide = 9 + Math.random() * 16; }
+            this.shuffle(f, dt, irr);
+            // A glide: wings out, still, for a few seconds, from the leader back.
+            if (f.t >= f.nextGlide) {
+                f.glideAt = f.t;
+                f.glideLen = 2 + Math.random() * 2;
+                f.nextGlide = f.t + f.glideLen + 9 + Math.random() * 16;
+            }
+            // The V breathes: it opens out and draws in again (`fit` kept room for its widest).
+            f.bx = 1 + 0.04 * f.breath * (1 - Math.sin(f.t * 0.17 + f.wave));
+            f.by = f.bx * (1 + 0.035 * f.breath * (1 - Math.sin(f.t * 0.11 + f.wave2)));
+            this.disturb(f, dt, irr);
             const k = harvestEase(1.1, dt);
+            // Each goose keeps time with where the one ahead was at the start of
+            // this step, not where it has just got to (at 10 fps that's a third of a beat).
+            for (const b of f.birds) b.last = b.phase;
             for (const b of f.birds) {
                 const [tx, ty] = f.offsets[b.slot];
                 b.ox += (tx - b.ox) * k;
                 b.oy += (ty - b.oy) * k;
+                this.flap(f, b, dt, irr);
+                this.hold(f, b, dt, irr);
             }
         }
         this.flocks = this.flocks.filter(f => f.dir > 0 ? f.x - f.len * f.n * 0.9 < m.W + f.len * 4 : f.x + f.len * f.n * 0.9 > -f.len * 4);
     }
 
+    // Neighbours trade places; a ragged flock pulls itself into a V.
+    shuffle(f, dt, irr) {
+        if (!irr) return;
+        if (f.t >= f.organize) {
+            f.organize = Infinity;
+            const old = f.offsets.map(o => o.slice());
+            f.type = 'v';
+            this.layout(f);
+            this.fit(f, old.concat(this.spread(f)));
+            // The goose furthest forward leads, and so on back, so nobody has to cross the flock.
+            const order = f.birds.slice().sort((a, b) => b.px - a.px);
+            const slots = f.offsets.map((_, k) => k).sort((a, b) => f.ranks[a] - f.ranks[b] || a - b);
+            order.forEach((b, i) => { b.slot = slots[i]; });
+            this.index(f);
+            return;
+        }
+        if (f.type === 'ragged' || f.n < 5 || (f.nextSwap -= dt * irr) > 0) return;
+        f.nextSwap = 20 + Math.random() * 40;
+        // A goose overtakes the one ahead of it on its arm (never the leader),
+        // swinging out wide to pass.
+        const slot = 1 + Math.floor(Math.random() * (f.n - 1)), front = f.ahead[slot];
+        if (front <= 0) return;
+        const a = f.bySlot[slot], b = f.bySlot[front];
+        a.slot = front; b.slot = slot;
+        this.index(f);
+        a.vy += Math.sign(f.offsets[front][1] || 1) * f.len * 1.6;
+        a.boost = 1.5;
+    }
+
+    // Dodges, gusts, whiffles, and the flinches they set off.
+    disturb(f, dt, irr) {
+        const m = this.m;
+        if (irr) {
+            // A gust (a fresh rise in the wind) jostles everyone, the tips of the arms most.
+            const gust = m.gust || 0;
+            if (gust > f.gustSeen + 0.25) {
+                const top = Math.max(1, ...f.ranks), push = Math.min(1.5, irr) * (gust - f.gustSeen);
+                for (const b of f.birds) {
+                    const reach = 0.35 + 0.65 * f.ranks[b.slot] / top;
+                    b.vx += (Math.random() - 0.5) * f.len * 1.2 * push * reach;
+                    b.vy += (Math.random() - 0.5) * f.len * 3 * push * reach;
+                }
+            }
+            f.gustSeen = gust;
+            if (f.n >= 3 && (f.nextWhiffle -= dt * irr) <= 0) {
+                f.nextWhiffle = 70 + Math.random() * 130;
+                this.whiffle(f, f.bySlot[1 + Math.floor(Math.random() * (f.n - 1))]);
+            }
+            for (const b of f.birds) {
+                if ((b.nextDodge -= dt * irr) > 0) continue;
+                b.nextDodge = 25 + Math.random() * 55;
+                const up = Math.random() < 0.5 ? -1 : 1, size = Math.min(1.4, irr) * (0.9 + Math.random() * 0.7);
+                this.kick(f, b, (Math.random() - 0.6) * size * 0.8, up * size * 1.6);
+            }
+        }
+        for (let i = f.kicks.length - 1; i >= 0; i--) {
+            const k = f.kicks[i];
+            if (k.at > f.t) continue;
+            f.kicks.splice(i, 1);
+            const b = f.bySlot[k.slot];
+            if (!b) continue;
+            if (k.whiffle) this.whiffle(f, b, false);
+            else this.kick(f, b, k.vx, k.vy);
+        }
+    }
+
+    // The wingbeat: each goose at its own rate, pulled towards a beat behind
+    // the goose ahead. Gliding holds the wings out; afterwards a goose
+    // takes up the beat from where its wings were, and hurries a little.
+    flap(f, b, dt, irr) {
+        const lag = b.slot ? (f.ranks[b.slot] - f.ranks[f.ahead[b.slot]]) * 0.07 : 0;
+        const wave = f.t - f.glideAt - f.ranks[b.slot] * 0.15 * Math.min(1, irr);
+        if (b.solo > 0) b.solo -= dt;
+        else if (irr && (b.nextSolo -= dt * irr) <= 0) { b.nextSolo = 15 + Math.random() * 35; b.solo = 0.5 + Math.random() * 1.1; }
+        const gliding = (wave >= 0 && wave < f.glideLen) || b.solo > 0 || b.roll >= 0;
+        if (gliding) { b.gliding = true; return; }
+        if (b.gliding) {
+            b.gliding = false;
+            b.phase = Math.floor(b.phase) + 0.4;
+            b.boost = Math.max(b.boost, 1.2);
+        }
+        b.boost = Math.max(0, b.boost - dt);
+        let rate = f.rate * (1 + b.dev * irr) * (1 + 0.16 * Math.min(1, b.boost));
+        // Climbing in its place takes more work.
+        rate *= 1 + harvestClamp(-b.vy / (f.len * 4), -0.08, 0.12) * Math.min(1, irr);
+        const front = b.slot ? f.bySlot[f.ahead[b.slot]] : null;
+        if (front && !front.gliding) {
+            // How hard it keeps time comes and goes.
+            const keen = 1 - Math.min(1, irr) * 0.75 * (0.5 + 0.5 * Math.sin(f.t * b.attRate * 6.283 + b.att));
+            let d = front.last - lag - b.last;
+            d -= Math.round(d);
+            rate += 1.6 * keen * d;
+        }
+        b.phase += rate * dt;
+    }
+
+    // Holding its place: a soft spring to its slot (opened out as the V
+    // breathes) plus a slow random wander, stepped finely enough to stay
+    // steady at 10 fps. It never strays further up or down than `fit` allowed.
+    hold(f, b, dt, irr) {
+        const s0 = Math.max(0, 1 - irr), len = f.len;
+        // The old, tidy sway, fading out as the wander takes over.
+        const sx = Math.sin(f.t * 0.5 + b.p1) * len * 0.07 * s0, sy = Math.sin(f.t * 0.7 + b.p2) * len * 0.09 * s0;
+        const g = () => (Math.random() + Math.random() + Math.random() - 1.5) * 2;
+        const root = Math.sqrt(dt);
+        b.wx += -0.5 * b.wx * dt + g() * len * 0.11 * irr * root;
+        b.wy += -0.5 * b.wy * dt + g() * len * 0.14 * irr * root;
+        const tx = b.ox * f.bx + b.wx + sx, ty = b.oy * f.by + b.wy + sy;
+        const w = 2.4, z = b.roll >= 0 ? 0.35 : 0.55, steps = Math.ceil(dt / 0.034), h = dt / steps;
+        for (let i = 0; i < steps; i++) {
+            b.vx += (-w * w * (b.px - tx) - 2 * z * w * b.vx) * h;
+            b.vy += (-w * w * (b.py - ty) - 2 * z * w * b.vy) * h;
+            b.px += b.vx * h;
+            b.py += b.vy * h;
+        }
+        const home = b.oy * f.by, out = b.py - home;
+        if (out > f.slack) { b.py = home + f.slack; b.vy = Math.min(0, b.vy); }
+        if (out < -f.slack) { b.py = home - f.slack; b.vy = Math.max(0, b.vy); }
+        if (b.roll >= 0 && (b.roll += dt) >= b.rollLen) { b.roll = -1; b.boost = 1.5; }
+    }
+
+    // Where a goose is drawn, on screen.
+    pos(f, b) {
+        const cos = Math.cos(f.tilt), sin = Math.sin(f.tilt);
+        return { x: f.x + f.dir * (b.px * cos - b.py * sin), y: f.y + b.px * sin + b.py * cos };
+    }
+
     // Far flocks first, so near ones cross in front.
     draw(ctx, dpr, geese) {
-        const m = this.m, frames = geese.frames, N = frames.length;
+        const frames = geese.frames, N = frames.length, glideFrame = Math.floor(N * 0.4);
         ctx.imageSmoothingQuality = 'high';          // they're small: shrink them well
         for (const f of this.flocks.slice().sort((a, b) => a.scale - b.scale)) {
-            const s = f.len / geese.length, cos = Math.cos(f.tilt), sin = Math.sin(f.tilt);
+            const s = f.len / geese.length, vel = Math.max(1, f.vel || f.speed);
             ctx.globalAlpha = 0.58 + 0.42 * harvestClamp((f.scale - 0.5) / 0.65, 0, 1);
             for (const b of f.birds) {
-                // The place in the flock, swaying a little, tilted with the flock and mirrored with its direction.
-                const ox = b.ox + Math.sin(f.t * 0.5 + b.p1) * f.len * 0.07, oy = b.oy + Math.sin(f.t * 0.7 + b.p2) * f.len * 0.09;
-                const px = f.x + f.dir * (ox * cos - oy * sin), py = f.y + ox * sin + oy * cos;
-                const cycle = f.t * f.rate - f.ranks[b.slot] * 0.07 + b.jit;
-                const frame = f.glide > 0 ? Math.floor(N * 0.4) : Math.floor((cycle - Math.floor(cycle)) * N) % N;
-                const psi = f.dir * f.tilt, c = Math.cos(psi), sn = Math.sin(psi);
-                ctx.setTransform(dpr * c * f.dir * s, dpr * sn * f.dir * s, -dpr * sn * s, dpr * c * s, px * dpr, py * dpr);
+                const { x, y } = this.pos(f, b);
+                const frame = b.gliding ? glideFrame : Math.floor((b.phase - Math.floor(b.phase)) * N) % N;
+                // Its own pitch as it rises and sinks in its place; mirrored with the flock's direction.
+                const pitch = f.tilt + harvestClamp(Math.atan2(b.vy, vel), -0.3, 0.3);
+                const psi = f.dir * pitch, c = Math.cos(psi), sn = Math.sin(psi);
+                // A whiffle rolls the goose about its length: the sprite flattens and turns over.
+                let rollY = 1;
+                if (b.roll >= 0) {
+                    const p = harvestClamp(b.roll / b.rollLen, 0, 1), e = p * p * (3 - 2 * p);
+                    rollY = Math.cos(b.rollFull ? e * Math.PI * 2 : Math.sin(e * Math.PI) * Math.PI);
+                    if (Math.abs(rollY) < 0.08) rollY = 0.08 * (rollY < 0 ? -1 : 1);
+                }
+                ctx.setTransform(dpr * c * f.dir * s, dpr * sn * f.dir * s, -dpr * sn * s * rollY, dpr * c * s * rollY, x * dpr, y * dpr);
                 ctx.drawImage(frames[frame], -geese.ax, -geese.ay);
             }
         }
@@ -348,7 +586,7 @@ class HarvestSquirrel {
     // Origin at the feet. `px` is the size of one unit on screen.
     draw(g) {
         if (this.state === 'away') return;
-        const m = this.m, px = 1.9 * m.u * m.depth(this.y);
+        const m = this.m, px = 1.9 * m.u * m.depth(this.y) * m.config.squirrelSize;
         const moving = ['fetch', 'wander', 'carry', 'flee'].includes(this.state);
         const bound = moving ? Math.abs(Math.sin(this.gait)) : 0;
         g.save();

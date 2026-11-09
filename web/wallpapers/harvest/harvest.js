@@ -557,7 +557,7 @@ class HarvestAnimationManager {
         if (seed) y = from ? y + (ground - y) * Math.random() : Math.random() * ground;
         this.leafPool.push({
             x, y, ground, kind: Math.floor(Math.random() * this.sprites.leaves.length),
-            fall: (24 + Math.random() * 26) * u, drift: (0.5 + Math.random()) * u, ang: Math.random() * 6.3, spin: (Math.random() - 0.5) * 3,
+            fall: (24 + Math.random() * 26) * u, drift: (0.5 + Math.random()) * u, ang: Math.random() * 6.3, spin: (Math.random() - 0.5) * 7, flip: Math.random() * 6.3,
             flutter: Math.random() * 6.3, rate: 1.5 + Math.random() * 2.2, size: 0.8 + Math.random() * 0.5, rest: 0, down: false,
         });
     }
@@ -569,6 +569,7 @@ class HarvestAnimationManager {
         for (const l of this.leafPool) {
             if (l.down) { l.rest += dt; continue; }
             l.flutter += l.rate * dt;
+            l.flip += l.rate * 2.6 * dt;     // the twirl, quicker than the sway
             l.ang += l.spin * dt * (0.5 + Math.abs(Math.sin(l.flutter)));
             l.y += l.fall * (0.6 + 0.4 * Math.abs(Math.cos(l.flutter * 0.5))) * dt;
             l.x += (this.windPush * this.wind * 38 * u * l.drift + Math.sin(l.flutter) * 22 * u * l.drift) * dt;
@@ -684,6 +685,17 @@ class HarvestAnimationManager {
         if (!this.config.geese) return 'No geese in this valley (Flocks is at 0)';
         this.flocks.spawn(0);
         return '🪿 Honk';
+    }
+
+    // A goose in the nearest flock in view rolls over, and maybe the ones
+    // behind it too; with no flock in view, one is called in first.
+    whiffle() {
+        if (!this.config.geese) return 'No geese in this valley (Flocks is at 0)';
+        const f = this.flocks;
+        let flock = f.flocks.filter(x => x.n >= 3 && x.x > this.W * 0.1 && x.x < this.W * 0.9).sort((a, b) => b.scale - a.scale)[0];
+        if (!flock) flock = f.spawn(0.3, { n: Math.max(5, f.size()) });
+        const goose = flock.bySlot[1 + Math.floor(Math.random() * (flock.n - 1))];
+        return f.whiffle(flock, goose, Math.random() < 0.6) ? '🪿 Whiffling: a goose rolls over to spill air and drop' : '🪿 That one is already upside down';
     }
 
     blow() { this.gust = 2; return '🍃 A gust'; }
@@ -1061,7 +1073,7 @@ class HarvestAnimationManager {
         const dpr = this.dpr, u = this.u, depthRef = this.L.Hu;
         for (const l of this.leafPool) {
             const f = 0.55 + 0.6 * Math.min(1, l.ground / depthRef), sprite = this.sprites.leaves[l.kind % this.sprites.leaves.length];
-            const sx = l.down ? 0.55 : Math.cos(l.flutter * 0.9), a = l.ang, size = 15 * u * 1.4 * f * l.size;
+            const sx = l.down ? 0.55 : Math.cos(l.flip), a = l.ang, size = 15 * u * 1.4 * f * l.size;
             g.globalAlpha = l.down ? Math.max(0, 1 - Math.max(0, l.rest - 4) / 3) : 1;
             g.setTransform(dpr * Math.cos(a) * sx, dpr * Math.sin(a) * sx, -dpr * Math.sin(a), dpr * Math.cos(a), dpr * l.x, dpr * l.y);
             g.drawImage(sprite, -size / 2, -size / 2, size, size);

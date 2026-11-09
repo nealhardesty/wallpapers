@@ -349,7 +349,9 @@ about the meadow (who, now and then, chase a squirrel clear off the screen,
 then come back for a long nap), flocks of small brown-and-black geese overhead, up to a hundred
 strong, sometimes several at once and sometimes with a few stragglers behind
 (a V that ripples wingbeat by wingbeat; the leader drops to the back now and
-then),
+then; every goose its own bird, drifting in and out of step, jinking,
+overtaking, and now and then rolling upside down to lose height, the way
+real geese whiffle),
 leaves on the wind, valley mist and slanting sunbeams, and an autumn wreath
 on every door.
 
@@ -364,8 +366,8 @@ in the patch has been known to rise. (Press `G` to wait for it.)
 
 Everything is in the panel: time of day (live, a whole day in a few minutes,
 or pinned to day, golden hour or night), the sun, the moon, its phase and
-size, stars, clouds, geese, the village and each part of it, fields, the
-scarecrow, the patch, the orchard (trees, apples, squirrels, turkeys, cats),
+size, stars, clouds, geese (and how irregular they fly), the village and each part of it, fields, the
+scarecrow, the patch, the orchard (trees, apples, squirrels and their size, turkeys, cats),
 leaves, wind, mist, sunbeams, and the autumn colours: seven presets, or your
 own palette of up to eight. Leave out the village and the orchard for a
 bare moon over a dark field, or turn off the day for a night with only the
@@ -444,7 +446,7 @@ you tick it, then seven, with the rest folded away:
   dive, `R` roost, `N` new evening · Lantern Festival `L` or Space release
   one · Rainy Window `W` wipe · Fireworks Space or `L` launch, `G` finale ·
   Lighthouse `L` next light, `S` sea state · Satellites `N` next station pass ·
-  Harvest Valley `G` wait for the Great Pumpkin, `H` call the geese, `W` a gust,
+  Harvest Valley `G` wait for the Great Pumpkin, `H` call the geese, `R` a goose whiffles, `W` a gust,
   `S` a cat chases a squirrel, `M` what the moon is doing · The Cat vs. the Ornament `N` the next cat's
   turn, `B` bap the ornament, `T` up the tree, `Z` the zoomies · The Last Bulb
   `L` the last bulb tries (or gives up), `O` the strand out (or back), `D` a draft · Frost on the Glass `B` breathe on it,

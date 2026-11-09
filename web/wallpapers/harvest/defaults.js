@@ -31,6 +31,7 @@ WP.defaults('harvest', {
     apples: 14,             // apples shaken loose each minute, at High
     acorns: 10,             // acorns dropped each minute, at High
     squirrels: 3,           // at High
+    squirrelSize: 0.7,      // × the original size (which stood taller than the cats)
     turkeys: 2,
     cats: 2,                // mostly asleep
     catChases: 3,           // a cat chases a squirrel off the screen (then naps), times an hour
@@ -42,6 +43,7 @@ WP.defaults('harvest', {
     // Geese
     geese: 20,              // flocks crossing each hour, at High
     flock: 15,              // geese in a flock, at most
+    irregularity: 1,        // 0: a drilled V; more: own wingbeats, wander, dodges, whiffling
     // Air
     mist: 0.15,             // valley mist, thickest at dawn and dusk
     beams: true,            // low sun slanting through the trees
