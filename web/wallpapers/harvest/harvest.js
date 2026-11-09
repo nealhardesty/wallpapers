@@ -650,11 +650,12 @@ class HarvestAnimationManager {
 
     // Keys, declared in the catalog.
     // Now and then (catChases an hour, on average, never in the first
-    // three-quarters of a minute) a cat goes after a squirrel.
+    // three-quarters of a minute, or the first half-interval when they're
+    // more often than that) a cat goes after a squirrel.
     updateChase(dt) {
         const rate = this.config.catChases;
         if (!rate || !this.cats.length || !this.squirrels.length) return;
-        if (this.chaseIn === null) this.chaseIn = 45 + Math.random() * 3600 / rate;
+        if (this.chaseIn === null) this.chaseIn = Math.min(45, 1800 / rate) + Math.random() * 3600 / rate;
         this.chaseIn -= dt;
         if (this.chaseIn > 0) return;
         this.chaseIn = this.startChase() ? 3600 / rate * (0.5 + Math.random()) : 20;
