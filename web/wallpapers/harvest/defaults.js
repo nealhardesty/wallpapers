@@ -34,7 +34,7 @@ WP.defaults('harvest', {
     squirrelSize: 0.7,      // × the original size (which stood taller than the cats)
     turkeys: 2,
     cats: 2,                // mostly asleep
-    catChases: 3,           // a cat chases a squirrel off the screen (then naps), times an hour
+    catChases: 10,          // a cat chases a squirrel off the screen (then naps), times an hour
     // Leaves and wind
     leaves: 140,            // leaves in the air at once, at High
     foliage: 'mixed',       // mixed, golden, crimson, russet, ember, burgundy, early, custom

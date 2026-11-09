@@ -2631,7 +2631,9 @@ no village, no orchard, no day (only the moon), and so on.
   then. They sleep (breathing, drifting z's), loaf, sit, wash a paw, stretch,
   and watch squirrels with great interest, doing nothing about them.
 - **The chase (owner request, November 2026):** `catChases` times an hour
-  on average (never in the first 45 s; 0 turns it off; `S` sets one off),
+  on average (default 10, up to 120 because in real life cats are always at
+  it; never in the first 45 s, or the first half-interval if that's
+  shorter; 0 turns it off; `S` sets one off),
   the nearest cat not on a roof (one already watching counts double) goes
   after a squirrel in plain view: it crouches low with its tail lashing
   (longer if it was asleep), wiggles, then gallops (bounding, tail
