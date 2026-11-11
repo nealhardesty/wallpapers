@@ -35,6 +35,7 @@ const OVERRIDES = {
     // Big bulbs to read at thumbnail size; the last one still dark.
     'last-bulb': { configVersion: 1, size: 1.6, sag: 0.7, roomLight: 0.25 },
     matrix: { configVersion: 2, intro: false },
+    'cherry-blossoms': { configVersion: 2, petalCount: 240, gusts: 0 },
     // One big pane, well frosted, the tree glowing through.
     frost: { configVersion: 1, window: 'single', coverage: 0.8, frameColour: 'red' },
     // A bit bigger, so the tree, the presents and the train read in a tile.

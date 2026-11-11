@@ -401,6 +401,55 @@ const AVERAGE = `(() => {
 })()`;
 
 const STAGE_CHECKS = {
+    // Cherry Blossoms: a tree with blossom and petals in the air on frame
+    // one; petals land on the grass (the pile grows) and float on water; a
+    // gust comes when called and shakes petals loose; a tap on the bough
+    // shakes it; S changes the sky and N the tree.
+    'cherry-blossoms': [['a bough on frame one, petals in the air and landing, a gust, a tap, the sky and a new tree', async () => {
+        const st = () => evaluate('JSON.parse(JSON.stringify(WP.stage.manager.debugState()))');
+        if (!await stageWith('cherry-blossoms', { configVersion: 2, gusts: 0 }, '&seed=7')) return record('no boot');
+        let s = await st();
+        if (!s.tree || s.tree.limbs < 8 || s.tree.clusters < 20 || s.petals < 100 || s.states.falling < 100) record(`frame one: ${JSON.stringify(s)}`);
+        const avg = await evaluate(AVERAGE);
+        if (!(avg[0] > 120 && avg[2] > 120)) record(`not a pale spring sky on frame one: ${avg}`);
+        await sleep(4000);
+        s = await st();
+        if (s.stats.settled < 5) record(`only ${s.stats.settled} petals landed in four seconds`);
+        if (s.wind.phase !== 'calm' || s.stats.gusts) record(`gusts with none asked for: ${JSON.stringify(s.wind)}`);
+        await shoot('cherry-blossoms-day');
+        // G: a gust, which shakes petals loose (more in the air than the setting).
+        const before = s.petals;
+        await press('g');
+        if (!await waitFor(async () => (s = await st()).wind.phase !== 'calm', 1000)) record(`G: ${JSON.stringify(s.wind)}`);
+        await sleep(1500);
+        s = await st();
+        if (s.wind.strength < 2) record(`the gust is feeble: ${JSON.stringify(s.wind)}`);
+        // A tap on the bough: a flurry (more petals than the target for a while).
+        const cl = await evaluate('(m => m.tree.clusters[Math.floor(m.tree.clusters.length / 2)])(WP.stage.manager)');
+        await mouse('mousePressed', cl.x, cl.y);
+        await mouse('mouseReleased', cl.x, cl.y);
+        await sleep(300);
+        s = await st();
+        if (s.stats.flurries < 1 || s.petals <= s.target) record(`a tap on the bough shook nothing loose: ${JSON.stringify({ flurries: s.stats.flurries, petals: s.petals, target: s.target, before })}`);
+        // S: the sky moves on to dusk; N: a new tree.
+        await press('s');
+        s = await st();
+        if (s.sky !== 'dusk' || !(s.light < 1)) record(`S: ${JSON.stringify({ sky: s.sky, light: s.light })}`);
+        const seed = s.seed;
+        await press('n');
+        s = await st();
+        if (s.seed === seed || !s.tree || s.tree.clusters < 20) record(`N grew no new tree: ${JSON.stringify({ seed, now: s.seed, tree: s.tree })}`);
+        await shoot('cherry-blossoms-dusk');
+        // Water: petals float, with ripples where they land.
+        if (!await stageWith('cherry-blossoms', { configVersion: 2, gusts: 0, ground: 'water', sky: 'night' }, '&seed=7')) return record('no boot on water');
+        await sleep(4000);
+        s = await st();
+        if (!(s.states.afloat > 0)) record(`nothing afloat after four seconds on water: ${JSON.stringify(s.states)}`);
+        const night = await evaluate(AVERAGE);
+        if (!(night[0] + night[1] + night[2] < 330)) record(`not dark at night: ${night}`);
+        await shoot('cherry-blossoms-night-water');
+        return true;
+    }]],
     // Matrix: the film's code. Frame one is full of it (intro off); the
     // symbols sit in fixed cells and only the light moves (a lit cell's
     // glyph index stays until the symbol clock changes it); it paces itself
