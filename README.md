@@ -106,37 +106,36 @@ In December, Seasonal takes turns, a day each, between the Advent
 calendar, the cats, the bulb, the frost, the very small tree and Sky
 Island.
 
-**Sky Island** 🏝️ is a small town on an island floating in an enormous
-sky, in fine pixel art, and a new island every time it loads: a mountain
-with goats on it, a lake with a dock and a waterfall pouring off the edge
-into the clouds, a forest, fenced fields, two streets of houses round a
-square with a well, a chapel, often a windmill and a lighthouse, roots and
-glowing crystals underneath, and a cave in the cliff where something
-green mostly sleeps. About twenty townsfolk each have a job and a day: the
-baker's up before dawn, the fisher's on the pier (and a cat keeps stealing
-the catch), kids kick a ball about or fly kites when the wind's up, a
-roofer's up a ladder, the mail does the rounds, a fiddler plays in the
-square of an evening, couples take the benches at sunset, and the night
-watch walks the streets with a lantern. The cats are the household's own
-(Moofy lurks and grins, Butters follows people about, Ras knocks flowerpots
-off sills, Ibbie sleeps, Maus gets the zoomies, Turkey loafs on the dock,
-Harry chases butterflies, Kitty Toes judges from the well), plus strays and
-a couple of dogs, with birds, rabbits, deer, ducks, a fox at dusk and an
-owl at night. The real clock lights the sky and the windows; the real date
-dresses the island for the season (snow, autumn colours, blossom, a frozen
-lake the kids skate on) and for every holiday: pumpkins and a ghost at
-Halloween, lights on every eave and a tree in the square at Christmas,
-fireworks on New Year's Eve and the Fourth, eggs to find at Easter, hearts
-from the chimneys on Valentine's, a rainbow with a pot of gold on St
-Patrick's, and a party (cake, balloons, confetti, dancing) on any dates of
-your own. Showers come from a cloud that sits over the island and leave a
-rainbow. Every few minutes another small island drifts past (a village, a
-lighthouse rock, an orchard, a wizard's tower, an island of cats…), its
-people wave, yours wave back, and sometimes a balloon brings one of them
-over for a look round. Tap a cat to call it, a person to get a wave, the
-lake for a fish, a house at night for its lights, or the sky for a bird.
-Like an island? Keep it (its seed is in the panel, to share); `N` rolls a
-new one.
+**Sky Island** 🏝️ is a village on a terraced island floating in an
+enormous sky, in 16-bit pixel art, and a new island every time it loads.
+Three tiers of ground step down from the top, where a castle tower flies
+its flag by a windmill and a crag with goats on it, through the village
+round its square (a well, benches, a market stall, a chapel) to the lake
+with its pier and sailboat and the farm with its red barn and fields of
+wheat. A spring on top spills into a waterfall that falls into the pond by
+the village, which falls into the lake, which pours off the edge in a
+cascade that dissolves into the sea of cloud below, where the ground far
+beneath (fields, woods, a river, little towns that light up at night)
+rolls slowly by. The island's underside is banded rock trailing roots,
+with something cyan crackling in its cracks and bits of rock in orbit
+round it, and a cave where something green mostly sleeps. About twenty
+townsfolk each have a job and a day: the baker's up before dawn, the
+fisher's on the pier (and a cat keeps running out to steal the catch),
+kids kick a ball about or fly kites when the wind's up, a roofer's up a
+ladder, the mail does the rounds, a fiddler plays in the square of an
+evening, couples take the benches at sunset, and the night watch walks
+the streets with a lantern. The cats are the household's own (Moofy lurks
+and grins, Butters follows people about, Ras knocks flowerpots off sills,
+Ibbie sleeps, Maus gets the zoomies, Turkey loafs on the pier, Harry
+chases butterflies, Kitty Toes judges from the castle's platform), plus
+strays and a couple of dogs, with birds, rabbits, deer, ducks, a fox at
+dusk and an owl at night. The real clock lights the sky and the windows; the
+real date dresses the island for the season and every holiday (and your own
+special dates, which throw a party). Other whole islands drift past, with
+their own towers and villages, and everyone waves; a small one comes now and
+then to orbit ours a couple of times; a balloon may bring a visitor (or a
+cat) over for a look round. Tap a cat and it comes; keep an island you like
+with `P`.
 
 **Weather** 🌦️ is the forecast for your place from Open-Meteo (no key),
 over a sky that is the weather outside: drifting clouds, rain or snow,
@@ -487,7 +486,7 @@ you tick it, then seven, with the rest folded away:
   `L` the last bulb tries (or gives up), `O` the strand out (or back), `D` a draft · Frost on the Glass `B` breathe on it,
   `D` someone draws in it, `T` thaw (or frost over again) · A Very Small
   Christmas `T` the train, `M` move house, `L` jingle, `S` a sleigh · Sky Island `N` a new island, `P` pin
-  this one (or let it go), `V` another island passes, `B` a balloon, `W` weather, `S` season, `H` holiday · Weather `V` next view (days, hours, now), `U` °C or °F,
+  this one (or let it go), `V` another island passes, `O` a small one comes to orbit, `B` a balloon, `W` weather, `S` season, `H` holiday · Weather `V` next view (days, hours, now), `U` °C or °F,
   `R` refresh now · World Clock `V` next view (map, faces, board), `M` centre
   the map on the next place, `L` next map look · Orrery `=`/`+` faster, `-` slower,
   `0` back to now, `L` look, `S` scale, `V` from above or tilted.

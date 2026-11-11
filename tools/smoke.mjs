@@ -990,26 +990,29 @@ const STAGE_CHECKS = {
     // visitor and everyone waves; the date dresses the island (pumpkins,
     // lights, eggs, a party of the owner's own); night lights the windows;
     // Low bakes the trees and keeps fewer folk.
-    'sky-island': [['the cast on frame one; a seed is an island; P pins it; a tap calls a cat', async () => {
+    'sky-island': [['the cast on frame one; three tiers and three falls; a seed is an island; P pins it; a tap calls a cat', async () => {
         const st = () => evaluate('JSON.parse(JSON.stringify(WP.stage.manager.debugState()))');
-        if (!await stageWith('sky-island', { configVersion: 1, seed: 4242, weather: 'fair' }, '&date=2026-06-20T11:00')) return record('no boot');
+        if (!await stageWith('sky-island', { configVersion: 2, seed: 4242, weather: 'fair' }, '&date=2026-06-20T11:00')) return record('no boot');
         let s = await st();
         const canvas = await evaluate('(m => ({ w: m.canvas.width, css: m.canvas.style.width, look: m.canvas.style.imageRendering, px: m.px }))(WP.stage.manager)');
-        if (canvas.w !== s.bw || canvas.look !== 'pixelated' || canvas.px < 2) record(`the canvas: ${JSON.stringify(canvas)}`);
+        if (canvas.w !== s.bw || canvas.look !== 'pixelated' || canvas.px < 1) record(`the canvas: ${JSON.stringify(canvas)}`);
         if (s.seed !== 4242 || !s.kept || !/^[A-Z][a-z]+ (Isle|Island|Rock|Aerie|Perch)$/.test(s.name)) record(`the seed: ${s.seed} ${s.kept} ${s.name}`);
-        if (s.island.houses < 3 || s.island.trees < 10 || s.island.lamps < 2) record(`a thin island: ${JSON.stringify(s.island)}`);
+        if (s.island.houses < 3 || s.island.trees < 10 || s.island.lamps < 2 || s.island.tiers !== 3 || s.island.falls !== 3 || s.island.fields < 1) record(`a thin island: ${JSON.stringify(s.island)}`);
         if (s.people !== 20 || s.outdoors < 8 || s.cats.length !== 12 || s.dogs !== 2 || s.wildlife.length < 8) record(`the cast: ${s.people} people (${s.outdoors} out), ${s.cats.length} cats, ${s.dogs} dogs, ${s.wildlife.length} animals`);
         if (s.season !== 'summer' || s.holiday !== null || s.dark > 0.05 || s.weather.state !== 'fair') record(`a June morning: ${JSON.stringify({ season: s.season, holiday: s.holiday, dark: s.dark, weather: s.weather })}`);
-        const name = s.name, houses = await evaluate('JSON.stringify(WP.stage.manager.I.houses.map(h => [h.x, h.w, h.kind]))');
+        // Folk stand on all three tiers; the terrain, the sea of cloud and the ground are baked.
+        const spread = await evaluate('(m => ({ tiers: [...new Set(m.folk.people.filter(p => !p.inside).map(p => SkyIslandLogic.tierAt(m.I, p.x, p.y)).filter(t => t >= 0))].sort(), terrain: !!m.terrain && m.terrain.c.width > m.I.w, sea: !!m.sea && m.sea.front.width === m.bw * 2, ground: !!m.groundArt, falls: m.falls.map(f => f.length), bands: m.bands.filter(Boolean).length }))(WP.stage.manager)');
+        if (spread.tiers.length < 2 || !spread.terrain || !spread.sea || !spread.ground || spread.falls.join() !== '4,4,4' || spread.bands < 3) record(`the bakes: ${JSON.stringify(spread)}`);
+        const name = s.name, houses = await evaluate('JSON.stringify(WP.stage.manager.I.houses.map(h => [h.x, h.w, h.kind, h.tier]))');
         await sleep(500);
         const before = await evaluate('WP.host.frames.count');
         await sleep(2000);
         const frames = await evaluate('WP.host.frames.count') - before;
         if (frames < 24 || frames > 50) record(`${frames} frames in 2 s (want about 40)`);
         // The same seed again: the same island, by name and by every house.
-        if (!await stageWith('sky-island', { configVersion: 1, seed: 4242, weather: 'fair' }, '&date=2026-06-20T11:00')) return record('no second boot');
+        if (!await stageWith('sky-island', { configVersion: 2, seed: 4242, weather: 'fair' }, '&date=2026-06-20T11:00')) return record('no second boot');
         s = await st();
-        if (s.name !== name || await evaluate('JSON.stringify(WP.stage.manager.I.houses.map(h => [h.x, h.w, h.kind]))') !== houses) record(`seed 4242 drew a different island: ${s.name}`);
+        if (s.name !== name || await evaluate('JSON.stringify(WP.stage.manager.I.houses.map(h => [h.x, h.w, h.kind, h.tier]))') !== houses) record(`seed 4242 drew a different island: ${s.name}`);
         // A fresh island (seed 0): some other island; P pins it, and P again lets it go.
         if (!await stageWith('sky-island', null, '&seed=9&date=2026-06-20T11:00')) return record('no fresh boot');
         s = await st();
@@ -1020,50 +1023,58 @@ const STAGE_CHECKS = {
         await press('p');
         if ((await st()).kept || (await evaluate("JSON.parse(localStorage.getItem('wp:sky-island') || '{}').seed") || 0) !== 0) record('P again didn’t let the island go');
         await evaluate("localStorage.removeItem('wp:sky-island')");
-        // A tap on open ground calls the nearest cat over, with a word.
-        const spot = await evaluate('(m => ({ x: (m.ix + m.I.spots.meadow.x) * m.px, y: (m.iy + m.I.spots.meadow.y) * m.px }))(WP.stage.manager)');
+        // A tap on the top, by the tower's bench, calls the nearest cat over (up the stairs), with a word.
+        const spot = await evaluate('(m => { const s = m.I.spots.lookout; return { x: (m.ix + s.x) * m.px, y: (m.iy + s.y + m.bob) * m.px, sx: s.x, sy: s.y }; })(WP.stage.manager)');
         await mouse('mousePressed', spot.x, spot.y);
         await mouse('mouseReleased', spot.x, spot.y);
         await sleep(200);
         const called = await evaluate('(m => { const c = m.cats.cats.find(c => c.bubbleT > 0); return c && { id: c.spec.id, state: c.state, bubble: c.bubble, taps: m.cats.stats.taps }; })(WP.stage.manager)');
         if (!called || called.taps !== 1 || !['meow', 'heart'].includes(called.bubble)) return record(`the tap called no cat: ${JSON.stringify(called)}`);
-        const near = await waitFor(() => evaluate(`(m => { const c = m.cats.cats.find(c => c.spec.id === '${called.id}'); return !c.moving && Math.hypot(c.x - m.I.spots.meadow.x, c.y - m.I.spots.meadow.y) < 3; })(WP.stage.manager)`), 25000);
-        if (!near) record(`${called.id} never came to the tap`);
-        console.log(`    sky-island: ${name}, ${s.island.houses} houses, ${s.island.trees} trees, ${s.outdoors} of ${s.people} out, ${s.cats.length} cats; ${frames} frames in 2 s; ${called.id} came when tapped`);
+        const near = await waitFor(() => evaluate(`(m => { const c = m.cats.cats.find(c => c.spec.id === '${called.id}'); return !c.moving && Math.hypot(c.x - ${spot.sx}, c.y - ${spot.sy}) < 3 && SkyIslandLogic.tierAt(m.I, c.x, c.y) === 0; })(WP.stage.manager)`), 60000);
+        if (!near) record(`${called.id} never came up to the tap`);
+        console.log(`    sky-island: ${name}, ${s.island.houses} houses, ${s.island.trees} trees, ${s.outdoors} of ${s.people} out on tiers ${spread.tiers.join('/')}, ${s.cats.length} cats; ${frames} frames in 2 s; ${called.id} came when tapped`);
         return true;
-    }], ['V brings a visitor and everyone waves; the date dresses the island; night lights the windows; Low bakes the trees', async () => {
+    }], ['V brings a whole island and everyone waves; O brings one to orbit; the date dresses the island; night lights the windows; Low bakes the trees', async () => {
         const st = () => evaluate('JSON.parse(JSON.stringify(WP.stage.manager.debugState()))');
-        if (!await stageWith('sky-island', { configVersion: 1, seed: 77, visitMinutes: 0, weather: 'fair' }, '&date=2026-10-31T15:00')) return record('no boot');
+        if (!await stageWith('sky-island', { configVersion: 2, seed: 77, visitMinutes: 0, orbiters: false, weather: 'fair' }, '&date=2026-10-31T15:00')) return record('no boot');
         let s = await st();
         if (s.holiday !== 'halloween' || s.season !== 'autumn' || s.decor < s.island.houses) record(`Halloween: ${JSON.stringify({ holiday: s.holiday, season: s.season, decor: s.decor })}`);
-        if (s.visitors.length) record('a visitor with visits off');
+        if (s.visitors.length || s.orbiter) record('a visitor with visits off');
         await press('v');
         s = await st();
         if (s.visitors.length !== 1) return record(`V brought ${s.visitors.length} visitors`);
-        // Bring it alongside: its folk wave, ours wave back.
+        // A whole island of its own: tiers, houses, falls; alongside, its folk wave and ours wave back.
+        const theirs = await evaluate('(m => { const v = m.visitors.islands[0]; return { tiers: v.art.I.tiers.length, houses: v.art.I.houses.length, falls: v.art.falls.length, residents: v.residents.length, w: v.art.w }; })(WP.stage.manager)');
+        if (theirs.tiers !== 3 || theirs.houses < 1 || theirs.falls !== 3 || theirs.residents < 1) record(`a thin visitor: ${JSON.stringify(theirs)}`);
         await evaluate('(m => { const v = m.visitors.islands[0]; v.x = m.bw / 2 + 20; v.vx = 1; })(WP.stage.manager)');
         await sleep(400);
         const waving = await evaluate('(m => ({ theirs: m.visitors.islands[0].waving, ours: m.folk.people.filter(p => !p.inside && p.wave > 0).length, greeted: m.visitors.islands[0].greeted }))(WP.stage.manager)');
         if (!waving.theirs || !waving.greeted || waving.ours < 2) record(`nobody waved: ${JSON.stringify(waving)}`);
         await shoot('sky-island-visitor');
+        // O: a small island comes to go round ours, behind and then in front.
+        await press('o');
+        await sleep(300);
+        const orb = await evaluate('(m => { const o = m.visitors.orbiter; return o && { name: o.name, houses: o.art.I.houses.length, phase: o.phase, w: o.art.I.w }; })(WP.stage.manager)');
+        if (!orb || orb.houses < 1) record(`O brought no islet: ${JSON.stringify(orb)}`);
         // Christmas Eve: lights on every eave, the tree in the square; Easter: eggs; a party of the owner's own.
-        if (!await stageWith('sky-island', { configVersion: 1, seed: 77, visitMinutes: 0, weather: 'fair' }, '&date=2026-12-24T20:00')) return record('no boot on Christmas Eve');
+        if (!await stageWith('sky-island', { configVersion: 2, seed: 77, visitMinutes: 0, orbiters: false, weather: 'fair' }, '&date=2026-12-24T20:00')) return record('no boot on Christmas Eve');
         s = await st();
         if (s.holiday !== 'christmas' || s.season !== 'winter' || s.lights < 10 || !(await evaluate('!!WP.stage.manager.squareTree')) || s.dark < 0.9) record(`Christmas Eve: ${JSON.stringify({ holiday: s.holiday, season: s.season, lights: s.lights, dark: s.dark })}`);
-        const lit = await evaluate('(m => ({ houses: m.I.houses.filter(h => m.windowsLit(h)).length, layer: !!m.glowLayer && m.glowKey !== null, inside: m.folk.people.filter(p => p.inside).length }))(WP.stage.manager)');
+        const lit = await evaluate('(m => ({ houses: m.I.houses.filter(h => m.windowsLit(h)).length, layer: !!m.glowLayer && m.glowKey !== null, inside: m.folk.people.filter(p => p.inside).length, seaDark: (c => { const d = c.getContext("2d").getImageData(0, 0, c.width, c.height).data; let lit = 0, n = 0; for (let i = 0; i < d.length; i += 16) if (d[i + 3]) { n++; if (d[i] + d[i + 1] + d[i + 2] > 450) lit++; } return n && lit / n; })(m.sea.front) }))(WP.stage.manager)');
         if (lit.houses < 1 || !lit.layer) record(`no windows lit at night: ${JSON.stringify(lit)}`);
-        if (!await stageWith('sky-island', { configVersion: 1, seed: 77, visitMinutes: 0 }, '&date=2026-04-05T11:00')) return record('no boot at Easter');
+        if (lit.seaDark > 0.1) record(`the sea of cloud is lit at night: ${JSON.stringify(lit)}`);
+        if (!await stageWith('sky-island', { configVersion: 2, seed: 77, visitMinutes: 0, orbiters: false }, '&date=2026-04-05T11:00')) return record('no boot at Easter');
         s = await st();
         if (s.holiday !== 'easter' || s.eggs < 5 || s.season !== 'spring') record(`Easter: ${JSON.stringify({ holiday: s.holiday, eggs: s.eggs, season: s.season })}`);
-        if (!await stageWith('sky-island', { configVersion: 1, seed: 77, visitMinutes: 0, specialDates: '06-10 The cats’ birthday' }, '&date=2026-06-10T18:30')) return record('no boot for the party');
+        if (!await stageWith('sky-island', { configVersion: 2, seed: 77, visitMinutes: 0, orbiters: false, specialDates: '06-10 The cats’ birthday' }, '&date=2026-06-10T18:30')) return record('no boot for the party');
         s = await st();
         const party = await evaluate('(m => ({ name: m.holiday && m.holiday.name, inSquare: m.folk.people.filter(p => !p.inside && p.plan && p.plan.spot === "square").length }))(WP.stage.manager)');
         if (s.holiday !== 'party' || party.name !== 'The cats’ birthday' || party.inSquare < 5 || s.decor < 1) record(`the party: ${JSON.stringify({ ...party, decor: s.decor })}`);
         // Low: the trees are baked into the bands, and fewer folk are about.
-        if (!await stageWith('sky-island', { configVersion: 1, seed: 77, visitMinutes: 0 }, '&date=2026-06-20T11:00&tier=low')) return record('no boot on Low');
+        if (!await stageWith('sky-island', { configVersion: 2, seed: 77, visitMinutes: 0, orbiters: false }, '&date=2026-06-20T11:00&tier=low')) return record('no boot on Low');
         const low = await evaluate('(m => ({ sway: m.sway, bands: m.bands.filter(Boolean).length, people: m.folk.people.length, tier: WP.host.quality.tier }))(WP.stage.manager)');
         if (low.sway || low.bands < 2 || low.people >= 20 || low.tier !== 'low') record(`Low: ${JSON.stringify(low)}`);
-        console.log(`    sky-island: waved at ${waving.ours ? 'the visitor' : 'nobody'}; ${lit.houses} houses lit on Christmas Eve; ${s.decor} trimmings for the party; ${low.people} folk on Low`);
+        console.log(`    sky-island: ${theirs.houses}-house visitor ${theirs.w} px wide, waved at by ${waving.ours}; ${orb && orb.name} came round; ${lit.houses} houses lit on Christmas Eve; ${s.decor} trimmings for the party; ${low.people} folk on Low`);
         return true;
     }]],
     // 8.2: one full repaint per morph step, none while a pattern holds. On
