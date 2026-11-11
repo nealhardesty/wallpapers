@@ -145,7 +145,7 @@ Added for Christmas, drawn in code (designs in §10.27–§10.30):
 | `last-bulb` | last-bulb-logic.js, last-bulb-art.js, last-bulb.js | ~1.1k lines | Interactive (tap a bulb to jiggle it); a C9 strand whose last bulb is loose; the flicker scripts, the filament and the strand's shape (`LastBulbLogic`), unit-tested; follows `host.now()` (Christmas Eve and Day); keys L, O, D |
 | `frost` | frost-logic.js, frost-art.js, frost.js | ~1k lines | Interactive (drag to draw in the frost, tap to breathe on it); fern frost grown tip by tip on an occupancy grid, the window and the doodles (`FrostLogic`), unit-tested; follows `host.now()` (Christmas Eve and Day); keys B, D, T |
 | `small-christmas` | small-christmas-logic.js, small-christmas-art.js, small-christmas.js | ~800 lines | Interactive (tap the tree, the train, the floor); pixel art at its own resolution, scaled up pixelated; palettes, blink patterns, the train's oval and the hops (`SmallXmasLogic`), unit-tested; follows `host.now()` (the sleigh on Christmas Eve, presents on Christmas Day); keys T, M, L, S |
-| `sky-island` | sky-island-logic.js, sky-island-art.js, sky-island-land.js, sky-island-actors.js, sky-island.js (and Harvest's harvest-sky.js) | ~2.6k lines | Interactive (tap a cat, a person, the lake, a house at night, the sky); fine pixel art at its own resolution, scaled up pixelated; the calendar (seasons, holidays, Easter, the owner's dates), the names and the island's layout from a seed (`SkyIslandLogic`), unit-tested over 240 layouts; follows `host.now()` (the hour, the season, every holiday); keys N, P, V, B, W, S, H |
+| `sky-island` | sky-island-logic.js, sky-island-art.js, sky-island-land.js, sky-island-actors.js, sky-island.js (and Harvest's harvest-sky.js) | ~3.5k lines | Interactive (tap a cat, a person, the lake, a house at night, the sky); 16-bit pixel art at its own resolution (a pixel is 2 CSS px on a laptop or 1080p), scaled up pixelated; a terraced island seen from above and in front, its underside, the sea of cloud and the ground far below all baked; the calendar (seasons, holidays, Easter, the owner's dates), the names and the island's three-tier layout from a seed (`SkyIslandLogic`), unit-tested over 240 layouts; follows `host.now()` (the hour, the season, every holiday); keys N, P, V, O, B, W, S, H |
 
 About 1.7 MB of JavaScript in total. **Not imported:** links, weather, clocks,
 search/omniprompt, custom links, status bar, Docker/nginx, the homepage's
@@ -833,7 +833,7 @@ and the commits.
 | frost | `glints` (medium) | Three canvases: the room and frost (redrawn ten times a second at most, six on a slow tier), the frame (baked once) and the snow (every frame, only while it's snowing, else idleUntil the next tenth); the room's blur, the bokeh discs and the frost's backlit colour baked per resize; frost accumulates on a mask (new ice only) and is re-tinted through it when it changes; tips capped at 9,000 × density; a render-scale change keeps the frost, rescaled; snow × density |
 | small-christmas | — | The canvas is the picture's own pixels (a few hundred across), scaled up by CSS with `image-rendering: pixelated`, so a frame is tiny; 12 fps by default (a setting), idleUntil between frames; sky, moon and snow floor one baked layer; every sprite baked per palette; scanlines a baked overlay canvas; snow × density |
 | harvest | `mist`, `beams` (medium) | Land is one baked layer per resize; trees, leaves, apples, geese and clouds are baked sprites; the world is washed once per frame with the hour's light; leaves, apples, smoke, sparks and flocks × density; squirrels × (0.5 + 0.5 density) |
-| sky-island | — | The canvas is the picture's own pixels (a pixel is about 2 CSS px), scaled up pixelated; the terrain is one bake per season; everything that stands still (houses, trees, lamps, trimmings) is baked into one layer per street band, drawn in turn with whoever moves (trees are drawn live, swaying, only on High); the sky is a dithered bake redone as the light changes, the stars four baked twinkle frames; the night is one `source-atop` wash over the island's scratch, with the lit windows and lamps one glow layer redone only when the lit set changes; 20 fps by default (a setting), idleUntil between frames; folk × (0.4 + 0.6 density), strays, wildlife, rain, snow, leaves, fireflies × density. Bench 2026-11-11: Low 17%, Medium 23%, High 29% |
+| sky-island | — | The canvas is the picture's own pixels (2 CSS px each on a laptop or 1080p, 3 at 1440p, 4 at 4K, 1 on a phone), scaled up pixelated; the terrain (three tiers, their cliffs, the underside, the water) is one bake per season, the roots three sway frames, the sea of cloud two tileable strips and the ground one, rebaked with the light; everything that stands still (houses, trees, lamps, props, trimmings) is baked into one layer per street band, drawn in turn with whoever moves (trees are drawn live, swaying, only on High); the sky is a dithered bake redone as the light changes, the stars four baked twinkle frames; the night is one `source-atop` wash over the island's scratch, with the lit windows and lamps one glow layer redone only when the lit set changes; a passing island is one bake with a few live bits; 20 fps by default (a setting), 12 on Low, paced on a steady timeline through idleUntil; folk × (0.4 + 0.6 density), strays, wildlife, rain, snow, leaves, fireflies × density. Bench 2026-11-11 (v2): Low 21%, Medium 38%, High 46% |
 
 #### In the panel
 
@@ -3483,123 +3483,195 @@ and a toy train parked on its oval of track. Retro, and cozy.
 
 From the brainstorm's "The Last Floating Island" (a tiny island in an
 enormous sky, one cottage, one resident), but the owner wanted **a small
-town full of people**, in fine pixel art, randomised each load, with other
+town full of people**, in pixel art, randomised each load, with other
 small towns floating by, pets everywhere (cats above all), wildlife,
 forests, lakes, small mountains, waterfalls, and holiday and seasonal
-touches. Decisions, from the Q&A: fine pixels (about 2 CSS px each); the
-real clock with overrides; the owner's cats by name and temperament plus
-strays and dogs; a new island every load with "keep this one"; every
-holiday set plus the owner's own dates and a way to pin a season or
-holiday; visitors wave, birds cross, a balloon ferries someone over; a
-light touch; a big island with sky all round; local weather; ~20 folk with
-daily routines; and Seasonal gets it as year-round filler.
+touches. Decisions, from the Q&A: the real clock with overrides; the
+owner's cats by name and temperament plus strays and dogs; a new island
+every load with "keep this one"; every holiday set plus the owner's own
+dates and a way to pin a season or holiday; visitors wave, birds cross, a
+balloon ferries someone over; a light touch; a big island with sky all
+round; local weather; ~20 folk with daily routines; and Seasonal gets it
+as year-round filler.
 
-- **Pixels:** the canvas is the picture at its own resolution (`pixelSize`
-  × about min(width, height)/400, so 2 on a laptop, 3 on a big monitor, 2
-  on a phone) and CSS scales it up pixelated. Every sprite is rows of
-  characters mapped to colours (`SkyIslandArt.rows`), facing left, flipped
-  to face right. People are 5×8, cats 7×7 (the big and fluffy ones 9×8),
-  with a few frames each (stand, walk, wave, sit, work, jump; sit, sleep,
-  walk, run, loaf, stretch, pounce).
+**The second iteration (the same day).** The first was side-on, flat, and
+too coarse (3 CSS px a pixel, a house 20 pixels tall in three colours),
+had no underside to speak of and no ground below, and its passing
+islands were scraps. The owner shared a reference picture (a 16-bit
+fantasy village on a terraced floating island, seen from above and in
+front, with a castle tower, a windmill, a red barn, cherry trees, a spring
+that falls into a pond that falls into a lake that cascades off the edge
+into a sea of cloud, banded rock trailing roots and crackling with cyan
+magic, bits of rock in orbit, and other islands in the distance) and
+asked for that, plus the far ground rolling slowly by below and small
+islands that come and orbit ours. Decisions, from the second Q&A: an
+elevated three-quarter view; a finer grid (2 CSS px a pixel) with every
+sprite redrawn bigger, outlined and shaded in four or five tones; three
+fixed tiers with random shapes; the deep banded underside with roots and
+magic; the cloud sea with distant islands; a slow bob; passing islands as
+whole islands; the ground below; the orbiters.
+
+- **Pixels:** the canvas is the picture at its own resolution
+  (`pixelSize` × round(min(width, height)/480 − 0.1): 2 on a laptop or a
+  1080p monitor, 3 at 1440p, 4 at 4K, 1 on a phone) and CSS scales it up
+  pixelated. Small sprites are rows of characters mapped to colours
+  (`SkyIslandArt.rows`), facing left, flipped to face right: people 7×12
+  (stand, walk, wave, sit, work, jump), cats 10×9 (the big ones a column
+  longer, the fluffy ones with a soft edge: sit, sleep, walk, run, loaf,
+  stretch, pounce), dogs, deer, goats, a fox, rabbits, ducks, birds,
+  butterflies, an owl, the dragon. Buildings, trees, bushes, the castle
+  tower, the windmill, clouds and rock fragments are drawn in code with
+  an outline (`outline`) in a dark tint of the thing: a house is its
+  front wall (plaster with timber framing, stone blocks, or the barn's red
+  boards with white trim), a roof either gabled toward us or seen as its
+  front slope with rows of tiles (or thatch), framed windows with four
+  panes and a sill, an arched door with a step and a knob, a chimney, a
+  shop sign, window boxes in the warm months, snow in winter; a tree is
+  clumps of foliage each lit from its upper left in four tones (round,
+  tall, birch, apple, cherry, pine, three sizes), bare with snow in
+  winter.
 - **The island from a seed** (`SkyIslandLogic.layout`, pure, in island
-  pixels: x across, y down from the plateau's back line): a rounded slab
-  with wobbly edges and a jagged cliff tapering to a point; a lake at one
-  end reaching the front lip, where the **waterfall** pours off (four baked
-  frames, widening into mist below the cliff), with a dock out from its back
-  shore; the **mountain** at the back on the other side, two to four
-  peaks, snow on top (more in winter), goats on its slopes; two **streets**
-  (three on a phone) through the town between them, the back one running
-  clear of the lake as the lane to the dock; **houses** of several kinds
-  (cottage, tall, wide, tower, barn) and roofs (gable, hip, thatch, flat),
-  a chapel with a bell across from the **square** (paving, a well, two
-  benches, often a market stall), sometimes a windmill (sails turning with
-  the wind) and a lighthouse at the island's end (a beam at night); fenced
-  **fields** (wheat, cabbages, pumpkins, flowers); a **forest** thick at
-  the ends and by the mountain, thin in town (round, tall, birch, apple and
-  pine trees in three sizes); lamps along the streets; meadow flowers;
-  roots trailing from the soil, glowing crystals underneath, and a **cave**
-  in the cliff where a small green dragon mostly sleeps, peeks out now and
-  then, and sometimes puffs sparks. The island has a name
-  (Thistlehollow Isle, Pebblewick Rock…), shown in the panel with its seed.
-  `seed` 0 (the default) draws a new island every load; **Keep this
-  island** (a panel action, or `P`) pins the seed, and again lets it go;
-  `N` rolls a new one. The unit test lays out 120 seeds both ways and
-  checks every house stands on its street clear of the others, the lake
-  and the mountain; the lake meets the lip at the waterfall; fields and
-  trees keep off the houses; every spot is reachable; and the same seed is
-  the same island.
-- **Getting about** (`SkyIslandLogic.route`): everyone walks the streets.
-  Houses stand with their doors on a street, so a walk goes up or down to
-  the nearest street, along it, crossing to the next street only through a
-  gap between its houses (`gaps`, computed once), and across open ground
-  straight from the back street for anything outside the town (the dock,
-  the fields, the island's ends). The test walks every spot from the square
-  and checks no leg wades the lake or passes through a house.
+  pixels: x across, y down from the top tier's back line): **three tiers**,
+  each a slab of ground with a visible top (its `back` and `front` edges
+  by x, a flattened ellipse with a wobble) and a cliff face below its
+  front edge down to its `foot`, where the next tier's ground begins; the
+  top one small (the crag, the castle **tower** with its flag, usually a
+  **windmill**, pines, the spring), the middle one wide (the **village**:
+  two streets of houses round the **square** with its well, benches and
+  stall, the **chapel** across from it), the bottom one the whole width
+  (the **lake** with a pier and a sailboat, the **farm**: a red **barn**,
+  fenced **fields** of wheat and cabbages or pumpkins, an orchard of apple
+  and cherry trees, a farmhouse, sometimes a cottage by the lake and a
+  **lighthouse** at the far tip). Below the lowest tier the **underside**
+  tapers to a jagged point, deepest a little toward the water. **The
+  water** runs down one side (`side`, `fallX`): the spring on top spills
+  over its lip into a narrow **fall** down the first cliff, into the
+  **pond** by the village (crossed by a footbridge where the front street
+  passes), which spills into a second fall into the lake, which pours off
+  the front edge in the **cascade**, wide, widening and thinning into mist
+  below the underside. **Stairs** cut into each cliff join the tiers.
+  Also: bushes, meadow flowers, lamps along the streets, props (barrels,
+  crates, hay bales, flower beds, a signpost), **roots** trailing far below
+  the underside, vines down the cliffs, cyan **cracks** low in the rock,
+  crystals, **fragments** of rock in orbit, and the **cave** where a small
+  green dragon mostly sleeps. The island has a name (Thistlehollow Isle,
+  Pebblewick Rock…), shown in the panel with its seed. `seed` 0 (the
+  default) draws a new island every load; **Keep this island** (a panel
+  action, or `P`) pins the seed, and again lets it go; `N` rolls a new
+  one. `islet: true` (passing islands under 200 px, and the orbiters) uses
+  deeper tiers so a house still fits. The island shrinks to fit the screen's
+  height when it must. The unit test lays out 120 seeds both ways and
+  checks every tier's front is below its back and clear of the cliff
+  above, the water chain lines up, every house stands on its street inside
+  its tier and clear of the others, the pond and the lake, there's a
+  chapel and a farm, the stairs join the tiers, fields and trees keep off
+  the houses, every spot is reachable by straight legs (between tiers by
+  the stairs, never wading the pond), and the same seed is the same island.
+- **Getting about** (`SkyIslandLogic.route`, `tierAt`): everyone walks
+  the streets. Every spot knows its tier; a walk goes up or down to the
+  nearest street of its tier, along it, crossing between the village's
+  streets only through a gap between houses (`gaps`), and between tiers
+  by the stairs, then across to the target. The pier is a spot with its
+  own legs (`then`): the manager's `walkTo` takes a walker out along the
+  planks and, next time, back along them first (`retrace`). Dogs route the
+  same way when their owner has changed tier.
 - **The town's day** (`planFor`, by the hour from `host.now()`): everyone
   has a role and a home. The baker and the fisher are up at five; the
   fisher stands at the pier's end with a rod and now and then catches
-  something (half the time the nearest cat runs off with it, and the fisher
-  waves their arms); the farmer hoes the field; kids kick a ball between
-  them in the meadow or the square, fly kites when the wind is up, and
-  skate on the lake when it freezes; the mail carrier does the doors; a
-  gardener waters; a roofer climbs a ladder and hammers on a roof; a
-  merchant minds the stall; a fiddler plays in the square from four; walkers
-  go to the island's ends; strollers pair up on a bench at sunset; lunch is
-  in the square; everyone's home by ten but the night watch, who patrols
-  the streets with a lantern (a pool of light after dark). Umbrellas come
-  out in the rain. A passing island gets a wave from most of them.
+  something (half the time the nearest cat runs out along the pier and
+  makes off with it, and the fisher waves their arms); the farmer hoes the
+  field; kids kick a ball between them in the meadow or the square, fly
+  kites when the wind is up, and skate on the lake when it freezes; the
+  mail carrier does the doors; a gardener waters; a roofer climbs a ladder
+  and hammers on a roof; a merchant minds the stall; a fiddler plays in the
+  square from four; walkers go up to the lookout by the tower, to the
+  lakeside and the island's ends; strollers pair up on a bench at sunset;
+  lunch is in the square; everyone's home by ten but the night watch, who
+  patrols the streets with a lantern (a pool of light after dark).
+  Umbrellas come out in the rain. A passing island gets a wave from most.
 - **Cats** (`Cats`): the owner's roster (the same nine as §10.27, as
   pixels: Moofy black and fluffy with a white grin, Butters a chunky buff
   tabby, Waffles white with black splotches, Ras a tuxedo, Ibbie a grey
   tabby, Maus a tortie, Turkey a big grey tabby, Harry orange and white,
   Kitty Toes a fluffy blue Persian), each toggleable, plus `strays`. Each
-  picks spots by temperament: sills, roofs, the dock, benches, the well,
-  under trees, by lamps, next to a person. Ibbie sleeps on sills; Turkey
-  loafs on the dock; Ras sits on a sill and knocks the flowerpot off it
-  (it falls and breaks); Maus gets the zoomies (runs about the island for
-  five seconds); Harry pounces at butterflies and birds; Moofy lurks under
-  trees or near someone; Butters follows people; Waffles sits in the field;
-  Kitty Toes judges from the well or a roof. At night they take the sills.
-  A tap on open ground calls the nearest cat over, with a meow (a heart,
-  from Moofy). Hats on holidays: witch, Santa, party, bunny ears.
-- **Dogs** follow their owners about, lie down when they sit, and now and
-  then chase a cat, which runs for a sill; the dog gives up and sits.
+  picks spots by temperament: sills, roofs, the pier, benches, the well,
+  the footbridge's rail, the tower's platform, under trees, by lamps, next
+  to a person. Ibbie sleeps on sills; Turkey loafs on the pier; Ras sits
+  on a sill and knocks the flowerpot off it (it falls and breaks); Maus
+  gets the zoomies (dashes about its tier for five seconds); Harry pounces
+  at butterflies and birds; Moofy lurks under trees or near someone;
+  Butters follows people; Waffles sits in the field; Kitty Toes judges
+  from the castle's platform, the well or a roof. At night they take the
+  sills. A tap on open ground calls the nearest cat over (up or down the
+  stairs), with a meow (a heart, from Moofy). Hats on holidays.
+- **Dogs** follow their owners about (down the stairs by the route), lie
+  down when they sit, and now and then chase a cat on the same ground,
+  which runs for a sill; the dog gives up and sits.
 - **Wildlife** (`Wildlife`, × `wildlife` × density): small birds perch on
-  roofs and trees, peck on the ground, and fly off when someone comes
-  near; butterflies over the flowers on spring and summer afternoons;
-  rabbits in the meadow that bolt from people; deer at the mountain's foot
-  that graze, wander and flee behind it; goats along the slopes; ducks on
-  the lake (not when it's frozen); a fish that jumps now and then (and
-  when the lake is tapped); a fox that trots the back lane at dusk; an owl
-  in a pine at night, blinking; flocks of geese (spring and autumn) or
-  small birds across the sky, and birds that fly over from a passing
-  island; Halloween's bats and a ghost over the lake.
+  roofs, the tower and trees, peck on the ground, and fly off when someone
+  comes near; three circle the tower now and then; butterflies over the
+  flowers on spring and summer afternoons; rabbits in the meadow that bolt
+  from people; deer on the top that graze, wander and flee; goats along
+  the crag; ducks on the lake (not when it's frozen); a fish that jumps now
+  and then (and when the lake is tapped); a fox that trots the lower street
+  at dusk; an owl in a pine at night, blinking; flocks of geese (spring and
+  autumn) or small birds across the sky, and birds that fly over from a
+  passing island; Halloween's bats round the tower and a ghost over the
+  lake.
 - **The sky:** the sun and moon from Harvest Valley's `HarvestSky.bodies`
   (the catalog loads `harvest/harvest-sky.js` first); the colours
   (`SkyIslandLand.light`) ramp over the sun's altitude with a shared night
-  and twilight and a day of the season's (summer's deep blue, spring's
-  fresh, autumn's haze, winter's pale); a dithered gradient baked when the
-  light has moved (every 6 s in twilight, else a minute); stars that
-  twinkle; far clouds behind, a cloud bank below, a couple in front of the
-  cliff, all drifting with the wind; `onScroll` pans them by depth. `sky`
-  is live, a whole day in `cycleMinutes`, or pinned day, golden hour or
-  night (via `HarvestSky.pinned`).
+  and twilight and a day of the season's (summer's cornflower blue,
+  spring's fresh, autumn's haze, winter's pale); a dithered gradient baked
+  when the light has moved (every 6 s in twilight, else a minute); stars
+  that twinkle; far clouds behind, a couple behind the upper tiers, a few
+  in front of the underside, all drifting with the wind; `onScroll` pans
+  them by depth. `sky` is live, a whole day in `cycleMinutes`, or pinned
+  day, golden hour or night (via `HarvestSky.pinned`). The light of the
+  hour is computed before the first bake, so frame one is right.
+- **Below** (`cloudSea`, `ground`): a **sea of cloud** across the bottom
+  of the screen in two tileable strips of billowing cumulus (the front
+  bigger and brighter, both with gaps), rolling past at two speeds in
+  front of and behind the island's tip (the cascade dissolves into it), the
+  island's shadow on it, and a few far islands poking through, hazed. Under
+  it, if `ground`, **the ground far below**: a patchwork of fields with
+  hedges, woods, lakes, a winding river, roads and little towns of tiny
+  roofs (snow in winter, autumn colours), washed with the horizon's colour
+  in a baked haze thick at the top, rolling by slowest of all (the island
+  is travelling); at night the towns' windows light. The island itself
+  **bobs** (`bob`) four pixels over 25 s; the fragments, the roots and the
+  clouds about the underside lag a little behind.
+- **Under the island:** the strata are a dozen bands (soil, terracotta,
+  rust, sand, ochre, moss, charcoal, slate…) with a wobble, lit on the left
+  and dark on the right, outlined at the jagged edge; **roots** hang from
+  the soil (three baked sway frames), vines from the cliffs; the **cyan
+  magic** in the cracks low in the rock glows and pulses, crackles in
+  flickering lines, and now and then throws an arc to a fragment passing
+  in front; four to six **fragments** of banded rock (some with grass on
+  top) orbit slowly, behind the island and then in front; the crystals
+  glint at night; the cave's ember glows when its occupant is awake.
 - **The night** is one wash over the island (`source-atop` on its
-  scratch), then what shines: windows (by a per-day hash, fewer after 23:00;
-  a tap on a house switches its own), lamps, the crystals pulsing, the
-  cave's ember, the lighthouse's beam, fireflies on summer nights, the
-  watch's lantern, Christmas lights blinking.
+  scratch), then what shines: windows (by a per-day hash, fewer after
+  23:00; a tap on a house switches its own; the tower's slits and the
+  mill's window too), lamps, the magic, the crystals pulsing, the cave's
+  ember, the lighthouse's beam, fireflies over the lake and the pond on
+  summer nights, the watch's lantern, Christmas lights blinking, the
+  towns far below.
 - **Weather** (`weather`: whatever comes, fair, a shower, snow): a run of
   fair weather with showers now and then (more in spring and autumn, snow
-  in winter), from a dark cloud that sits over the island, the rain falling
-  only onto it; a rainbow for a minute after; wind that comes and goes,
-  bends the trees (on High), flies the kites, turns the mill, blows the
-  leaves in autumn and the petals in spring and leans the chimney smoke.
+  in winter), from a dark cloud that sits over the island, the rain
+  falling only onto its highest ground at each x; a rainbow for a minute
+  after; wind that comes and goes, bends the trees (on High), flies the
+  kites, turns the mill and the flag, blows the leaves in autumn and the
+  petals (cherry ones pink) in spring and leans the chimney smoke.
 - **Seasons** (`seasonOf`, or pinned): the grass, the foliage (autumn
   trees each pick a colour; winter broadleaves are bare with snow on the
-  branches; apples fruit in late summer and blossom in spring), window boxes
-  in the warm months, snow on everything in winter, the lake frozen (and
-  skated on) in January and February, chimney smoke in the cold months.
+  branches; apples fruit in late summer and blossom in spring; cherries
+  are pink in spring), window boxes in the warm months, snow on everything
+  in winter (the roofs, the tower, the crag, the fields), the lake, the
+  pond and the spring frozen (and the lake skated on) in January and
+  February, chimney smoke in the cold months, the ground below in its
+  season's colours too.
 - **Holidays** (`holidayOf`, or pinned, with `decorations` off for a quiet
   one): Valentine's (hearts from the chimneys), St Patrick's (green
   bunting, shamrocks, a rainbow all day with a pot of gold at its end),
@@ -3615,38 +3687,55 @@ daily routines; and Seasonal gets it as year-round filler.
   with a cake in the square, balloons on the lamps, confetti, everyone
   dancing there from five. Easter is computed; Thanksgiving is the fourth
   Thursday. Unit-tested for every one.
-- **Visitors** (`Visitors`, about every `visitMinutes`): a small island of
-  a kind (a village, a lighthouse rock, an orchard, a wizard's tower with a
-  lit window, an island of cats, one with a windmill, a bare rock with a
-  pine and a goat) drifts across, far (small, behind ours, hazed) or near
-  (bigger, below, in front of the cloud bank), with its own name. Alongside,
-  its folk wave and ours wave back, a few birds fly over, and (if
-  `balloon`) a hot-air balloon may lift from it with a visitor (or a cat),
-  land on our meadow, let them have a look round the square and the dock
-  for half a minute, and carry them home. `V` and `B` send one now.
+- **Visitors** (`Visitors`, about every `visitMinutes`): **a whole island
+  of its own**, laid out from a seed by the same generator at 120 to 300 px
+  wide (`SkyIslandLand.island`: terrain and every static sprite baked into
+  one canvas; its falls, sails, flag, a few folk, a cat or two and its lit
+  windows live), with its own name, drifting across far (small, behind
+  ours, hazed) or near (big, below, between the layers of the cloud sea).
+  Alongside, its folk wave and ours wave back, a few birds fly over, and
+  (if `balloon`) a hot-air balloon may lift from it with a visitor (or a
+  cat), land on our meadow, let them have a look round the square, the
+  pier and the lookout for half a minute, and carry them home. **Orbiters**
+  (`orbiters`, every ten minutes or so): a tiny island (100 to 120 px: a
+  tower, a cottage, a tree or two, a person or two and a cat) rises from
+  below and goes round ours two or three times on an ellipse about the
+  underside, behind it (drawn before it, hazed) and then in front, its folk
+  waving each time it comes round the front, and drifts off. `V`, `O` and
+  `B` send one now.
 - **Taps** (`touch`): a cat comes over; a person waves back (with a
   heart); the lake jumps a fish; a house at night switches its windows; the
   sky sends a bird off from there.
 - **Panel:** a status line (the island's name, seed, population and cats,
   the season and holiday), **A new island** and **Keep this island** /
   **Let it go** (shown by the feed's `kept`), the seed as a number to
-  type in or share. Keys: `N` new, `P` pin, `V` visitor, `B` balloon, `W`
-  weather, `S` season, `H` holiday (each cycling, with a toast).
-- **Performance:** §4.8's row. The expensive part was a few hundred
-  `drawImage` calls a frame for things that never move; baking them into
-  bands (split at the streets, so whoever walks a street is in front of its
-  houses and behind the next street's) took the Low tier from 50% to 17%.
+  type in or share; `bob`, `ground` and `orbiters` toggles. Keys: `N`
+  new, `P` pin, `V` visitor, `O` orbiter, `B` balloon, `W` weather, `S`
+  season, `H` holiday (each cycling, with a toast). `configVersion` 2.
+- **Performance:** §4.8's row. Baking the statics into bands (split at the
+  streets, so whoever walks a street is in front of its houses and behind
+  the next street's) took the first version's Low tier from 50% to 17%;
+  the second's bigger scratch (the underside, the tower's headroom), the
+  cloud sea and the ground cost more per frame, so the roots are baked
+  rather than drawn pixel by pixel, Low runs at 12 fps, and frames are
+  paced on a steady timeline (the next due a frame after the last, never
+  sooner) rather than from the rAF timestamp, which over-ran. Low 21%,
+  Medium 38%.
 - **Tests.** Unit (`tools/sky-island.test.mjs`): the seeded random, the
   seasons, Easter and Thanksgiving, every holiday's run-up and day and the
   owner's dates, the names, 240 layouts' invariants and reproducibility,
-  the routes, the day's plan. Smoke: the cast on frame one (20 folk, 12
-  cats, 2 dogs, animals), a pixelated canvas at about 40 frames in 2 s, the
-  same seed is the same island, `P` pins and unpins (and the storage shows
-  it), a tap calls a cat and it comes; `V` brings a visitor, nobody waves
-  until it's alongside and then both sides do; Halloween's pumpkins,
-  Christmas Eve's lights, tree and lit windows, Easter's eggs, a party on
-  the owner's date with the folk in the square; Low bakes the trees and
-  keeps fewer folk.
+  the routes (within a tier, between tiers by the stairs), the day's plan.
+  Smoke: the cast on frame one (20 folk on more than one tier, 12 cats, 2
+  dogs, animals), three tiers and three falls with four frames each, the
+  terrain, the cloud sea and the ground baked, a pixelated canvas at about
+  40 frames in 2 s, the same seed is the same island, `P` pins and unpins
+  (and the storage shows it), a tap by the tower calls a cat up the stairs
+  and it comes; `V` brings a whole island (three tiers, houses, three
+  falls, residents), nobody waves until it's alongside and then both sides
+  do; `O` brings an islet with a house; Halloween's pumpkins, Christmas
+  Eve's lights, tree and lit windows with the cloud sea dark, Easter's
+  eggs, a party on the owner's date with the folk in the square; Low bakes
+  the trees and keeps fewer folk.
 - **Seasonal:** every month's list (§4.2).
 
 ---

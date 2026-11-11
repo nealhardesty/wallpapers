@@ -39,7 +39,7 @@ const OVERRIDES = {
     // A bit bigger, so the tree, the presents and the train read in a tile.
     'small-christmas': { configVersion: 1, treeSize: 'medium', pixelSize: 1.5 },
     // A summer morning on a fair day, a little bigger so the town reads in a tile.
-    'sky-island': { configVersion: 1, weather: 'fair', islandSize: 1.3, pixelSize: 1.25 },
+    'sky-island': { configVersion: 2, weather: 'fair', islandSize: 1.2 },
 };
 // URL parameters for a better picture: satellites as its sample station
 // passes overhead before dawn, weather's sample at a golden dusk (thumb mode never fetches, so it's the sample),

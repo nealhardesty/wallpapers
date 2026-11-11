@@ -1,8 +1,8 @@
 // Sky Island's pure logic (SPEC §10.31): the seeded random, the calendar
 // (season, holidays, the owner's own special dates), island names, and the
-// layout of an island from a seed: where the plateau's edges run, the
-// mountain, the lake and its waterfall, the town's two streets and their
-// houses, the fields, the forest, the dock, the lamps and benches, and the
+// layout of an island from a seed: its three tiers and their cliffs, the
+// water from the spring to the cascade, the village streets and their
+// houses, the farm, the trees, the dock, the stairs between tiers, and the
 // spots the townsfolk go to. No DOM in here, so tools/sky-island.test.mjs
 // runs it in Node.
 
@@ -135,269 +135,415 @@ const SkyIslandLogic = (() => {
     // ---- The layout ----------------------------------------------------------------------------
 
     // Everything is in island pixels: x from 0 to w across the island, y
-    // down from the plateau's back line (0) to its front line (about
-    // `depth`), and on down the cliff. The manager places the whole thing
-    // on the screen.
+    // down the screen from the top tier's back line (0). The island is seen
+    // from above and in front, so each tier is a slab of ground with a
+    // visible top (its `back` and `front` edges, by x) and a cliff face
+    // below its front edge, down to its `foot`; the next tier's ground
+    // starts at that foot. Three tiers: the crag with the tower and the
+    // mill, the village, and the lower ground with the lake and the farm.
+    // Below the lowest, the underside tapers to a point (`bottom`). Water
+    // runs down one side: the spring on top, a fall, the pond by the
+    // village, a fall, the lake, and the cascade off the edge.
     //
-    // opts: { w, portrait, houses, forest (0..2), fields (bool), dragon }
+    // opts: { w, portrait, houses, forest (0..2), fields (bool), dragon, islet }
     function layout(seed, opts) {
         const rand = rng(seed);
-        const w = Math.max(90, Math.round(opts.w));
+        const w = Math.max(100, Math.round(opts.w));
         const portrait = !!opts.portrait;
-        const depth = Math.round(w * (portrait ? 0.4 : 0.125));
-        const cx = w / 2, half = w / 2;
         const name = islandName(rand);
         const side = rand.chance(0.5) ? 'left' : 'right';
-        // The plateau's back and front edges: a rounded slab with a wobble.
-        const wob1 = noise1(rand.int(1, 1e9), 23), wob2 = noise1(rand.int(1, 1e9), 31);
-        const back = [], front = [];
-        for (let x = 0; x <= w; x++) {
-            const u = (x - cx) / half;
-            const round = Math.sqrt(Math.max(0, 1 - u * u));
-            const hd = depth / 2 * Math.min(1, round * 1.35);
-            back[x] = Math.max(0, Math.round(depth / 2 - hd + (wob1(x) - 0.5) * depth * 0.12));
-            front[x] = Math.min(depth, Math.round(depth / 2 + hd + (wob2(x) - 0.5) * depth * 0.12));
-            if (front[x] <= back[x]) front[x] = Math.min(depth, back[x] + 1);
-        }
-        // The cliff below: a jagged taper to a point.
-        const cliffH = Math.round(w * rand.range(0.17, 0.26));
-        const jag = noise1(rand.int(1, 1e9), 9), jag2 = noise1(rand.int(1, 1e9), 3);
+        const dir = side === 'left' ? -1 : 1;             // toward the water
+        const islet = !!opts.islet;                        // a tiny island of its own: deeper tiers, so a house fits
+        const DEPTH = islet ? [0.22, 0.32, 0.34] : portrait ? [0.12, 0.17, 0.2] : [0.06, 0.085, 0.105];
+        const DROP = islet ? [0.1, 0.11] : portrait ? [0.07, 0.08] : [0.042, 0.048];
+        const underH = Math.round(w * (islet ? 0.55 : portrait ? 0.4 : 0.26));
+        // The three slabs, top first. Each is an ellipse flattened into a
+        // slab, with a wobble, nested inside the one below.
+        const cx1 = w / 2 + w * rand.range(-0.04, 0.04), hw1 = w * rand.range(0.4, 0.46);
+        const hw0 = w * rand.range(0.21, 0.27);
+        const cx0 = clamp(cx1 + w * rand.range(-0.1, 0.1), hw0 + w * 0.08, w - hw0 - w * 0.08);
+        const tiers = [];
+        const slab = (k, cx, hw, top, depth) => {
+            const x0 = Math.max(0, Math.round(cx - hw)), x1 = Math.min(w, Math.round(cx + hw));
+            const wob1 = noise1(rand.int(1, 1e9), 19), wob2 = noise1(rand.int(1, 1e9), 23);
+            const cy = top + depth / 2, hd = depth / 2;
+            const back = [], front = [];
+            for (let x = x0; x <= x1; x++) {
+                const u = (x - cx) / hw, round = Math.min(1, Math.sqrt(Math.max(0, 1 - u * u)) * 1.25);
+                back[x] = Math.round(cy - hd * round + (wob1(x) - 0.5) * depth * 0.14);
+                front[x] = Math.round(cy + hd * round + (wob2(x) - 0.5) * depth * 0.14);
+                if (front[x] < back[x] + 1) front[x] = back[x] + 1;
+            }
+            return { k, cx, hw, x0, x1, back, front, top, depth };
+        };
+        const d0 = Math.round(w * DEPTH[0]);
+        const t0 = slab(0, cx0, hw0, 0, d0);
+        t0.drop = Math.round(w * DROP[0]);
+        t0.foot = t0.front.map(f => f + t0.drop);
+        const nest = (t, up) => {
+            for (let x = t.x0; x <= t.x1; x++) {
+                if (x >= up.x0 && x <= up.x1 && up.foot[x] >= t.back[x]) t.back[x] = up.foot[x] + 1;
+                if (t.front[x] < t.back[x] + 3) t.front[x] = t.back[x] + 3;
+            }
+        };
+        const maxFoot = t => { let m = -1e9; for (let x = t.x0; x <= t.x1; x++) m = Math.max(m, t.foot[x]); return m; };
+        const e1 = Math.round(t0.drop * 0.45), d1 = Math.round(w * DEPTH[1]);
+        const t1 = slab(1, cx1, hw1, maxFoot(t0) - e1, d1 + e1);
+        t1.drop = Math.round(w * DROP[1]);
+        t1.foot = t1.front.map(f => f + t1.drop);
+        nest(t1, t0);
+        const e2 = Math.round(t1.drop * 0.45), d2 = Math.round(w * DEPTH[2]);
+        const t2 = slab(2, w / 2, w / 2, maxFoot(t1) - e2, d2 + e2);
+        nest(t2, t1);
+        t2.drop = 0; t2.foot = t2.front.slice();
+        tiers.push(t0, t1, t2);
+        const depth = Math.max(...t2.front.filter(v => v !== undefined));
+        // The underside: strata tapering to a jagged point, deepest a little toward the water.
+        const jag = noise1(rand.int(1, 1e9), Math.max(8, w / 9)), jag2 = noise1(rand.int(1, 1e9), 4);
         const bottom = [];
+        const lowX = w / 2 + dir * w * rand.range(0.02, 0.1);
         for (let x = 0; x <= w; x++) {
-            const u = Math.abs((x - cx) / half);
-            const taper = Math.max(0, 1 - Math.pow(u, 2.2));
-            bottom[x] = front[x] + Math.round(cliffH * taper * (0.6 + jag(x) * 0.4) * (0.85 + jag2(x) * 0.15));
+            const u = Math.abs(x - lowX) / (x < lowX ? lowX : w - lowX);
+            const taper = Math.max(0, 1 - Math.pow(u, 2.3));
+            bottom[x] = t2.front[x] + Math.round(underH * taper * (0.55 + jag(x) * 0.45) * (0.88 + jag2(x) * 0.12));
         }
-        // Streets: two rows (three on a phone). People only ever cross open ground straight up or down from one.
-        const streets = portrait ? [0.3, 0.57, 0.84].map(k => Math.round(depth * k)) : [0.47, 0.84].map(k => Math.round(depth * k));
-        // The lake, at the waterfall's side of the plateau, reaching the front
-        // lip, its back shore clear of the back street (the way to the dock).
-        const lakeX = Math.round(side === 'left' ? w * rand.range(0.17, 0.24) : w * rand.range(0.76, 0.83));
-        const lakeRx = Math.round(w * rand.range(0.075, 0.115));
-        const lakeRy = Math.max(3, Math.min(Math.round(lakeRx * (portrait ? 0.55 : 0.42)), Math.floor((front[lakeX] + 1 - streets[0] - 2) / 2)));
-        const lake = { x: lakeX, rx: lakeRx, ry: lakeRy, y: front[lakeX] - lakeRy + 1 };
-        const fall = { x: lakeX, w: Math.max(4, Math.round(lakeRx * 0.5)), top: front[lakeX], bottom: bottom[lakeX] };
-        // The mountain: at the back, on the far side from the lake, or behind the town.
-        const mw = Math.round(w * rand.range(0.3, 0.42));
-        const mx = side === 'left' ? Math.round(w * rand.range(0.66, 0.78)) : Math.round(w * rand.range(0.22, 0.34));
-        const mountain = { x: mx, w: mw, h: Math.round(mw * rand.range(0.32, 0.45)), y: Math.round(depth * (portrait ? 0.14 : 0.2)), peaks: rand.int(2, 4) };
-        // The town: between the lake and the island's other end.
-        const townL = Math.round(side === 'left' ? lake.x + lake.rx + 6 : Math.max(w * 0.08, 4));
-        const townR = Math.round(side === 'left' ? Math.min(w * 0.92, w - 4) : lake.x - lake.rx - 6);
-        const town = { l: townL, r: townR };
-        const houses = placeHouses(rand, { streets, town, mountain, depth, portrait, count: opts.houses, w, back, front });
-        const square = houses.square;
-        // Fields: a fenced plot or two in the open, on the far side from the lake.
+        // ---- Water, top to bottom ----
+        const fallX = Math.round(clamp(cx0 + dir * hw0 * rand.range(0.5, 0.7), side === 'left' ? w * 0.17 : w * 0.5, side === 'left' ? w * 0.5 : w * 0.83));
+        const spring = { tier: 0, x: fallX, rx: Math.round(w * 0.026) + 2, ry: Math.max(2, Math.round(d0 * 0.2)) };
+        spring.y = t0.front[fallX] - spring.ry;
+        const pond = { tier: 1, x: fallX, rx: Math.round(w * rand.range(0.042, 0.055)) };
+        pond.ry = Math.max(3, Math.round((t1.front[fallX] - t0.foot[fallX] - 1) / 2)); pond.y = t0.foot[fallX] + 1 + pond.ry;
+        const lake = { tier: 2, x: fallX, rx: Math.round(w * rand.range(0.1, 0.125)) };
+        lake.ry = Math.max(4, Math.round((t2.front[fallX] - t1.foot[fallX] - 1) / 2)); lake.y = t1.foot[fallX] + 1 + lake.ry;
+        const falls = [
+            { x: fallX, w: 3, top: t0.front[fallX], bottom: t0.foot[fallX], into: 'pond' },
+            { x: fallX, w: 4, top: t1.front[fallX], bottom: t1.foot[fallX], into: 'lake' },
+            { x: fallX, w: Math.max(8, Math.round(lake.rx * 0.34)), top: t2.front[fallX], bottom: bottom[fallX] + Math.round(underH * 0.5), into: 'clouds' },
+        ];
+        // ---- Streets, stairs ----
+        // A street runs only where its tier is deep enough to stand on.
+        const span = (t, y, need) => { let l = t.x0, r = t.x1; while (l < r && !(t.back[l] < y - 2 && t.front[l] > y + need)) l++; while (r > l && !(t.back[r] < y - 2 && t.front[r] > y + need)) r--; return r - l < 12 ? [t.x0 + 2, t.x1 - 2] : [l, r]; };
+        const stair0X = Math.round(cx0 - dir * hw0 * rand.range(0.45, 0.68));
+        const [s0l, s0r] = span(t0, Math.round(d0 * 0.66), 2);
+        const street0 = { tier: 0, y: Math.round(d0 * 0.66), l: s0l + 3, r: s0r - 3 };
+        const innerPond = fallX - dir * (pond.rx + 4);                      // the pond's shore on the village side
+        const y1 = t1.top + e1;
+        const [bl, br] = span(t1, y1 + Math.round(d1 * 0.36), 8), [fl, fr] = span(t1, y1 + Math.round(d1 * 0.76), 2);
+        const town = side === 'left' ? { l: innerPond, r: Math.min(br, fr) - 3 } : { l: Math.max(bl, fl) + 3, r: innerPond };
+        const street1b = { tier: 1, y: y1 + Math.round(d1 * 0.36), l: town.l, r: town.r };
+        const street1f = { tier: 1, y: y1 + Math.round(d1 * 0.76), l: fl + 2, r: fr - 2 };
+        const innerLake = fallX - dir * (lake.rx + 4);
+        const y2 = t2.top + e2;
+        const [l2, r2] = span(t2, y2 + Math.round(d2 * 0.4), 6);
+        const street2 = { tier: 2, y: y2 + Math.round(d2 * 0.4), l: side === 'left' ? innerLake : l2 + 3, r: side === 'left' ? r2 - 3 : innerLake };
+        const streets = [street0, street1b, street1f, street2];
+        // ---- The crag, the tower, the mill, on top ----
+        const crag = { x: Math.round(fallX + dir * w * 0.02), w: Math.round(w * 0.15), h: Math.round(w * (portrait ? 0.1 : 0.07)), y: t0.back[fallX] + 2 };
+        const tower = { tier: 0, x: Math.round(cx0 - dir * hw0 * 0.12), base: t0.back[Math.round(cx0)] + Math.round(d0 * 0.5) };
+        const millX = Math.round(cx0 - dir * hw0 * rand.range(0.28, 0.4));
+        const windmill = !islet && rand.chance(0.8) && Math.abs(millX - stair0X) > 14 ? { tier: 0, x: millX, base: t0.back[millX] + Math.round(d0 * 0.52) } : null;
+        // ---- The village ----
+        const squareX = Math.round(town.l + (town.r - town.l) * rand.range(0.4, 0.6));
+        const square = { tier: 1, x: squareX, y: street1f.y + 4, w: 30 };
+        const stair1X = Math.round(squareX - dir * rand.range(22, 30));
+        const houses = placeHouses(rand, { streets, town, square, tiers, w, count: opts.houses, portrait, pond, stair1X, side, dir, lake, innerLake, fields: opts.fields !== false });
+        const bridge = { x: fallX, y: street1f.y, hw: pond.rx + 2 };
+        // ---- The lower ground: fields, the barn, the orchard, the dock, the boat ----
         const fields = [];
+        const farmL = side === 'left' ? Math.round(w * 0.56) : 8, farmR = side === 'left' ? w - 8 : Math.round(w * 0.44);
         if (opts.fields !== false) {
-            for (let tries = 0; tries < 30 && fields.length < (portrait ? 1 : 2); tries++) {
-                const fw = rand.int(16, 26), fh = rand.int(6, 9);
-                const fx = rand.int(4, w - fw - 4), fy = rand.int(streets[0] + 2, depth - fh - 1);
-                const rect = { x: fx, y: fy, w: fw, h: fh };
-                if (!inPlateau(rect, back, front) || hits(rect, houses.list, 3) || hitsLake(rect, lake, 3) || hitsMountain(rect, mountain) || fields.some(f => hits(rect, [f], 3)) || hitsStreet(rect, streets)) continue;
-                fields.push({ ...rect, crop: rand.pick(['wheat', 'cabbage', 'pumpkin', 'flowers']) });
+            const fy = street2.y + 4, fh = Math.max(7, Math.min(Math.round(d2 * 0.42), t2.front[Math.round((farmL + farmR) / 2)] - fy - 4));
+            const fitsField = (x, fw) => x >= 4 && x + fw <= w - 4 && t2.front[x] - 3 >= fy + fh && t2.front[x + fw] - 3 >= fy + fh && t2.front[Math.round(x + fw / 2)] - 3 >= fy + fh;
+            let fx = side === 'left' ? farmL + rand.int(2, 10) : farmR - rand.int(2, 10);
+            for (let i = 0; i < 2 && fh >= 7; i++) {
+                let placed = null;
+                for (let fw = rand.int(Math.round(w * 0.06), Math.round(w * 0.09)); fw >= 12 && !placed; fw -= 4) {
+                    for (let k = 0; k < 8 && !placed; k++) { const x = (side === 'left' ? fx : fx - fw) + (side === 'left' ? 1 : -1) * k * 6; if (fitsField(x, fw)) placed = { x, w: fw }; }
+                }
+                if (!placed && i === 0) for (let x = farmL; x + 12 <= farmR && !placed; x += 3) if (fitsField(x, 12)) placed = { x, w: 12 };
+                if (!placed) break;
+                fields.push({ x: placed.x, y: fy, w: placed.w, h: fh, crop: i === 0 ? 'wheat' : rand.pick(['cabbage', 'pumpkin', 'carrot', 'flowers']) });
+                fx = side === 'left' ? placed.x + placed.w + rand.int(5, 8) : placed.x - rand.int(5, 8);
             }
         }
-        // The dock: a pier out from the lake's back shore.
-        const dock = { x: lake.x + rand.int(-Math.round(lake.rx * 0.3), Math.round(lake.rx * 0.3)), y: lake.y - lake.ry, len: Math.max(3, Math.round(lake.ry * 0.9)) };
-        // Trees: thick near the mountain and the ends, thin in town.
-        const trees = placeTrees(rand, { w, depth, back, front, houses: houses.list, lake, mountain, fields, streets, square, town, forest: opts.forest ?? 1, dock });
-        // Lamps along the streets, benches by the square, a well in it.
-        const lamps = [];
-        for (const y of streets) for (let x = town.l + 6; x < town.r - 4; x += rand.int(22, 34)) if (!houses.list.some(h => x >= h.x - 2 && x <= h.x + h.w + 2 && Math.abs(h.base - y) < 3)) lamps.push({ x, y: y - 1 });
-        const benches = [{ x: square.x - 7, y: square.y + 2 }, { x: square.x + 7, y: square.y + 2 }];
-        const well = { x: square.x, y: square.y - 1 };
-        // Where people go. Each spot is on open ground, reached straight from a street.
-        const spots = {
-            square: { x: square.x, y: square.y },
-            dock: { x: dock.x, y: dock.y - 1 },
-            fishing: { x: dock.x, y: dock.y + dock.len - 1 },
-            field: fields[0] ? { x: fields[0].x + Math.round(fields[0].w / 2), y: fields[0].y - 1 } : { x: square.x + 12, y: streets[streets.length - 1] },
-            meadow: openSpot(rand, { w, depth, back, front, houses: houses.list, lake, mountain, fields, trees }) || { x: town.l, y: streets[0] },
-            edgeL: { x: Math.max(3, Math.round(w * 0.04)), y: Math.round(depth * 0.55) },
-            edgeR: { x: Math.min(w - 3, Math.round(w * 0.96)), y: Math.round(depth * 0.55) },
-            bench0: { x: benches[0].x, y: benches[0].y + 1 },
-            bench1: { x: benches[1].x, y: benches[1].y + 1 },
-        };
-        // The dragon's cave, in the cliff face.
-        const caveX = Math.round(side === 'left' ? w * rand.range(0.55, 0.8) : w * rand.range(0.2, 0.45));
-        const cave = opts.dragon === false ? null : { x: caveX, y: front[caveX] + Math.round((bottom[caveX] - front[caveX]) * rand.range(0.3, 0.5)) };
-        // Crystals on the underside, roots down the sides.
-        const crystals = [];
-        for (let i = 0; i < rand.int(2, 4); i++) { const x = rand.int(Math.round(w * 0.2), Math.round(w * 0.8)); crystals.push({ x, y: bottom[x] - rand.int(2, 6), hue: rand.pick(['pink', 'cyan', 'violet']) }); }
-        const roots = [];
-        for (let i = 0; i < rand.int(3, 6); i++) { const x = rand.int(Math.round(w * 0.1), Math.round(w * 0.9)); roots.push({ x, y: front[x] + rand.int(3, 8), len: rand.int(6, 18), lean: rand.pick([-1, 1]) }); }
-        const flowers = [];
-        for (let i = 0; i < w / 3; i++) {
-            const x = rand.int(1, w - 1), y = rand.int(1, depth - 1);
-            if (y <= back[x] || y >= front[x] || hits({ x, y, w: 1, h: 1 }, houses.list, 1) || hitsLake({ x, y, w: 1, h: 1 }, lake, 1) || hitsMountain({ x, y, w: 1, h: 1 }, mountain) || fields.some(f => hits({ x, y, w: 1, h: 1 }, [f], 1)) || streets.some(s => Math.abs(s - y) < 2)) continue;
-            flowers.push({ x, y, k: rand() });
+        const dockShore = innerLake - dir * 2;
+        const dock = { tier: 2, shoreX: innerLake + dir * 2, y: lake.y - Math.round(lake.ry * 0.15), len: Math.max(8, Math.round(lake.rx * 0.5)), dir };
+        dock.tipX = dock.shoreX + dir * dock.len;
+        const boat = { x: fallX + dir * lake.rx * 0.3, y: lake.y + Math.round(lake.ry * 0.3), rx: lake.rx * 0.45 };
+        // ---- Trees, bushes, flowers ----
+        const blocked = [];
+        const block = (x, y, bw, bh, pad = 0) => blocked.push({ x: x - pad, y: y - pad, w: bw + pad * 2, h: bh + pad * 2 });
+        for (const h of houses.list) block(h.x, h.y, h.w, h.h + 2, 2);
+        block(tower.x - 12, tower.base - 10, 24, 12, 3);
+        if (windmill) block(windmill.x - 12, windmill.base - 8, 24, 10, 3);
+        block(crag.x - crag.w / 2, crag.y - 2, crag.w, 6, 2);
+        block(spring.x - spring.rx, spring.y - spring.ry, spring.rx * 2, spring.ry * 2, 3);
+        block(pond.x - pond.rx, pond.y - pond.ry, pond.rx * 2, pond.ry * 2, 3);
+        block(lake.x - lake.rx, lake.y - lake.ry, lake.rx * 2, lake.ry * 2, 3);
+        block(square.x - square.w / 2, square.y - 8, square.w, 16, 3);
+        for (const f of fields) block(f.x, f.y, f.w, f.h, 3);
+        block(stair0X - 4, t0.front[stair0X] - 3, 8, t0.drop + 6, 2);
+        block(stair1X - 4, t1.front[stair1X] - 3, 8, t1.drop + 6, 2);
+        block(dock.shoreX - 4, dock.y - 4, 8, 8, 2);
+        if (houses.barn) block(houses.barn.x, houses.barn.y, houses.barn.w, houses.barn.h, 3);
+        for (const s of streets) block(s.l, s.y - 2, s.r - s.l, 5, 0);
+        const orchard = [];
+        if (fields.length) {
+            // Rows of apple and cherry trees behind the street on the farm side.
+            const ox0 = side === 'left' ? Math.round(w * 0.6) : Math.round(w * 0.12), ox1 = side === 'left' ? w - 10 : Math.round(w * 0.4);
+            for (let x = ox0; x <= ox1; x += 16) {
+                const y = y2 + 4 + ((x / 16) % 2) * 4;
+                if (t2.back[x] === undefined || y <= t2.back[x] + 2 || y >= street2.y - 4) continue;
+                if (hits({ x: x - 5, y: y - 3, w: 10, h: 5 }, blocked, 0)) continue;
+                orchard.push({ x, y, kind: rand.chance(0.35) ? 'cherry' : 'apple', size: 1, phase: rand(), sway: 1, tier: 2 });
+            }
         }
-        const path = { from: { x: dock.x, y: dock.y + 1 }, street: streets[streets.length - 1] };
-        const gaps = crossings(houses.list, streets, town, lake);
-        return { seed, name, w, depth, portrait, side, back, front, bottom, cliffH, lake, fall, mountain, streets, town, gaps, houses: houses.list, square, fields, dock, trees, lamps, benches, well, spots, cave, crystals, roots, flowers, path,
-            windmill: houses.windmill, chapel: houses.chapel, lighthouse: houses.lighthouse, stall: houses.stall };
+        const trees = placeTrees(rand, { w, tiers, blocked, forest: opts.forest ?? 1, orchard, town, square, pond, fallX, side });
+        for (const t of orchard) trees.push(t);
+        trees.sort((a, b) => a.y - b.y);
+        for (const t of trees) block(t.x - 4, t.y - 2, 8, 3, 0);
+        const bushes = [];
+        for (let i = 0; i < w / 14; i++) {
+            const t = rand.pick(tiers), x = rand.int(t.x0 + 2, t.x1 - 2);
+            const yb = t.back[x], yf = t.front[x]; if (yb === undefined) continue;
+            const y = rand.int(yb + 1, yf - 1);
+            if (hits({ x: x - 3, y: y - 2, w: 6, h: 3 }, blocked, 0)) continue;
+            bushes.push({ x, y, k: rand(), size: rand.int(0, 1), tier: t.k, berry: rand.chance(0.3) });
+            block(x - 3, y - 2, 6, 3, 0);
+        }
+        const flowers = [];
+        for (let i = 0; i < w / 2.5; i++) {
+            const t = rand.pick(tiers), x = rand.int(t.x0 + 1, t.x1 - 1);
+            const yb = t.back[x], yf = t.front[x]; if (yb === undefined) continue;
+            const y = rand.int(yb + 1, yf - 1);
+            if (hits({ x: x - 1, y: y - 1, w: 3, h: 2 }, blocked, 0)) continue;
+            flowers.push({ x, y, k: rand(), tier: t.k });
+        }
+        // ---- Lamps, benches, the well, props ----
+        const lamps = [];
+        for (const s of [street1b, street1f]) for (let x = s.l + 8; x < s.r - 6; x += rand.int(34, 48)) if (!houses.list.some(h => x >= h.x - 3 && x <= h.x + h.w + 3 && h.base === s.y - 1) && Math.abs(x - square.x) > 18 && Math.abs(x - fallX) > pond.rx + 4) lamps.push({ x, y: s.y - 1, tier: 1 });
+        lamps.push({ x: stair1X + dir * 6, y: street2.y - 1, tier: 2 });
+        lamps.push({ x: dock.shoreX - dir * 3, y: dock.y - 3, tier: 2 });
+        const benches = [{ x: square.x - 11, y: square.y + 3, tier: 1 }, { x: square.x + 11, y: square.y + 3, tier: 1 }, { x: tower.x + dir * 0 + (dir > 0 ? -14 : 14), y: street0.y + 1, tier: 0 }];
+        const well = { x: square.x, y: square.y - 1, tier: 1 };
+        const props = [];
+        if (houses.stall) { props.push({ kind: 'barrel', x: houses.stall.x + (houses.stall.x < square.x ? -9 : 9), y: houses.stall.base, tier: 1 }); props.push({ kind: 'crate', x: houses.stall.x + (houses.stall.x < square.x ? -13 : 13), y: houses.stall.base - 1, tier: 1 }); }
+        if (houses.barn) { const b = houses.barn; for (let i = 0; i < 3; i++) props.push({ kind: 'hay', x: b.x + b.w + 4 + i * 6 - (side === 'left' ? 0 : b.w + 14), y: b.base + (i % 2), tier: 2 }); props.push({ kind: 'barrel', x: b.x - 4, y: b.base, tier: 2 }); }
+        for (let i = 0; i < 3; i++) { const h = houses.list[(i * 5 + 1) % houses.list.length]; if (h && h.tier === 1 && h.kind !== 'chapel') props.push({ kind: 'flowerbed', x: h.x + (i % 2 ? 2 : h.w - 4), y: h.base + 2, tier: 1 }); }
+        props.push({ kind: 'signpost', x: stair1X - dir * 5, y: street1f.y + 2, tier: 1 });
+        // ---- Where people go ----
+        const meadow = openSpot(rand, { tiers: [t2, t0], blocked, streets }) || { tier: 0, x: Math.round(cx0), y: street0.y };
+        const edgeFar = { tier: 1, x: side === 'left' ? t1.x0 + 5 : t1.x1 - 5, y: street1f.y };
+        const edgeNear = { tier: 1, x: side === 'left' ? t1.x1 - 5 : t1.x0 + 5, y: street1f.y };
+        const spots = {
+            square: { tier: 1, x: square.x, y: square.y },
+            dock: { tier: 2, x: dock.shoreX, y: dock.y },
+            fishing: { tier: 2, x: dock.shoreX, y: dock.y, then: [{ x: dock.tipX - dir * 2, y: dock.y }] },
+            field: fields[0] ? { tier: 2, x: fields[0].x + Math.round(fields[0].w / 2), y: fields[0].y - 1 } : { tier: 2, x: street2.l + 20, y: street2.y },
+            meadow,
+            edgeL: side === 'left' ? edgeFar : edgeNear,
+            edgeR: side === 'left' ? edgeNear : edgeFar,
+            bench0: { tier: 1, x: benches[0].x, y: benches[0].y + 1 },
+            bench1: { tier: 1, x: benches[1].x, y: benches[1].y + 1 },
+            lookout: { tier: 0, x: benches[2].x, y: benches[2].y + 1 },
+            spring: { tier: 0, x: spring.x - dir * (spring.rx + 3), y: street0.y },
+            mill: windmill ? { tier: 0, x: windmill.x, y: windmill.base + 1 } : { tier: 0, x: tower.x, y: tower.base + 1 },
+            lakeside: { tier: 2, x: innerLake + (side === 'left' ? 6 : -6), y: lake.y + 2 },
+            barn: houses.barn ? { tier: 2, x: houses.barn.x + Math.round(houses.barn.w / 2), y: houses.barn.base + 1 } : { tier: 2, x: street2.l + 10, y: street2.y },
+        };
+        // ---- Under the island ----
+        const farX = Math.round(w / 2 - dir * w * rand.range(0.15, 0.3));
+        const cave = opts.dragon === false ? null : { x: farX, y: t2.front[farX] + Math.round((bottom[farX] - t2.front[farX]) * rand.range(0.28, 0.4)) };
+        const roots = [];
+        for (let i = 0; i < rand.int(5, 8); i++) { const x = rand.int(Math.round(w * 0.08), Math.round(w * 0.92)); if (Math.abs(x - fallX) < falls[2].w + 6) continue; roots.push({ x, y: t2.front[x] + rand.int(4, 9), len: rand.int(Math.round(underH * 0.25), Math.round(underH * 0.7)), lean: rand.pick([-1, 1]), k: rand() * 9, thick: rand.chance(0.4) }); }
+        const vines = [];
+        for (const t of [t0, t1]) for (let i = 0; i < rand.int(2, 4); i++) { const x = rand.int(t.x0 + 4, t.x1 - 4); if (Math.abs(x - fallX) < 8 || Math.abs(x - (t.k === 0 ? stair0X : stair1X)) < 7) continue; vines.push({ x, y: t.front[x] + 1, len: rand.int(Math.round(t.drop * 0.5), t.drop + 6), k: rand() * 9 }); }
+        const cracks = [];
+        for (let i = 0; i < rand.int(3, 5); i++) { const x = rand.int(Math.round(w * 0.3), Math.round(w * 0.7)); const y0 = t2.front[x] + Math.round((bottom[x] - t2.front[x]) * rand.range(0.55, 0.85)); cracks.push({ x, y: y0, len: rand.int(6, 14), lean: rand.pick([-1, 1]), k: rand() * 9 }); }
+        const crystals = [];
+        for (let i = 0; i < rand.int(2, 4); i++) { const x = rand.int(Math.round(w * 0.2), Math.round(w * 0.8)); crystals.push({ x, y: bottom[x] - rand.int(3, 9), hue: rand.pick(['cyan', 'cyan', 'violet']) }); }
+        const fragments = [];
+        for (let i = 0; i < rand.int(4, 6); i++) fragments.push({ rx: w * rand.range(0.45, 0.62), ry: underH * rand.range(0.5, 0.9), cy: depth + underH * rand.range(0.3, 0.6), phase: rand() * Math.PI * 2, speed: rand.range(0.03, 0.06) * rand.pick([-1, 1]), size: rand.int(5, 12), k: rand() * 9, grass: rand.chance(0.5) });
+        // ---- Getting about ----
+        const gaps = crossings(houses.list, streets, { stair0X, stair1X, pond });
+        return { seed, name, w, depth, underH, portrait, side, dir, tiers, bottom, fallX, spring, pond, lake, falls, bridge, streets, stairs: [{ x: stair0X, tier: 0, top: t0.front[stair0X], bottom: t0.foot[stair0X] }, { x: stair1X, tier: 1, top: t1.front[stair1X], bottom: t1.foot[stair1X] }],
+            crag, tower, windmill, town, square, houses: houses.list, chapel: houses.chapel, stall: houses.stall, barn: houses.barn, lighthouse: houses.lighthouse, fields, orchard, dock, boat, trees, bushes, flowers, lamps, benches, well, props, spots, cave, roots, vines, cracks, crystals, fragments, gaps };
     }
 
-    // Where one can cross from each street to the next without walking
-    // through a house: gaps[i] is the clear x's between street i-1 and
-    // street i (the houses on street i stand there). gaps[0] is empty: above
-    // the back street, cross anywhere.
-    function crossings(houses, streets, town, lake) {
+    // Where one can cross from each street to the next: gaps[i] is the clear
+    // x's between street i-1 and street i. Between tiers that's the stairs;
+    // between the village's two streets, the clear ground between the
+    // front street's houses. gaps[0] is empty.
+    function crossings(houses, streets, o) {
         const gaps = streets.map(() => []);
-        const dry = g => Math.abs(g - lake.x) > lake.rx + 2;
-        for (let i = 1; i < streets.length; i++) {
-            const row = houses.filter(h => h.row === i).sort((a, b) => a.x - b.x);
-            let x = town.l - 3;
-            for (const h of row) {
-                if (h.x - 2 - x >= 3) gaps[i].push(Math.round((x + h.x - 2) / 2));
-                x = Math.max(x, h.x + h.w + 2);
-            }
-            gaps[i].push(Math.max(x + 1, town.r + 3));
-            gaps[i].unshift(town.l - 3);
-            gaps[i] = gaps[i].filter(dry);
+        gaps[1] = [o.stair0X];
+        gaps[3] = [o.stair1X];
+        const row = houses.filter(h => h.row === 2).sort((a, b) => a.x - b.x);
+        const s = streets[1];
+        let x = s.l;
+        for (const h of row) {
+            if (h.x - 3 - x >= 4) gaps[2].push(Math.round((x + h.x - 3) / 2));
+            x = Math.max(x, h.x + h.w + 3);
         }
+        if (s.r - x >= 3) gaps[2].push(Math.round((x + s.r) / 2));
+        gaps[2] = gaps[2].filter(g => Math.abs(g - o.pond.x) > o.pond.rx + 3);
+        if (!gaps[2].length) gaps[2].push(Math.round((s.l + s.r) / 2));
         return gaps;
     }
 
-    const inPlateau = (r, back, front) => {
-        for (const x of [r.x, r.x + r.w]) { const xx = clamp(x, 0, back.length - 1); if (r.y <= back[xx] || r.y + r.h >= front[xx]) return false; }
-        return true;
-    };
     const overlap = (a, b, pad) => a.x < b.x + b.w + pad && a.x + a.w + pad > b.x && a.y < b.y + b.h + pad && a.y + a.h + pad > b.y;
     const hits = (r, list, pad) => list.some(o => overlap(r, o, pad));
-    const hitsLake = (r, lake, pad) => overlap(r, { x: lake.x - lake.rx, y: lake.y - lake.ry, w: lake.rx * 2, h: lake.ry * 2 }, pad);
-    const hitsMountain = (r, m) => overlap(r, { x: m.x - m.w / 2, y: 0, w: m.w, h: m.y + 2 }, 1);
-    const hitsStreet = (r, streets) => streets.some(s => s >= r.y - 1 && s <= r.y + r.h + 1);
+    // Which tier the ground at (x, y) belongs to, or -1 in the air or on a cliff.
+    function tierAt(I, x, y) {
+        const xx = Math.round(clamp(x, 0, I.w));
+        for (const t of I.tiers) if (xx >= t.x0 && xx <= t.x1 && y >= t.back[xx] - 0.5 && y <= t.foot[xx] + 0.5) return t.k;
+        return -1;
+    }
 
-    const HOUSE_KINDS = ['cottage', 'cottage', 'tall', 'wide', 'cottage', 'tower', 'barn'];
+    const HOUSE_KINDS = ['cottage', 'cottage', 'tall', 'wide', 'cottage', 'tower', 'cottage', 'stone'];
     const SHOPS = ['bakery', 'inn', 'shop'];
 
-    // Houses along the streets, a square in the middle of the front street
-    // with the chapel across from it, and sometimes a windmill, a lighthouse
-    // at an end, a market stall by the square.
+    // Houses along the village's two streets with the square on the front
+    // one and the chapel across from it; a farmhouse and the barn on the
+    // lower ground; sometimes a cottage by the lake, a stall by the square,
+    // a lighthouse at the island's far tip.
     function placeHouses(rand, o) {
         const list = [];
         const count = Math.max(3, o.count);
-        const frontStreet = o.streets[o.streets.length - 1];
-        const townW = o.town.r - o.town.l;
-        const squareX = Math.round(o.town.l + townW * rand.range(0.4, 0.6));
-        const square = { x: squareX, y: frontStreet + (o.portrait ? 3 : 4), w: 20 };
+        const [, backSt, frontSt, lowSt] = o.streets;
+        const t1 = o.tiers[1], t2 = o.tiers[2];
         let id = 0;
-        // Each street gets a share, the front one the square's gap.
-        const rows = o.streets.map((y, i) => ({ y, share: i === o.streets.length - 1 ? 0.45 : 0.55 / (o.streets.length - 1) }));
         let shops = rand.shuffle(SHOPS);
+        const sizeOf = kind => {
+            const hw = kind === 'wide' ? rand.int(34, 42) : kind === 'tower' ? rand.int(16, 19) : kind === 'stone' ? rand.int(24, 30) : rand.int(22, 30);
+            const hh = kind === 'tall' || kind === 'tower' ? rand.int(24, 30) : rand.int(15, 20);
+            return [hw, hh];
+        };
+        const make = (x, hw, hh, street, tier, kind, extra = {}) => ({ id: id++, x, w: hw, h: hh, base: street.y - 1, y: street.y - 1 - hh, kind, row: o.streets.indexOf(street), tier,
+            shop: null, wall: rand.int(0, 5), roof: rand.int(0, 4), roofStyle: rand.pick(['gable', 'gable', 'hip', 'thatch', 'gable']), door: rand.int(0, 2), flip: rand.chance(0.5), ...extra });
+        const fits = (x, hw, hh, street, tier) => {
+            const t = o.tiers[tier];
+            if (x < t.x0 + 3 || x + hw > t.x1 - 3) return false;
+            const mid = Math.round(x + hw / 2);
+            // Standing on the street, its back clear of the tier's back edge (the house is a few pixels deep).
+            if (street.y - 1 - 6 <= t.back[mid] || street.y - 1 - 6 <= t.back[x] || street.y - 1 - 6 <= t.back[x + hw]) return false;
+            if (street.y + 1 >= t.front[mid] || street.y + 1 >= t.front[x] || street.y + 1 >= t.front[x + hw]) return false;
+            if (Math.abs(mid - o.pond.x) < o.pond.rx + hw / 2 + 4 && tier === 1) return false;
+            if (tier === 2 && Math.abs(mid - o.lake.x) < o.lake.rx + hw / 2 + 4) return false;
+            return true;
+        };
+        // The village: a share for each street, the front one keeps the square clear.
+        const villageCount = Math.max(2, count - (o.fields ? 1 : 0));
+        const rows = [{ street: backSt, share: 0.5 }, { street: frontSt, share: 0.5 }];
         for (const row of rows) {
-            const want = Math.max(1, Math.round(count * row.share));
-            const isFront = row.y === frontStreet;
-            let x = o.town.l + rand.int(0, 6);
-            let placed = 0;
-            for (let tries = 0; placed < want && tries < 40 && x < o.town.r - 10; tries++) {
+            const want = Math.max(1, Math.round(villageCount * row.share));
+            const isFront = row.street === frontSt;
+            let x = o.town.l + rand.int(2, 8), placed = 0;
+            for (let tries = 0; placed < want && tries < 40 && x < o.town.r - 16; tries++) {
                 const kind = rand.pick(HOUSE_KINDS);
-                const hw = kind === 'wide' || kind === 'barn' ? rand.int(18, 24) : kind === 'tower' ? rand.int(9, 11) : rand.int(12, 17);
-                const hh = kind === 'tall' || kind === 'tower' ? rand.int(14, 19) : rand.int(9, 13);
-                if (x + hw > o.town.r) break;
-                // Keep the square clear on the front street.
-                if (isFront && x + hw > square.x - square.w / 2 && x < square.x + square.w / 2) { x = Math.round(square.x + square.w / 2) + rand.int(1, 3); continue; }
-                const house = { id: id++, x, w: hw, h: hh, base: row.y - 1, y: row.y - 1 - hh, kind, row: o.streets.indexOf(row.y),
-                    shop: null, wall: rand.int(0, 5), roof: rand.int(0, 4), roofStyle: rand.pick(['gable', 'gable', 'hip', 'thatch', 'flat']), door: rand.int(0, 2), flip: rand.chance(0.5) };
-                if (hitsMountain({ x: house.x, y: house.y, w: house.w, h: house.h }, o.mountain) && row.y === o.streets[0]) { x += hw + rand.int(3, 7); continue; }
-                if (house.y < o.back[clamp(x + Math.round(hw / 2), 0, o.w)] - hh * 0.8 - 6 && o.portrait) { x += hw + rand.int(3, 7); continue; }
-                if (!o.portrait && kind !== 'tower' && shops.length && rand.chance(0.35)) house.shop = shops.pop();
+                const [hw, hh] = sizeOf(kind);
+                if (x + hw > o.town.r - 2) break;
+                if (isFront && x + hw > o.square.x - o.square.w / 2 - 2 && x < o.square.x + o.square.w / 2 + 2) { x = Math.round(o.square.x + o.square.w / 2) + rand.int(3, 6); continue; }
+                if (!fits(x, hw, hh, row.street, 1)) { x += 6; continue; }
+                const house = make(x, hw, hh, row.street, 1, kind);
+                if (kind !== 'tower' && shops.length && rand.chance(0.4)) house.shop = shops.pop();
                 list.push(house);
                 placed++;
-                x += hw + rand.int(3, 8);
+                x += hw + rand.int(5, 12);
             }
         }
-        // The chapel: on the back street, across from the square, if it fits; else a tower house becomes it.
+        // The chapel: on the back street across from the square, if it fits; else a house nearest the square.
         let chapel = null;
-        const backStreet = o.streets[0];
-        const chapelW = 14, chapelX = square.x - Math.round(chapelW / 2);
-        const chapelRect = { x: chapelX - 2, y: backStreet - 1 - 22, w: chapelW + 4, h: 22 };
-        if (!hits(chapelRect, list, 0) && !hitsMountain(chapelRect, o.mountain)) {
-            chapel = { id: id++, x: chapelX, w: chapelW, h: 12, base: backStreet - 1, y: backStreet - 1 - 12, kind: 'chapel', row: 0, shop: null, wall: 5, roof: 1, roofStyle: 'gable', door: 1, flip: false };
+        const chapelW = 26, chapelX = o.square.x - Math.round(chapelW / 2);
+        const chapelRect = { x: chapelX - 3, y: backSt.y - 1 - 40, w: chapelW + 6, h: 40 };
+        if (!hits(chapelRect, list, 0) && fits(chapelX, chapelW, 18, backSt, 1)) {
+            chapel = make(chapelX, chapelW, 18, backSt, 1, 'chapel', { wall: 5, roof: 1, roofStyle: 'gable', door: 1, flip: false });
             list.push(chapel);
         } else {
-            // No room: the back street's house nearest the square gets the bell.
-            const backRow = list.filter(h => h.row === 0);
-            chapel = list.find(h => h.kind === 'tower') || backRow.sort((a, b) => Math.abs(a.x + a.w / 2 - square.x) - Math.abs(b.x + b.w / 2 - square.x))[0] || list[0];
-            chapel.kind = 'chapel'; chapel.shop = null;
+            const backRow = list.filter(h => h.row === 1);
+            chapel = backRow.sort((a, b) => Math.abs(a.x + a.w / 2 - o.square.x) - Math.abs(b.x + b.w / 2 - o.square.x))[0] || list.find(h => h.kind !== 'tower') || list[0] || null;
+            if (chapel) { chapel.kind = 'chapel'; chapel.shop = null; chapel.roofStyle = 'gable'; }
         }
-        // A windmill at a town end on the back street, a lighthouse at the island's far end, a stall by the square.
-        let windmill = null;
-        if (rand.chance(0.7)) {
-            const wx = rand.chance(0.5) ? o.town.l - 10 : o.town.r + 4;
-            const rect = { x: wx, y: backStreet - 1 - 18, w: 9, h: 18 };
-            if (!hits(rect, list, 1) && !hitsMountain(rect, o.mountain) && wx > 3 && wx + 9 < o.w - 3) windmill = { x: wx + 4, base: backStreet - 1 };
+        // The lower ground: the barn by the fields, a farmhouse, maybe a cottage by the lake.
+        let barn = null;
+        if (o.fields) {
+            const bw = rand.int(34, 40), bh = 18;
+            let bx = o.side === 'left' ? Math.round(o.w * 0.58) + rand.int(0, 8) : Math.round(o.w * 0.42) - bw - rand.int(0, 8);
+            const bx0 = bx;
+            for (let k = 1; k < 16 && !fits(bx, bw, bh, lowSt, 2); k++) bx = bx0 + (k % 2 ? -1 : 1) * Math.ceil(k / 2) * 8;
+            if (fits(bx, bw, bh, lowSt, 2)) { barn = make(bx, bw, bh, lowSt, 2, 'barn', { wall: 0, roof: 0, roofStyle: 'gambrel', door: 1, flip: o.side === 'right' }); list.push(barn); }
+            const fx = o.side === 'left' ? (barn ? barn.x + barn.w + rand.int(10, 18) : Math.round(o.w * 0.62)) : (barn ? barn.x - rand.int(36, 44) : Math.round(o.w * 0.2));
+            const [hw, hh] = sizeOf('cottage');
+            if (fits(fx, hw, hh, lowSt, 2) && !hits({ x: fx, y: 0, w: hw, h: 1 }, list.filter(h => h.tier === 2).map(h => ({ x: h.x - 4, y: 0, w: h.w + 8, h: 1 })), 0)) list.push(make(fx, hw, hh, lowSt, 2, 'cottage', { farm: true }));
         }
+        if (!list.length) {
+            const [hw, hh] = sizeOf('cottage');
+            for (let x = lowSt.l + 2; x + hw < lowSt.r - 2; x += 4) if (fits(x, hw, hh, lowSt, 2)) { list.push(make(x, hw, hh, lowSt, 2, 'cottage')); break; }
+        }
+        if (rand.chance(0.6)) {
+            const [hw, hh] = sizeOf('cottage');
+            const lx = o.innerLake + (o.side === 'left' ? 10 : -10 - hw);
+            if (fits(lx, hw, hh, lowSt, 2) && !hits({ x: lx, y: lowSt.y - 1 - hh, w: hw, h: hh }, list, 4)) list.push(make(lx, hw, hh, lowSt, 2, 'cottage'));
+        }
+        const stall = rand.chance(0.8) ? { x: o.square.x + (rand.chance(0.5) ? -17 : 17), base: o.square.y + 5, tier: 1 } : null;
         let lighthouse = null;
-        if (rand.chance(0.5)) {
-            const lx = o.mountain.x < o.w / 2 ? Math.round(o.w * 0.93) : Math.round(o.w * 0.07);
-            const y = Math.round((o.back[lx] + o.front[lx]) / 2);
-            lighthouse = { x: lx, base: y };
-        }
-        const stall = rand.chance(0.75) ? { x: square.x + (rand.chance(0.5) ? -13 : 13), base: square.y + 3 } : null;
-        return { list, square, chapel, windmill, lighthouse, stall };
+        if (rand.chance(0.5)) { const lx = o.side === 'left' ? 7 : o.w - 7; const t = o.tiers[2]; if (t.back[lx] !== undefined && t.front[lx] - t.back[lx] > 6) lighthouse = { x: lx, base: Math.round((t.back[lx] + t.front[lx]) / 2) + 2, tier: 2 }; }
+        return { list, chapel, stall, barn, lighthouse };
     }
 
     function placeTrees(rand, o) {
         const trees = [];
-        const want = Math.round(o.w / 7 * (0.6 + o.forest * 0.7));
-        const evergreenNear = x => Math.abs(x - o.mountain.x) < o.mountain.w * 0.9;
-        for (let tries = 0; trees.length < want && tries < want * 12; tries++) {
-            const x = rand.int(3, o.w - 3), y = rand.int(1, o.depth - 1);
-            // Thicker at the ends and by the mountain, thin in town.
-            const inTown = x > o.town.l - 4 && x < o.town.r + 4;
-            if (inTown && rand.chance(0.78)) continue;
-            if (y <= o.back[x] + 1 || y >= o.front[x] - 1) continue;
-            const r = { x: x - 2, y: y - 1, w: 5, h: 2 };
-            if (hits(r, o.houses, 2) || hitsLake(r, o.lake, 2) || hitsMountain(r, o.mountain) || o.fields.some(f => hits(r, [f], 2))) continue;
-            if (Math.abs(x - o.square.x) < 14 && Math.abs(y - o.square.y) < 8) continue;
-            if (o.streets.some(s => Math.abs(s - y) <= 1) && inTown) continue;
-            if (Math.abs(x - o.dock.x) < 5 && y < o.dock.y && y > o.dock.y - o.dock.len - 3) continue;
-            if (trees.some(t => Math.abs(t.x - x) < 3 && Math.abs(t.y - y) < 2)) continue;
-            const kind = evergreenNear(x) && rand.chance(0.7) ? 'pine' : rand.pick(['round', 'round', 'tall', 'pine', 'apple', 'birch']);
-            trees.push({ x, y, kind, size: rand.pick([0, 1, 1, 2]), phase: rand(), sway: rand.chance(0.5) ? 1 : -1 });
+        const want = Math.round(o.w / 9 * (0.5 + o.forest * 0.6));
+        for (let tries = 0; trees.length < want && tries < want * 14; tries++) {
+            const t = rand.pick(o.tiers);
+            const x = rand.int(t.x0 + 3, t.x1 - 3);
+            const yb = t.back[x], yf = t.front[x]; if (yb === undefined) continue;
+            const y = rand.int(yb + 2, yf - 1);
+            // Thick at the ends and on top, thin in the village.
+            const inTown = t.k === 1 && x > o.town.l - 4 && x < o.town.r + 4;
+            if (inTown && rand.chance(0.8)) continue;
+            if (hits({ x: x - 4, y: y - 2, w: 8, h: 3 }, o.blocked, 1)) continue;
+            if (trees.some(tr => Math.abs(tr.x - x) < 6 && Math.abs(tr.y - y) < 4)) continue;
+            const kind = t.k === 0 ? (rand.chance(0.65) ? 'pine' : 'round') : rand.pick(['round', 'round', 'tall', 'pine', 'birch', 'cherry', 'round']);
+            trees.push({ x, y, kind, size: t.k === 0 && kind === 'pine' ? rand.pick([1, 2]) : rand.pick([0, 1, 1, 2]), phase: rand(), sway: rand.chance(0.5) ? 1 : -1, tier: t.k });
         }
-        trees.sort((a, b) => a.y - b.y);
         return trees;
     }
 
     function openSpot(rand, o) {
-        for (let tries = 0; tries < 60; tries++) {
-            const x = rand.int(6, o.w - 6), y = rand.int(2, o.depth - 2);
-            const r = { x: x - 3, y: y - 2, w: 6, h: 3 };
-            if (y <= o.back[x] + 2 || y >= o.front[x] - 2) continue;
-            if (hits(r, o.houses, 2) || hitsLake(r, o.lake, 3) || hitsMountain(r, o.mountain) || o.fields.some(f => hits(r, [f], 2)) || o.trees.some(t => Math.abs(t.x - x) < 5 && Math.abs(t.y - y) < 3)) continue;
-            return { x, y };
+        for (const t of o.tiers) for (let tries = 0; tries < 60; tries++) {
+            const x = rand.int(t.x0 + 8, t.x1 - 8);
+            const yb = t.back[x], yf = t.front[x]; if (yb === undefined) continue;
+            const y = rand.int(yb + 3, yf - 3);
+            if (hits({ x: x - 8, y: y - 3, w: 16, h: 6 }, o.blocked, 0)) continue;
+            if (o.streets.some(s => s.tier === t.k && Math.abs(s.y - y) < 3)) continue;
+            return { tier: t.k, x, y };
         }
         return null;
     }
 
     // ---- Getting about -------------------------------------------------------------------------
 
-    // Waypoints from `from` to `to`: up or down to the nearest street,
-    // along it, crossing to the next street only through a gap between its
-    // houses, then across to the target. Anywhere outside the town (the
-    // lake, the fields, the island's ends) is reached from the back street,
-    // which runs clear of the lake and the mountain's feet.
+    // Waypoints from `from` to `to`: up or down to the nearest street of the
+    // tier, along it, crossing to the next street through a gap (between the
+    // village's houses) or down the stairs (between tiers), then across to
+    // the target. Points carry their tier; without one, the ground decides.
     function route(from, to, I) {
-        const { streets, gaps, town } = I;
-        const nearest = y => streets.reduce((best, s) => Math.abs(s - y) < Math.abs(best - y) ? s : best, streets[0]);
-        const outside = x => x < town.l - 2 || x > town.r + 2;
-        const s1 = outside(from.x) ? streets[0] : nearest(from.y);
-        const s2 = outside(to.x) ? streets[0] : nearest(to.y);
+        const S = I.streets, gaps = I.gaps;
+        const tierOf = p => p.tier ?? Math.max(0, tierAt(I, p.x, p.y));
+        const nearestOn = (tier, y) => { let best = -1; S.forEach((s, i) => { if (s.tier === tier && (best < 0 || Math.abs(s.y - y) < Math.abs(S[best].y - y))) best = i; }); return best; };
+        const i1 = nearestOn(tierOf(from), from.y), i2 = nearestOn(tierOf(to), to.y);
         const points = [];
         let x = from.x, y = from.y;
         const go = (nx, ny) => { if (nx !== x || ny !== y) { x = nx; y = ny; points.push({ x, y }); } };
-        go(x, s1);
-        const i1 = streets.indexOf(s1), i2 = streets.indexOf(s2), step = i2 > i1 ? 1 : -1;
+        go(x, S[i1].y);
+        const step = i2 > i1 ? 1 : -1;
         for (let i = i1; i !== i2; i += step) {
-            const row = step > 0 ? i + 1 : i;       // the houses standing between street i and the next
+            const row = step > 0 ? i + 1 : i;
             const list = gaps?.[row]?.length ? gaps[row] : [to.x];
             const cross = list.reduce((best, g) => Math.abs(g - to.x) < Math.abs(best - to.x) ? g : best, list[0]);
             go(cross, y);
-            go(cross, streets[i + step]);
+            go(cross, S[i + step].y);
         }
         go(to.x, y);
         go(to.x, to.y);
@@ -433,5 +579,5 @@ const SkyIslandLogic = (() => {
         }
     }
 
-    return { rng, hash, clamp, lerp, noise1, SEASONS, seasonOf, easter, thanksgiving, parseSpecialDates, HOLIDAYS, holidayOf, islandName, visitorName, ROSTER, layout, route, ROLES, planFor, overlap };
+    return { rng, hash, clamp, lerp, noise1, SEASONS, seasonOf, easter, thanksgiving, parseSpecialDates, HOLIDAYS, holidayOf, islandName, visitorName, ROSTER, layout, route, tierAt, ROLES, planFor, overlap, hits };
 })();

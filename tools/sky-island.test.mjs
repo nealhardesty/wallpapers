@@ -73,71 +73,79 @@ test('names read as places, and differ by seed', () => {
     assert.match(L.visitorName(L.rng(3)), /^[A-Z][a-z]+ [A-Z][a-z]+$/);
 });
 
-// Every house stands on its street inside the plateau and clear of every
-// other house, the lake and the mountain; the lake reaches the front lip,
-// where the waterfall is; the trees and fields keep off the houses; the
-// spots are reachable; and the same seed gives the same island.
+// Every tier is a slab whose front is below its back and whose cliff foot
+// is where the next tier starts; the water runs from the spring at the top
+// to the cascade off the bottom at one x; every house stands on its street
+// inside its tier and clear of every other house, the pond and the lake;
+// the stairs join the tiers; the trees and fields keep off the houses;
+// every spot is reachable from the square by straight legs; and the same
+// seed gives the same island.
 test('layouts fit together, for many seeds, landscape and portrait', () => {
     const rectOf = h => ({ x: h.x, y: h.y, w: h.w, h: h.h });
     for (let seed = 1; seed <= 120; seed++) {
         for (const portrait of [false, true]) {
-            const w = portrait ? 180 + (seed % 5) * 20 : 300 + (seed % 7) * 50;
+            const w = portrait ? 300 + (seed % 5) * 30 : 420 + (seed % 7) * 40;
             const I = L.layout(seed, { w, portrait, houses: 4 + (seed % 9), forest: (seed % 3), fields: true });
-            assert.equal(I.back.length, I.w + 1);
-            for (let x = 0; x <= I.w; x++) {
-                assert.ok(I.front[x] > I.back[x], `seed ${seed}: front above back at ${x}`);
-                assert.ok(I.bottom[x] >= I.front[x], `seed ${seed}: cliff above the front at ${x}`);
-                assert.ok(I.front[x] <= I.depth + 2 && I.back[x] >= -2, `seed ${seed}: edge out of the plateau at ${x}`);
+            assert.equal(I.tiers.length, 3);
+            for (const t of I.tiers) {
+                const up = I.tiers[t.k - 1];
+                for (let x = t.x0; x <= t.x1; x++) {
+                    assert.ok(t.front[x] > t.back[x], `seed ${seed}: tier ${t.k} front above back at ${x}`);
+                    assert.ok(t.foot[x] >= t.front[x], `seed ${seed}: tier ${t.k} foot above its front at ${x}`);
+                    if (up && x >= up.x0 && x <= up.x1) assert.ok(t.back[x] > up.foot[x], `seed ${seed}: tier ${t.k} under tier ${up.k}'s cliff at ${x}`);
+                }
             }
+            for (let x = 0; x <= I.w; x++) assert.ok(I.bottom[x] >= I.tiers[2].front[x] && !Number.isNaN(I.bottom[x]), `seed ${seed}: the underside above the ground at ${x}`);
+            // The water: the spring spills into the first fall, the pond into the second, the lake off the edge, all at fallX.
+            assert.equal(I.falls.length, 3);
+            for (const f of I.falls) { assert.equal(f.x, I.fallX); assert.ok(f.bottom > f.top, `seed ${seed}: a fall that goes up`); }
+            assert.equal(I.spring.y + I.spring.ry, I.tiers[0].front[I.fallX]);
+            assert.equal(I.pond.y - I.pond.ry, I.tiers[0].foot[I.fallX] + 1);
+            assert.equal(I.lake.y - I.lake.ry, I.tiers[1].foot[I.fallX] + 1);
+            assert.ok(I.lake.x - I.lake.rx > 0 && I.lake.x + I.lake.rx < I.w, `seed ${seed}: the lake off the island`);
             assert.ok(I.houses.length >= 3, `seed ${seed}: only ${I.houses.length} houses`);
+            const streetYs = I.streets.map(s => s.y);
             for (const h of I.houses) {
-                assert.ok(I.streets.includes(h.base + 1), `seed ${seed}: house ${h.id} not on a street`);
-                assert.ok(h.x >= 0 && h.x + h.w <= I.w, `seed ${seed}: house ${h.id} off the island`);
+                assert.ok(streetYs.includes(h.base + 1), `seed ${seed}: house ${h.id} not on a street`);
+                const t = I.tiers[h.tier];
+                assert.ok(h.x >= t.x0 && h.x + h.w <= t.x1, `seed ${seed}: house ${h.id} off its tier`);
                 const mid = Math.round(h.x + h.w / 2);
-                assert.ok(h.base < I.front[mid], `seed ${seed}: house ${h.id} over the front lip`);
-                // Rows stack (a phone's three rows overlap on purpose); along a row, never.
+                assert.ok(h.base < t.front[mid] && h.base - 6 > t.back[mid], `seed ${seed}: house ${h.id} over an edge`);
                 for (const o of I.houses) if (o !== h && o.row === h.row) assert.ok(!L.overlap(rectOf(h), rectOf(o), 0), `seed ${seed}: houses ${h.id} and ${o.id} overlap`);
-                assert.ok(!(h.x + h.w > I.lake.x - I.lake.rx && h.x < I.lake.x + I.lake.rx && h.base >= I.lake.y - I.lake.ry), `seed ${seed}: house ${h.id} in the lake`);
+                if (h.tier === 1) assert.ok(!(h.x + h.w > I.pond.x - I.pond.rx && h.x < I.pond.x + I.pond.rx), `seed ${seed}: house ${h.id} in the pond`);
+                if (h.tier === 2) assert.ok(!(h.x + h.w > I.lake.x - I.lake.rx && h.x < I.lake.x + I.lake.rx), `seed ${seed}: house ${h.id} in the lake`);
             }
             assert.ok(I.houses.some(h => h.kind === 'chapel'), `seed ${seed}: no chapel`);
-            // The lake touches the front edge, and the waterfall falls from it to the cliff's foot.
-            assert.equal(I.lake.y + I.lake.ry - 1, I.front[I.lake.x]);
-            assert.equal(I.fall.x, I.lake.x);
-            assert.ok(I.fall.bottom > I.fall.top);
-            assert.ok(I.lake.x - I.lake.rx > 0 && I.lake.x + I.lake.rx < I.w);
-            // The mountain's feet are at the back; the town is between the lake and the mountain.
-            assert.ok(I.mountain.y < I.depth * 0.35);
+            assert.ok(I.houses.some(h => h.kind === 'barn') && I.fields.length >= 1, `seed ${seed}: no farm`);
+            // The stairs: each from a tier's front edge to its foot, where the streets below and above can be reached.
+            for (const st of I.stairs) { const t = I.tiers[st.tier]; assert.equal(st.top, t.front[st.x]); assert.equal(st.bottom, t.foot[st.x]); assert.ok(Math.abs(st.x - I.fallX) > 6, `seed ${seed}: stairs in the water`); }
+            same(I.gaps[1], [I.stairs[0].x]); same(I.gaps[3], [I.stairs[1].x]);
+            assert.ok(I.gaps[2].length >= 1);
             for (const f of I.fields) {
                 assert.ok(!I.houses.some(h => L.overlap(f, rectOf(h), 2)), `seed ${seed}: a field on a house`);
-                assert.ok(!I.streets.some(s => s >= f.y - 1 && s <= f.y + f.h + 1), `seed ${seed}: a field across a street`);
+                assert.ok(!I.streets.some(s => s.tier === 2 && s.y >= f.y - 1 && s.y <= f.y + f.h + 1), `seed ${seed}: a field across the street`);
             }
             for (const t of I.trees) {
-                assert.ok(!I.houses.some(h => L.overlap({ x: t.x - 2, y: t.y - 1, w: 5, h: 2 }, rectOf(h), 1)), `seed ${seed}: a tree in a house`);
-                assert.ok(t.y > I.back[t.x] && t.y < I.front[t.x], `seed ${seed}: a tree off the plateau`);
+                assert.ok(!I.houses.some(h => L.overlap({ x: t.x - 4, y: t.y - 2, w: 8, h: 3 }, rectOf(h), 1)), `seed ${seed}: a tree in a house`);
+                const tier = I.tiers[t.tier];
+                assert.ok(t.y > tier.back[t.x] && t.y < tier.front[t.x], `seed ${seed}: a tree off its tier`);
             }
-            assert.ok(I.trees.length >= 10, `seed ${seed}: only ${I.trees.length} trees`);
+            assert.ok(I.trees.length >= 8, `seed ${seed}: only ${I.trees.length} trees`);
             for (const [name, s] of Object.entries(I.spots)) {
-                assert.ok(s.x >= 0 && s.x <= I.w && s.y >= -1 && s.y <= I.depth + 1, `seed ${seed}: spot ${name} off the island (${s.x}, ${s.y})`);
+                assert.ok(s.x >= 0 && s.x <= I.w && s.tier >= 0 && s.tier <= 2, `seed ${seed}: spot ${name} off the island (${s.x}, ${s.y})`);
                 const r = L.route(I.spots.square, s, I);
-                // Every leg is straight, and no leg between two streets passes through a house.
                 let last = I.spots.square;
-                for (const p of r) {
-                    assert.ok(p.x === last.x || p.y === last.y, `seed ${seed}: a diagonal leg to ${name}`);
-                    if (p.x === last.x && !I.streets.includes(p.y) === false && I.streets.includes(last.y)) {
-                        const lo = Math.min(p.y, last.y), hi = Math.max(p.y, last.y);
-                        for (const h of I.houses) assert.ok(!(p.x >= h.x && p.x <= h.x + h.w && h.base > lo && h.base <= hi && h.y < hi), `seed ${seed}: the way to ${name} goes through house ${h.id}`);
-                    }
-                    if (p.y === last.y && I.streets.includes(p.y)) {
-                        // Along a street: never across the lake.
-                        const lo = Math.min(p.x, last.x), hi = Math.max(p.x, last.x);
-                        assert.ok(!(hi >= I.lake.x - I.lake.rx && lo <= I.lake.x + I.lake.rx && p.y >= I.lake.y - I.lake.ry), `seed ${seed}: the way to ${name} wades the lake`);
-                    }
-                    last = p;
-                }
+                for (const p of r) { assert.ok(p.x === last.x || p.y === last.y, `seed ${seed}: a diagonal leg to ${name}`); last = p; }
                 assert.ok(r.length >= 1 && r.at(-1).x === s.x && r.at(-1).y === s.y, `seed ${seed}: no route to ${name}`);
+                // Between tiers, the way is the stairs.
+                if (s.tier !== 1) assert.ok(r.some(p => p.x === I.stairs[s.tier === 0 ? 0 : 1].x), `seed ${seed}: the way to ${name} skips the stairs`);
+                // Along the village's front street, never through the pond but over the bridge.
+                for (const p of r) if (p.y === I.streets[1].y) assert.ok(Math.abs(p.x - I.pond.x) > I.pond.rx + 2, `seed ${seed}: the way to ${name} wades the pond on the back street`);
             }
+            assert.ok(L.tierAt(I, I.spots.square.x, I.spots.square.y) === 1 && L.tierAt(I, I.tower.x, I.tower.base) === 0 && L.tierAt(I, I.spots.field.x, I.spots.field.y) === 2);
+            assert.equal(L.tierAt(I, I.fallX, I.tiers[0].foot[I.fallX] - 2), 0);
             assert.ok(I.lamps.length >= 2, `seed ${seed}: ${I.lamps.length} lamps`);
-            assert.ok(I.crystals.length >= 2 && I.roots.length >= 3);
+            assert.ok(I.cracks.length >= 3 && I.roots.length >= 3 && I.fragments.length >= 4);
             const again = L.layout(seed, { w, portrait, houses: 4 + (seed % 9), forest: (seed % 3), fields: true });
             assert.equal(JSON.stringify(again), JSON.stringify(I), `seed ${seed}: not reproducible`);
         }
@@ -147,12 +155,15 @@ test('layouts fit together, for many seeds, landscape and portrait', () => {
     assert.notEqual(JSON.stringify(a.houses), JSON.stringify(b.houses));
 });
 
-test('routes go by the streets, cross between them through gaps, and reach the outskirts by the back street', () => {
-    const I = { streets: [10, 24], gaps: [[], [-3, 30, 70, 103]], town: { l: 0, r: 100 } };
-    same(L.route({ x: 5, y: 10 }, { x: 60, y: 30 }, I), [{ x: 70, y: 10 }, { x: 70, y: 24 }, { x: 60, y: 24 }, { x: 60, y: 30 }]);
-    same(L.route({ x: 5, y: 12 }, { x: 40, y: 9 }, I), [{ x: 5, y: 10 }, { x: 40, y: 10 }, { x: 40, y: 9 }]);
-    same(L.route({ x: 50, y: 28 }, { x: 130, y: 20 }, I), [{ x: 50, y: 24 }, { x: 103, y: 24 }, { x: 103, y: 10 }, { x: 130, y: 10 }, { x: 130, y: 20 }]);
-    same(L.route({ x: 130, y: 20 }, { x: 50, y: 28 }, I), [{ x: 130, y: 10 }, { x: 30, y: 10 }, { x: 30, y: 24 }, { x: 50, y: 24 }, { x: 50, y: 28 }]);
+test('routes go by the streets of a tier, cross between them through gaps, and between tiers by the stairs', () => {
+    const I = { streets: [{ tier: 0, y: 10, l: 0, r: 100 }, { tier: 1, y: 40, l: 0, r: 100 }, { tier: 1, y: 60, l: 0, r: 100 }, { tier: 2, y: 90, l: 0, r: 100 }], gaps: [[], [80], [-3, 30, 70, 103], [20]], tiers: [] };
+    // Along the village's streets, through the gap nearest the target.
+    same(L.route({ x: 5, y: 40, tier: 1 }, { x: 60, y: 66, tier: 1 }, I), [{ x: 70, y: 40 }, { x: 70, y: 60 }, { x: 60, y: 60 }, { x: 60, y: 66 }]);
+    same(L.route({ x: 5, y: 42, tier: 1 }, { x: 40, y: 38, tier: 1 }, I), [{ x: 5, y: 40 }, { x: 40, y: 40 }, { x: 40, y: 38 }]);
+    // Down from the top: the first stairs, the back street, a gap, the front street, the second stairs, the lower street.
+    same(L.route({ x: 50, y: 8, tier: 0 }, { x: 60, y: 95, tier: 2 }, I), [{ x: 50, y: 10 }, { x: 80, y: 10 }, { x: 80, y: 40 }, { x: 70, y: 40 }, { x: 70, y: 60 }, { x: 20, y: 60 }, { x: 20, y: 90 }, { x: 60, y: 90 }, { x: 60, y: 95 }]);
+    // And back up.
+    same(L.route({ x: 60, y: 95, tier: 2 }, { x: 50, y: 8, tier: 0 }, I), [{ x: 60, y: 90 }, { x: 20, y: 90 }, { x: 20, y: 60 }, { x: 30, y: 60 }, { x: 30, y: 40 }, { x: 80, y: 40 }, { x: 80, y: 10 }, { x: 50, y: 10 }, { x: 50, y: 8 }]);
 });
 
 test('the day’s plan: everyone sleeps at night but the watch; lunch in the square; a party in the evening', () => {

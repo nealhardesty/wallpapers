@@ -1,7 +1,7 @@
 // Default settings for Sky Island. Saved settings store only what differs
 // from these (SPEC §4.1).
 WP.defaults('sky-island', {
-    configVersion: 1,
+    configVersion: 2,
     // The island
     seed: 0,                // 0: a new island every load; otherwise always this one (Keep this island sets it)
     islandSize: 1,          // × the usual width
@@ -9,12 +9,14 @@ WP.defaults('sky-island', {
     forest: 1,              // how wooded, 0 to 2
     fields: true,           // a fenced field or two
     dragon: true,           // something lives in a cave in the cliff
+    bob: true,              // the island rides the air, slowly
     // Sky and weather
     sky: 'live',            // live (the real hour), cycle (a day in a few minutes), day, golden, night
     cycleMinutes: 4,        // minutes for a whole day, when sky is cycle
     weather: 'random',      // random, fair, rain, snow
     wind: 1,                // × the usual breeze
     clouds: 1,              // × the usual clouds
+    ground: true,           // the far ground rolling by below the clouds
     // Seasons and holidays
     season: 'auto',         // auto (by the date), spring, summer, autumn, winter
     holiday: 'auto',        // auto (by the date), none, or one to keep
@@ -26,6 +28,7 @@ WP.defaults('sky-island', {
     smoke: true,            // chimney smoke
     visitMinutes: 4,        // about how often another island drifts past (0: never)
     balloon: true,          // a balloon may bring a visitor over
+    orbiters: true,         // a small island comes to go round ours now and then
     // Cats and pets
     cats: ['moofy', 'butters', 'waffles', 'ras', 'ibbie', 'maus', 'turkey', 'harry', 'persian'],
     strays: 3,              // cats of no fixed name
