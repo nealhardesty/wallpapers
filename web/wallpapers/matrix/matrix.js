@@ -1,375 +1,409 @@
-// Matrix Animation Module
+// Matrix (SPEC §10.32): the film's digital rain, done the way the film did
+// it. The symbols never fall: they sit in fixed cells, and a wave of light
+// runs down each column, lighting the cell it passes and going dark behind.
+// Symbols change in place on a shared clock. The glyphs are the ones in the
+// 1999 title sequence, mirrored half-width katakana and a few numerals,
+// drawn as strokes (MatrixLogic), baked into an atlas of brightness steps
+// per colour, so a frame is one drawImage per lit cell and nothing else.
 class MatrixAnimationManager {
     constructor(host) {
         this.host = host;
+        this.config = WP.settings.load();
         this.canvas = null;
         this.ctx = null;
-        this.columns = [];
-        this.isEnabled = false;
-        this.animationId = null;
-        this.columnCount = 0;
-        this.lastTime = 0;
-
-        // Head glows, baked once per colour (SPEC §4.8): a live shadowBlur on
-        // every head glyph was the whole cost of this wallpaper.
-        this.glowSprites = new Map();
-
-        // Configuration
-        this.config = WP.settings.load();
-
-        this.setupThemes();
-        this.setupCharacterSets();
+        this.running = false;
+        this.frameId = 0;
+        this.listeners = [];
+        this.atlases = new Map();
+        this.time = 0;
+        this.layers = [];
+        this.stats = { frames: 0, cells: 0 };
+        this.seed = Math.floor(Math.random() * 0x7fffffff) || 1;   // ?seed= makes Math.random repeatable
     }
 
-    saveConfig() {
-        WP.settings.save(this.config);
-    }
-
-    setupThemes() {
-        this.themes = {
-            classic: {
-                name: '🟢 Classic (Green)',
-                glowColor: '#00ff00',
-                textColor: '#008800',
-                backgroundColor: '#000000'
-            },
-            blue: {
-                name: '🔵 Blue Matrix',
-                glowColor: '#00aaff',
-                textColor: '#0066cc',
-                backgroundColor: '#000011'
-            },
-            red: {
-                name: '🔴 Red Alert',
-                glowColor: '#ff0044',
-                textColor: '#cc0022',
-                backgroundColor: '#110000'
-            },
-            purple: {
-                name: '🟣 Purple Cyber',
-                glowColor: '#aa00ff',
-                textColor: '#6600aa',
-                backgroundColor: '#110011'
-            },
-            orange: {
-                name: '🟠 Orange Fire',
-                glowColor: '#ff6600',
-                textColor: '#cc4400',
-                backgroundColor: '#110500'
-            },
-            cyan: {
-                name: '🔷 Cyan Ice',
-                glowColor: '#00ffff',
-                textColor: '#00aaaa',
-                backgroundColor: '#001111'
-            },
-            white: {
-                name: '⚪ White Ghost',
-                glowColor: '#ffffff',
-                textColor: '#bbbbbb',
-                backgroundColor: '#000000'
-            },
-            rainbow: {
-                name: '🌈 Rainbow',
-                glowColor: '#00ff00', // Default, will be overridden
-                textColor: '#008800',
-                backgroundColor: '#000000'
-            }
-        };
-    }
-
-    setupCharacterSets() {
-        this.characterSets = {
-            hiragana: 'あいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめもやゆよらりるれろわをん',
-            katakana: 'アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲン',
-            kanji: '一二三四五六七八九十百千万円年月日時分秒人大小中高新古今明暗光闇水火土風雷氷森山川海空星月太陽地球宇宙神仏龍虎鳥魚花木草石金銀銅鉄王女男子母父兄弟姉妹友愛心生死夢希望絶望喜怒哀楽平和戦争自由束縛真偽善悪美醜強弱速遅深浅広狭長短高低重軽明暗熱冷乾湿硬軟滑粗細太豊貧富貴賤勝敗成敗得失増減進退上下左右前後内外表裏東西南北春夏秋冬朝昼夜',
-            mixed: ''
-        };
-
-        // Combine all character sets for mixed option
-        this.characterSets.mixed = this.characterSets.hiragana + this.characterSets.katakana + this.characterSets.kanji;
-    }
-
-    getCharacterSet() {
-        return this.characterSets.mixed; // Always use mixed for now
-    }
-
-    getRandomCharacter() {
-        const chars = this.getCharacterSet();
-        return chars[Math.floor(Math.random() * chars.length)];
-    }
-
-    getRainbowColor(index, time) {
-        const hue = (index * 137.508 + time * 0.05) % 360; // Golden angle distribution
-        return `hsl(${hue}, 100%, 60%)`;
-    }
-
-    async init() {
-        this.createCanvas();
-        console.log('Matrix animation manager initialized');
-    }
-
-    createCanvas() {
-        this.canvas = document.createElement('canvas');
-        this.canvas.id = 'matrix-canvas';
-        this.canvas.style.position = 'fixed';
-        this.canvas.style.top = '0';
-        this.canvas.style.left = '0';
-        this.canvas.style.width = '100%';
-        this.canvas.style.height = '100%';
-        this.canvas.style.pointerEvents = 'none';
-        this.canvas.style.zIndex = '-1';
-        this.canvas.style.display = 'none';
-
-        this.ctx = this.canvas.getContext('2d');
-        document.body.appendChild(this.canvas);
-
-        this.resizeCanvas();
-        window.addEventListener('resize', () => this.resizeCanvas());
-    }
-
-    resizeCanvas() {
-        if (!this.canvas) return;
-
-        this.canvas.width = window.innerWidth;
-        this.canvas.height = window.innerHeight;
-
-        // Recalculate columns when canvas resizes
-        this.setupColumns();
-    }
-
-    setupColumns() {
-        const columnWidth = this.config.fontSize;
-        // Ensure we cover the entire screen width
-        this.columnCount = Math.ceil(this.canvas.width / columnWidth);
-        this.columns = [];
-
-        // Calculate max trail length based on screen height and config
-        const maxTrailLength = Math.floor((this.canvas.height * this.config.tailLength) / this.config.fontSize);
-        const minTrailLength = Math.max(5, Math.floor(maxTrailLength * 0.3)); // At least 30% of max, minimum 5
-
-        for (let i = 0; i < this.columnCount; i++) {
-            this.columns.push({
-                x: i * columnWidth,
-                y: Math.random() * this.canvas.height - maxTrailLength * this.config.fontSize,
-                speed: this.config.speed + Math.random() * 2,
-                characters: [],
-                trail: Math.floor(Math.random() * (maxTrailLength - minTrailLength)) + minTrailLength,
-                lastCharacterChange: 0,
-                // Spread evenly, so a lower tier's share of the columns
-                // thins the rain out across the screen instead of in clumps
-                rank: (i * 0.618034) % 1,
-                isActive: false
-            });
-            this.columns[i].isActive = this.inTier(this.columns[i]) && Math.random() < this.config.density;
-        }
-    }
-
-    // Lower tiers run fewer columns (host.quality.density). A column outside
-    // the tier's share finishes its pass and then stays dark, so a change
-    // thins or fills the screen gradually.
-    inTier(column) {
-        return column.rank < (this.host.quality?.density ?? 1);
-    }
-
-    // The glow a shadowBlur of 10 put around a head glyph, baked into a
-    // sprite: the shadow of a dense glyph, drawn with the glyph itself off
-    // the canvas. Rainbow heads share sprites in 10° steps of hue.
-    glowSprite(color) {
-        const key = `${color}|${this.config.fontSize}`;
-        let sprite = this.glowSprites.get(key);
-        if (sprite) return sprite;
-
-        const pad = 20;
-        sprite = document.createElement('canvas');
-        sprite.width = sprite.height = this.config.fontSize + pad * 2;
-        const g = sprite.getContext('2d');
-        g.font = `${this.config.fontSize}px 'Courier New', monospace`;
-        g.textBaseline = 'top';
-        g.shadowColor = color;
-        g.shadowBlur = 10;
-        g.shadowOffsetX = 1000;
-        g.fillText('龍', pad - 1000, pad);
-        sprite.pad = pad;
-        this.glowSprites.set(key, sprite);
-        return sprite;
-    }
+    async init() {}
 
     start() {
-        if (this.isEnabled) return;
-
-        this.isEnabled = true;
-        this.canvas.style.display = 'block';
-        this.lastTime = 0;
-        this.setupColumns();
-        this.animate();
-        console.log('Matrix animation started');
+        if (this.running) return;
+        this.running = true;
+        const canvas = this.canvas = document.createElement('canvas');
+        canvas.id = 'matrix-canvas';
+        Object.assign(canvas.style, { position: 'fixed', inset: '0', width: '100%', height: '100%', zIndex: '-1', pointerEvents: 'none', background: '#000' });
+        document.body.appendChild(canvas);
+        this.ctx = canvas.getContext('2d');
+        this.build();
+        const on = (target, type, fn) => { target.addEventListener(type, fn, { passive: true }); this.listeners.push(() => target.removeEventListener(type, fn)); };
+        on(window, 'resize', () => this.build(true));
+        this.listeners.push(this.host.gestures({ tap: (x, y) => { if (this.config.touch) this.splash(x, y); } }));
+        this.last = 0;
+        this.nextFrameAt = 0;
+        this.frameId = requestAnimationFrame(t => this.frame(t));
     }
 
     stop() {
-        if (!this.isEnabled) return;
-
-        this.isEnabled = false;
-        this.canvas.style.display = 'none';
-
-        if (this.animationId) {
-            cancelAnimationFrame(this.animationId);
-            this.animationId = null;
-        }
-        console.log('Matrix animation stopped');
+        if (!this.running) return;
+        this.running = false;
+        cancelAnimationFrame(this.frameId);
+        for (const off of this.listeners) off();
+        this.listeners = [];
+        this.canvas.remove();
+        this.canvas = this.ctx = null;
     }
 
-    // Speeds and chances are per 60 fps frame; dt (seconds) scales them, so
-    // the rain falls at the same speed at any frame rate.
-    updateColumns(dt) {
-        const frames = dt * 60;
-        const frameTime = Date.now();
-        const maxTrailLength = Math.floor((this.canvas.height * this.config.tailLength) / this.config.fontSize);
-        const minTrailLength = Math.max(5, Math.floor(maxTrailLength * 0.3));
-
-        for (let i = 0; i < this.columns.length; i++) {
-            const column = this.columns[i];
-
-            // Check if column should be active
-            if (!column.isActive) {
-                if (this.inTier(column) && Math.random() < this.config.density * 0.01 * frames) { // Chance to reactivate
-                    column.isActive = true;
-                    column.y = -column.trail * this.config.fontSize;
-                    column.characters = [];
-                }
-                continue;
-            }
-
-            // Move column down
-            column.y += column.speed * frames;
-
-            // Reset column when it goes off screen
-            if (column.y > this.canvas.height + column.trail * this.config.fontSize) {
-                column.y = -column.trail * this.config.fontSize;
-                column.speed = this.config.speed + Math.random() * 2;
-                column.trail = Math.floor(Math.random() * (maxTrailLength - minTrailLength)) + minTrailLength;
-                column.characters = [];
-
-                // Randomly deactivate column based on density
-                if (Math.random() > this.config.density || !this.inTier(column)) {
-                    column.isActive = false;
-                    continue;
-                }
-            }
-
-            // Update character trail
-            const charactersNeeded = Math.ceil(column.trail);
-            while (column.characters.length < charactersNeeded) {
-                column.characters.push({
-                    char: this.getRandomCharacter(),
-                    lastUpdate: frameTime
-                });
-            }
-
-            // Randomly change characters in the trail
-            if (frameTime - column.lastCharacterChange > 100) { // Change every 100ms
-                for (let j = 0; j < column.characters.length; j++) {
-                    if (Math.random() < this.config.characterChangeRate) {
-                        column.characters[j].char = this.getRandomCharacter();
-                        column.characters[j].lastUpdate = frameTime;
-                    }
-                }
-                column.lastCharacterChange = frameTime;
-            }
-        }
+    // Changes from the panel. The grid is rebuilt when its shape changes; the
+    // rest takes effect on the next frame.
+    applySettings(config) {
+        const old = this.config;
+        this.config = config;
+        if (!this.running) return;
+        const changed = keys => keys.some(k => old[k] !== config[k]);
+        if (changed(['look', 'glyphSize', 'depth', 'intro'])) this.build();
+        else if (changed(['colour', 'glow'])) this.repaint();
+        if (changed(['fps'])) this.nextFrameAt = 0;
     }
 
-    drawColumns() {
-        const theme = this.themes[this.config.theme];
-        const frameTime = Date.now();
+    onQuality() {
+        const depth = this.config.depth && this.effect('depth');
+        if (depth !== (this.layers.length === 2)) this.build(true); else this.repaint();
+    }
 
-        this.ctx.font = `${this.config.fontSize}px 'Courier New', monospace`;
-        this.ctx.textAlign = 'left';
-        this.ctx.textBaseline = 'top';
+    // New colours: every cell is drawn again.
+    repaint() {
+        this.atlases.clear();
+        for (const L of this.layers) { L.tiers.fill(0); L.g.clearRect(0, 0, L.canvas.width, L.canvas.height); }
+    }
 
-        for (const column of this.columns) {
-            // Skip inactive columns
-            if (!column.isActive) continue;
+    effect(name) { return this.host.quality?.effects?.includes(name) ?? true; }
+    density() { return this.host.quality?.density ?? 1; }
+    look() { return MatrixLogic.LOOKS[this.config.look] || MatrixLogic.LOOKS.operator; }
 
-            for (let i = 0; i < column.characters.length; i++) {
-                const character = column.characters[i];
-                const charY = column.y - (i * this.config.fontSize);
+    // ---- The grid ----------------------------------------------------------------------------
 
-                // Skip if character is off screen
-                if (charY < -this.config.fontSize || charY > this.canvas.height) {
-                    continue;
-                }
+    // Two layers: the rain, and (depth on) a smaller, dimmer, softer one behind
+    // it. A resize keeps the rain going; only the cells are re-fitted.
+    build(resize = false) {
+        const dpr = this.dpr = window.devicePixelRatio || 1;
+        const W = this.W = window.innerWidth, H = this.H = window.innerHeight;
+        this.canvas.width = Math.round(W * dpr);
+        this.canvas.height = Math.round(H * dpr);
+        this.atlases.clear();
+        const look = this.look();
+        const random = MatrixLogic.rng(this.seed);
+        const make = (scale, dim) => {
+            // Cells scale with the screen, so a 4K display is as crowded as a laptop.
+            const cw = Math.max(5, this.config.glyphSize * scale * Math.min(2.5, Math.max(0.75, Math.min(W, H) / 800))), ch = cw * look.aspect;
+            const cols = Math.ceil(W / cw), rows = Math.ceil(H / ch) + 1;
+            const columns = [];
+            for (let c = 0; c < cols; c++) {
+                const col = MatrixLogic.makeColumn(c, cols, random);
+                col.start = this.config.intro ? MatrixLogic.introDelay(c, cols, random) : 0;
+                columns.push(col);
+            }
+            const glyphs = new Uint8Array(cols * rows);
+            for (let i = 0; i < glyphs.length; i++) glyphs[i] = Math.floor(random() * look.glyphs.length);
+            // The layer's own canvas, where only the cells that change are redrawn.
+            const canvas = document.createElement('canvas');
+            canvas.width = this.canvas.width; canvas.height = this.canvas.height;
+            return {
+                scale, dim, cw, ch, cols, rows, columns, glyphs, random, tick: 0, nextTick: 0, canvas, g: canvas.getContext('2d'),
+                tiers: new Uint8Array(cols * rows), shown: new Uint8Array(cols * rows), want: new Uint8Array(cols * rows), dirty: new Uint8Array(cols * rows),
+            };
+        };
+        const front = make(1, 1);
+        this.layers = this.config.depth && this.effect('depth') ? [make(0.62, 0.42), front] : [front];
+        this.time = 0;
+        this.ticks = 0;
+        // Without the intro (or on a resize), it's been raining a while already.
+        if (!this.config.intro || resize) this.advance(12, 0.1);
+    }
 
-                // Calculate opacity based on position in trail
-                let alpha = 1 - (i / column.characters.length);
-                if (alpha < 0) alpha = 0;
+    params(L) {
+        const look = this.look(), c = this.config;
+        return {
+            rows: L.rows, speed: 18 * c.speed * (L.scale < 1 ? 0.7 : 1), trailRows: Math.max(3, Math.round(L.rows * c.trail * look.trail / 1.5)),
+            brightShare: c.brightHeads, rate: c.density, density: Math.min(1, c.density * this.density() * (L.scale < 1 ? 0.7 : 1)),
+            stutter: c.stutter, time: this.time,
+        };
+    }
 
-                // Make the first character brightest
-                if (i === 0) {
-                    alpha = 1;
-
-                    let glow;
-                    if (this.config.theme === 'rainbow') {
-                        this.ctx.fillStyle = this.getRainbowColor(column.x, frameTime);
-                        const hue = Math.round((column.x * 137.508 + frameTime * 0.05) % 360 / 10) * 10 % 360;
-                        glow = this.glowSprite(`hsl(${hue}, 100%, 60%)`);
-                    } else {
-                        this.ctx.fillStyle = theme.glowColor;
-                        glow = this.glowSprite(theme.glowColor);
-                    }
-                    this.ctx.drawImage(glow, column.x - glow.pad, charY - glow.pad);
-                } else {
-                    if (this.config.theme === 'rainbow') {
-                        const color = this.getRainbowColor(column.x, frameTime);
-                        this.ctx.fillStyle = color.replace('60%', `${Math.floor(60 * alpha)}%`);
-                    } else {
-                        // Theme colours are hex: fade the tail with globalAlpha
-                        this.ctx.fillStyle = theme.textColor;
-                        this.ctx.globalAlpha = alpha;
-                    }
-                }
-
-                // Draw the character
-                this.ctx.fillText(character.char, column.x, charY);
-                this.ctx.globalAlpha = 1;
+    // Run every layer forward: the drops, then (on the look's clock) the symbols.
+    advance(dt, step = dt) {
+        const look = this.look();
+        for (let t = 0; t < dt - 1e-9; t += step) {
+            const d = Math.min(step, dt - t);
+            this.time += d;
+            for (const L of this.layers) {
+                const p = this.params(L);
+                for (const col of L.columns) MatrixLogic.stepColumn(col, d, p, L.random);
+                L.nextTick -= d;
+                if (L.nextTick <= 0) { L.nextTick += 1 / look.tick; this.cycle(L); }
             }
         }
     }
 
-    animate(currentTime = 0) {
-        if (!this.isEnabled) return;
-
-        // Clamped, so a stalled tab doesn't jump every column at once
-        if (!this.lastTime) this.lastTime = currentTime;
-        const dt = Math.min((currentTime - this.lastTime) / 1000, 0.1);
-        this.lastTime = currentTime;
-
-        const theme = this.themes[this.config.theme];
-
-        // Clear canvas or apply fade effect
-        if (this.config.fadeTrails) {
-            // Apply fade effect by drawing a semi-transparent overlay: 30%
-            // per 60 Hz frame, whatever the frame rate
-            this.ctx.fillStyle = theme.backgroundColor;
-            this.ctx.globalAlpha = 1 - Math.pow(0.7, dt * 60);
-            this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
-            this.ctx.globalAlpha = 1;
-        } else {
-            // Clear canvas completely
-            this.ctx.fillStyle = theme.backgroundColor;
-            this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+    // One tick of the symbol clock: every cell that's due changes, together.
+    // Some cells (the look's flicker share) change every tick; the rest at
+    // the look's rate times the setting, at random.
+    cycle(L) {
+        const look = this.look(), n = look.glyphs.length;
+        const chance = look.cycle * this.config.cycle / look.tick;
+        if (chance <= 0 && look.flicker <= 0) return;
+        L.tick++;
+        for (const col of L.columns) {
+            for (const d of col.drops) {
+                const top = Math.max(0, Math.ceil(d.head - d.len)), bottom = Math.min(L.rows - 1, Math.floor(d.head));
+                for (let r = top; r <= bottom; r++) {
+                    const flick = MatrixLogic.hash(col.c, r, 7) < look.flicker * Math.min(1, this.config.cycle);
+                    if (flick || L.random() < chance) L.glyphs[col.c * L.rows + r] = Math.floor(L.random() * n);
+                }
+            }
         }
-
-        this.updateColumns(dt);
-        this.drawColumns();
-
-        this.animationId = requestAnimationFrame((time) => this.animate(time));
     }
 
-    destroy() {
-        this.stop();
-        if (this.canvas) {
-            document.body.removeChild(this.canvas);
+    // ---- The atlas ---------------------------------------------------------------------------
+
+    TIERS = 16;
+
+    // Every glyph at every brightness step, plus the head row (with its glow)
+    // and the head's white core, drawn once in white as a mask per layer;
+    // then a copy per hue, each tier row tinted through it (source-in), so a
+    // new colour, or the rainbow's twelve, costs a few fills, not a bake.
+    mask(L) {
+        const look = this.look(), dpr = this.dpr, glyphs = look.glyphs;
+        const cw = Math.ceil(L.cw * dpr), ch = Math.ceil(L.ch * dpr), pad = Math.ceil(cw * 0.9);
+        const T = this.TIERS, slotW = cw + pad * 2, slotH = ch + pad * 2;
+        const c = document.createElement('canvas');
+        c.width = glyphs.length * slotW;
+        c.height = (T + 2) * slotH;
+        const g = c.getContext('2d');
+        const paths = glyphs.map(gl => new Path2D(gl.path));
+        g.lineCap = 'round';
+        g.lineJoin = 'round';
+        const drawGlyph = (i, x, y, width, alpha = 1, blur = 0) => {
+            const gl = glyphs[i];
+            g.save();
+            g.translate(x, y);
+            // The glyph box: 10 × 14 units, fitted into the cell with a margin.
+            const sx = cw * 0.88 / 10, sy = ch * 0.88 / 14;
+            g.translate(cw * 0.06, ch * 0.06);
+            if (gl.flip === 'x') { g.translate(10 * sx, 0); g.scale(-sx, sy); } else if (gl.flip === 'y') { g.translate(0, 14 * sy); g.scale(sx, -sy); } else g.scale(sx, sy);
+            g.lineWidth = width / Math.min(sx, sy);
+            g.strokeStyle = `rgba(255,255,255,${alpha})`;
+            if (blur) { g.shadowColor = '#fff'; g.shadowBlur = blur; }
+            g.stroke(paths[i]);
+            g.restore();
+        };
+        const stroke = Math.max(1, cw * 0.11) * (L.dim < 1 ? 1.3 : 1);
+        for (let t = 1; t < T; t++) for (let i = 0; i < glyphs.length; i++) drawGlyph(i, i * slotW + pad, t * slotH + pad, stroke);
+        // The head row: a bloom round it (shadowBlur here, at bake time only),
+        // and, a row below, its core alone.
+        const glow = this.config.glow && this.effect('glow') && L.dim >= 1;
+        for (let i = 0; i < glyphs.length; i++) {
+            const x = i * slotW + pad, y = T * slotH + pad;
+            if (glow) { drawGlyph(i, x, y, stroke * 1.6, 0.55, cw * 0.45); drawGlyph(i, x, y, stroke * 1.2, 0.8, cw * 0.18); }
+            drawGlyph(i, x, y, stroke * (glow ? 1 : 1.15));
+            drawGlyph(i, x, y + slotH, stroke * 0.9);
         }
+        // Soft, for the layer behind: drawn through a smaller canvas and back.
+        if (L.dim < 1) {
+            const s = document.createElement('canvas');
+            s.width = Math.max(1, Math.round(c.width / 3)); s.height = Math.max(1, Math.round(c.height / 3));
+            s.getContext('2d').drawImage(c, 0, 0, s.width, s.height);
+            g.clearRect(0, 0, c.width, c.height);
+            g.globalAlpha = 0.9;
+            g.drawImage(s, 0, 0, c.width, c.height);
+            g.globalAlpha = 1;
+        }
+        return { c, cw, ch, pad, slotW, slotH };
+    }
+
+    atlas(L, hue) {
+        const key = `${L.scale}|${hue}`;
+        let a = this.atlases.get(key);
+        if (a) return a;
+        const maskKey = `mask|${L.scale}`;
+        let m = this.atlases.get(maskKey);
+        if (!m) { m = this.mask(L); this.atlases.set(maskKey, m); }
+        const look = this.look(), colour = MatrixLogic.COLOURS[this.config.colour] || MatrixLogic.COLOURS.green, sat = colour.sat;
+        const T = this.TIERS, { slotW, slotH } = m;
+        const c = document.createElement('canvas');
+        c.width = m.c.width; c.height = (T + 1) * slotH;
+        const g = c.getContext('2d');
+        g.drawImage(m.c, 0, 0, m.c.width, (T + 1) * slotH, 0, 0, m.c.width, (T + 1) * slotH);
+        g.globalCompositeOperation = 'source-in';
+        for (let t = 1; t <= T; t++) {
+            const b = (t / (T - 1)) * L.dim;
+            g.fillStyle = t === T ? MatrixLogic.hsl(MatrixLogic.headShade(hue, sat, look.head)) : MatrixLogic.hsl(MatrixLogic.shade(hue, sat, b));
+            g.save(); g.beginPath(); g.rect(0, t * slotH, c.width, slotH); g.clip();
+            g.fillRect(0, t * slotH, c.width, slotH);
+            g.restore();
+        }
+        // The head's white core over its tinted bloom.
+        g.globalCompositeOperation = 'source-over';
+        g.globalAlpha = 0.85;
+        g.drawImage(m.c, 0, (T + 1) * slotH, m.c.width, slotH, 0, T * slotH, m.c.width, slotH);
+        g.globalAlpha = 1;
+        a = { c, cw: m.cw, ch: m.ch, pad: m.pad, slotW, slotH };
+        this.atlases.set(key, a);
+        return a;
+    }
+
+    hueFor(c) {
+        const colour = MatrixLogic.COLOURS[this.config.colour] || MatrixLogic.COLOURS.green;
+        if (colour.hue === 'column') return Math.round(MatrixLogic.columnHue(c) / 30) * 30;
+        return colour.hue === null ? this.look().hue : colour.hue;
+    }
+
+    // ---- Frames ------------------------------------------------------------------------------
+
+    // Paced on a steady timeline at the fps setting (the film ran at 24):
+    // the next frame is due an interval after the last was, never sooner,
+    // and between them the stage sends nothing.
+    frame(now) {
+        if (!this.running) return;
+        const dt = this.last ? Math.min(0.1, (now - this.last) / 1000) : 0;
+        this.last = now;
+        this.advance(dt);
+        this.draw();
+        this.stats.frames++;
+        const interval = 1000 / Math.max(6, Math.min(60, this.config.fps));
+        const at = performance.now();
+        this.nextFrameAt = Math.max(at, (this.nextFrameAt || 0) + interval);
+        this.host.idleUntil(Math.max(0, this.nextFrameAt - at - 1));
+        this.frameId = requestAnimationFrame(t => this.frame(t));
+    }
+
+    draw() {
+        const { ctx, dpr } = this;
+        let cells = 0;
+        for (const L of this.layers) cells += this.drawLayer(L);
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.fillStyle = '#000';
+        ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+        for (const L of this.layers) ctx.drawImage(L.canvas, 0, 0);
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        this.stats.cells = cells;
+        if (this.config.crt) this.drawScanlines();
+    }
+
+    // What each cell should show now (its tier, from the drops over it, and
+    // its symbol) against what it shows; only the difference is redrawn. A
+    // head's bloom spills into the cells round it, so a head that moves on,
+    // or one next to a cell being redrawn, takes its whole neighbourhood with it.
+    drawLayer(L) {
+        const look = this.look(), T = this.TIERS, { cols, rows, cw, ch, want, tiers, shown, dirty, glyphs, g } = L, dpr = this.dpr;
+        want.fill(0);
+        for (const col of L.columns) {
+            const base = col.c * rows;
+            for (const d of col.drops) {
+                const headRow = Math.floor(d.head);
+                const top = Math.max(0, Math.ceil(d.head - d.len)), bottom = Math.min(rows - 1, headRow);
+                for (let r = top; r <= bottom; r++) {
+                    const b = MatrixLogic.cover(d, r, look.ramp);
+                    if (b < 0) continue;
+                    const tier = r === headRow && d.bright ? T : Math.round(b * (T - 1));
+                    if (tier > want[base + r]) want[base + r] = tier;
+                }
+            }
+        }
+        const n = cols * rows, queue = [];
+        dirty.fill(0);
+        for (let i = 0; i < n; i++) {
+            if (want[i] !== tiers[i] || (want[i] && shown[i] !== glyphs[i])) { dirty[i] = 1; queue.push(i); }
+        }
+        if (!queue.length) return 0;
+        // Round every head that is, or was, within a cell of a change, the 3 × 3 block is redrawn.
+        const mark = i => { if (!dirty[i]) { dirty[i] = 1; queue.push(i); } };
+        for (let q = 0; q < queue.length; q++) {
+            const i = queue[q], c = Math.floor(i / rows), r = i - c * rows;
+            for (let dc = -1; dc <= 1; dc++) for (let dr = -1; dr <= 1; dr++) {
+                const cc = c + dc, rr = r + dr;
+                if (cc < 0 || cc >= cols || rr < 0 || rr >= rows) continue;
+                const j = cc * rows + rr;
+                if (want[j] !== T && tiers[j] !== T) continue;
+                for (let ec = -1; ec <= 1; ec++) for (let er = -1; er <= 1; er++) {
+                    const c2 = cc + ec, r2 = rr + er;
+                    if (c2 >= 0 && c2 < cols && r2 >= 0 && r2 < rows) mark(c2 * rows + r2);
+                }
+            }
+        }
+        g.setTransform(dpr, 0, 0, dpr, 0, 0);
+        for (const i of queue) { const c = Math.floor(i / rows), r = i - c * rows; g.clearRect(c * cw, r * ch, cw, ch); }
+        let drawn = 0;
+        for (const i of queue) {
+            const c = Math.floor(i / rows), r = i - c * rows, tier = want[i];
+            tiers[i] = tier;
+            if (!tier) continue;
+            shown[i] = glyphs[i];
+            const a = this.atlas(L, this.hueFor(c)), gi = glyphs[i];
+            if (tier === T) g.drawImage(a.c, gi * a.slotW, tier * a.slotH, a.slotW, a.slotH, c * cw - a.pad / dpr, r * ch - a.pad / dpr, a.slotW / dpr, a.slotH / dpr);
+            else g.drawImage(a.c, gi * a.slotW + a.pad, tier * a.slotH + a.pad, a.cw, a.ch, c * cw, r * ch, a.cw / dpr, a.ch / dpr);
+            drawn++;
+        }
+        return drawn;
+    }
+
+    // A CRT's lines: a baked stripe pattern, drawn once over the frame.
+    drawScanlines() {
+        const { ctx, dpr, W, H } = this;
+        if (!this.scan || this.scan.dpr !== dpr) {
+            const c = document.createElement('canvas');
+            c.width = 4; c.height = Math.max(2, Math.round(3 * dpr));
+            const g = c.getContext('2d');
+            g.fillStyle = 'rgba(0,0,0,0.28)';
+            g.fillRect(0, 0, 4, Math.max(1, Math.round(dpr)));
+            this.scan = { pattern: ctx.createPattern(c, 'repeat'), dpr };
+        }
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.fillStyle = this.scan.pattern;
+        ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
+
+    // ---- Input and keys ----------------------------------------------------------------------
+
+    // A tap: the columns round it light up from that row, bright-headed.
+    splash(x, y) {
+        const L = this.layers[this.layers.length - 1];
+        const c0 = Math.floor(x / L.cw), r0 = Math.floor(y / L.ch), p = this.params(L);
+        for (let c = c0 - 3; c <= c0 + 3; c++) {
+            const col = L.columns[c];
+            if (!col) continue;
+            MatrixLogic.spawn(col, L.rows, { ...p, brightShare: 1 }, L.random, Math.max(0, r0 - Math.abs(c - c0)));
+            col.start = 0;
+        }
+        this.host.idleUntil(0);
+    }
+
+    rainAgain() {
+        this.seed = (this.seed * 1664525 + 1013904223) >>> 0;
+        this.build();
+        return this.config.intro ? 'The code comes down again' : 'New rain';
+    }
+
+    nextLook() {
+        const order = MatrixLogic.LOOK_ORDER, i = order.indexOf(this.config.look);
+        this.config.look = order[(i + 1) % order.length];
+        WP.settings.save(this.config);
+        this.build();
+        return `Look: ${this.look().name}`;
+    }
+
+    nextColour() {
+        const order = MatrixLogic.COLOUR_ORDER, i = order.indexOf(this.config.colour);
+        this.config.colour = order[(i + 1) % order.length];
+        WP.settings.save(this.config);
+        this.repaint();
+        return `Colour: ${MatrixLogic.COLOURS[this.config.colour].name}`;
+    }
+
+    debugState() {
+        const L = this.layers[this.layers.length - 1];
+        return {
+            look: this.config.look, colour: this.config.colour, layers: this.layers.length, cols: L.cols, rows: L.rows,
+            drops: L.columns.reduce((n, c) => n + c.drops.length, 0), bright: L.columns.reduce((n, c) => n + c.drops.filter(d => d.bright).length, 0),
+            cells: this.stats.cells, frames: this.stats.frames, time: Math.round(this.time * 10) / 10, atlases: this.atlases.size,
+            glyphs: this.look().glyphs.length,
+        };
     }
 }

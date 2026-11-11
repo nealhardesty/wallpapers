@@ -401,6 +401,51 @@ const AVERAGE = `(() => {
 })()`;
 
 const STAGE_CHECKS = {
+    // Matrix: the film's code. Frame one is full of it (intro off); the
+    // symbols sit in fixed cells and only the light moves (a lit cell's
+    // glyph index stays until the symbol clock changes it); it paces itself
+    // at the fps setting; L changes the look, C the colour; a tap splashes
+    // bright-headed strings round it; Low runs one layer.
+    matrix: [['code on frame one in fixed cells, paced at 30 fps, L and H, a tap splashes, one layer on Low', async () => {
+        const st = () => evaluate('JSON.parse(JSON.stringify(WP.stage.manager.debugState()))');
+        if (!await stageWith('matrix', { configVersion: 2, intro: false, cycle: 0, stutter: false }, '&seed=7')) return record('no boot');
+        let s = await st();
+        if (s.look !== 'operator' || s.layers !== 2 || s.drops < 30 || s.bright < 3 || s.cols < 40) record(`frame one: ${JSON.stringify(s)}`);
+        const avg = await evaluate(AVERAGE);
+        if (!(avg[1] > avg[0] + 10 && avg[1] > avg[2] + 10) || avg[1] < 8) record(`not green code on frame one: ${avg}`);
+        // The symbols stay put: with the symbol clock off, a cell's glyph is the same a second later.
+        const cellsBefore = await evaluate('(m => Array.from(m.layers[1].glyphs.slice(0, 400)))(WP.stage.manager)');
+        const before = await evaluate('WP.host.frames.count');
+        await sleep(2000);
+        const frames = await evaluate('WP.host.frames.count') - before;
+        if (frames < 45 || frames > 75) record(`${frames} frames in two seconds (want about 60 at 30 fps)`);
+        const cellsAfter = await evaluate('(m => Array.from(m.layers[1].glyphs.slice(0, 400)))(WP.stage.manager)');
+        if (cellsBefore.join() !== cellsAfter.join()) record('symbols changed in place with the symbol clock off');
+        s = await st();
+        if (!(s.time > 13)) record(`the rain hasn't been running: ${JSON.stringify(s)}`);
+        await shoot('matrix-operator');
+        // L: the next look; C: the next colour.
+        await press('l');
+        if ((await st()).look !== 'classic') record(`L: ${JSON.stringify(await st())}`);
+        await press('h');
+        if ((await st()).colour !== 'amber') record(`H: ${JSON.stringify(await st())}`);
+        await sleep(300);
+        const amber = await evaluate(AVERAGE);
+        if (!(amber[0] > amber[2] + 8)) record(`amber isn't warm: ${amber}`);
+        await shoot('matrix-classic-amber');
+        // A tap: bright-headed strings from that row in the columns round it.
+        const brightBefore = (await st()).bright;
+        await mouse('mousePressed', 400, 300);
+        await mouse('mouseReleased', 400, 300);
+        await sleep(200);
+        s = await st();
+        if (s.bright < brightBefore + 5) record(`a tap added ${s.bright - brightBefore} bright strings (want seven)`);
+        // Low: one layer, no bloom.
+        if (!await stageWith('matrix', { configVersion: 2, intro: false }, '&seed=7&tier=low')) return record('no boot on Low');
+        s = await st();
+        if (s.layers !== 1) record(`Low runs ${s.layers} layers`);
+        return true;
+    }]],
     // Murmuration (task 8.8): the pointer is the falcon. Sweep it through
     // the middle of the flock: the flock splits into separate clouds and a
     // wave of alarm runs through it.

@@ -90,7 +90,7 @@ Imported from the private homepage repo, as a **fresh copy with no git history**
 | `cherry-blossoms` | cherry-blossoms.js | 21 KB | Leaks a resize listener on every `start()`. |
 | `halloween` | halloween.js, halloween.html | 178 KB | Interactive (mouse). Settings are already data-driven (`controlSpec()`). |
 | `neko` | neko.js + `assets/neko/` (79 themes, 2,472 `.ico`, 20 MB) | 28 KB | Interactive. **Licensing, size and filename-case problems** (§7.3). Now the public-domain oneko bitmaps in sprites.js, recoloured per coat (§10.24). |
-| `matrix` | matrix.js | 23 KB | |
+| `matrix` | matrix-logic.js, matrix.js | ~800 lines | Rebuilt 2026-11-11 as the film's code (§10.32): fixed cells lit by a passing wave, the 1999 glyphs as strokes (`MatrixLogic`), unit-tested; keys R, L, H; tap to splash |
 | `fishtank` | fishtank.js, fishtank.html | 139 KB | Interactive. `ctx.filter` blur and per-frame `putImageData`; the hardest on WebView. |
 | `advent` | advent.js, advent-treats.js, advent.html | 365 KB | Interactive. Date-driven; `?date=` time travel. |
 | `quest` | quest.js, quest-art.js, quest-world.js, quest.html | 538 KB | Interactive. Playable with keys and touch when standalone. |
@@ -804,7 +804,7 @@ and the commits.
 | quest | `crt` (high) | Palette proxy every tier; light map half size on Low; idles while paused; fixed 60 Hz steps (up to 20 catch-up) |
 | advent | — | Doors-at-rest layer, baked glow; treat refreshes, particles and confetti × density; idles between its own capped frames (never fully still: today's treat plays) |
 | leaves | — | Drift capped at 6k (Medium) and 2k (Low), shallower banks of the same shape; falling × density |
-| matrix | — | Baked head glow; columns limited to a density share, thinning as passes finish |
+| matrix | `depth`, `glow` (medium) | Every glyph at sixteen brightness steps and the bloomed head baked once as a white mask per layer and tinted per hue (the rainbow's twelve cost a few fills); each layer on its own canvas where only the cells whose light or symbol changed are redrawn (a flat 1999 trail is under a hundred cells a frame; a fading trail a couple of thousand), then two blits; paced at the fps setting (30) through idleUntil; columns × density; Low drops the back layer and the bloom |
 | snow, rain, fireflies, cherry-blossoms | — | Spawn rate and cap × density; fireflies' glow sprites 32/64/128 px by tier; cherry-blossoms' sky and branches cached |
 | starfield | — | Stars × density, joining at the far plane; `onScroll` |
 | mountains, parallax-clouds | — | No density (the layers are the composition, and they cost ~1%); `onScroll` |
@@ -3739,6 +3739,68 @@ whole islands; the ground below; the orbiters.
 - **Seasonal:** every month's list (§4.2).
 
 ---
+
+### 10.32 Matrix: the film's code (`matrix`, owner request, 2026-11-11)
+
+"The Matrix needs to look like the real thing from the movie." The old one
+was the generic clone: a font's katakana falling down the screen in a
+fading column. Research (a frame study of the 1999 title sequence, the
+designer's interviews, and Rezmason's widely cited recreation) says the
+film does something else, and this is built on it:
+
+- **The symbols never fall.** They sit in fixed cells; a wave of light runs
+  down each column (`MatrixLogic.stepColumn`), lighting the cell it passes,
+  and the trail behind the head goes dark again as the head moves on (the
+  film ends its strings by erasing from the top, which looks the same).
+  Each string has its own pace (half to full speed), a wobble, and (Stalls)
+  holds still now and then; some start in mid screen; a column past the
+  density never rains. Strings in a column keep their order (a new one is
+  never faster than the one ahead). A lit cell's light steps with the
+  head's row, not its fraction, as the film's does.
+- **The glyphs** (`MatrixLogic.KANA` etc.) are the ones in the title
+  sequence: thirty half-width katakana, all mirrored (Simon Whiteley
+  scanned them from Japanese cookbooks and flipped them on purpose), 日,
+  the digits (2 5 9 mirrored, 3 and 6 upside down), one Z, and
+  `* + : = . < > " | ¦ _`, drawn as strokes on a 10 × 14 grid (SVG paths
+  in a Path2D), so they look the same on every device and need no font.
+  Resurrections adds the rest of the half-width set. Kana are listed
+  twice, so the code reads as kana with numerals between.
+- **Looks** (`look`, key L): *The Matrix (1999)*, the operator screens and
+  the first film's titles: crowded (cells 1.35 tall), a flat dim trail with
+  no gradient, a blazing head on a share of the strings (Bright Heads,
+  default 30%; the film has about one in five), symbols that hold and then
+  change together on an 8 Hz clock, and a few cells (8%) that change every
+  tick. *Reloaded / Revolutions*: the sequels' titles, a trail fading from
+  bright to dark. *Resurrections (2021)*: the bigger alphabet, a cooler
+  green, and cells either dim or blazing (nothing between).
+- **Colour** (`colour`, key H; C is the player's): each look's own phosphor green (hue 140°,
+  112°, 135°), or amber, blue, red, purple, cyan, white, or the rainbow
+  (a hue per column). The trail's lightness ramps to 0.8 and never reaches
+  white; the head is paler and a little yellower, with a bloom.
+- **The intro** (`intro`): the code drips in from the top, the middle
+  column first, the three-quarter column next, the rest over a few seconds
+  and the edges last; off, it has been raining twelve seconds already.
+  R starts it over.
+- **Depth** (`depth`): a second grid behind, cells 0.62 the size, dimmer
+  and softened (its atlas drawn through a third-size canvas and back).
+- **Touch:** a tap starts bright-headed strings from that row in the seven
+  columns round it.
+- **Settings:** look, colour, symbol size (scaled with the screen, so 4K is
+  as crowded as a laptop), density, speed, trail length, bright heads,
+  symbol changes, stalls, intro, depth, glow, scanlines (a baked stripe
+  pattern), fps (30; the film ran at 24), tap. configVersion 2.
+- **Cost:** see §4.8. Each layer draws on its own canvas and only the cells
+  whose light or symbol changed are redrawn; a head's bloom spills into
+  the cells round it, so a head that moves on, or one next to a change,
+  takes its 3 × 3 block with it. The atlas is one white mask per layer
+  (every glyph at sixteen steps, the head row with its bloom, the head's
+  core), tinted per hue through `source-in`. Smoke: code on frame one in
+  fixed cells (a cell's glyph is the same a second later with the clock
+  off), about 30 frames a second, L and H, a tap's splash, one layer on
+  Low. Unit (`tools/matrix.test.mjs`): the glyph set and its flips, the
+  paths on the grid, the looks' ramps (flat, gradient, binary), the colour
+  ramp, the intro order, the rain (speed, the trail, spacing, the density,
+  the intro's hold, strings in order).
 
 ## Open questions
 

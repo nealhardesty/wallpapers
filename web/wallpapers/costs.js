@@ -20,7 +20,7 @@ WP.costs = {
     'last-bulb': 1,
     'leaves': 1,
     'lighthouse': 1,
-    'matrix': 1,
+    'matrix': 2,
     'mountains': 1,
     'murmuration': 2,
     'neko': 1,
