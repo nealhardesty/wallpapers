@@ -176,6 +176,9 @@ class FireplaceAnimationManager {
         this.draftTimer = 0;
 
         this.bedTop = 0;
+        this.burn = { phase: 'dying', t: 0 };
+        this.fresh = null;
+        this.stats = { collapses: 0, freshLogs: 0 };
 
         this.noiseField = null;
         this.noiseSize = 128;
@@ -315,6 +318,19 @@ class FireplaceAnimationManager {
         smctx.fillStyle = smokeGradient;
         smctx.fillRect(0, 0, FIREPLACE_SPRITE_SIZE, FIREPLACE_SPRITE_SIZE);
         this.smokeSprite = smoke;
+
+        // Steam off a fresh log (white), and the blue at the flame roots.
+        const soft = (stops) => {
+            const c = document.createElement('canvas');
+            c.width = c.height = FIREPLACE_SPRITE_SIZE;
+            const g = c.getContext('2d'), grad = g.createRadialGradient(half, half, 0, half, half, half);
+            for (const [k, colour] of stops) grad.addColorStop(k, colour);
+            g.fillStyle = grad;
+            g.fillRect(0, 0, FIREPLACE_SPRITE_SIZE, FIREPLACE_SPRITE_SIZE);
+            return c;
+        };
+        this.steamSprite = soft([[0, 'rgba(235, 230, 226, 0.6)'], [0.5, 'rgba(220, 216, 212, 0.25)'], [1, 'rgba(210, 206, 202, 0)']]);
+        this.blueSprite = soft([[0, 'rgba(120, 170, 255, 0.9)'], [0.35, 'rgba(70, 120, 240, 0.5)'], [1, 'rgba(40, 80, 200, 0)']]);
 
         // A coal is a round glow cut off by a flat ellipse; baked at a typical
         // 2:1 and stretched to each coal's own shape when drawn
@@ -481,56 +497,9 @@ class FireplaceAnimationManager {
         const baseRadius = 34 * scale * this.config.logThickness;
         const baseLength = width / (count - 0.7);
 
-        // Bottom row: mostly buried in the ash, running the full width
-        for (let i = 0; i < count; i++) {
-            const radius = baseRadius * (0.86 + random() * 0.3);
-            const length = baseLength * (0.9 + random() * 0.28);
-            this.logs.push(this.makeLog({
-                cx: -baseLength * 0.35 + baseLength * i + (random() - 0.5) * baseLength * 0.15,
-                cy: ground - radius * 0.5,
-                length,
-                radius,
-                angle: (random() - 0.5) * 0.1,
-                row: 0,
-                random
-            }));
-        }
-
-        // Upper row: crossed over the seams of the row below, tilted harder
-        const upperRadius = baseRadius * 0.82;
-        const upperCount = Math.max(1, count - 1);
-        const upperLength = width / (upperCount - 0.5);
-        for (let i = 0; i < upperCount; i++) {
-            const radius = upperRadius * (0.82 + random() * 0.32);
-            const length = upperLength * (0.82 + random() * 0.3);
-            this.logs.push(this.makeLog({
-                cx: -upperLength * 0.1 + upperLength * i + (random() - 0.5) * upperLength * 0.22,
-                cy: ground - baseRadius * 1.05 - radius * (0.5 + random() * 0.3),
-                length,
-                radius,
-                angle: (random() - 0.5) * 0.28,
-                row: 1,
-                random
-            }));
-        }
-
-        // A sparse capping row of split wood once the stack is big enough
-        if (count >= 7) {
-            const capCount = Math.max(1, Math.round(count / 2));
-            const capSpan = width / capCount;
-            for (let i = 0; i < capCount; i++) {
-                const radius = baseRadius * (0.5 + random() * 0.22);
-                this.logs.push(this.makeLog({
-                    cx: capSpan * (i + 0.5) + (random() - 0.5) * capSpan * 0.4,
-                    cy: ground - baseRadius * 2.0 - radius * 0.6,
-                    length: capSpan * (0.55 + random() * 0.35),
-                    radius,
-                    angle: (random() - 0.5) * 0.5,
-                    row: 2,
-                    random
-                }));
-            }
-        }
+        // The stack: where each piece goes, back to front (FireplaceWood.stack)
+        const shapes = FireplaceWood.stack(this.config.stack, { width, ground, count, baseRadius, baseLength, random, pieces: this.config.pieces });
+        for (const shape of shapes) this.logs.push(this.makeLog({ ...shape, random }));
 
         this.bedTop = this.logs.reduce((top, log) => Math.min(top, log.cy - log.radius), ground);
 
@@ -545,8 +514,122 @@ class FireplaceAnimationManager {
     makeLog(shape) {
         return FireplaceWood.makeLog(shape, shape.random, {
             palette: this.config.palette,
-            centre: this.canvas.width / 2
+            centre: this.canvas.width / 2,
+            pieces: this.config.pieces
         });
+    }
+
+    // ------------------------------------------------------------ the burn
+
+    // How hard the fire is burning, 0.35 (dying down) to 1 (blazing). Steady
+    // fires stay at 1; a cycling fire dies down over `burnMinutes`, then a
+    // top log burns through and drops, a fresh log lands on the heap,
+    // steams for a while and catches, and it blazes again.
+    fireLevel() {
+        if (this.config.burn !== 'cycle') return 1;
+        const b = this.burn;
+        if (b.phase === 'catching') return 0.35 + 0.65 * Math.min(1, b.t / 50);
+        const k = Math.min(1, b.t / Math.max(60, this.config.burnMinutes * 60));
+        return 1 - 0.65 * k * k * (3 - 2 * k);
+    }
+
+    updateBurn(dt) {
+        if (this.config.burn !== 'cycle') return;
+        const b = this.burn;
+        b.t += dt;
+        if (b.phase === 'dying' && b.t >= Math.max(60, this.config.burnMinutes * 60)) this.collapse();
+        if (b.phase === 'catching') {
+            const fresh = this.fresh;
+            if (fresh) {
+                // Steam off the ends of a fresh log, then (as it chars) less and less.
+                fresh.t += dt;
+                if (fresh.t < 25 && this.config.smoke && Math.random() < dt * 6 * (1 - fresh.t / 25)) {
+                    const end = Math.random() < 0.5 ? 1 : -1, [x, y] = FireplaceWood.toScreen(fresh.log, end * fresh.log.length * 0.45, fresh.log.top[Math.floor(fresh.log.top.length / 2)]);
+                    this.spawnSmoke(x, y, true);
+                }
+                // It chars as it catches: re-dressed and re-baked a few times.
+                const stage = Math.min(6, Math.floor(fresh.t / 12));
+                if (stage > fresh.stage) {
+                    fresh.stage = stage;
+                    const i = this.logs.indexOf(fresh.log);
+                    FireplaceWood.dress(fresh.log, this.charring() * stage / 6);
+                    fresh.log.art = FireplaceWood.bakeLog(fresh.log, this.logs.slice(i + 1), this.palette());
+                }
+                if (fresh.t > 75) this.fresh = null;
+            }
+            if (b.t >= 50) { b.phase = 'dying'; b.t = 0; }
+        }
+        // A log on its way down the heap.
+        for (const log of this.logs) {
+            if (!log.drop) continue;
+            log.drop.t += dt;
+            const k = Math.min(1, log.drop.t / log.drop.dur), e = k * k;
+            const y = log.drop.from + (log.drop.to - log.drop.from) * e;
+            if (log.art) log.art.y += y - log.cy;
+            log.cy = y;
+            if (k >= 1) {
+                log.drop = null;
+                if (log.landBurst) { log.landBurst = false; this.burst(log.cx, log.cy - log.radius * 0.5, 14); }
+            }
+        }
+    }
+
+    // The top log burns through and settles into the heap, sparks fly, and
+    // a fresh one lands on top.
+    collapse() {
+        const b = this.burn;
+        b.phase = 'catching'; b.t = 0;
+        this.stats.collapses++;
+        const candidates = this.logs.filter(log => log.kind === 'log' && !log.drop);
+        if (candidates.length > 1) {
+            const top = candidates.reduce((best, log) => log.cy < best.cy ? log : best);
+            top.drop = { t: 0, dur: 0.45, from: top.cy, to: top.cy + top.radius * 0.85 };
+            this.burst(top.cx, top.cy, 22);
+            for (const emitter of this.emitters) if (Math.abs(emitter.x - top.cx) < top.length * 0.5) emitter.flareBoost = Math.max(emitter.flareBoost || 0, 1.4);
+        }
+        this.freshLog();
+    }
+
+    freshLog() {
+        if (!this.config.showLogs || !this.logs.length) return;
+        const width = this.canvas.width, ground = this.groundLevel();
+        const random = this.seededRandom(Math.floor(Math.random() * 1e6));
+        const scale = this.config.logScale * Math.min(1, Math.max(0.62, width / 1400));
+        const R = 34 * scale * this.config.logThickness * 0.8 * (0.85 + random() * 0.3), L = width / Math.max(2, this.config.logCount - 0.7) * (0.8 + random() * 0.3);
+        const top = Math.min(...this.logs.filter(l => l.kind === 'log').map(l => l.cy - l.radius));
+        const cy = Math.min(top - R * 0.6, ground - R * 1.6);
+        const log = this.makeLog({ cx: width * (0.3 + random() * 0.4), cy, length: L, radius: R, angle: (random() - 0.5) * 0.3, row: 2, random, cut: 'round' });
+        log.drop = { t: 0, dur: 0.5, from: cy - this.canvas.height * 0.5, to: cy };
+        log.landBurst = true;
+        log.cy = log.drop.from;
+        this.logs.push(log);
+        const bed = this.bed;
+        FireplaceWood.findContacts(this.logs, bed ? x => ground - FireplaceWood.bedHeight(bed, x) : null);
+        FireplaceWood.dress(log, 0);
+        log.art = FireplaceWood.bakeLog(log, [], this.palette());
+        log.cy = log.drop.from; log.art.y += log.drop.from - cy;
+        // The heap can't grow for ever: the oldest fresh log of a tall heap is forgotten, buried.
+        const fresh = this.logs.filter(l => l.row === 2 && l.fresh);
+        log.fresh = true;
+        if (fresh.length > 2) { const gone = fresh[0]; this.logs.splice(this.logs.indexOf(gone), 1); }
+        this.fresh = { log, t: 0, stage: 0 };
+        this.bedTop = Math.min(this.bedTop, cy - R);
+        this.stats.freshLogs++;
+    }
+
+    burst(x, y, count) {
+        if (!this.config.sparks) return;
+        for (let i = 0; i < count; i++) this.spawnSpark(x + (Math.random() - 0.5) * 40, y, 1.4 + Math.random());
+    }
+
+    freshLogNow() { if (this.config.burn !== 'cycle') { this.config.burn = 'cycle'; this.saveConfig(); } this.collapse(); return '🪵 A fresh log'; }
+
+    nextStack() {
+        const order = ['heap', 'cabin', 'teepee', 'topdown', 'leanto', 'backlog', 'kindling'], i = order.indexOf(this.config.stack);
+        this.config.stack = order[(i + 1) % order.length];
+        this.saveConfig();
+        this.rebuildScene();
+        return { heap: '🪵 A heap', cabin: '🪵 A log cabin', teepee: '🪵 A teepee', topdown: '🪵 Top-down', leanto: '🪵 A lean-to', backlog: '🪵 A backlog', kindling: '🪵 Kindling' }[this.config.stack];
     }
 
     // A burned-down fire's wood is deep in char whatever the slider says
@@ -1101,7 +1184,7 @@ class FireplaceAnimationManager {
         const x = emitter.x + (Math.random() - 0.5) * 62 * config.flameSpread;
         const y = this.emitterTop(emitter);
 
-        const life = (0.45 + Math.pow(Math.random(), 0.7) * 1.05) * config.flameHeight * (0.7 + emitter.strength * 0.6);
+        const life = (0.45 + Math.pow(Math.random(), 0.7) * 1.05) * config.flameHeight * (0.7 + emitter.strength * 0.6) * (0.55 + 0.45 * this.level);
 
         this.flames.push({
             x,
@@ -1135,17 +1218,38 @@ class FireplaceAnimationManager {
         });
     }
 
-    spawnSmoke(x, y) {
+    spawnSmoke(x, y, steam = false) {
         this.smoke.push({
             x,
             y,
             vx: (Math.random() - 0.5) * 20,
-            vy: -(30 + Math.random() * 50),
-            radius: 18 + Math.random() * 28,
+            vy: -(30 + Math.random() * 50) * (steam ? 0.7 : 1),
+            radius: (18 + Math.random() * 28) * (steam ? 0.5 : 1),
             growth: 26 + Math.random() * 34,
             life: 0,
-            maxLife: 2.4 + Math.random() * 2.6
+            maxLife: (2.4 + Math.random() * 2.6) * (steam ? 0.6 : 1),
+            steam
         });
+    }
+
+    // Heat haze: the air over the fire wobbles, so the wall and anything
+    // else seen through it does too. Strips of the frame above the wood are
+    // drawn back a pixel or two to one side, swaying with time and height.
+    drawHaze(ctx) {
+        const height = this.canvas.height, width = this.canvas.width;
+        const y1 = Math.max(0, Math.min(height, this.bedTop)), y0 = Math.max(0, y1 - height * 0.42);
+        if (y1 - y0 < 16) return;
+        const strip = 6, t = this.elapsed;
+        ctx.save();
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.globalAlpha = 1;
+        for (let y = y0; y < y1; y += strip) {
+            const k = (y - y0) / (y1 - y0);                        // 0 at the top of the haze, 1 at the fire
+            const dx = Math.sin(y * 0.045 + t * 7.5) * 2.2 * k * k * this.fireIntensity + Math.sin(y * 0.11 - t * 11) * 0.8 * k;
+            if (Math.abs(dx) < 0.3) continue;
+            ctx.drawImage(this.canvas, 0, y, width, strip, dx, y, width, strip);
+        }
+        ctx.restore();
     }
 
     updateEmitters(dt) {
@@ -1161,7 +1265,12 @@ class FireplaceAnimationManager {
             // decays back to 0 on its own each frame rather than needing a
             // separate timer here
             const flare = emitter.flareBoost || 0;
-            emitter.strength = emitter.base * (1 - config.flickerAmount + config.flickerAmount * flow) * (1 + flare);
+            // The puffing of a buoyant flame: tongues detach at a few hertz,
+            // each root a little off the others' beat (1.5/√D Hz for a bed D
+            // metres across, a half-metre hearth near two; single tongues
+            // quicker), and the whole fire burns by its level.
+            const puff = 1 + config.puff * 0.45 * Math.sin(this.elapsed * Math.PI * 2 * this.puffHz * (0.85 + (emitter.seed % 1) * 0.5) + emitter.seed);
+            emitter.strength = emitter.base * (1 - config.flickerAmount + config.flickerAmount * flow) * (1 + flare) * Math.max(0, puff) * this.level;
             total += emitter.strength;
 
             if (flare > 0) {
@@ -1191,7 +1300,8 @@ class FireplaceAnimationManager {
         const height = this.canvas.height;
 
         // Emission scales with canvas width so a wide screen does not thin out
-        const rate = 1500 * (this.canvas.width / 1600) * config.flameDensity * config.intensity;
+        const puff = 1 + config.puff * 0.35 * Math.sin(this.elapsed * Math.PI * 2 * this.puffHz);
+        const rate = 1500 * (this.canvas.width / 1600) * config.flameDensity * config.intensity * puff * (0.25 + 0.75 * this.level);
         this.flameCarry += rate * dt;
         let toSpawn = Math.floor(this.flameCarry);
         this.flameCarry -= toSpawn;
@@ -1322,6 +1432,9 @@ class FireplaceAnimationManager {
     }
 
     update(dt) {
+        this.level = this.fireLevel();
+        this.puffHz = 1.5 / Math.sqrt(Math.max(0.15, (this.canvas.width / 1400) * 0.5));
+        this.updateBurn(dt);
         this.updateDraft(dt);
         this.updateEmitters(dt);
         this.updateFlames(dt);
@@ -1405,8 +1518,22 @@ class FireplaceAnimationManager {
                     );
                 }
             }
+            // The blue at the very base, where the gas burns clean before it
+            // soots: faint in a blaze, plainer as the fire dies down to coals.
+            if (this.blueSprite && this.config.blueBase > 0) {
+                const blue = this.config.blueBase * (0.08 + 0.3 * (1 - this.level));
+                for (const emitter of this.emitters) {
+                    const radius = (8 + emitter.strength * 10) * scale;
+                    bctx.globalAlpha = Math.min(1, blue * (0.3 + emitter.strength));
+                    bctx.drawImage(this.blueSprite, emitter.x * scale - radius, (ground - 3) * scale - radius * 1.3, radius * 2, radius * 2);
+                }
+            }
         }
 
+        // A tongue of flame is taller than it is wide: each sprite is drawn
+        // stretched upward by the Tongues setting, more so while it is hot
+        // (young) and still a column, less as it breaks up and cools.
+        const tongues = this.config.tongues ?? 0.5;
         for (const flame of this.flames) {
             if (flame.front !== front) continue;
             if (flame.alpha <= 0.004) continue;
@@ -1415,8 +1542,9 @@ class FireplaceAnimationManager {
             if (!sprite) continue;
 
             const radius = flame.radius * scale;
+            const stretch = 1 + tongues * (0.35 + 0.75 * flame.temp);
             bctx.globalAlpha = Math.min(1, flame.alpha);
-            bctx.drawImage(sprite, flame.x * scale - radius, flame.y * scale - radius, radius * 2, radius * 2);
+            bctx.drawImage(sprite, flame.x * scale - radius, flame.y * scale - radius * (2 * stretch - 1), radius * 2, radius * 2 * stretch);
         }
 
         bctx.globalAlpha = 1;
@@ -1723,9 +1851,9 @@ class FireplaceAnimationManager {
             const alpha = Math.sin(Math.PI * Math.min(1, k)) * this.config.smokeOpacity;
             if (alpha <= 0.01) continue;
 
-            ctx.globalAlpha = alpha;
+            ctx.globalAlpha = puff.steam ? alpha * 1.6 : alpha;
             ctx.drawImage(
-                this.smokeSprite,
+                puff.steam && this.steamSprite ? this.steamSprite : this.smokeSprite,
                 puff.x - puff.radius,
                 puff.y - puff.radius,
                 puff.radius * 2,
@@ -1764,6 +1892,7 @@ class FireplaceAnimationManager {
 
         this.drawSparks(ctx);
         this.drawSmoke(ctx);
+        if (this.config.haze && this.quality.effects.includes('haze')) this.drawHaze(ctx);
         this.drawCompanion(ctx);
     }
 

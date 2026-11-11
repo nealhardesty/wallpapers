@@ -45,7 +45,14 @@ scaly pine or bleached driftwood (following its Wood Type), round or split,
 each showing the rings of its sawn end and charring into alligator cracks
 whose glow breathes as the air moves. It lies in a heap of coals behind an
 iron grate or a pair of andirons; the panel's Char, Coal Bed and Ironwork
-controls set them.
+controls set them. Lay it how you like: a heap, a log cabin, a teepee,
+top-down with kindling on top, a lean-to, one great backlog, or kindling
+alone, from rounds, splits, sticks and twigs, snapped ends with their
+splinters showing, or punky old wood. The flame puffs the way a real one
+does, licks in tongues as tall as you like, burns blue at its roots, and
+wobbles the air above it; or let it burn down to coals, drop a log, and
+catch again on a fresh one that steams before it takes (L drops one now,
+W lays the wood again).
 
 The second half is new: a harmonograph inking its figures, a pixel-art room
 with a cat that keeps the real hours, Islamic star patterns that breathe, a
@@ -503,7 +510,7 @@ you tick it, then seven, with the rest folded away:
   this one (or let it go), `V` another island passes, `O` a small one comes to orbit, `B` a balloon, `W` weather, `S` season, `H` holiday · Weather `V` next view (days, hours, now), `U` °C or °F,
   `R` refresh now · World Clock `V` next view (map, faces, board), `M` centre
   the map on the next place, `L` next map look · Orrery `=`/`+` faster, `-` slower,
-  `0` back to now, `L` look, `S` scale, `V` from above or tilted · Matrix `R` the code comes down again, `L` next look (the 1999 film, the sequels, Resurrections), `H` next colour · Cherry Blossoms `G` a gust, `B` shake the bough, `N` a new tree, `S` next sky, `W` next ground.
+  `0` back to now, `L` look, `S` scale, `V` from above or tilted · Matrix `R` the code comes down again, `L` next look (the 1999 film, the sequels, Resurrections), `H` next colour · Cherry Blossoms `G` a gust, `B` shake the bough, `N` a new tree, `S` next sky, `W` next ground · Fireplace `L` a log burns through and a fresh one lands, `W` the wood laid again.
 
 **Touch and drag:** tap or drag on Zen Garden (rake), Koi Pond (ripples;
 feed them in settings), Murmuration (you're the falcon), Lantern Festival,

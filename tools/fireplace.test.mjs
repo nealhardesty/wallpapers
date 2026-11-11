@@ -195,3 +195,64 @@ test('bed: a lumpy heap on the hearth, deeper with depth, and none at zero', () 
     assert.ok(Math.abs(Wood.bedHeight(one, 3) - (one.heights[0] + one.heights[1]) / 2) < 1e-4);
     assert.ok(one.top < 800 - Math.max(...one.heights));
 });
+
+test('stacks: every layout keeps its wood on the hearth, back to front, and the pieces asked for', () => {
+    const opts = { width: 1400, ground: 760, count: 5, baseRadius: 60, baseLength: 320, pieces: ['rounds', 'splits', 'sticks', 'snapped', 'punky'] };
+    for (const kind of ['heap', 'cabin', 'teepee', 'topdown', 'leanto', 'backlog', 'kindling']) {
+        const shapes = Wood.stack(kind, { ...opts, random: Wood.random(7) });
+        assert.ok(shapes.length >= 4, `${kind}: ${shapes.length} pieces`);
+        for (const sh of shapes) {
+            assert.ok(Number.isFinite(sh.cx) && Number.isFinite(sh.cy) && sh.length > 0 && sh.radius > 0, `${kind}: a bad shape`);
+            assert.ok(sh.cx > -opts.width * 0.5 && sh.cx < opts.width * 1.5, `${kind}: off the hearth`);
+            assert.ok(sh.cy <= opts.ground + 1e-9 && sh.cy > opts.ground - opts.baseRadius * 8, `${kind}: floating or buried`);
+            assert.ok(Math.abs(sh.angle) < 1.6);
+        }
+        // The same seed lays the same stack.
+        assert.equal(JSON.stringify(Wood.stack(kind, { ...opts, random: Wood.random(7) })), JSON.stringify(shapes));
+    }
+    const cabin = Wood.stack('cabin', { ...opts, random: Wood.random(1) });
+    assert.ok(cabin.some(sh => sh.endOn), 'a cabin has logs laid across, seen end-on');
+    const teepee = Wood.stack('teepee', { ...opts, random: Wood.random(1) });
+    assert.ok(teepee.filter(sh => sh.kind !== 'twig').every(sh => Math.abs(sh.angle) > 0.35), 'a teepee leans');
+    assert.ok(teepee.some(sh => sh.angle > 0) && teepee.some(sh => sh.angle < 0), 'from both sides');
+    const topdown = Wood.stack('topdown', { ...opts, random: Wood.random(1) });
+    const rounds = topdown.filter(sh => sh.row === 0), kindling = topdown.filter(sh => sh.kind === 'stick' || sh.kind === 'twig');
+    assert.ok(rounds.length && kindling.length && Math.min(...kindling.map(sh => sh.cy)) < Math.min(...rounds.map(sh => sh.cy)), 'kindling on top of the big wood');
+    const backlog = Wood.stack('backlog', { ...opts, random: Wood.random(1) });
+    assert.ok(backlog[0].radius > opts.baseRadius * 1.4 && backlog[0].row === 0, 'one great log at the back');
+    assert.ok(Wood.stack('kindling', { ...opts, random: Wood.random(1) }).every(sh => sh.kind === 'stick' || sh.kind === 'twig'));
+    // Without sticks, no kindling anywhere.
+    for (const kind of ['heap', 'cabin', 'topdown', 'leanto', 'backlog']) {
+        assert.ok(Wood.stack(kind, { ...opts, pieces: ['rounds', 'splits'], random: Wood.random(2) }).every(sh => sh.kind !== 'stick' && sh.kind !== 'twig'), `${kind}: sticks when none were asked for`);
+    }
+});
+
+test('pieces: the mix follows what goes on; snapped ends and punky wood turn up when asked, never otherwise', () => {
+    const counts = (pieces, n = 400) => {
+        const random = Wood.random(11), out = { torn: 0, punky: 0, split: 0, round: 0 };
+        for (let i = 0; i < n; i++) {
+            const w = Wood.pickWood(random, 'hardwood', pieces);
+            if (w.torn) out.torn++;
+            if (w.species === 'punky') out.punky++;
+            if (w.cut === 'round') out.round++; else out.split++;
+        }
+        return out;
+    };
+    const plain = counts(['rounds', 'splits']);
+    assert.equal(plain.torn, 0); assert.equal(plain.punky, 0); assert.ok(plain.round > 0 && plain.split > 0);
+    assert.equal(counts(['rounds']).split, 0);
+    assert.equal(counts(['splits']).round, 0);
+    const all = counts(['rounds', 'splits', 'snapped', 'punky']);
+    assert.ok(all.torn > 20 && all.punky > 10, JSON.stringify(all));
+    // A torn log's shown end is ragged; an end-on log shows nearly its whole face.
+    const random = Wood.random(3);
+    const torn = Wood.makeLog({ cx: 500, cy: 700, length: 300, radius: 50, angle: 0, row: 0, cut: 'round', torn: true }, random, { palette: 'hardwood', centre: 700 });
+    assert.ok(torn.torn);
+    const [, face] = Wood.silhouettePolys(torn);
+    assert.equal(JSON.stringify(face), JSON.stringify(Wood.faceOutline(torn, torn.endSide, 0.3)), 'the torn end is the ragged outline');
+    assert.notEqual(JSON.stringify(face), JSON.stringify(Wood.faceOutline(torn, torn.endSide, 0.025)));
+    const plainLog = Wood.makeLog({ cx: 500, cy: 700, length: 300, radius: 50, angle: 0, row: 0, cut: 'round' }, Wood.random(3), { palette: 'hardwood', centre: 700 });
+    assert.ok(!plainLog.torn);
+    const across = Wood.makeLog({ cx: 500, cy: 700, length: 80, radius: 50, angle: 0, row: 1, cut: 'round', endOn: true }, Wood.random(4), { palette: 'hardwood', centre: 700 });
+    assert.ok(across.faceRx > 45 && plainLog.faceRx < 30);
+});
