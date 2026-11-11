@@ -32,6 +32,7 @@ class LastBulbAnimationManager {
         this.tail = { a: 0.35, w: 0 };
         this.gust = null;
         this.twist = null;
+        this.twinklers = [];
     }
 
     // ---- Lifecycle ------------------------------------------------------------------------
@@ -77,7 +78,7 @@ class LastBulbAnimationManager {
         this.config = config;
         if (!this.running) return;
         const changed = keys => keys.some(k => JSON.stringify(old[k]) !== JSON.stringify(config[k]));
-        if (changed(['palette', 'myColors', 'lastColour', 'glass', 'size', 'spacing', 'sag', 'end', 'wall', 'roomLight', 'tag'])) this.resize();
+        if (changed(['palette', 'myColors', 'lastColour', 'glass', 'shape', 'size', 'spacing', 'sag', 'end', 'wall', 'roomLight', 'tag', 'tagText', 'route', 'rows', 'hookEvery', 'glow', 'garland', 'twinklers'])) this.resize();
         if (changed(['outages'])) this.planOutage();
         if (changed(['draft'])) this.planDraft();
         if (changed(['christmasEve'])) this.checkEve();
@@ -174,7 +175,7 @@ class LastBulbAnimationManager {
         const dl = (lc.x - x) ** 2 + (lc.y - y) ** 2;
         if (dl < bestD) { best = 'last'; bestD = dl; }
         for (const b of this.bulbs) {
-            const c = LastBulbArt.centre(LastBulbLogic.mx(L, b.x), b.y, this.angle(b.rest + b.th), w);
+            const c = LastBulbArt.centre(LastBulbLogic.mx(L, b.x), b.y, this.angle(b.rest + b.th), w, L.cy);
             const d = (c.x - x) ** 2 + (c.y - y) ** 2;
             if (d < bestD) { best = b; bestD = d; }
         }
@@ -211,6 +212,28 @@ class LastBulbAnimationManager {
         else this.goOut(true);
         this.host.idleUntil(0);
     }
+    nextRoute() {
+        const order = ['rail', 'border', 'arch'], i = order.indexOf(this.config.route);
+        this.config.route = order[(i + 1) % order.length];
+        WP.settings.save(this.config);
+        this.resize();
+        return { rail: this.config.rows > 1 ? `Along the rail, ${this.config.rows} rows` : 'Along the rail', border: 'Round the border', arch: 'Over the doorway' }[this.config.route];
+    }
+
+    // ---- Twinkle bulbs ----------------------------------------------------------------------------
+
+    // A twinkle bulb blinks on its own clock: off for a blink, on for a
+    // second or three. Each change is a slot, so the stage idles between.
+    planTwinkle(k, first = false) {
+        const tw = this.twinklers[k];
+        const wait = first ? Math.random() * 2 : tw.on ? 0.9 + Math.random() * 2.2 : 0.22 + Math.random() * 0.3;
+        this.schedule(`tw${k}`, wait, () => {
+            tw.on = !tw.on;
+            tw.power = tw.on ? 1 : 0;
+            this.planTwinkle(k);
+            this.host.idleUntil(0);
+        });
+    }
 
     // ---- Layout and baking -------------------------------------------------------------------
 
@@ -224,26 +247,28 @@ class LastBulbAnimationManager {
         this.canvas.width = Math.round(W * dpr);
         this.canvas.height = Math.round(H * dpr);
         const c = this.config;
-        const L = this.layout = LastBulbLogic.layout(W, H, { top: this.host.insets?.top || 0, size: c.size, spacing: c.spacing, sag: c.sag, end: c.end });
+        const L = this.layout = LastBulbLogic.layout(W, H, { top: this.host.insets?.top || 0, bottom: this.host.insets?.bottom || 0, size: c.size, spacing: c.spacing, sag: c.sag, end: c.end, route: c.route, rows: c.rows, hookEvery: c.hookEvery, glow: c.glow });
+        L.shape = c.shape || 'c9';
+        L.cy = LastBulbArt.centreOf(L.shape);
         const colours = LastBulbLogic.colours(c);
         const old = this.bulbs || [];
         this.bulbs = L.bulbs.map((b, i) => ({ ...b, colour: colours[i % colours.length], th: old[i]?.th || 0, om: old[i]?.om || 0, k: 0.6 + ((i * 7919) % 13) / 16 }));
         this.lastColour = LastBulbLogic.lastColour(c, colours, L.lastIndex);
         this.tail.rest = L.rest;
         // Sprites: dark, lit and ember for each colour on the strand.
-        const w = L.w, glass = c.glass;
+        const w = L.w, glass = c.glass, shape = L.shape;
         this.sprites = {};
         for (const col of new Set([...colours, this.lastColour])) {
-            this.sprites[col] = { dark: LastBulbArt.bulb(col, w, dpr, 'dark', glass), lit: LastBulbArt.bulb(col, w, dpr, 'lit', glass), ember: LastBulbArt.bulb(col, w, dpr, 'ember', glass) };
+            this.sprites[col] = { dark: LastBulbArt.bulb(col, w, dpr, 'dark', glass, shape), lit: LastBulbArt.bulb(col, w, dpr, 'lit', glass, shape), ember: LastBulbArt.bulb(col, w, dpr, 'ember', glass, shape) };
         }
         this.plug = LastBulbArt.plug(w, dpr);
-        this.tagArt = c.tag ? LastBulbArt.tag(w, dpr, 'jiggle') : null;
+        this.tagArt = c.tag ? LastBulbArt.tag(w, dpr, (c.tagText || '').trim() || 'jiggle') : null;
         // The wall: lit by the strand, dark (the strand out), and the corner
         // round the last bulb lit by it as well.
         const random = WP.seededRandom(1209);
-        const wall = LastBulbArt.albedo(L, dpr, c.wall, random);
+        const wall = LastBulbArt.albedo(L, dpr, c.wall, random, c.garland === 'pine');
         this.ambient = 0.05 + c.roomLight * 0.6;
-        const lights = this.bulbs.map(b => ({ ...LastBulbArt.centre(LastBulbLogic.mx(L, b.x), b.y, this.angle(b.rest), w), colour: b.colour }));
+        const lights = this.bulbs.map(b => ({ ...LastBulbArt.centre(LastBulbLogic.mx(L, b.x), b.y, this.angle(b.rest), w, L.cy), colour: b.colour }));
         const full = { x: 0, y: 0, w: W, h: H };
         const withWire = (layer, rect, strong) => {
             const g = layer.getContext('2d');
@@ -257,6 +282,20 @@ class LastBulbAnimationManager {
         const rect = this.corner = this.cornerRect();
         const lc = this.lastCentre(this.tail.rest, 0);
         this.lastBg = withWire(LastBulbArt.lit(wall, L, dpr, rect, this.ambient, [...lights, { ...lc, colour: this.lastColour }]), rect, true);
+        // Twinkle bulbs: each has the wall round it lit by everyone but
+        // itself, drawn over the lit wall by how dark it is.
+        for (const k of this.twinklers.keys()) this.cancel(`tw${k}`);
+        const was = this.twinklers;
+        this.twinklers = LastBulbLogic.twinklers(this.bulbs.length, c.twinklers).map((i, k) => {
+            const l = lights[i], r = L.reach;
+            const d = this.dpr, lo = v => Math.floor(v * d) / d, hi = v => Math.ceil(v * d) / d;
+            const x0 = Math.max(0, lo(l.x - r - w * 2)), y0 = Math.max(0, lo(l.y - r - w * 2)), x1 = Math.min(W, hi(l.x + r + w * 2)), y1 = Math.min(H, hi(l.y + r + w * 2));
+            const twRect = { x: x0, y: y0, w: Math.max(1 / d, x1 - x0), h: Math.max(1 / d, y1 - y0) };
+            const layer = withWire(LastBulbArt.lit(wall, L, dpr, twRect, this.ambient, lights.filter((_, j) => j !== i)), twRect, true);
+            const prev = was[k];
+            return { i, rect: twRect, layer, on: prev ? prev.on : true, power: prev ? prev.power : 1, f: prev ? prev.f : 1 };
+        });
+        for (const k of this.twinklers.keys()) this.planTwinkle(k, !was[k]);
         this.dirty = true;
         this.host.idleUntil(0);
     }
@@ -271,7 +310,7 @@ class LastBulbAnimationManager {
         // blend that column twice and leave a seam (the stage may render below 1:1).
         const d = this.dpr, lo = v => Math.floor(v * d) / d, hi = v => Math.ceil(v * d) / d;
         const x0 = Math.max(0, lo(Math.min(...xs) - L.w * 2)), x1 = Math.min(this.canvas.width / d, hi(Math.max(...xs) + L.w * 2));
-        const y0 = Math.max(0, lo(L.top)), y1 = Math.min(this.canvas.height / d, hi(Math.max(lc.y + r, T.Q.y + L.w * 3)));
+        const y0 = Math.max(0, lo(Math.min(L.top, lc.y - r, L.hookY - L.w * 2))), y1 = Math.min(this.canvas.height / d, hi(Math.max(lc.y + r, T.Q.y + L.w * 3)));
         return { x: x0, y: y0, w: Math.max(1 / d, x1 - x0), h: Math.max(1 / d, y1 - y0) };
     }
 
@@ -281,7 +320,7 @@ class LastBulbAnimationManager {
         const phi = -(a - L.rest) * 0.5 + 0.06 + th;
         return { x: LastBulbLogic.mx(L, T.P.x), y: T.P.y, a: this.angle(phi), T };
     }
-    lastCentre(a, th) { const p = this.lastPose(a, th); return LastBulbArt.centre(p.x, p.y, p.a, this.L.w); }
+    lastCentre(a, th) { const p = this.lastPose(a, th); return LastBulbArt.centre(p.x, p.y, p.a, this.L.w, this.L.cy); }
 
     // ---- The frame -----------------------------------------------------------------------------
 
@@ -298,7 +337,7 @@ class LastBulbAnimationManager {
         this.idled = 0;
         const changed = this.update(sceneDt, dt);
         this.draw(changed);
-        const busy = changed.strand || changed.last;
+        const busy = changed.strand || changed.last || changed.tw.length > 0;
         if (!busy) {
             if (this.moving) this.host.idleUntil(Math.max(0, 1000 / 30 - (performance.now() - now) - 4));
             else {
@@ -331,11 +370,17 @@ class LastBulbAnimationManager {
         const strand = !!s.steps || Math.abs(s.f - sf) > 0.0005 || Math.abs(s.f - s.power) > 0.002;
         const last = !!l.steps || Math.abs(l.f - lf) > 0.0005 || Math.abs(l.f - l.power * s.power) > 0.002;
         if (!strand && !last) { s.f = s.power; l.f = l.power * s.power; }
+        const tw = [];
+        for (const [k, t] of this.twinklers.entries()) {
+            const tf = t.f;
+            t.f = LastBulbLogic.filament(t.f, t.power, dt);
+            if (Math.abs(t.f - tf) > 0.0005 || Math.abs(t.f - t.power) > 0.002) tw.push(k); else t.f = t.power;
+        }
         if (this.moving) {
             this.acc += dt;
             while (this.acc >= LAST_BULB_STEP) { this.acc -= LAST_BULB_STEP; this.physics(LAST_BULB_STEP); }
         }
-        return { strand, last };
+        return { strand, last, tw };
     }
 
     physics(h) {
@@ -348,7 +393,7 @@ class LastBulbAnimationManager {
         }
         const pulse = u => Math.exp(-(((u - 0.6) / 0.45) ** 2));
         for (const b of this.bulbs) {
-            const along = L.mirror ? 1 - b.x / L.W : b.x / L.W;
+            const along = b.u;
             F = this.gust ? this.gust.dir * this.gust.strength * 3.2 * b.k * pulse(this.gust.t - along * 1.2) : 0;
             b.om += (-55 * b.th - 1.8 * b.om + F) * h;
             b.th += b.om * h;
@@ -387,15 +432,20 @@ class LastBulbAnimationManager {
             this.stats.full++;
             g.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
             this.paint(g);
-        } else if (changed.last) {
-            // A flicker: only the corner round the last bulb.
-            this.stats.corner++;
-            const r = this.corner;
-            g.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
-            g.save();
-            g.beginPath(); g.rect(r.x, r.y, r.w, r.h); g.clip();
-            this.paint(g, r);
-            g.restore();
+        } else {
+            // A flicker: only the corner round the last bulb; a twinkle, only
+            // the wall round that bulb.
+            const rects = [];
+            if (changed.last) rects.push(this.corner);
+            for (const k of changed.tw) rects.push(this.twinklers[k].rect);
+            for (const r of rects) {
+                this.stats.corner++;
+                g.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+                g.save();
+                g.beginPath(); g.rect(r.x, r.y, r.w, r.h); g.clip();
+                this.paint(g, r);
+                g.restore();
+            }
         }
     }
 
@@ -414,6 +464,7 @@ class LastBulbAnimationManager {
         };
         if (S < 0.997) bg(this.darkBg, 1);
         bg(this.litBg, S);
+        for (const t of this.twinklers) bg(t.layer, S * (1 - LastBulbLogic.light(t.f)), t.rect);
         bg(this.lastBg, Ll, this.corner);
         // The tail: wire off the last hook to the last socket, then on to the plug.
         const pose = this.lastPose(), T = pose.T, X = x => LastBulbLogic.mx(L, x);
@@ -423,10 +474,11 @@ class LastBulbAnimationManager {
             g2.quadraticCurveTo(X(T.C.x), T.C.y, X(T.P.x), T.P.y);
             g2.quadraticCurveTo(X(T.P.x + w * 0.9), T.P.y + w * 0.2, X(T.Q.x), T.Q.y);
         }, false);
-        LastBulbArt.hooks(g, { ...L, hooks: [L.lastHook] });
+        LastBulbArt.hooks(g, { ...L, hooks: [{ x: L.lastHook, y: L.hookY }] });
         if (this.tagArt) {
-            // Tied to the last hook, between the strand's last bulb and the tail.
-            const bx = L.lastHook + w * 0.1, by = L.hookY + w * 0.15;
+            // Tied to the last hook, between the strand's last bulb and the
+            // tail; a hook by the screen's edge has it hang inward instead.
+            const bx = L.lastHook + (L.lastHook > L.W - 2.5 * w ? -0.75 * w : 0.1 * w), by = L.hookY + w * 0.15;
             const ta = this.angle(-(this.tail.a - L.rest) * 0.5 + 0.05 + this.last.th * 0.15);
             LastBulbArt.put(g, this.tagArt.lit, X(bx), by, ta);
             const bright = Math.min(1, this.ambient * 1.4 + 0.45 * S + 0.6 * Ll);
@@ -437,10 +489,13 @@ class LastBulbAnimationManager {
             LastBulbArt.put(g, sp.ember, x, y, a, emb);
             LastBulbArt.put(g, sp.lit, x, y, a, light);
         };
-        for (const b of this.bulbs) {
+        const twOf = new Map(this.twinklers.map(t => [t.i, t]));
+        for (const [i, b] of this.bulbs.entries()) {
             const x = X(b.x);
-            if (clip && (x < clip.x - w * 3 || x > clip.x + clip.w + w * 3)) continue;
-            put(this.sprites[b.colour], x, b.y, this.angle(b.rest + b.th), S, Se);
+            if (clip && (x < clip.x - w * 3 || x > clip.x + clip.w + w * 3 || b.y < clip.y - w * 4 || b.y > clip.y + clip.h + w * 3)) continue;
+            const t = twOf.get(i);
+            if (t) put(this.sprites[b.colour], x, b.y, this.angle(b.rest + b.th), S * LastBulbLogic.light(t.f), Math.max(Se, LastBulbLogic.ember(t.f) * S));
+            else put(this.sprites[b.colour], x, b.y, this.angle(b.rest + b.th), S, Se);
         }
         put(this.sprites[this.lastColour], pose.x, pose.y, pose.a, Ll, Le);
         LastBulbArt.put(g, this.plug, X(T.Q.x), T.Q.y, this.angle(-(this.tail.a - L.rest) * 0.8 - 0.1));
@@ -451,7 +506,9 @@ class LastBulbAnimationManager {
         return {
             strand: this.strand.mode, strandLight: +LastBulbLogic.light(this.strand.f).toFixed(3),
             last: this.last.mode, lastLight: +LastBulbLogic.light(this.last.f).toFixed(3),
-            moving: !!this.moving, eve: this.eve, bulbs: this.bulbs.length,
+            moving: !!this.moving, eve: this.eve, bulbs: this.bulbs.length, route: this.L.route, rows: this.L.rows,
+            spread: this.bulbs.length ? { x0: Math.round(Math.min(...this.bulbs.map(b => LastBulbLogic.mx(this.L, b.x)))), x1: Math.round(Math.max(...this.bulbs.map(b => LastBulbLogic.mx(this.L, b.x)))), y0: Math.round(Math.min(...this.bulbs.map(b => b.y))), y1: Math.round(Math.max(...this.bulbs.map(b => b.y))) } : null,
+            twinklers: this.twinklers.map(t => ({ i: t.i, on: t.on, light: +LastBulbLogic.light(t.f).toFixed(2) })),
             next: Object.fromEntries(Object.entries(this.slots).filter(([, s]) => s).map(([k, s]) => [k, +(s.at - this.time).toFixed(1)])),
             stats: { ...this.stats },
         };

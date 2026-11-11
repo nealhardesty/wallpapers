@@ -1,7 +1,7 @@
 // Default settings for Frost on the Glass. Saved settings store only what
 // differs from these (SPEC §4.1).
 WP.defaults('frost', {
-    configVersion: 1,
+    configVersion: 2,       // 2026-11-11: the tree's style, size, width and lights
     growMinutes: 6,         // how long the frost takes to creep in
     coverage: 0.55,         // how far in from the edges it reaches
     cycleMinutes: 30,       // the glass thaws and frosts afresh this often (0: never)
@@ -12,6 +12,10 @@ WP.defaults('frost', {
     twinkle: 1,             // how much they breathe
     blur: 1,                // how far out of focus the room is (bokeh size)
     treeSide: 'center',     // where the tree stands: left, center, right
+    treeStyle: 'fir',       // fir, charlie (a Charlie Brown tree), none
+    treeSize: 1,            // × its height
+    treeWidth: 1,           // × its width
+    lightCount: 46,         // bulbs on it (before the screen's size scales them)
     window: 'four',         // panes: single, two, four, six
     frameColour: 'white',   // white, wood, green, red
     snow: 0.5,              // snow falling outside (0: none)

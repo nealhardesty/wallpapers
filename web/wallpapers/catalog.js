@@ -112,6 +112,7 @@
               { keys: ['l'], label: 'The last bulb tries (or gives up)', run: strand => strand.keyTry() },
               { keys: ['o'], label: 'The whole strand goes out (or back on)', run: strand => strand.keyOut() },
               { keys: ['d'], label: 'A draft', run: strand => strand.blow() },
+              { keys: ['n'], label: 'Where it hangs: the rail, the border, a doorway', run: strand => strand.nextRoute() },
           ] },
         { id: 'frost', name: 'Frost on the Glass', icon: '🧊', accent: '#a9d4ff', background: '#120c0a',
           scripts: ['frost/frost-logic.js', 'frost/frost-art.js', 'frost/frost.js'],

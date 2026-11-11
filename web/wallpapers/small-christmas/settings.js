@@ -2,7 +2,11 @@
 // The values and their defaults live in defaults.js.
 WP.schema('small-christmas', [
     { group: '🎄 The Tree' },
-    { key: 'treeSize', label: 'Size', type: 'select', options: [['tiny', '🌱 Tiny'], ['small', '🎄 Small'], ['medium', '🌲 A bit bigger']] },
+    { key: 'treeSize', label: 'Size', type: 'select', options: [['tiny', '🌱 Tiny'], ['small', '🎄 Small'], ['medium', '🌲 A bit bigger'], ['big', '🎄🎄 Big'], ['huge', '🌲🌲 Huge']] },
+    { key: 'treeStyle', label: 'What kind', type: 'select', options: [['fir', '🎄 A fir'], ['charlie', '🥀 A Charlie Brown tree']], help: 'A bent stick with a few drooping branches and one red ball, in a blanket.' },
+    { key: 'treeWidth', label: 'Width', type: 'range', min: 0.6, max: 1.8, step: 0.1, unit: '×', digits: 1 },
+    { key: 'lightCount', label: 'Lights', type: 'range', min: 0, max: 3, step: 0.1, unit: '×', digits: 1, when: config => config.treeStyle === 'fir', help: 'More lights!' },
+    { key: 'ornamentCount', label: 'Ornaments', type: 'range', min: 0, max: 3, step: 0.1, unit: '×', digits: 1, when: config => config.treeStyle === 'fir' && config.ornaments, help: 'More ornaments!' },
     { key: 'lightPattern', label: 'Lights blink', type: 'select', options: [['twinkle', '✨ Twinkle'], ['chase', '🏃 Chase'], ['alternate', '🔀 Alternate'], ['together', '💡 All together'], ['steady', '🔆 Steady']], help: 'L (or a tap on the tree) jingles it.' },
     { key: 'lights', label: 'Light colours', type: 'select', options: [['classic', '🌈 Classic'], ['warm', '🕯️ Warm'], ['blue', '❄️ Blue'], ['candy', '🍬 Candy cane']] },
     { key: 'garland', label: 'Garland', type: 'toggle' },

@@ -31,15 +31,15 @@ const OVERRIDES = {
     'stained-glass': { configVersion: 1, light: 'afternoon' },
     orrery: { configVersion: 1, view: 'tilted', drift: false, showInfo: false, showLabels: false, planetSize: 1.4 },
     // Moofy's grin under the tree, Ras at the ornament, Butters belly-up.
-    'cat-ornament': { configVersion: 1, cats: ['moofy', 'ras', 'butters'], inRoom: 3, catSize: 1.2 },
+    'cat-ornament': { configVersion: 2, cats: ['moofy', 'ras', 'butters'], inRoom: 3, catSize: 1.2 },
     // Big bulbs to read at thumbnail size; the last one still dark.
-    'last-bulb': { configVersion: 1, size: 1.6, sag: 0.7, roomLight: 0.25 },
+    'last-bulb': { configVersion: 2, size: 1.6, sag: 0.7, roomLight: 0.25 },
     matrix: { configVersion: 2, intro: false },
     'cherry-blossoms': { configVersion: 2, petalCount: 240, gusts: 0 },
     // One big pane, well frosted, the tree glowing through.
     frost: { configVersion: 1, window: 'single', coverage: 0.8, frameColour: 'red' },
     // A bit bigger, so the tree, the presents and the train read in a tile.
-    'small-christmas': { configVersion: 1, treeSize: 'medium', pixelSize: 1.5 },
+    'small-christmas': { configVersion: 2, treeSize: 'medium', pixelSize: 1.5 },
     // A summer morning on a fair day, a little bigger so the town reads in a tile.
     'sky-island': { configVersion: 2, weather: 'fair', islandSize: 1.2 },
 };

@@ -68,21 +68,33 @@ now and then one goes up the tree, and the tree comes down: ornaments
 everywhere, the lights out, a cat with no idea what happened. Then a fade,
 and it's up again. Tap for a laser dot. The tree is Grand by default, wide
 and full, with up to 180 lights and a pile of presents. Choose Cozy for a
-slim tree or Majestic for the biggest.
+slim tree or Majestic for the biggest, then make it yours: height (up to
+the ceiling), width, fullness, up to three times the lights and ornaments,
+gold beads or silver tinsel, a star or a red bow, snow on the boughs, and
+nought to twelve presents. Or choose the Charlie Brown tree: a sapling
+with a few drooping branches, one red ball bending it over, and a blanket
+round its base. The cats still bring it down.
 
 **The Last Bulb on the Strand** 💡 is a string of old C9 bulbs hung along
-the top of the wall, every one pooling its colour on the plaster. Except
-the last one, on the tail where the wire drops off the final hook: it's
-loose. Every so often it flickers twice (a real filament's soft blink) and
+the top of the wall (or snaking down it in rows, or right round the
+border, or up and over a doorway), every one pooling its colour on the
+plaster. Except the last one, on the tail where the wire drops off the
+final hook: it's loose. Every so often it flickers twice (a real filament's soft blink) and
 lights, and stays lit a while, and works loose again; sometimes it
 flickers twice and thinks better of it. On Christmas Eve it lights first
 time. Once in a long while the whole strand goes out, and someone jiggles
 the last bulb until it all comes back. Tap a bulb to jiggle it. Nearly
-nothing moves, so it costs next to nothing.
+nothing moves, so it costs next to nothing. Everything about the strand
+is yours to set: C9, globe or little C6 bulbs, painted, clear or frosted,
+nine palettes or your own, how far their light reaches, a pine garland
+wound along the wire, a few old twinkle bulbs blinking on their own, the
+wall (plaster, pine, brick, wallpaper, white or charcoal), and what the
+note on the last bulb says.
 
 **Frost on the Glass** 🧊: you're outside on a cold night, looking in. The
 room behind the window is out of focus, a warm lamp and a Christmas tree
-that's only the soft discs of its lights, and fern frost creeps in from the
+that's only the soft discs of its lights (as big or wide or bright as you
+like, or a Charlie Brown tree with one red ball, or no tree), and fern frost creeps in from the
 corners of each pane, crystal by crystal, glowing amber where the tree
 shines through it and glinting now and then. Someone inside draws in it
 with a fingertip (a heart, a star, a cat's paw print, NOEL backwards from
@@ -93,7 +105,9 @@ breathe on it.
 
 **A Very Small Christmas** 🎄 is a little pixel-art tree near the bottom of
 a big dark screen, on a strip of snow, with a few presents and a toy train
-parked on its track. Its lights blink (twinkle, chase, alternate, all
+parked on its track (tiny to huge, wide or slim, with as many lights and
+ornaments as you like; or a Charlie Brown tree, a bent stick with one red
+ball). Its lights blink (twinkle, chase, alternate, all
 together). Every couple of minutes the train toots and goes round. Now and
 then the whole set moves house: the track packs itself away, the tree hops
 somewhere new with the presents and the train hopping after it in a line,
@@ -483,7 +497,7 @@ you tick it, then seven, with the rest folded away:
   Harvest Valley `G` wait for the Great Pumpkin, `H` call the geese, `R` a goose whiffles, `W` a gust,
   `S` a cat chases a squirrel, `M` what the moon is doing · The Cat vs. the Ornament `N` the next cat's
   turn, `B` bap the ornament, `T` up the tree, `Z` the zoomies · The Last Bulb
-  `L` the last bulb tries (or gives up), `O` the strand out (or back), `D` a draft · Frost on the Glass `B` breathe on it,
+  `L` the last bulb tries (or gives up), `O` the strand out (or back), `D` a draft, `N` where it hangs · Frost on the Glass `B` breathe on it,
   `D` someone draws in it, `T` thaw (or frost over again) · A Very Small
   Christmas `T` the train, `M` move house, `L` jingle, `S` a sleigh · Sky Island `N` a new island, `P` pin
   this one (or let it go), `V` another island passes, `O` a small one comes to orbit, `B` a balloon, `W` weather, `S` season, `H` holiday · Weather `V` next view (days, hours, now), `U` °C or °F,

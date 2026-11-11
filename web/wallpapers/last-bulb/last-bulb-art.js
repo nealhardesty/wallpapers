@@ -20,7 +20,7 @@ const LastBulbArt = (() => {
     // ---- The wall --------------------------------------------------------------------------
 
     // The picture rail's wood for each wall.
-    const WALLS = { plaster: { rail: '#4d3422' }, pine: { rail: '#5b3b22' }, brick: { rail: '#e9e2d4' }, wallpaper: { rail: '#3b2618' } };
+    const WALLS = { plaster: { rail: '#4d3422' }, pine: { rail: '#5b3b22' }, brick: { rail: '#e9e2d4' }, wallpaper: { rail: '#3b2618' }, white: { rail: '#f2efe8' }, charcoal: { rail: '#1c1a1a' } };
 
     function grain(g, W, H, random, alpha) {
         const tile = canvas(96, 96), tg = tile.getContext('2d');
@@ -126,12 +126,67 @@ const LastBulbArt = (() => {
         }
     }
 
+    // A modern painted wall: flat, with roller texture; and the same in charcoal.
+    function flat(g, L, random, base, tone) {
+        g.fillStyle = base;
+        g.fillRect(0, 0, L.W, L.H);
+        for (let i = 0; i < 90; i++) {
+            const x = random() * L.W, y = random() * L.H, r = 40 + random() * 160;
+            const grad = g.createRadialGradient(x, y, 0, x, y, r);
+            grad.addColorStop(0, `rgba(${tone},${0.02 + random() * 0.03})`);
+            grad.addColorStop(1, `rgba(${tone},0)`);
+            g.fillStyle = grad;
+            g.fillRect(x - r, y - r, 2 * r, 2 * r);
+        }
+    }
+    const white = (g, L, random) => flat(g, L, random, '#ece8e0', '120,110,100');
+    const charcoal = (g, L, random) => flat(g, L, random, '#2b2a2c', '255,250,240');
+
+    // A pine garland wound along the wire: sprigs of needles either side,
+    // in two greens, with a red berry here and there. Into the wall, so the
+    // bulbs light it with everything else.
+    function garland(g, L, random) {
+        const w = L.w;
+        g.save();
+        g.lineCap = 'round';
+        for (const sw of L.swags) {
+            const n = Math.max(2, Math.round(sw.len / (w * 0.3)));
+            for (let k = 0; k <= n; k++) {
+                const p = LastBulbLogic.swagPoint(sw, k / n);
+                const x = LastBulbLogic.mx(L, p.x), y = p.y;
+                if (x < -w || x > L.W + w || y < -w || y > L.H + w) continue;
+                const sprigs = 3 + Math.floor(random() * 3);
+                for (let i = 0; i < sprigs; i++) {
+                    const a = random() * Math.PI * 2, len = w * (0.3 + random() * 0.35);
+                    const dark = random() < 0.5;
+                    g.strokeStyle = dark ? 'rgba(26,58,30,0.9)' : 'rgba(58,98,48,0.9)';
+                    g.lineWidth = Math.max(1, w * 0.06);
+                    g.beginPath(); g.moveTo(x, y); g.lineTo(x + Math.cos(a) * len, y + Math.sin(a) * len); g.stroke();
+                    // Needles off the sprig.
+                    g.lineWidth = Math.max(0.6, w * 0.03);
+                    for (let j = 1; j <= 3; j++) {
+                        const t = j / 4, bx = x + Math.cos(a) * len * t, by = y + Math.sin(a) * len * t;
+                        for (const side of [-1, 1]) { g.beginPath(); g.moveTo(bx, by); g.lineTo(bx + Math.cos(a + side * 1.1) * w * 0.12, by + Math.sin(a + side * 1.1) * w * 0.12); g.stroke(); }
+                    }
+                }
+                if (random() < 0.12) {
+                    g.fillStyle = '#b3202a';
+                    g.beginPath(); g.arc(x + (random() - 0.5) * w * 0.4, y + (random() - 0.5) * w * 0.3, w * 0.07, 0, Math.PI * 2); g.fill();
+                    g.fillStyle = 'rgba(255,255,255,0.5)';
+                    g.beginPath(); g.arc(x + (random() - 0.5) * w * 0.4, y + (random() - 0.5) * w * 0.3, w * 0.02, 0, Math.PI * 2); g.fill();
+                }
+            }
+        }
+        g.restore();
+    }
+
     // The wall at full light: the chosen wall, a picture rail along the top
-    // (the hooks screw into it) with its shadow, and the ceiling above it.
-    function albedo(L, dpr, kind, random) {
+    // (the hooks screw into it) with its shadow, and the ceiling above it;
+    // and the garland, if there is one.
+    function albedo(L, dpr, kind, random, withGarland = false) {
         const c = canvas(L.W * dpr, L.H * dpr), g = c.getContext('2d');
         g.scale(dpr, dpr);
-        ({ plaster, pine, brick, wallpaper }[kind] || plaster)(g, L, random);
+        ({ plaster, pine, brick, wallpaper, white, charcoal }[kind] || plaster)(g, L, random);
         grain(g, L.W, L.H, random, kind === 'plaster' ? 0.07 : 0.05);
         const look = WALLS[kind] || WALLS.plaster;
         if (L.top > 0) { g.fillStyle = '#c9bea9'; g.fillRect(0, 0, L.W, L.top); }
@@ -147,6 +202,7 @@ const LastBulbArt = (() => {
         wood.addColorStop(1, css(mix(rail, BLACK, 0.45)));
         g.fillStyle = wood; g.fillRect(0, y0, L.W, y1 - y0);
         g.fillStyle = 'rgba(255,255,255,0.12)'; g.fillRect(0, y0 + (y1 - y0) * 0.3, L.W, 1);
+        if (withGarland) garland(g, L, random);
         return c;
     }
 
@@ -198,16 +254,12 @@ const LastBulbArt = (() => {
 
     // ---- The wire and the hooks ----------------------------------------------------------------
 
-    // The strand from off the edge to the last hook (the tail is drawn live).
+    // The strand from its first hook (off the edge) to the last (the tail is drawn live).
     function strandPath(g, L) {
         const X = x => LastBulbLogic.mx(L, x);
-        const h = L.hooks;
         g.beginPath();
-        g.moveTo(X(h[0] - 2 * L.s), L.hookY);
-        for (let i = 0; i < h.length; i++) {
-            const x0 = i ? h[i - 1] : h[0] - 2 * L.s;
-            g.quadraticCurveTo(X((x0 + h[i]) / 2), L.hookY + 2 * L.sag, X(h[i]), L.hookY);
-        }
+        g.moveTo(X(L.hooks[0].x), L.hooks[0].y);
+        for (const sw of L.swags) g.quadraticCurveTo(X((sw.A.x + sw.B.x) / 2), (sw.A.y + sw.B.y) / 2 + 2 * sw.d, X(sw.B.x), sw.B.y);
     }
 
     // A twisted pair: dark green, with the twist picked out in short dashes.
@@ -228,21 +280,25 @@ const LastBulbArt = (() => {
         g.restore();
     }
 
+    // Brass cup hooks: on the rail they screw into its underside; on the
+    // wall, into a little screw plate.
     function hooks(g, L) {
-        const r = L.w * 0.14;
+        const r = L.w * 0.14, stem = L.w * 0.45;
         g.save();
         g.lineCap = 'round';
-        g.strokeStyle = '#b8913e'; g.lineWidth = Math.max(1.2, L.w * 0.07);
-        for (const hx of L.hooks) {
-            const x = LastBulbLogic.mx(L, hx);
-            if (x < -L.s || x > L.W + L.s) continue;
+        for (const h of L.hooks) {
+            const x = LastBulbLogic.mx(L, h.x), y = h.y;
+            if (x < -L.s || x > L.W + L.s || y < -L.s || y > L.H + L.s) continue;
+            const onRail = Math.abs(y - L.railY) < 0.5;
+            g.strokeStyle = '#b8913e'; g.lineWidth = Math.max(1.2, L.w * 0.07);
             g.beginPath();
-            g.moveTo(x, L.top + L.rail);
-            g.lineTo(x, L.hookY - r);
-            g.arc(x, L.hookY, r, -Math.PI / 2, Math.PI * 0.8, true);
+            g.moveTo(x, y - stem);
+            g.lineTo(x, y - r);
+            g.arc(x, y, r, -Math.PI / 2, Math.PI * 0.8, true);
             g.stroke();
             g.fillStyle = '#d8b765';
-            g.fillRect(x - L.w * 0.09, L.top + L.rail - 1, L.w * 0.18, Math.max(1.5, L.w * 0.06));
+            if (onRail) g.fillRect(x - L.w * 0.09, y - stem - 1, L.w * 0.18, Math.max(1.5, L.w * 0.06));
+            else { g.beginPath(); g.arc(x, y - stem, L.w * 0.08, 0, Math.PI * 2); g.fill(); g.fillStyle = 'rgba(60,40,10,0.6)'; g.fillRect(x - L.w * 0.02, y - stem - L.w * 0.02, L.w * 0.04, L.w * 0.04); }
         }
         g.restore();
     }
@@ -251,17 +307,22 @@ const LastBulbArt = (() => {
 
     // A C9's glass: a narrow neck at the screw base, round shoulders, and a
     // long taper to a soft point. Drawn hanging down from y = 0.
-    function glassPath(g, w) {
+    // Shapes: the C9, a round G40 globe, or a small C6 (the C9's shape at two thirds).
+    function glassPath(g, w, shape = 'c9') {
         g.beginPath();
-        g.moveTo(-0.24 * w, 0);
-        g.bezierCurveTo(-0.27 * w, 0.3 * w, -0.5 * w, 0.4 * w, -0.5 * w, 0.78 * w);
-        g.bezierCurveTo(-0.5 * w, 1.26 * w, -0.16 * w, 1.68 * w, 0, 1.94 * w);
-        g.bezierCurveTo(0.16 * w, 1.68 * w, 0.5 * w, 1.26 * w, 0.5 * w, 0.78 * w);
-        g.bezierCurveTo(0.5 * w, 0.4 * w, 0.27 * w, 0.3 * w, 0.24 * w, 0);
+        if (shape === 'globe') { g.arc(0, 0.82 * w, 0.6 * w, 0, Math.PI * 2); g.closePath(); return; }
+        const k = shape === 'mini' ? 0.66 : 1;
+        g.moveTo(-0.24 * w * k, 0);
+        g.bezierCurveTo(-0.27 * w * k, 0.3 * w * k, -0.5 * w * k, 0.4 * w * k, -0.5 * w * k, 0.78 * w * k);
+        g.bezierCurveTo(-0.5 * w * k, 1.26 * w * k, -0.16 * w * k, 1.68 * w * k, 0, 1.94 * w * k);
+        g.bezierCurveTo(0.16 * w * k, 1.68 * w * k, 0.5 * w * k, 1.26 * w * k, 0.5 * w * k, 0.78 * w * k);
+        g.bezierCurveTo(0.5 * w * k, 0.4 * w * k, 0.27 * w * k, 0.3 * w * k, 0.24 * w * k, 0);
         g.closePath();
     }
     const SOCKET = 1.08;      // the glass starts this many widths below the wire
-    const CENTRE = SOCKET + 0.82;
+    const GLASS_CENTRE = { c9: 0.82, globe: 0.82, mini: 0.55 };
+    const centreOf = shape => SOCKET + (GLASS_CENTRE[shape] ?? 0.82);
+    const CENTRE = centreOf('c9');
 
     // The socket clipped to the wire, and the brass screw base below it.
     function socket(g, w) {
@@ -291,15 +352,17 @@ const LastBulbArt = (() => {
     // anchor. `mode` is 'dark', 'lit' (with the bloom round the glass baked
     // in) or 'ember' (the glass alone, glowing filament-orange: drawn over
     // a dark bulb while the filament is warming or cooling).
-    function bulb(colour, w, dpr, mode, glass) {
+    function bulb(colour, w, dpr, mode, glass, shape = 'c9') {
+        const CY = centreOf(shape);
         const R = w * 2.5;
-        const ax = R, ay = Math.max(0.3 * w, R - CENTRE * w + 0.1 * w);
-        const cw = 2 * R, chH = ay + CENTRE * w + R;
+        const ax = R, ay = Math.max(0.3 * w, R - CY * w + 0.1 * w);
+        const cw = 2 * R, chH = ay + CY * w + R;
         const c = canvas(cw * dpr, chH * dpr), g = c.getContext('2d');
         g.scale(dpr, dpr);
         g.translate(ax, ay);
-        const col = rgb(colour);
-        const cy = CENTRE * w;
+        const frosted = glass === 'frosted';
+        const col = frosted ? mix(rgb(colour), WHITE, 0.4) : rgb(colour);
+        const cy = CY * w;
         if (mode === 'lit') {
             const halo = g.createRadialGradient(0, cy, 0, 0, cy, R);
             const hot = mix(col, WHITE, 0.45);
@@ -310,8 +373,8 @@ const LastBulbArt = (() => {
         if (mode !== 'ember') socket(g, w);
         g.save();
         g.translate(0, SOCKET * w);
-        glassPath(g, w);
-        const fy = 0.62 * w;                           // the filament
+        glassPath(g, w, shape);
+        const fy = (shape === 'mini' ? 0.42 : 0.62) * w;                           // the filament
         if (mode === 'ember') {
             g.clip();
             const e = g.createRadialGradient(0, fy, 0, 0, fy, 1.1 * w);
@@ -368,8 +431,9 @@ const LastBulbArt = (() => {
         if (mode !== 'ember') {
             // The glaze's highlight, and its rim.
             g.fillStyle = mode === 'lit' ? 'rgba(255,255,255,0.35)' : 'rgba(255,245,225,0.3)';
-            g.beginPath(); g.ellipse(-0.24 * w, 0.62 * w, 0.06 * w, 0.3 * w, 0.18, 0, Math.PI * 2); g.fill();
-            glassPath(g, w);
+            const hk = shape === 'mini' ? 0.66 : 1;
+            g.beginPath(); g.ellipse(-0.24 * w * hk, 0.62 * w * hk + (shape === 'globe' ? 0.1 * w : 0), 0.06 * w * hk, 0.3 * w * hk, 0.18, 0, Math.PI * 2); g.fill();
+            glassPath(g, w, shape);
             g.strokeStyle = css(mix(col, BLACK, mode === 'lit' ? 0.25 : 0.85), 0.55);
             g.lineWidth = Math.max(0.6, 0.035 * w);
             g.stroke();
@@ -389,7 +453,7 @@ const LastBulbArt = (() => {
         g.restore();
     }
     // Where a hanging bulb's glass centre is: below its anchor, turned by a.
-    const centre = (x, y, a, w) => ({ x: x - Math.sin(a) * CENTRE * w, y: y + Math.cos(a) * CENTRE * w });
+    const centre = (x, y, a, w, cy = CENTRE) => ({ x: x - Math.sin(a) * cy * w, y: y + Math.cos(a) * cy * w });
 
     // The strand's end plug: a female connector, hanging from its wire.
     function plug(w, dpr) {
@@ -436,5 +500,5 @@ const LastBulbArt = (() => {
         return { lit: { ...s, c: make(false) }, shade: { ...s, c: make(true) } };
     }
 
-    return { WALLS, albedo, lit, strandPath, wire, hooks, bulb, put, centre, plug, tag, CENTRE, rgb, mix, css };
+    return { WALLS, albedo, lit, strandPath, wire, hooks, bulb, put, centre, centreOf, plug, tag, CENTRE, rgb, mix, css };
 })();

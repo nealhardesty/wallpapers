@@ -1,8 +1,12 @@
 // Default settings for A Very Small Christmas. Saved settings store only
 // what differs from these (SPEC §4.1).
 WP.defaults('small-christmas', {
-    configVersion: 1,
-    treeSize: 'small',      // tiny, small, medium
+    configVersion: 2,       // 2026-11-11: big and huge trees, the Charlie Brown tree, width, light and ornament counts
+    treeSize: 'small',      // tiny, small, medium, big, huge
+    treeStyle: 'fir',       // fir, charlie (a Charlie Brown tree)
+    treeWidth: 1,           // × its width
+    lightCount: 1,          // × the bulbs
+    ornamentCount: 1,       // × the ornaments
     lightPattern: 'twinkle', // twinkle, chase, alternate, together, steady
     lights: 'classic',      // classic, warm, blue, candy
     garland: true,

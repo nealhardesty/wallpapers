@@ -73,12 +73,14 @@ test('layout: swags between hooks, the last bulb on a tail, mirrored', () => {
     for (const [W, H] of [[1280, 800], [412, 915], [3840, 2160]]) {
         const L = B.layout(W, H, { top: 24, size: 1, spacing: 3.6, sag: 0.5 });
         assert.ok(L.bulbs.length >= 4, `${W}x${H}: ${L.bulbs.length} bulbs`);
-        for (let i = 1; i < L.hooks.length; i++) assert.ok(Math.abs(L.hooks[i] - L.hooks[i - 1] - 2 * L.s) < 1e-6);
+        for (let i = 1; i < L.hooks.length; i++) assert.ok(Math.abs(L.hooks[i].x - L.hooks[i - 1].x - 2 * L.s) < 0.5 * L.s, 'a hook about every two bulbs');
         for (const b of L.bulbs) {
             assert.ok(b.x > -L.s && b.x < L.lastHook, 'bulbs before the last hook');
-            assert.ok(b.y >= L.hookY && b.y <= L.hookY + L.sag + 1e-6, 'within the swag');
+            assert.ok(b.y >= L.railY && b.y <= L.railY + L.sag + 1e-6, 'within the swag');
+            assert.ok(b.u >= 0 && b.u <= 1);
         }
-        assert.ok(L.hookY > 24, 'below the inset');
+        assert.ok(L.railY > 24, 'below the inset');
+        assert.equal(L.hookY, L.railY);
         const T = B.tail(L, L.rest);
         assert.ok(T.P.y > L.hookY + L.tail * 0.8 && T.P.x > L.lastHook && T.P.x < W, 'the tail hangs below the last hook, on screen');
         assert.ok(T.Q.x < W + L.w, 'the plug about on screen');
@@ -88,7 +90,57 @@ test('layout: swags between hooks, the last bulb on a tail, mirrored', () => {
     assert.equal(B.mx(Lf, 100), 1180);
     // Sag 0 is a straight wire.
     const flat = B.layout(1280, 800, { sag: 0 });
-    assert.ok(flat.bulbs.every(b => Math.abs(b.y - flat.hookY) < 1e-9 && Math.abs(b.rest) < 1e-9));
+    assert.ok(flat.bulbs.every(b => Math.abs(b.y - flat.railY) < 1e-9 && Math.abs(b.rest) < 1e-9));
+    // A point on a swag: at the hooks, and drooping most in the middle.
+    const sw = R.swags[1];
+    assert.equal(JSON.stringify(B.swagPoint(sw, 0)), JSON.stringify({ x: sw.A.x, y: sw.A.y }));
+    assert.ok(B.swagPoint(sw, 0.5).y > sw.A.y && Math.abs(B.swagPoint(sw, 0.5).y - sw.A.y - sw.d) < 1e-9);
+    assert.ok(B.swagSlope(sw, 0.1) > 0 && B.swagSlope(sw, 0.9) < 0);
+});
+
+test('layout: rows snake down the wall; the border goes round; the arch goes up, across and down; hooks as asked', () => {
+    const W = 1280, H = 800;
+    const rows = B.layout(W, H, { rows: 3 });
+    const ys = [...new Set(rows.bulbs.map(b => Math.round(b.y / 10)))];
+    assert.equal(rows.corners.length, 6, 'three runs, each with a start and an end');
+    assert.ok(rows.bulbs.some(b => b.y > H * 0.4), 'bulbs well down the wall');
+    assert.ok(rows.lastHook > W / 2 && rows.hookY > rows.railY, 'the end on the right, on the last row');
+    assert.ok(rows.bulbs.some(b => Math.abs(b.x - (W - rows.w * 1.1)) < 1 && b.y > rows.railY + 5), 'bulbs down the side drop');
+    const border = B.layout(W, H, { route: 'border', bottom: 48 });
+    const near = (v, t) => Math.abs(v - t) < border.w * 1.2;
+    assert.ok(border.bulbs.some(b => near(b.x, border.w * 1.1) && b.y > H * 0.3), 'up the left side');
+    assert.ok(border.bulbs.some(b => near(b.y, border.railY) && b.x > W * 0.3 && b.x < W * 0.7), 'along the top');
+    assert.ok(border.bulbs.some(b => near(b.x, W - border.w * 1.1) && b.y > H * 0.3), 'down the right side');
+    assert.ok(border.bulbs.some(b => b.y > H - 48 - border.w * 3.5 && b.x > W * 0.3 && b.x < W * 0.7), 'along the bottom, above the inset');
+    assert.ok(border.bulbs.filter(b => b.x > W * 0.3).every(b => b.y + 3 * border.w < H - 48 + 1e-6), 'the bottom run\'s glass hangs above the inset line');
+    assert.ok(border.lastHook < W / 2 && border.hookY > H * 0.8, 'the end near the bottom left');
+    const arch = B.layout(W, H, { route: 'arch' });
+    assert.ok(!arch.bulbs.some(b => b.y > H * 0.9 && b.x > W * 0.3 && b.x < W * 0.7), 'no bottom run');
+    assert.ok(arch.hookY > H * 0.6 && arch.lastHook > W * 0.9, 'the end down the right side');
+    for (const route of ['rail', 'border', 'arch']) {
+        const L = B.layout(W, H, { route, hookEvery: 4 });
+        for (let i = 1; i < L.hooks.length; i++) {
+            const d = Math.hypot(L.hooks[i].x - L.hooks[i - 1].x, L.hooks[i].y - L.hooks[i - 1].y);
+            assert.ok(d <= 4 * L.s + 1e-6, `${route}: a hook within four bulbs`);
+        }
+        // Bulbs a spacing apart along the wire, none within half a spacing of the end hook.
+        const end = { x: L.lastHook, y: L.hookY };
+        for (const b of L.bulbs) assert.ok(Math.hypot(b.x - end.x, b.y - end.y) >= 0.45 * L.s - 1e-6);
+    }
+    assert.ok(B.layout(W, H, { glow: 2 }).reach > B.layout(W, H, {}).reach);
+});
+
+test('twinkle bulbs: spread along the strand, never the first; a blink then on', () => {
+    assert.equal(JSON.stringify(B.twinklers(20, 0)), '[]');
+    assert.equal(JSON.stringify(B.twinklers(1, 3)), '[]');
+    const t = B.twinklers(20, 3);
+    assert.equal(t.length, 3);
+    assert.ok(t.every(i => i >= 1 && i < 20) && t[0] < t[1] && t[1] < t[2]);
+    assert.ok(B.twinklers(4, 6).length <= 3);
+    const steps = B.twinkle(() => 0.5);
+    assert.equal(steps.length, 2);
+    assert.equal(steps[0][0], 0); assert.equal(steps[1][0], 1);
+    assert.ok(steps[0][1] < steps[1][1]);
 });
 
 test('Christmas Eve from five, and Christmas Day', () => {

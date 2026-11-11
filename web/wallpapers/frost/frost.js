@@ -124,7 +124,7 @@ class FrostAnimationManager {
         const c = this.config;
         const L = this.layout = FrostLogic.layout(W, H, { kind: c.window, insets: this.host.insets || {} });
         const random = WP.seededRandom(2412);
-        this.room = FrostArt.room(L, dpr, { lights: c.lights, blur: c.blur, treeSide: c.treeSide }, random);
+        this.room = FrostArt.room(L, dpr, { lights: c.lights, blur: c.blur, treeSide: c.treeSide, treeStyle: c.treeStyle, treeSize: c.treeSize, treeWidth: c.treeWidth, lightCount: c.lightCount }, random);
         const fg = this.frameCanvas.getContext('2d');
         fg.clearRect(0, 0, this.frameCanvas.width, this.frameCanvas.height);
         fg.drawImage(FrostArt.frame(L, dpr, { colour: c.frameColour }, random), 0, 0);

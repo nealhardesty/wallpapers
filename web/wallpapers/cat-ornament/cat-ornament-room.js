@@ -35,19 +35,22 @@ const CatRoom = (() => {
         cozy: { aspect: 0.6, tall: 1, x: 0.6 },
         grand: { aspect: 1, tall: 1, x: 0.6 },
         majestic: { aspect: 1.2, tall: 1.14, x: 0.62 },
+        charlie: { aspect: 0.5, tall: 0.7, x: 0.6 },
     };
 
     // Where everything goes, in CSS px. A tall screen puts the tree in the
-    // middle and the window above to the left.
-    function layout(W, H, insets, size = 'grand') {
+    // middle and the window above to the left. `height` and `width` scale
+    // the tree (the owner's "big trees! wide trees!"), within the room.
+    function layout(W, H, insets, size = 'grand', height = 1, width = 1) {
         const T = TREES[size] || TREES.grand;
         const bottom = H - (insets.bottom || 0);
         const tall = H > W * 1.15;
         const floorY = tall ? bottom * 0.7 : bottom * 0.66;
         const baseY = floorY + (bottom - floorY) * (tall ? 0.3 : 0.34);
-        const treeH = Math.min(baseY - H * 0.05 - (insets.top || 0), tall ? W * 1.28 * T.tall : H * 0.7);
+        const ceiling = baseY - H * 0.04 - (insets.top || 0);
+        const treeH = Math.min(ceiling, (tall ? W * 1.28 * T.tall : H * 0.7) * (size === 'charlie' ? 0.7 : 1) * height);
         // On a phone the tree can fill the width, but not overflow it.
-        const treeW = Math.min(treeH * T.aspect, tall ? W * 0.98 : W * 0.6);
+        const treeW = Math.min(treeH * T.aspect * width, tall ? W * 0.98 : W * 0.72);
         const treeX = tall ? W * 0.5 + Math.min(W * 0.04, (W - treeW) / 2) : W * T.x;
         const u = Math.min(H, W * 1.6) / 800 * (tall ? 1.15 : 1.3);
         const win = tall ? { x: W * 0.07, y: H * 0.08 + (insets.top || 0), w: W * 0.34, h: H * 0.2 }
@@ -226,13 +229,18 @@ const CatRoom = (() => {
     // the bottom up, each one's skirt hanging over the one below; each is a
     // rounded, shaded cone, needled with thousands of sprigs, a feathery
     // fringe past its edge.
-    function tree(L, dpr, random, palette) {
+    // o: { fullness (sprigs and fringe), lights, ornaments (× the counts the
+    // tree has room for), garland ('beads' | 'tinsel' | 'none'), topper
+    // ('star' | 'bow' | 'none'), flocked (snow on the boughs) }.
+    function tree(L, dpr, random, palette, o = {}) {
+        if (L.treeKind === 'charlie') return charlie(L, dpr, random, o);
+        const fullness = o.fullness ?? 1;
         const h = L.treeH, w = L.treeW, u = L.u, pad = 26 * u;
         const cw = w + pad * 2, chh = h + pad * 2, ox = cw / 2, oy = h + pad;
         const make = () => { const c = canvas(cw * dpr, chh * dpr), g = c.getContext('2d'); g.scale(dpr, dpr); g.translate(ox, oy); return [c, g]; };
         const [main, g] = make();
         const wide = w / (h * 0.6);                    // 1 for the cozy tree, more for the grand ones
-        const tiers = Math.round(6 + wide * 1.4), trunkH = h * 0.075, pivot = h * 0.078;
+        const tiers = Math.max(4, Math.round(6 + wide * 1.4)), trunkH = h * 0.075, pivot = h * 0.078;
         // The trunk and its stand (sized by the height, not the width: the stand is what it tips over on).
         g.fillStyle = '#4a2e1a'; g.fillRect(-h * 0.026, -trunkH - h * 0.05, h * 0.052, trunkH + h * 0.05);
         const stand = new Path2D(); stand.moveTo(-pivot, 0); stand.lineTo(-pivot * 0.77, -trunkH * 0.75); stand.lineTo(pivot * 0.77, -trunkH * 0.75); stand.lineTo(pivot, 0); stand.closePath();
@@ -244,8 +252,23 @@ const CatRoom = (() => {
             const half = w * 0.5 * (0.13 + 0.87 * Math.pow((i + 1) / tiers, 0.85));
             spots.push({ yBot, half, yTop, path: tierPath(yTop, yBot, half, u, random) });
         }
-        for (let i = tiers - 1; i >= 0; i--) bough(g, spots[i], u, random, i / (tiers - 1));
-        // Garlands: gold beads swagged round the tiers, dipping toward you.
+        for (let i = tiers - 1; i >= 0; i--) bough(g, spots[i], u, random, i / (tiers - 1), fullness);
+        if (o.flocked) for (let i = tiers - 1; i >= 0; i--) flock(g, spots[i], u, random);
+        // Garlands: gold beads swagged round the tiers, dipping toward you;
+        // or a ribbon of tinsel.
+        const tinsel = (gg, s, k) => {
+            const span = s.yBot - s.yTop, y0 = s.yBot - span * 0.42, x0 = -s.half * 0.84, x1 = s.half * 0.86, dip = span * 0.3;
+            const at = t => [x0 + (x1 - x0) * t, y0 + (x1 - x0) * 0.08 * (t - 0.5) * k + Math.sin(t * Math.PI) * dip];
+            gg.lineCap = 'round';
+            for (const [wd, col] of [[5.5 * u, 'rgba(40,30,10,0.4)'], [4.2 * u, '#c9ccd6'], [2.2 * u, '#f4f6ff']]) {
+                gg.strokeStyle = col; gg.lineWidth = wd;
+                gg.beginPath();
+                for (let j = 0; j <= 40; j++) { const t = j / 40, [x, y] = at(t); const wob = Math.sin(t * 70) * 1.3 * u; j ? gg.lineTo(x, y + wob) : gg.moveTo(x, y + wob); }
+                gg.stroke();
+            }
+            gg.fillStyle = 'rgba(255,255,255,0.85)';
+            for (let j = 0; j <= 14; j++) { const [x, y] = at((j + 0.5) / 15); gg.beginPath(); gg.arc(x + (random() - 0.5) * 4 * u, y + (random() - 0.5) * 3 * u, 1.1 * u, 0, TAU); gg.fill(); }
+        };
         const beads = (gg, s, k) => {
             const span = s.yBot - s.yTop, y0 = s.yBot - span * 0.42, x0 = -s.half * 0.84, x1 = s.half * 0.86, dip = span * 0.3, r = Math.max(1.4, 1.7 * u);
             for (let j = 0, n = Math.round((x1 - x0) / (r * 2.3)); j <= n; j++) {
@@ -255,22 +278,26 @@ const CatRoom = (() => {
                 gg.fillStyle = 'rgba(255,250,215,0.85)'; gg.beginPath(); gg.arc(x - r * 0.35, y - r * 0.35, r * 0.35, 0, TAU); gg.fill();
             }
         };
-        for (let i = 1; i < tiers - 1; i += 2) beads(g, spots[i], i % 4 === 1 ? 1 : -1);
+        const garland = o.garland || 'beads';
+        if (garland !== 'none') for (let i = 1; i < tiers - 1; i += 2) (garland === 'tinsel' ? tinsel : beads)(g, spots[i], i % 4 === 1 ? 1 : -1);
         // Lights and ornaments, scattered over the tree's face.
         const inside = (x, y) => { for (const s of spots) if (y > s.yTop && y < s.yBot && Math.abs(x) < s.half * 0.86 * (y - s.yTop) / (s.yBot - s.yTop)) return true; return false; };
         const low = spots[tiers - 1], lights = [], ornaments = [];
-        // As many as the tree has room for: the cozy tree has 70; the grandest, near 180.
-        const room = w * h / (u * u), nLights = Math.round(Math.min(180, room / 1590));
-        for (let tries = 0; lights.length < nLights && tries < 8000; tries++) {
+        // As many as the tree has room for (the cozy tree has 70; the
+        // grandest, near 180), times the setting: up to three times as many,
+        // packed closer.
+        const room = w * h / (u * u), kl = o.lights ?? 1, ko = o.ornaments ?? 1;
+        const nLights = Math.round(Math.min(560, room / 1590 * kl)), lightGap = 9 * u / Math.sqrt(Math.max(1, kl));
+        for (let tries = 0; lights.length < nLights && tries < 16000; tries++) {
             const y = -h * (0.06 + random() * 0.88), x = (random() - 0.5) * w;
-            if (inside(x, y) && lights.every(b => Math.abs(b.x - x) + Math.abs(b.y - y) > 9 * u))
+            if (inside(x, y) && lights.every(b => Math.abs(b.x - x) + Math.abs(b.y - y) > lightGap))
                 lights.push({ x, y, colour: Math.floor(random() * 6), phase: random() * TAU, rate: 0.4 + random() * 1.6, front: y > low.yTop - 12 * u });   // its glow reaches the front boughs: drawn after them
         }
-        const nOrnaments = Math.round(Math.min(36, room / 6900));
-        for (let tries = 0; ornaments.length < nOrnaments && tries < 6000; tries++) {
+        const nOrnaments = Math.round(Math.min(110, room / 6900 * ko)), ornGap = 28 * u / Math.sqrt(Math.max(1, ko));
+        for (let tries = 0; ornaments.length < nOrnaments && tries < 12000; tries++) {
             const s = spots[1 + Math.floor(random() * (tiers - 2))];
             const y = s.yBot - (s.yBot - s.yTop) * (0.05 + random() * 0.4), x = (random() - 0.5) * 2 * s.half * 0.85;
-            if (!inside(x, y - 3) || y > low.yTop - 30 * u || ornaments.some(o => Math.hypot(o.x - x, o.y - y) < 28 * u)) continue;
+            if (!inside(x, y - 3) || y > low.yTop - 30 * u || ornaments.some(o => Math.hypot(o.x - x, o.y - y) < ornGap)) continue;
             ornaments.push({ x, y, colour: Math.floor(random() * 5), kind: random() < 0.7 ? 'ball' : random() < 0.5 ? 'drop' : 'bell', size: (0.8 + random() * 0.5) * u * Math.min(1.25, wide), detach: 0.35 + random() * 1 });
         }
         // The low hook: a tip of the bottom tier, on each side.
@@ -296,7 +323,93 @@ const CatRoom = (() => {
             return c;
         };
         const starR = Math.max(16 * u, h * 0.042);
-        return { main, lit, front: front(main), frontLit: front(lit), ox, oy, h, w, pivot, lights, ornaments, hooks, starR, star: { x: 0, y: -h - starR * 0.25 } };
+        return { main, lit, front: front(main), frontLit: front(lit), ox, oy, h, w, pivot, lights, ornaments, hooks, starR, star: { x: 0, y: -h - starR * 0.25 }, topper: o.topper || 'star' };
+    }
+
+    // Snow on the boughs: white dabs along each tier's edge and over its face.
+    function flock(g, s, u, random) {
+        const { yTop, yBot, half } = s, span = yBot - yTop;
+        g.fillStyle = 'rgba(245,248,255,0.9)';
+        const n = Math.round(half / (2.2 * u));
+        for (let k = 0; k < n; k++) {
+            const t = random() * 2 - 1, x = t * half * 0.96, y = yBot - span * (0.1 * t * t + 0.05 + random() * 0.12);
+            g.beginPath(); g.ellipse(x, y, (2.5 + random() * 3) * u, (1.2 + random() * 1.4) * u, 0, 0, TAU); g.fill();
+        }
+        g.fillStyle = 'rgba(245,248,255,0.55)';
+        for (let k = 0; k < n * 0.8; k++) {
+            const fy = 0.3 + random() * 0.6, x = (random() - 0.5) * 2 * half * fy * 0.9, y = yTop + span * fy;
+            g.beginPath(); g.ellipse(x, y, (1.5 + random() * 2.5) * u, (0.8 + random() * 1) * u, 0, 0, TAU); g.fill();
+        }
+    }
+
+    // A Charlie Brown tree: a spindly sapling, a few drooping branches with
+    // hardly any needles, one red ball at the top bending it over, and a
+    // blue blanket wrapped round its wooden cross. The same shape of answer
+    // as the fir, so the room, the cats and the fall work the same.
+    function charlie(L, dpr, random, o = {}) {
+        const h = L.treeH, w = Math.max(L.treeW, h * 0.5), u = L.u, pad = 30 * u;
+        const cw = w + pad * 2, chh = h + pad * 2, ox = cw / 2, oy = h + pad;
+        const make = () => { const c = canvas(cw * dpr, chh * dpr), g = c.getContext('2d'); g.scale(dpr, dpr); g.translate(ox, oy); return [c, g]; };
+        const [main, g] = make();
+        const trunkH = h * 0.1, pivot = h * 0.16;
+        // The cross of two boards, and the blanket over it.
+        g.fillStyle = '#6b4a2a'; g.fillRect(-pivot, -trunkH * 0.45, pivot * 2, trunkH * 0.45);
+        g.fillStyle = '#5a3c20'; g.fillRect(-pivot * 0.25, -trunkH * 0.9, pivot * 0.5, trunkH * 0.5);
+        const blanket = new Path2D();
+        blanket.moveTo(-pivot * 1.1, 0); blanket.quadraticCurveTo(-pivot * 1.2, -trunkH * 0.9, -pivot * 0.45, -trunkH * 1.05);
+        blanket.lineTo(pivot * 0.4, -trunkH * 1.0); blanket.quadraticCurveTo(pivot * 1.25, -trunkH * 0.8, pivot * 1.15, 0); blanket.closePath();
+        g.fillStyle = '#4a7fc4'; g.fill(blanket);
+        g.save(); g.clip(blanket);
+        g.strokeStyle = 'rgba(255,255,255,0.18)'; g.lineWidth = 2 * u;
+        for (let k = -4; k <= 4; k++) { g.beginPath(); g.moveTo(k * pivot * 0.3 - pivot, 0); g.lineTo(k * pivot * 0.3 + pivot * 0.2, -trunkH * 1.1); g.stroke(); }
+        g.restore();
+        g.strokeStyle = '#2d548a'; g.lineWidth = 1.5 * u; g.stroke(blanket);
+        // The trunk: thin, leaning, bending over at the top under the ball.
+        const lean = (random() < 0.5 ? -1 : 1) * 0.08, top = -h * 0.96;
+        const trunk = t => ({ x: lean * h * t * t * 1.4 + Math.sin(t * 5.2) * h * 0.012, y: -trunkH * 0.9 + (top + trunkH * 0.9) * t });
+        g.strokeStyle = '#5a3c20'; g.lineCap = 'round';
+        for (let i = 0; i < 24; i++) {
+            const a = trunk(i / 24), b = trunk((i + 1) / 24);
+            g.lineWidth = Math.max(2, (6.5 - 4.5 * i / 24) * u);
+            g.beginPath(); g.moveTo(a.x, a.y); g.lineTo(b.x, b.y); g.stroke();
+        }
+        g.strokeStyle = 'rgba(255,220,170,0.25)'; g.lineWidth = Math.max(0.8, 1.2 * u);
+        g.beginPath(); for (let i = 0; i <= 24; i++) { const a = trunk(i / 24); i ? g.lineTo(a.x - 1.5 * u, a.y) : g.moveTo(a.x - 1.5 * u, a.y); } g.stroke();
+        // Branches: five or six, drooping, each with a few sprigs of needles.
+        const inks = ['rgba(28,66,34,0.9)', 'rgba(52,104,58,0.9)', 'rgba(86,140,80,0.85)'];
+        const tips = [], lights = [], hooks = [];
+        const n = 5 + Math.floor(random() * 2);
+        for (let i = 0; i < n; i++) {
+            const t = 0.18 + (i / (n - 1)) * 0.72, root = trunk(t), side = i % 2 ? 1 : -1;
+            const len = h * (0.34 - t * 0.2) * (0.8 + random() * 0.4) * (w / (h * 0.5));
+            const droop = len * (0.35 + random() * 0.3);
+            const end = { x: root.x + side * len, y: root.y + droop };
+            const ctrl = { x: root.x + side * len * 0.55, y: root.y - droop * 0.25 };
+            g.strokeStyle = '#5a3c20'; g.lineWidth = Math.max(1.6, 3 * u);
+            g.beginPath(); g.moveTo(root.x, root.y); g.quadraticCurveTo(ctrl.x, ctrl.y, end.x, end.y); g.stroke();
+            // Sprigs along it, sparse.
+            const at = k => ({ x: (1 - k) * (1 - k) * root.x + 2 * (1 - k) * k * ctrl.x + k * k * end.x, y: (1 - k) * (1 - k) * root.y + 2 * (1 - k) * k * ctrl.y + k * k * end.y });
+            const m = 6 + Math.floor(random() * 5);
+            for (let j = 0; j < m; j++) {
+                const p = at(0.2 + random() * 0.8), a = Math.PI / 2 + (random() - 0.5) * 1.6, l = (8 + random() * 10) * u;
+                g.strokeStyle = inks[Math.floor(random() * inks.length)]; g.lineWidth = Math.max(1.2, 1.6 * u);
+                g.beginPath(); g.moveTo(p.x, p.y); g.lineTo(p.x + Math.cos(a) * l, p.y + Math.sin(a) * l); g.stroke();
+                for (const sgn of [-1, 1]) { g.beginPath(); g.moveTo(p.x + Math.cos(a) * l * 0.5, p.y + Math.sin(a) * l * 0.5); g.lineTo(p.x + Math.cos(a + sgn * 0.8) * l * 0.5, p.y + Math.sin(a + sgn * 0.8) * l * 0.5); g.stroke(); }
+            }
+            tips.push({ ...end, side });
+            if ((o.lights ?? 1) > 0 && i % 2 === 0) lights.push({ x: at(0.6).x, y: at(0.6).y + 2 * u, colour: Math.floor(random() * 6), phase: random() * TAU, rate: 0.4 + random() * 1.2, front: false });
+        }
+        // Needles at the very top, and the one red ball that weighs it down.
+        const crown = trunk(1);
+        for (let j = 0; j < 7; j++) { const a = -Math.PI / 2 + (random() - 0.5) * 2.2; g.strokeStyle = inks[1]; g.lineWidth = Math.max(1.2, 1.6 * u); g.beginPath(); g.moveTo(crown.x, crown.y); g.lineTo(crown.x + Math.cos(a) * 9 * u, crown.y + Math.sin(a) * 9 * u); g.stroke(); }
+        const ornaments = [{ x: crown.x + lean * h * 0.1, y: crown.y + 22 * u, colour: 0, kind: 'ball', size: 1.9 * u, detach: 0.3 }];
+        // The low hooks: the lowest branch's tip, each side.
+        const lowest = tips.slice(-2);
+        for (const side of [-1, 1]) { const tip = lowest.find(t => t.side === side) || lowest[0]; hooks.push({ x: tip.x - side * 4 * u, y: tip.y - 2 * u }); }
+        const [lit, lg] = make();
+        lg.drawImage(main, -ox, -oy, cw, chh);
+        const empty = () => { const [c] = make(); return c; };
+        return { main, lit, front: empty(), frontLit: empty(), ox, oy, h, w, pivot, lights, ornaments, hooks, starR: Math.max(10 * u, h * 0.03), star: { x: crown.x, y: crown.y - 4 * u }, topper: o.topper === 'none' ? 'none' : 'none', charlie: true };
     }
 
     // A tier's outline: gently rounded sides out to the tips, and along the
@@ -319,7 +432,7 @@ const CatRoom = (() => {
     // from the window side, darker up where the tier above hangs over it,
     // then sprigs of needles fanning down and out (batched by colour, one
     // stroke each), and a fringe of them past the edge.
-    function bough(g, s, u, random, depth) {
+    function bough(g, s, u, random, depth, fullness = 1) {
         const { yTop, yBot, half, path } = s, span = yBot - yTop;
         g.fillStyle = 'rgba(4,14,8,0.55)'; g.save(); g.translate(0, span * 0.06); g.fill(path); g.restore();
         const side = g.createLinearGradient(-half, 0, half, 0);
@@ -346,7 +459,7 @@ const CatRoom = (() => {
                 p.moveTo(bx, by); p.lineTo(bx + Math.cos(a + 0.9) * n, by + Math.sin(a + 0.9) * n);
             }
         };
-        const n = Math.round(half * span / (55 * u * u));
+        const n = Math.round(half * span / (55 * u * u) * fullness);
         for (let k = 0; k < n; k++) {
             const fy = Math.sqrt(random()), y = yTop + span * fy, x = (random() - 0.5) * 2 * half * fy;
             // Brighter toward the bottom of the tier and on the lit side.
@@ -358,7 +471,7 @@ const CatRoom = (() => {
         g.restore();
         // The fringe: sprigs hanging just past the bottom and sides.
         const fringe = inks.map(() => new Path2D());
-        const m = Math.round(half / (3.2 * u));
+        const m = Math.round(half / (3.2 * u) * fullness);
         for (let k = 0; k < m; k++) {
             const t = random() * 2 - 1, fy = 0.25 + random() * 0.7, bottom = random() < 0.75;
             const x = bottom ? t * half * 0.98 : Math.sign(t || 1) * half * fy * 0.97;
@@ -418,9 +531,25 @@ const CatRoom = (() => {
         return c;
     }
 
+    // A red bow for the top, instead of the star.
+    function bow(r, dpr) {
+        const s = Math.ceil(r * 2.6), c = canvas(s * dpr, s * dpr), g = c.getContext('2d');
+        g.scale(dpr, dpr);
+        const cx = s / 2, cy = s / 2;
+        g.fillStyle = '#b8202a'; g.strokeStyle = '#6e1016'; g.lineWidth = Math.max(1, r * 0.08); g.lineJoin = 'round';
+        // Two loops, two tails, a knot.
+        for (const side of [-1, 1]) {
+            g.beginPath(); g.moveTo(cx, cy); g.quadraticCurveTo(cx + side * r * 1.3, cy - r * 1.1, cx + side * r * 1.15, cy - r * 0.1); g.quadraticCurveTo(cx + side * r * 1.0, cy + r * 0.5, cx, cy); g.closePath(); g.fill(); g.stroke();
+            g.beginPath(); g.moveTo(cx, cy + r * 0.1); g.lineTo(cx + side * r * 0.75, cy + r * 1.2); g.lineTo(cx + side * r * 0.35, cy + r * 1.05); g.lineTo(cx + side * r * 0.15, cy + r * 0.3); g.closePath(); g.fill(); g.stroke();
+        }
+        g.fillStyle = '#d83a44'; g.beginPath(); g.ellipse(cx, cy, r * 0.3, r * 0.26, 0, 0, TAU); g.fill(); g.stroke();
+        g.fillStyle = 'rgba(255,255,255,0.3)'; for (const side of [-1, 1]) { g.beginPath(); g.ellipse(cx + side * r * 0.65, cy - r * 0.45, r * 0.3, r * 0.14, side * 0.5, 0, TAU); g.fill(); }
+        return c;
+    }
+
     // The presents: wrapped boxes in front of the skirt (one sprite), and
-    // the open box, back and front, for a cat to sit in.
-    function presents(L, dpr, random) {
+    // the open box, back and front, for a cat to sit in. `count` of them (0–12).
+    function presents(L, dpr, random, count = null) {
         const u = L.u;
         // Only the strip they sit in, not the whole screen.
         const x0 = L.treeX - L.treeW * 0.62 - 40 * u, x1 = L.treeX + L.treeW * 0.62 + 40 * u, y0 = L.baseY - 70 * u, y1 = L.baseY + 24 * u;
@@ -430,10 +559,11 @@ const CatRoom = (() => {
         const wraps = [['#c8202a', '#f0d070'], ['#1e6a3c', '#e8e0d0'], ['#2a4aa0', '#e8c060'], ['#e8e0d0', '#c8202a'], ['#8a2a6a', '#f0d0e0']];
         const boxes = [];
         const base = L.baseY + 10 * u;
-        // A wider tree, more under it (back row first, so the front row overlaps it).
-        const spec = L.treeW > L.treeH * 0.75
-            ? [[-0.42, 38, 52, -9], [0.12, 50, 30, -9], [0.48, 36, 40, -9], [-0.62, 46, 34], [-0.28, 34, 26], [0.3, 40, 44], [0.66, 30, 22], [0.02, 26, 18]]
-            : [[-0.55, 46, 34], [-0.25, 34, 26], [0.3, 40, 44], [0.6, 30, 22]];
+        // A wider tree, more under it (back row first, so the front row
+        // overlaps it); or as many as asked, from a list of twelve places.
+        const all = [[-0.42, 38, 52, -9], [0.12, 50, 30, -9], [0.48, 36, 40, -9], [-0.62, 46, 34], [-0.28, 34, 26], [0.3, 40, 44], [0.66, 30, 22], [0.02, 26, 18],
+            [-0.8, 30, 24, -4], [0.84, 34, 28, -4], [-0.1, 24, 20, -16], [0.58, 22, 16, -18]];
+        const spec = count === null ? (L.treeW > L.treeH * 0.75 ? all.slice(0, 8) : [[-0.55, 46, 34], [-0.25, 34, 26], [0.3, 40, 44], [0.6, 30, 22]]) : all.slice(0, Math.max(0, Math.min(12, count)));
         for (const [fx, bw, bh, dy = 0] of spec) {
             const x = L.treeX + fx * Math.min(L.treeW, L.W * 0.8), w = bw * u, h = bh * u, [paper, ribbon] = wraps[Math.floor(random() * wraps.length)];
             boxes.push({ x, y: base + dy * u, w, h, paper, ribbon });
@@ -492,5 +622,5 @@ const CatRoom = (() => {
         return c;
     }
 
-    return { PALETTES, ORNAMENTS, TREES, layout, background, tree, ornament, bulb, star, presents, glow, hex };
+    return { PALETTES, ORNAMENTS, TREES, layout, background, tree, charlie, ornament, bulb, star, bow, presents, glow, hex };
 })();

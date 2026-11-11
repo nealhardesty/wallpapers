@@ -141,8 +141,8 @@ Added for Christmas, drawn in code (designs in §10.27–§10.30):
 
 | id | Files | Size | Notes |
 |---|---|---|---|
-| `cat-ornament` | cat-ornament-logic.js, cat-ornament-cats.js, cat-ornament-room.js, cat-ornament.js | ~2.2k lines | Interactive (a tap's laser dot); nine named cats on one vector rig; the roster, the pendulum, the fall and the odds (`CatOrnamentLogic`), unit-tested; follows `host.now()` (Christmas Eve and Day); keys N, B, T, Z |
-| `last-bulb` | last-bulb-logic.js, last-bulb-art.js, last-bulb.js | ~1.1k lines | Interactive (tap a bulb to jiggle it); a C9 strand whose last bulb is loose; the flicker scripts, the filament and the strand's shape (`LastBulbLogic`), unit-tested; follows `host.now()` (Christmas Eve and Day); keys L, O, D |
+| `cat-ornament` | cat-ornament-logic.js, cat-ornament-cats.js, cat-ornament-room.js, cat-ornament.js | ~2.5k lines | Interactive (a tap's laser dot); nine named cats on one vector rig; the roster, the pendulum, the fall and the odds (`CatOrnamentLogic`), unit-tested; follows `host.now()` (Christmas Eve and Day); keys N, B, T, Z |
+| `last-bulb` | last-bulb-logic.js, last-bulb-art.js, last-bulb.js | ~1.4k lines | Interactive (tap a bulb to jiggle it); a C9 strand whose last bulb is loose, along the rail, in rows, round the border or over a doorway; the flicker scripts, the filament and the strand's path (`LastBulbLogic`), unit-tested; follows `host.now()` (Christmas Eve and Day); keys L, O, D, N |
 | `frost` | frost-logic.js, frost-art.js, frost.js | ~1k lines | Interactive (drag to draw in the frost, tap to breathe on it); fern frost grown tip by tip on an occupancy grid, the window and the doodles (`FrostLogic`), unit-tested; follows `host.now()` (Christmas Eve and Day); keys B, D, T |
 | `small-christmas` | small-christmas-logic.js, small-christmas-art.js, small-christmas.js | ~800 lines | Interactive (tap the tree, the train, the floor); pixel art at its own resolution, scaled up pixelated; palettes, blink patterns, the train's oval and the hops (`SmallXmasLogic`), unit-tested; follows `host.now()` (the sleigh on Christmas Eve, presents on Christmas Day); keys T, M, L, S |
 | `sky-island` | sky-island-logic.js, sky-island-art.js, sky-island-land.js, sky-island-actors.js, sky-island.js (and Harvest's harvest-sky.js) | ~3.5k lines | Interactive (tap a cat, a person, the lake, a house at night, the sky); 16-bit pixel art at its own resolution (a pixel is 2 CSS px on a laptop or 1080p), scaled up pixelated; a terraced island seen from above and in front, its underside, the sea of cloud and the ground far below all baked; the calendar (seasons, holidays, Easter, the owner's dates), the names and the island's three-tier layout from a seed (`SkyIslandLogic`), unit-tested over 240 layouts; follows `host.now()` (the hour, the season, every holiday); keys N, P, V, O, B, W, S, H |
@@ -3307,6 +3307,27 @@ household's cats taking turns with it.
   it"); sleepers startle; the Persian is unimpressed. After 9 s, a fade,
   "Some time later…", everything back, and the next cat's turn. Topple off
   (or reduced motion): the climber jumps down and the tree stays up.
+- **The tree, every way (owner request, 2026-11-11: "serious configuration
+  options for the tree. Like big trees! Wide trees! More ornaments. More
+  lights… I'd love a charlie brown tree too"; configVersion 2).**
+  `treeHeight` (× 0.5–1.3, the top of the range touching the ceiling) and
+  `treeWidth` (× 0.5–1.6, never overflowing a phone) scale the layout;
+  `fullness` scales the sprigs and fringe; `lightCount` and
+  `ornamentCount` (× 0–3) scale what the tree has room for (up to 560
+  lights and 110 ornaments, packed closer as they grow); `garland` is
+  gold beads, silver tinsel (a wobbling ribbon in three strokes with
+  glints) or none; `topper` a star, a red bow or nothing; `flocked` dabs
+  snow along every tier's edge and face; `presents` 0–12 from a list of
+  twelve places. **The Charlie Brown tree** (`tree: 'charlie'`,
+  `CatRoom.charlie`): a spindly leaning sapling, five or six drooping
+  branches with a few sprigs of needles each, one big red ball at the top
+  bending it over, a blue blanket wrapped round its wooden cross, three
+  bulbs at most and no topper; it answers in the same shape as the fir
+  (sprites, hooks at the lowest branch's tips, the ball as its one
+  ornament, an empty front layer), so the cats, the pendulum and the fall
+  work unchanged. The cats: a belly-up cat's head now lolls back (hr
+  0.95) instead of hanging upside down, the fluffy edges and ruffs are
+  finer, heads a touch smaller.
 - **The tree** (`tree`: cozy, grand (default), majestic; owner request,
   2026-11-06: "an impressive tree, much wider"). `CatRoom.TREES` sets how
   wide it is for its height (0.6, 1, 1.2), how much taller it may be on a
@@ -3382,18 +3403,48 @@ Subtle on purpose: almost nothing moves, and when something does it's small.
   `roomLight`, plus a pool of each bulb's colour), so a red bulb reddens
   cream plaster and barely shows on green paper.
 - **Colours:** vintage (red, green, blue, orange, gold), warm white,
-  red-green, blue-white, candy cane, all red, all blue, or the user's own;
-  the last bulb takes its place in the pattern or a colour of its own (the
-  one replacement from a different box). Its end, left or right.
+  red-green, blue-white, candy cane, all red, all blue, pastels, or the
+  user's own; the last bulb takes its place in the pattern or a colour of
+  its own (the one replacement from a different box). Its end, left or right.
+- **The strand, every way (owner request, 2026-11-11: "more options…
+  maybe a strand that wraps around the entire border… configurable is
+  key"; configVersion 2).** The layout is now a path of cup hooks
+  (`LastBulbLogic.layout`: corners, hooks every `hookEvery` bulbs along
+  each run, the corners always; swags between hooks drooping by their
+  horizontal span, so a vertical run hangs straight; a bulb every
+  `spacing` widths along the wire, each with its fraction `u` along the
+  strand for the draft's pulse; the lead-in bulbs off the screen dropped).
+  Routes (`route`, key N): along the picture rail (`rows` 1–5 snakes it
+  back and forth down the wall, dropping down one side then the other, the
+  end always on the chosen side), round the whole border (up one side,
+  along the rail, down the other, back along the bottom above
+  `host.insets.bottom`), or an arch over a doorway (up, across, down, the
+  end part-way down the far side). Hooks off the rail screw into a little
+  plate on the wall. Bulbs (`shape`): C9, a round G40 globe, or a C6 at
+  two thirds (the glass centre per shape, `centreOf`, so the light pools
+  and taps land right); glass painted, clear or frosted (milky, the colour
+  softened); `glow` scales the light's reach; a pine garland (`garland`)
+  is drawn into the wall along every swag (sprigs of needles in two
+  greens, a berry here and there), so the bulbs light it with the wall;
+  two more walls, painted white and charcoal; the tag's text is a setting.
+  **Twinkle bulbs** (`twinklers`, 0–6): the old bimetal blinkers, spread
+  along the strand (`twinklers()`), each on its own slot clock (on a
+  second or three, off a blink), its filament answering as the last
+  bulb's does; each has the wall round it baked lit by everyone but
+  itself, drawn over the lit wall by how dark it is, and a blink redraws
+  only that rect (the corner mechanism, generalised to a list of rects);
+  between blinks the stage idles as before.
 - **Cost:** see §4.8. Bench (phone, 4× throttle): 0.4% Low, ~8.5% Medium.
   Smoke: frame one is lit with the last bulb dark; no frames while still;
   L gives exactly two flicks then light, redrawing only the corner; O puts
   the strand out and the twist brings it back with the last bulb on; a tap
   on it jiggles it; on Christmas Eve, even at 90% stubborn, it lights and
-  isn't due to go out. Unit: palettes, the attempt scripts (always two
-  flicks), playback, the filament (frame-rate independent, heats faster
-  than it cools, a flick is a soft blink), the layout (swags, the tail,
-  mirroring), Christmas Eve's hours.
+  isn't due to go out; round the border with two twinklers, bulbs by every
+  edge and a blink that redraws only its rect. Unit: palettes, the attempt
+  scripts (always two flicks), playback, the filament (frame-rate
+  independent, heats faster than it cools, a flick is a soft blink), the
+  layout (swags, the tail, mirroring; rows, the border, the arch, hooks as
+  asked, no bulb under the tail), the twinklers, Christmas Eve's hours.
 - **Seasonal:** December's list (§4.2).
 
 ### 10.29 Frost on the Glass (`frost`, owner request, November 2026)
@@ -3432,7 +3483,12 @@ soft discs of its lights.
   round clear patch, fogged for a few seconds). Both grow back.
 - **The room** (`frost-art.js`): painted sharp at a quarter size and blurred
   up: warm walls, a lamp, the fire's glow off to one side, a sofa's back,
-  the tree in tiers. Its lights wind round it in a spiral, the nearer ones
+  the tree in tiers. The tree (configVersion 2, 2026-11-11): `treeStyle`
+  a fir, a Charlie Brown tree (a bent sapling in lighter brown so it shows
+  through the blur, five drooping branches with a few dabs of needles, a
+  blanket round its foot, one big red disc for its ball and three bulbs,
+  the lot of it) or none; `treeSize` and `treeWidth` scale it;
+  `lightCount` (0–200) sets its bulbs before the screen's size scales them. Its lights wind round it in a spiral, the nearer ones
   bigger; each a bokeh disc, brighter at its rim, twinkling slowly
   (`twinkle`), with a star and a few far lamps. Warm, coloured, icy blue or
   candlelight; the tree left, middle or right; `blur` sizes the discs.
@@ -3462,7 +3518,13 @@ and a toy train parked on its oval of track. Retro, and cozy.
   scales it up pixelated. Drawn a pixel at a time into sprites; ordered
   (Bayer) dithering for the sky's fall toward the horizon and the snow's
   shading. A retro 12 frames a second (`fps`, 6–30).
-- **The tree** (`SmallXmasArt.tree`, tiny, small or a bit bigger): tiers
+- **The tree** (`SmallXmasArt.tree`, tiny, small, a bit bigger, big or
+  huge (84 pixels tall, seven tiers; configVersion 2, 2026-11-11);
+  `treeWidth` × 0.6–1.8; `lightCount` and `ornamentCount` × the bulbs and
+  the ornament pixels; or `treeStyle: 'charlie'`, a Charlie Brown tree in
+  pixels: a bent stick with four drooping branches and a needle or two,
+  one red ball bowing the top, a blanket over the cross it stands in, two
+  or three bulbs and no star): tiers
   widening downward, lit from the left with a checkered shade on the right,
   a dark edge under each tier, snow on its shoulders, a gold garland,
   pixel ornaments, a star whose arms reach out now and then, a red pot.
