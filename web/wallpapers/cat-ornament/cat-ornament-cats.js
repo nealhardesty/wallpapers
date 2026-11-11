@@ -57,7 +57,7 @@ const CatArt = (() => {
                   fpn: [24, -1], fpf: [20, -1], hpn: [-12, 0], hpf: [-16, 0], tail: [0.05, -0.12], tb: [-0.5, 0.78], tailFront: 1 },
         curl:   { S: [9, -12], H: [-11, -13], rc: 13, rh: 14.5, N: [21, -11], hr: 0.55, legs: 0, haunch: 0,
                   fpn: [22, -1], fpf: [18, -1], hpn: [-8, 0], hpf: [-12, 0], tail: [0.1, -0.2], tb: [-0.5, 0.75], tailFront: 1 },
-        belly:  { S: [21, -14], H: [-21, -14], rc: 15, rh: 15, N: [40, -13], hr: Math.PI, legs: 1, haunch: 0,
+        belly:  { S: [21, -14], H: [-21, -14], rc: 15, rh: 15, N: [40, -16], hr: 0.95, legs: 1, haunch: 0,
                   fpn: [27, -38], fpf: [19, -35], hpn: [-24, -36], hpf: [-16, -33], tail: [-3.1, -0.15], tb: [-0.9, 0], tailFront: 0 },
         rear:   { S: [3, -60], H: [-8, -21], rc: 13, rh: 15.5, N: [7, -78], hr: 0, legs: 1, haunch: 0.7,
                   fpn: [25, -94], fpf: [18, -90], hpn: [2, 0], hpf: [-7, 0], tail: [2.6, 0.35], tb: [-0.7, 0.45], tailFront: 0 },
@@ -264,7 +264,7 @@ const CatArt = (() => {
         g.save();
         g.translate(pose.N[0], pose.N[1] - bob * 1.1);
         g.rotate(p.hr + (s.tilt || 0));
-        const hs = (cat.coat === 'blue-persian' ? 1.08 : 1) * (cat.id === 'moofy' ? 1.06 : 1) * Math.pow(chunk, 0.25);
+        const hs = 0.93 * (cat.coat === 'blue-persian' ? 1.08 : 1) * (cat.id === 'moofy' ? 1.06 : 1) * Math.pow(chunk, 0.25);
         g.scale(hs, hs);
         head(g, rig, s.face || {}, s);
         g.restore();
@@ -281,12 +281,12 @@ const CatArt = (() => {
     function fluffEdge(g, path, coat, amount) {
         g.save();
         g.lineCap = 'round';
-        g.setLineDash([0.1, 4.4]);
+        g.setLineDash([0.1, 3.1]);
         g.strokeStyle = coat.outline;
-        g.lineWidth = 7 + amount * 3;
+        g.lineWidth = 5.6 + amount * 2.2;
         g.stroke(path);
         g.strokeStyle = coat.base;
-        g.lineWidth = 5 + amount * 3;
+        g.lineWidth = 4 + amount * 2.2;
         g.stroke(path);
         g.restore();
     }
@@ -390,9 +390,9 @@ const CatArt = (() => {
         if (only) { /* nothing of the face but its eyes */ }
         else if (coat.ruff) {
             g.save();
-            g.lineCap = 'round'; g.setLineDash([0.1, 4.2]);
-            g.strokeStyle = coat.outline; g.lineWidth = 8; g.stroke(face);
-            g.strokeStyle = coat.base; g.lineWidth = 6; g.stroke(face);
+            g.lineCap = 'round'; g.setLineDash([0.1, 3]);
+            g.strokeStyle = coat.outline; g.lineWidth = 6.4; g.stroke(face);
+            g.strokeStyle = coat.base; g.lineWidth = 4.8; g.stroke(face);
             g.restore();
         } else {
             g.lineWidth = 2.4; g.strokeStyle = coat.outline; g.stroke(face);

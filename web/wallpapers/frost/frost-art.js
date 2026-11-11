@@ -50,8 +50,10 @@ const FrostArt = (() => {
         const palette = LIGHTS[o.lights] || LIGHTS.warm;
         const blur = o.blur ?? 1;
         const side = o.treeSide === 'left' ? 0.3 : o.treeSide === 'right' ? 0.7 : 0.5;
-        const tree = { x: W * side, top: H * (H > W ? 0.3 : 0.14), bottom: H * 1.02 };
-        tree.w = Math.min(W * (H > W ? 0.8 : 0.42), (tree.bottom - tree.top) * 0.78);
+        const style = o.treeStyle || 'fir', size = o.treeSize ?? 1, width = o.treeWidth ?? 1;
+        const bottom = H * 1.02, top0 = H * (H > W ? 0.3 : 0.14);
+        const tree = { x: W * side, top: bottom - (bottom - top0) * size * (style === 'charlie' ? 0.78 : 1), bottom, style };
+        tree.w = Math.min(W * (H > W ? 0.8 : 0.42) * Math.max(1, width), (tree.bottom - tree.top) * 0.78 * width);
         // The room, painted sharp at a quarter of the size, then blurred up.
         const q = 0.25, sw = Math.ceil(W * q), sh = Math.ceil(H * q);
         const sharp = canvas(sw, sh), s = sharp.getContext('2d');
@@ -72,20 +74,41 @@ const FrostArt = (() => {
         s.fillStyle = 'rgba(0,0,0,0.25)'; s.fillRect(0, H * 0.22, W, H * 0.012);
         s.fillStyle = 'rgba(40,16,10,0.85)';
         s.beginPath(); s.roundRect(lampX - W * 0.25, H * 0.72, W * 0.5, H * 0.4, H * 0.05); s.fill();
-        glow(tree.x, tree.top + (tree.bottom - tree.top) * 0.55, tree.w * 1.1, '#ffae55', 0.28);
-        // The tree: tiers of dark boughs.
+        if (style !== 'none') glow(tree.x, tree.top + (tree.bottom - tree.top) * 0.55, tree.w * 1.1, '#ffae55', 0.28);
+        // The tree: tiers of dark boughs; or a Charlie Brown sapling, a bent
+        // stick with a few drooping branches, bowed under one red ball.
         s.fillStyle = '#0c2414';
-        const tiers = 5, th = (tree.bottom - tree.top) / tiers;
-        for (let i = 0; i < tiers; i++) {
-            const y0 = tree.top + i * th * 0.92, y1 = y0 + th * 1.35, w = tree.w * (0.25 + 0.75 * (i + 1) / tiers);
-            s.beginPath(); s.moveTo(tree.x, y0); s.lineTo(tree.x + w / 2, y1); s.lineTo(tree.x - w / 2, y1); s.closePath(); s.fill();
+        const charlieLights = [];
+        if (style === 'fir') {
+            const tiers = 5, th = (tree.bottom - tree.top) / tiers;
+            for (let i = 0; i < tiers; i++) {
+                const y0 = tree.top + i * th * 0.92, y1 = y0 + th * 1.35, w = tree.w * (0.25 + 0.75 * (i + 1) / tiers);
+                s.beginPath(); s.moveTo(tree.x, y0); s.lineTo(tree.x + w / 2, y1); s.lineTo(tree.x - w / 2, y1); s.closePath(); s.fill();
+            }
+        } else if (style === 'charlie') {
+            const th = tree.bottom - tree.top, lean = 0.08;
+            const trunk = t => ({ x: tree.x + lean * th * t * t, y: tree.bottom - th * t });
+            s.strokeStyle = '#5a3a1e'; s.lineCap = 'round';
+            for (let i = 0; i < 16; i++) { const a = trunk(i / 16), b = trunk((i + 1) / 16); s.lineWidth = (22 - 13 * i / 16) * u; s.beginPath(); s.moveTo(a.x, a.y); s.lineTo(b.x, b.y); s.stroke(); }
+            for (let i = 0; i < 5; i++) {
+                const t = 0.25 + i * 0.16, r = trunk(t), sideOf = i % 2 ? 1 : -1, len = tree.w * (0.6 - t * 0.3), droop = len * 0.5;
+                s.strokeStyle = '#5a3a1e'; s.lineWidth = 9 * u;
+                s.beginPath(); s.moveTo(r.x, r.y); s.quadraticCurveTo(r.x + sideOf * len * 0.55, r.y - droop * 0.25, r.x + sideOf * len, r.y + droop); s.stroke();
+                s.fillStyle = '#2a6a36';
+                for (let k = 0; k < 3; k++) { const q = 0.35 + k * 0.3, px = r.x + sideOf * len * q, py = r.y + droop * q * q; s.beginPath(); s.ellipse(px, py + 6 * u, 16 * u, 9 * u, sideOf * 0.4, 0, Math.PI * 2); s.fill(); }
+                if (i < 3) charlieLights.push({ x: r.x + sideOf * len * 0.6, y: r.y + droop * 0.36 });
+            }
+            // A blanket round the foot.
+            s.fillStyle = '#3f74c0';
+            s.beginPath(); s.ellipse(tree.x, tree.bottom - 10 * u, tree.w * 0.32, 20 * u, 0, 0, Math.PI * 2); s.fill();
+            tree.crown = trunk(1);
         }
         const base = canvas(W * dpr, H * dpr), b = base.getContext('2d');
         b.filter = `blur(${Math.round(10 * u * dpr * blur)}px)`;
         b.drawImage(sharp, -20 * dpr, -20 * dpr, (W + 40) * dpr, (H + 40) * dpr);
         b.filter = 'none';
         // The lights: wound round the tree in a loose spiral, nearer ones bigger.
-        const n = Math.round((o.count || 46) * Math.max(0.6, Math.min(1.4, Math.sqrt(W * H) / 1000)));
+        const n = style !== 'fir' ? 0 : Math.round((o.lightCount ?? o.count ?? 46) * Math.max(0.6, Math.min(1.4, Math.sqrt(W * H) / 1000)));
         const discs = [];
         for (let i = 0; i < n; i++) {
             const h = 0.06 + 0.92 * Math.pow((i + random()) / n, 0.8);
@@ -97,7 +120,12 @@ const FrostArt = (() => {
             const r = blur * u * (11 + 9 * random()) * (0.8 + 0.25 * depth);
             discs.push({ x, y, r, colour: palette[i % palette.length], a: 0.45 + 0.4 * (depth + 1) / 2, phase: random() * 7, speed: 0.4 + random() * 1.1 });
         }
-        discs.push({ x: tree.x, y: tree.top + 6 * u, r: blur * u * 30, colour: '#ffe4a0', a: 0.9, phase: 0, speed: 0.25 });     // the star
+        if (style === 'fir') discs.push({ x: tree.x, y: tree.top + 6 * u, r: blur * u * 30, colour: '#ffe4a0', a: 0.9, phase: 0, speed: 0.25 });     // the star
+        if (style === 'charlie') {
+            // The one red ball, and three bulbs, the lot of it.
+            discs.push({ x: tree.crown.x + 14 * u, y: tree.crown.y + 30 * u, r: blur * u * 30, colour: '#ff3030', a: 0.95, phase: 0, speed: 0.2 });
+            for (const l of charlieLights) discs.push({ x: l.x, y: l.y, r: blur * u * 14, colour: palette[discs.length % palette.length], a: 0.75, phase: random() * 7, speed: 0.5 + random() * 0.8 });
+        }
         for (let i = 0; i < 5; i++) discs.push({ x: random() * W, y: H * (0.1 + random() * 0.5), r: blur * u * (24 + random() * 24), colour: random() < 0.5 ? '#ffcf8a' : '#ff9d5c', a: 0.16, phase: random() * 7, speed: 0.1 });
         const sprites = {};
         for (const d of discs) {

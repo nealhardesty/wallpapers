@@ -924,9 +924,41 @@ const STAGE_CHECKS = {
     // sends a cat up and the tree comes down, the lights go out, ornaments
     // everywhere, then the fade and it's up again for the next cat; with
     // Topple off it stays up; a tap shines a dot that a cat chases.
-    'cat-ornament': [['the ornament swings, the tree falls and is put back, a cat chases the dot', async () => {
+    // The Christmas trees, every way (2026-11-11): a Charlie Brown tree in
+    // the cat room (one ball, hooks at its branch tips, and it still falls),
+    // a big wide fir with three times the lights; the pixel tree huge and
+    // as a Charlie Brown tree; the frosted window's tree as a sapling.
+    'cat-ornament': [['a Charlie Brown tree that falls, a big full fir, the pixel tree huge and spindly, the window\'s sapling', async () => {
         const at = '&seed=7&date=2026-12-10T20:00';
-        if (!await stageWith('cat-ornament', { configVersion: 1, cats: ['ras', 'butters', 'ibbie'], mischief: 0 }, at)) return record('no boot');
+        if (!await stageWith('cat-ornament', { configVersion: 2, cats: ['ras', 'turkey'], tree: 'charlie', presents: 2 }, at)) return record('no boot with the Charlie Brown tree');
+        let s = await evaluate('(m => ({ charlie: !!m.treeArt.charlie, ornaments: m.treeArt.ornaments.length, lights: m.treeArt.lights.length, hooks: m.treeArt.hooks.length, presents: m.presents.boxes.length, star: m.treeArt.topper }))(WP.stage.manager)');
+        if (!s.charlie || s.ornaments !== 1 || s.lights > 3 || s.hooks !== 2 || s.presents !== 2 || s.star !== 'none') record(`the Charlie Brown tree: ${JSON.stringify(s)}`);
+        await press('t');
+        if (!await waitFor(() => evaluate("WP.stage.manager.tree.state !== 'still'"), 12000)) record('T sent no cat up the Charlie Brown tree');
+        else if (!await waitFor(() => evaluate("WP.stage.manager.tree.state === 'down' || WP.stage.manager.tree.state === 'reset' || Math.abs(WP.stage.manager.tree.phi) > 1"), 15000)) record('the Charlie Brown tree never came down');
+        await shoot('christmas-trees-charlie');
+        if (!await stageWith('cat-ornament', { configVersion: 2, cats: ['ibbie'], tree: 'majestic', treeHeight: 1.3, treeWidth: 1.5, lightCount: 3, ornamentCount: 3, garland: 'tinsel', topper: 'bow', flocked: true, presents: 12 }, at)) return record('no boot with the big tree');
+        s = await evaluate('(m => ({ lights: m.treeArt.lights.length, ornaments: m.treeArt.ornaments.length, presents: m.presents.boxes.length, w: m.treeArt.w, h: m.treeArt.h, W: m.W, star: m.treeArt.topper }))(WP.stage.manager)');
+        if (s.lights < 300 || s.ornaments < 60 || s.presents !== 12 || s.w > s.W * 0.75 || s.star !== 'bow') record(`the big tree: ${JSON.stringify(s)}`);
+        await shoot('christmas-trees-big');
+        if (!await stageWith('small-christmas', { configVersion: 2, treeSize: 'huge', treeWidth: 1.4, lightCount: 2, moveMinutes: 0 }, at)) return record('no boot with the huge pixel tree');
+        s = await evaluate('(m => ({ h: m.tree.h, lights: m.tree.lights.length, star: !!m.tree.star }))(WP.stage.manager)');
+        if (s.h < 80 || s.lights < 60 || !s.star) record(`the huge pixel tree: ${JSON.stringify(s)}`);
+        if (!await stageWith('small-christmas', { configVersion: 2, treeStyle: 'charlie', moveMinutes: 0 }, at)) return record('no boot with the pixel Charlie Brown tree');
+        s = await evaluate('(m => ({ charlie: !!m.tree.charlie, lights: m.tree.lights.length, star: !!m.tree.star }))(WP.stage.manager)');
+        if (!s.charlie || s.lights > 3 || s.star) record(`the pixel Charlie Brown tree: ${JSON.stringify(s)}`);
+        await sleep(1200);
+        await shoot('christmas-trees-pixel-charlie');
+        if (!await stageWith('frost', { configVersion: 2, snow: 0, doodles: false, treeStyle: 'charlie' }, at)) return record('no boot with the window\'s sapling');
+        s = await evaluate('(m => ({ style: m.room.tree.style, discs: m.room.discs.length }))(WP.stage.manager)');
+        if (s.style !== 'charlie' || s.discs > 12) record(`the window's sapling: ${JSON.stringify(s)}`);
+        if (!await stageWith('frost', { configVersion: 2, snow: 0, doodles: false, lightCount: 200, treeSize: 1.4 }, at)) return record('no boot with the big window tree');
+        s = await evaluate('(m => ({ discs: m.room.discs.length }))(WP.stage.manager)');
+        if (s.discs < 150) record(`the big window tree has ${s.discs} discs`);
+        return true;
+    }], ['the ornament swings, the tree falls and is put back, a cat chases the dot', async () => {
+        const at = '&seed=7&date=2026-12-10T20:00';
+        if (!await stageWith('cat-ornament', { configVersion: 2, cats: ['ras', 'butters', 'ibbie'], mischief: 0 }, at)) return record('no boot');
         const st = () => evaluate('JSON.parse(JSON.stringify(WP.stage.manager.debugState()))');
         let s = await st();
         if (s.cats.length !== 3) record(`${s.cats.length} cats in the room, not 3`);
@@ -958,7 +990,7 @@ const STAGE_CHECKS = {
         if (s.loose || !s.pendulum.hung) record(`after the reset: ${s.loose} loose, hung ${s.pendulum.hung}`);
         if (s.lead === lead) record('the same cat kept the ornament after the reset');
         // Topple off: a climb, and the tree stays up.
-        if (!await stageWith('cat-ornament', { configVersion: 1, cats: ['turkey', 'ibbie'], topple: false }, at)) return record('no boot with topple off');
+        if (!await stageWith('cat-ornament', { configVersion: 2, cats: ['turkey', 'ibbie'], topple: false }, at)) return record('no boot with topple off');
         await press('t');
         await sleep(8000);
         s = await st();
@@ -1037,7 +1069,7 @@ const STAGE_CHECKS = {
     frost: [['frost grows, someone draws in it, breath, a finger, the thaw', async () => {
         const st = () => evaluate('JSON.parse(JSON.stringify(WP.stage.manager.debugState()))');
         const alphaAt = (x, y) => evaluate(`(m => m.mask.getContext('2d').getImageData(Math.round(${x} * m.dpr), Math.round(${y} * m.dpr), 1, 1).data[3])(WP.stage.manager)`);
-        if (!await stageWith('frost', { configVersion: 1, snow: 0, doodles: false }, '&seed=7&date=2026-12-10T20:00')) return record('no boot');
+        if (!await stageWith('frost', { configVersion: 2, snow: 0, doodles: false }, '&seed=7&date=2026-12-10T20:00')) return record('no boot');
         let s = await st();
         if (s.phase !== 'grow' || s.stats.segments < 2000 || s.spots < 50) record(`frame one: ${JSON.stringify(s)}`);
         const seg = s.stats.segments;
@@ -1084,7 +1116,7 @@ const STAGE_CHECKS = {
     // on Christmas Day there are more presents.
     'small-christmas': [['pixelated, twelve frames a second, the train goes round, moving house, the sleigh', async () => {
         const st = () => evaluate('JSON.parse(JSON.stringify(WP.stage.manager.debugState()))');
-        const settings = { configVersion: 1, laps: 1, trainSpeed: 2.5, moveMinutes: 0, train: false, sleigh: 'never' };
+        const settings = { configVersion: 2, laps: 1, trainSpeed: 2.5, moveMinutes: 0, train: false, sleigh: 'never' };
         if (!await stageWith('small-christmas', settings, '&seed=7&date=2026-12-10T20:00')) return record('no boot');
         let s = await st();
         const canvas = await evaluate('(m => ({ w: m.canvas.width, h: m.canvas.height, css: m.canvas.style.width, look: m.canvas.style.imageRendering }))(WP.stage.manager)');

@@ -86,7 +86,7 @@ class CatOrnamentAnimationManager {
         this.config = config;
         if (!this.running) return;
         const changed = keys => keys.some(k => JSON.stringify(old[k]) !== JSON.stringify(config[k]));
-        if (changed(['time', 'lights', 'ornaments', 'catSize', 'tree'])) this.resize();
+        if (changed(['time', 'lights', 'ornaments', 'catSize', 'tree', 'treeHeight', 'treeWidth', 'fullness', 'lightCount', 'ornamentCount', 'garland', 'topper', 'presents', 'flocked'])) this.resize();
         if (changed(['cats', 'inRoom', ...CatOrnamentLogic.ROSTER.map(c => this.nameKey(c.id))])) { this.buildCast(); this.seed(true); }
         if (changed(['topple']) && !config.topple && this.tree.state !== 'still') this.resetScene();
     }
@@ -112,7 +112,9 @@ class CatOrnamentAnimationManager {
         const W = this.W = innerWidth, H = this.H = innerHeight;
         this.canvas.width = Math.round(W * dpr);
         this.canvas.height = Math.round(H * dpr);
-        const L = this.layout = CatRoom.layout(W, H, this.host.insets || {}, this.config.tree);
+        const c = this.config;
+        const L = this.layout = CatRoom.layout(W, H, this.host.insets || {}, c.tree, c.treeHeight, c.treeWidth);
+        L.treeKind = c.tree;
         L.u *= this.config.catSize;
         const random = WP.seededRandom(1225);
         // The ornament's side: toward the open floor.
@@ -120,20 +122,21 @@ class CatOrnamentAnimationManager {
         this.day = Math.round(this.dayAmount() * 2) / 2;
         const palette = CatRoom.PALETTES[this.config.lights] || CatRoom.PALETTES.classic;
         const ornamentColours = CatRoom.ORNAMENTS[this.config.ornaments] || CatRoom.ORNAMENTS.classic;
-        this.treeArt = CatRoom.tree({ ...L, u: L.u / this.config.catSize }, dpr, random, palette);
+        this.treeArt = CatRoom.tree({ ...L, u: L.u / this.config.catSize }, dpr, random, palette,
+            { fullness: c.fullness, lights: c.lightCount, ornaments: c.ornamentCount, garland: c.garland, topper: c.topper, flocked: c.flocked });
         const ou = L.u / this.config.catSize;
         this.sprites = {
             bulbs: palette.map(c => CatRoom.bulb(c, 11 * ou, dpr)),
-            ornaments: this.treeArt.ornaments.map(o => CatRoom.ornament(ornamentColours[o.colour % ornamentColours.length], 8 * o.size, o.kind, dpr)),
+            ornaments: this.treeArt.ornaments.map(o => CatRoom.ornament(this.treeArt.charlie ? '#c8202a' : ornamentColours[o.colour % ornamentColours.length], 8 * o.size, o.kind, dpr)),
             the: CatRoom.ornament(ornamentColours[0], 11 * ou, 'ball', dpr),
-            star: CatRoom.star(this.treeArt.starR, dpr),
+            star: this.treeArt.topper === 'bow' ? CatRoom.bow(this.treeArt.starR, dpr) : CatRoom.star(this.treeArt.starR, dpr),
             treeGlow: CatRoom.glow(this.glowR(), '#ffb860', 0.32, dpr),
             unlit: CatRoom.glow(this.glowR(), '#060306', 0.75, dpr),
             fire: CatRoom.glow(Math.max(W, H) * 0.5, '#ff8a3a', 0.3, dpr),
             laser: CatRoom.glow(10 * ou, '#ff2a2a', 1, dpr),
             shadow: CatArt.shadowSprite(80 * L.u * dpr),
         };
-        this.presents = CatRoom.presents({ ...L, u: ou }, dpr, random);
+        this.presents = CatRoom.presents({ ...L, u: ou }, dpr, random, c.presents);
         // The room, with the fire's and the tree's glow painted in (a frame
         // only adds the fire's flicker, at High, and darkness while the tree's
         // lights are out): big soft fills are what a phone can't afford each frame.
@@ -418,7 +421,7 @@ class CatOrnamentAnimationManager {
             t.lights = Math.random() < 0.3 ? 0.3 : 1;
             // Ornaments fly off as it goes.
             this.treeArt.ornaments.forEach((o, i) => { if (!t.detached.has(i) && Math.abs(t.phi) > o.detach) { t.detached.add(i); this.fling(o.x, o.y, this.sprites.ornaments[i]); } });
-            if (!this.starOff && Math.abs(t.phi) > 0.7) { this.starOff = true; this.fling(this.treeArt.star.x, this.treeArt.star.y, null, true); }
+            if (!this.starOff && Math.abs(t.phi) > 0.7) { this.starOff = true; if (this.treeArt.topper !== 'none') this.fling(this.treeArt.star.x, this.treeArt.star.y, null, true); }
             if (this.pendulum.hung && Math.abs(t.phi) > 0.45) this.unhook();
         }
         // The ornament: a pendulum driven by the hook's sway, or a free body.
@@ -580,7 +583,7 @@ class CatOrnamentAnimationManager {
                 g.restore();
             });
         }
-        if (parts.star && !this.starOff) { const s = this.sprites.star, r = art.starR * 1.3; g.drawImage(s, art.star.x - r, art.star.y - r, r * 2, r * 2); }
+        if (parts.star && !this.starOff && art.topper !== 'none') { const s = this.sprites.star, r = art.starR * 1.3; g.drawImage(s, art.star.x - r, art.star.y - r, r * 2, r * 2); }
         g.restore();
     }
 
