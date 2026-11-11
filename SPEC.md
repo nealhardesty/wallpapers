@@ -800,7 +800,7 @@ and the commits.
 | fishtank | `depthBlur`, `caustics` (medium) | Whole roster stocked, `fishCount × density` swim, the rest fade out; motes. Low: distant fish sink into the water colour instead of blurring |
 | northern-lights | `bloom`, `reflection` (medium) | Low draws the curtains straight onto the sky (no aurora buffer); blur 1/8 on Medium; stars × density, from baked sprites |
 | halloween | `bloom` (medium), `grain` (high), `fogMid` (medium), `fogFar` (high) | Bats, wisps, candy, leaves × density; bats on a grid; the near fog bank is never shed; a lit jack-o'-lantern's carving glows near-white, black only when snuffed |
-| fireplace | `smoke` (medium) | Coal glows baked per heat level; each log, the coal bed and the grate baked once per resize, only their glow zones' alpha changing per frame (§10.23); sparks and coals × density |
+| fireplace | `haze` (high), `smoke` (medium) | Coal glows baked per heat level; each log, the coal bed and the grate baked once per resize, only their glow zones' alpha changing per frame (§10.23); sparks and coals × density; the heat haze (strips of the frame drawn back a pixel aside) on High only |
 | quest | `crt` (high) | Palette proxy every tier; light map half size on Low; idles while paused; fixed 60 Hz steps (up to 20 catch-up) |
 | advent | — | Doors-at-rest layer, baked glow; treat refreshes, particles and confetti × density; idles between its own capped frames (never fully still: today's treat plays) |
 | leaves | — | Drift capped at 6k (Medium) and 2k (Low), shallower banks of the same shape; falling × density |
@@ -2763,9 +2763,54 @@ geometry unit-tested in `tools/fireplace.test.mjs`) replaces them:
   flame; settings Coal Bed (depth) and Ironwork (grate, andirons, none).
   Below the ground line is hearth stone, hiding the logs' buried undersides.
 
+**More wood, and a fire that behaves (owner request, 2026-11-11: "the
+logs need more options (like broken logs, half logs, sticks etc). The fire
+itself could be more realistic"; research in the session's brief: how
+wood is stacked and burns, buoyant-flame puffing, the blue at the base;
+configVersion 2).**
+- **Pieces** (`pieces`, a multi-select; `pickWood` filters the palette's
+  mix): rounds, splits (halves and quarters), kindling sticks and twigs
+  (thin, short, placed by the stack, one knot or none, no stubs), snapped
+  ends (`torn`: the shown end's outline ragged at 0.3 and, instead of
+  rings, splinters of pale wood fanning from the pith with torn fibres
+  between), and punky wood (a species: rotten through, grey-brown, bleached
+  bark, few rings). Logs laid across the stack (`endOn`) show nearly their
+  whole end (`faceRx` 0.92 R).
+- **Stacks** (`stack`, key W, since K is the player's; `FireplaceWood.stack`, pure and
+  unit-tested): the heap (the old rows, kindling on top of a big one), a
+  log cabin (long logs, logs laid across them end-on, long logs again), a
+  teepee (leaning from both sides to an apex, twigs inside), top-down (big
+  rounds under, splits, then sticks and twigs on top), a lean-to (splits
+  leaning on one big log), a backlog (one great round at the back with two
+  or three in front) or kindling alone. Every stack is a list of shapes,
+  back to front, for `makeLog`.
+- **The flame:** *Tongues* draws each sprite taller than wide, more while
+  it is young and hot (a column) and less as it breaks up (0 is the old
+  round, gassy fire); *Puffing* modulates every root's strength and the
+  emission at the puffing rate of a buoyant flame (1.5/√D Hz for a hearth
+  D metres across, about two a second here), each root a little off the
+  others' beat, so tongues detach; *Blue at the roots* draws a blue sprite
+  under each root where the gas burns clean before it soots, faint in a
+  blaze and plainer as the fire dies down; *Heat haze* (`haze`, an effect
+  on High) draws strips of the frame above the wood a pixel or two to one
+  side, swaying with time and height, so the wall wobbles through the hot
+  air.
+- **The burn** (`burn: 'cycle'`, `burnMinutes`, key L): the fire's level
+  (`fireLevel`) falls from 1 to 0.35 over the cycle (emission, flame life
+  and every root follow it; the blue grows), then the topmost log burns
+  through and drops into the heap with a burst of sparks and a flare of the
+  roots under it, and a fresh log falls from above onto the stack, lands
+  with sparks, steams from its ends for twenty-five seconds (white puffs,
+  the smoke system with a `steam` flag and its own sprite) and chars as it
+  catches (re-dressed and re-baked six times over seventy seconds, from
+  bare wood to the Char setting), while the level climbs back over fifty
+  seconds. The heap keeps at most three fresh logs; the oldest is buried.
+  Steady fires (the default) stay at level 1.
+
 Costs: a 60–70 ms bake per resize on a desktop, about 3.5 MP of layers at
-10 logs; per frame, one blit per log plus about three per zone. Bench
-unchanged (4.7 / 9.0 / 18.7% busy).
+10 logs; per frame, one blit per log plus about three per zone; the haze
+about forty strip blits of the frame's width on High only. Bench before
+the 2026-11-11 additions 4.7 / 9.0 / 18.7% busy.
 
 Hard-won:
 - `destination-in` scales by the fill's alpha. A mask fill that inherits a

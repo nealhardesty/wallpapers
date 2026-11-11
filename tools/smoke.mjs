@@ -637,7 +637,20 @@ const STAGE_CHECKS = {
     // Fireplace: the wood is baked before the first frame, with char that
     // glows in zones, a coal bed and the grate; a pop flashes the zone it
     // bursts from and then lets it go; and the glow breathes on its own.
-    fireplace: [['wood, coals and iron baked by frame one; a pop flashes its zone; the glow breathes', async () => {
+    fireplace: [['the stacks and the pieces; L drops a log and lands a fresh one that steams; W lays the wood again', async () => {
+        if (!await stageWith('fireplace', { configVersion: 2, stack: 'cabin', pieces: ['rounds', 'splits', 'sticks', 'snapped', 'punky'], logCount: 6, burn: 'cycle', burnMinutes: 5 }, '&seed=7')) return record('no boot with a cabin');
+        let s = await evaluate('(m => ({ logs: m.logs.length, endOn: m.logs.filter(l => l.endOn).length, sticks: m.logs.filter(l => l.kind === "stick" || l.kind === "twig").length, level: m.level }))(WP.stage.manager)');
+        if (s.logs < 10 || !s.endOn || !s.sticks || !(s.level > 0.95)) record(`the cabin: ${JSON.stringify(s)}`);
+        await shoot('fireplace-cabin');
+        await press('l');
+        await sleep(900);
+        s = await evaluate('(m => ({ logs: m.logs.length, stats: m.stats, fresh: !!m.fresh, dropping: m.logs.filter(l => l.drop).length, steam: m.smoke.filter(p => p.steam).length, phase: m.burn.phase }))(WP.stage.manager)');
+        if (s.stats.freshLogs !== 1 || s.stats.collapses !== 1 || !s.fresh || s.phase !== 'catching' || s.steam < 1) record(`L: ${JSON.stringify(s)}`);
+        await press('w');
+        s = await evaluate('(m => ({ stack: m.config.stack, logs: m.logs.length }))(WP.stage.manager)');
+        if (s.stack !== 'teepee') record(`W: ${JSON.stringify(s)}`);
+        return true;
+    }], ['wood, coals and iron baked by frame one; a pop flashes its zone; the glow breathes', async () => {
         await cdp.send('Page.navigate', { url: `${WEB}/stage.html?w=fireplace&seed=7` });
         await waitFor(() => evaluate('WP.stage?.ready === true'));
         const first = await evaluate(`(m => ({ frames: WP.host.frames.count, logs: m.logs.length,

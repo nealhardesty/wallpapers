@@ -35,7 +35,11 @@
           make: host => new FirefliesAnimationManager(host), cost: 'low' },
         { id: 'fireplace', name: 'Fireplace', icon: '🔥', accent: '#ff8a3d', scripts: ['fireplace/fireplace-wood.js', 'fireplace/fireplace.js'],
           make: host => new FireplaceAnimationManager(host), cost: 'high',
-          effects: [['smoke', 'medium']] },
+          effects: [['haze', 'high'], ['smoke', 'medium']],
+          keys: [
+              { keys: ['l'], label: 'A log burns through and a fresh one lands', run: fire => fire.freshLogNow() },
+              { keys: ['w'], label: 'The wood laid again: a heap, a cabin, a teepee, top-down, a lean-to, a backlog, kindling', run: fire => fire.nextStack() },
+          ] },
         { id: 'northern-lights', name: 'Northern Lights', icon: '🌌', accent: '#55eeb0', scripts: ['northern-lights/northern-lights.js'],
           make: host => new NorthernLightsAnimationManager(host), cost: 'high', motion: 'slow',
           effects: [['bloom', 'medium'], ['reflection', 'medium']] },

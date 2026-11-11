@@ -35,7 +35,9 @@ const FIREPLACE_WOODS = {
     // Scaly reddish plates between dark fissures, over pale resinous wood
     pine: { bark: 'plated', barkColor: [160, 92, 58], barkDark: [44, 26, 18], ridge: [200, 130, 88], wood: [228, 194, 136], heart: [204, 140, 84], barkDepth: 0.08, rings: [8, 18] },
     // The bark long gone, the wood bleached silver by sun and salt
-    drift: { bark: 'bleached', barkColor: [166, 162, 154], barkDark: [70, 66, 62], ridge: [208, 204, 196], wood: [178, 170, 158], heart: [150, 142, 130], barkDepth: 0, rings: [12, 24] }
+    drift: { bark: 'bleached', barkColor: [166, 162, 154], barkDark: [70, 66, 62], ridge: [208, 204, 196], wood: [178, 170, 158], heart: [150, 142, 130], barkDepth: 0, rings: [12, 24] },
+    // Punky wood: rotten through, grey-brown and crumbly, the bark mostly gone; it smoulders rather than flames
+    punky: { bark: 'bleached', barkColor: [96, 82, 66], barkDark: [42, 34, 28], ridge: [124, 110, 92], wood: [122, 104, 82], heart: [90, 74, 58], barkDepth: 0.02, rings: [6, 12], punky: true }
 };
 
 // What each flame palette burns: [species, cut, weight]
@@ -163,23 +165,115 @@ const FireplaceWood = {
 
     // ------------------------------------------------------------ the log
 
-    pickWood(random, palette) {
-        const mix = FIREPLACE_WOOD_MIX[palette] || FIREPLACE_WOOD_MIX.hardwood;
+    // pieces: which kinds of wood go on (SPEC §10.23): 'rounds', 'splits',
+    // 'sticks' (placed by the stack), 'snapped' (a round with one torn end),
+    // 'punky' (rotten). Without rounds or splits, whatever is left.
+    pickWood(random, palette, pieces = null) {
+        let mix = FIREPLACE_WOOD_MIX[palette] || FIREPLACE_WOOD_MIX.hardwood;
+        if (pieces) {
+            const ok = cut => cut === 'round' ? pieces.includes('rounds') : pieces.includes('splits');
+            const kept = mix.filter(([, cut]) => ok(cut));
+            if (kept.length) mix = kept;
+        }
         let total = 0;
         for (const entry of mix) total += entry[2];
         let pick = random() * total;
+        let chosen = { species: mix[0][0], cut: mix[0][1] };
         for (const [species, cut, weight] of mix) {
             pick -= weight;
-            if (pick <= 0) return { species, cut };
+            if (pick <= 0) { chosen = { species, cut }; break; }
         }
-        return { species: mix[0][0], cut: mix[0][1] };
+        if (pieces && chosen.cut === 'round') {
+            if (pieces.includes('punky') && random() < 0.2) chosen = { species: 'punky', cut: 'round', torn: random() < 0.5 };
+            else if (pieces.includes('snapped') && random() < 0.35) chosen = { ...chosen, torn: true };
+        }
+        return chosen;
+    },
+
+    // Where the wood goes: a heap (the old rows), a log cabin (long logs
+    // with end-on logs laid across), a teepee, top-down (big rounds, then
+    // splits, then kindling on top), a lean-to (splits leaning on one big
+    // log), a backlog (one great round at the back with two in front) or
+    // kindling alone. Pure: shapes for makeLog, back to front.
+    // o: { width, ground, count, baseRadius, baseLength, random, pieces }.
+    stack(kind, o) {
+        const { width, ground, random } = o;
+        const count = Math.max(2, Math.round(o.count));
+        const R = o.baseRadius, L = o.baseLength;
+        const sticks = !o.pieces || o.pieces.includes('sticks');
+        const shapes = [];
+        const row = (n, { radius, length, y, angle = 0.1, kind: pieceKind, cut, rowIndex, spread = 1 }) => {
+            const span = width / Math.max(1, n - 0.7);
+            for (let i = 0; i < n; i++) {
+                const r = radius * (0.84 + random() * 0.32), l = length * (0.85 + random() * 0.3);
+                shapes.push({ cx: -span * 0.35 + span * i + (random() - 0.5) * span * 0.2 * spread, cy: y(r), length: l, radius: r, angle: (random() - 0.5) * angle, row: rowIndex, kind: pieceKind, cut });
+            }
+        };
+        const kindling = (n, y, rowIndex, twigs = false) => {
+            for (let i = 0; i < n; i++) {
+                const r = R * (twigs ? 0.14 : 0.26) * (0.8 + random() * 0.4), l = L * (twigs ? 0.3 : 0.5) * (0.7 + random() * 0.5);
+                shapes.push({ cx: width * (0.08 + random() * 0.84), cy: y - r * (0.4 + random() * 0.6), length: l, radius: r, angle: (random() - 0.5) * 0.7, row: rowIndex, kind: twigs ? 'twig' : 'stick', cut: 'round' });
+            }
+        };
+        if (kind === 'cabin') {
+            row(count, { radius: R, length: L, y: r => ground - r * 0.5, rowIndex: 0 });
+            const across = Math.max(2, count - 1), span = width / across;
+            for (let i = 0; i < across; i++) {
+                const r = R * 0.8 * (0.85 + random() * 0.3);
+                shapes.push({ cx: span * (i + 0.5) + (random() - 0.5) * span * 0.3, cy: ground - R * 1.05 - r * 0.7, length: r * 1.7, radius: r, angle: (random() - 0.5) * 0.12, row: 1, endOn: true, cut: 'round' });
+            }
+            row(Math.max(1, count - 2), { radius: R * 0.8, length: L * 1.1, y: r => ground - R * 2.3 - r * 0.6, rowIndex: 2, angle: 0.14 });
+            if (sticks) kindling(Math.round(count * 1.2), ground - R * 2.9, 3);
+        } else if (kind === 'teepee') {
+            const len = Math.min(width * 0.42, L * 1.4), apexX = width / 2, apexY = ground - len * 0.78;
+            if (sticks) kindling(count + 2, ground, 0, true);
+            for (let i = 0; i < count; i++) {
+                const side = i % 2 ? 1 : -1, k = (Math.floor(i / 2) + 0.5) / Math.ceil(count / 2);
+                const lean = side * (0.95 + k * 0.35) + (random() - 0.5) * 0.15;
+                const l = len * (0.85 + random() * 0.25), r = R * 0.72 * (0.85 + random() * 0.3);
+                shapes.push({ cx: apexX - Math.sin(lean) * l * 0.5 * side * side + side * Math.sin(Math.abs(lean)) * l * 0.5, cy: (apexY + ground - r * 0.4) / 2, length: l, radius: r, angle: -lean * 0.52, row: i < count / 2 ? 0 : 1, cut: 'round' });
+            }
+        } else if (kind === 'topdown') {
+            row(Math.max(2, count - 1), { radius: R * 1.25, length: L * 1.15, y: r => ground - r * 0.45, rowIndex: 0, angle: 0.08 });
+            row(count, { radius: R * 0.72, length: L * 0.9, y: r => ground - R * 1.9 - r * 0.6, rowIndex: 1, angle: 0.24, cut: random() < 0.5 ? 'half' : 'quarter' });
+            if (sticks) { kindling(count + 2, ground - R * 2.8, 2); kindling(count + 3, ground - R * 3.2, 3, true); }
+        } else if (kind === 'leanto') {
+            const big = R * 1.45;
+            shapes.push({ cx: width * 0.5, cy: ground - big * 0.55, length: Math.min(width * 0.78, L * 2.4), radius: big, angle: 0.02, row: 0, cut: 'round' });
+            if (sticks) kindling(count, ground - big * 0.2, 0);
+            for (let i = 0; i < count; i++) {
+                const side = i % 2 ? 1 : -1, r = R * 0.62 * (0.85 + random() * 0.3), l = L * 0.9 * (0.8 + random() * 0.3);
+                shapes.push({ cx: width * 0.5 + side * (width * 0.08 + random() * width * 0.26), cy: ground - big * 0.6 - r * 0.6 + random() * big * 0.2, length: l, radius: r, angle: side * (0.4 + random() * 0.18), row: 1, cut: random() < 0.6 ? 'half' : 'round' });
+            }
+        } else if (kind === 'backlog') {
+            const big = R * 1.6;
+            shapes.push({ cx: width * 0.5, cy: ground - big * 0.6, length: Math.min(width * 0.86, L * 2.6), radius: big, angle: 0.015, row: 0, cut: 'round' });
+            row(Math.max(2, Math.min(3, count - 1)), { radius: R * 0.9, length: L * 1.05, y: r => ground - r * 0.45, rowIndex: 1, angle: 0.12 });
+            if (sticks) kindling(Math.max(2, count - 2), ground - R * 0.8, 2);
+        } else if (kind === 'kindling') {
+            kindling(count * 2, ground, 0);
+            kindling(count * 2, ground - R * 0.5, 1, true);
+            kindling(count, ground - R * 0.9, 2);
+        } else {
+            // The heap: the bottom row buried in the ash, an upper row crossed
+            // over its seams, split wood capping a big stack, kindling on top.
+            row(count, { radius: R, length: L, y: r => ground - r * 0.5, rowIndex: 0 });
+            const upper = Math.max(1, count - 1);
+            row(upper, { radius: R * 0.82, length: width / (upper - 0.5) * 0.95, y: r => ground - R * 1.05 - r * (0.5 + random() * 0.3), rowIndex: 1, angle: 0.28 });
+            if (count >= 7) row(Math.max(1, Math.round(count / 2)), { radius: R * 0.6, length: width / Math.round(count / 2) * 0.7, y: r => ground - R * 2 - r * 0.6, rowIndex: 2, angle: 0.5 });
+            if (sticks && count >= 4) kindling(Math.round(count / 2), ground - R * (count >= 7 ? 2.6 : 1.9), 3);
+        }
+        return shapes;
     },
 
     // The shape of one log: its outline along its length, its knots and
     // stubs, which end it shows and what that end looks like.
     // `centre` is the screen x the viewer looks from.
-    makeLog({ cx, cy, length, radius, angle, row }, random, { palette, centre }) {
-        const { species, cut } = this.pickWood(random, palette);
+    makeLog(shape, random, { palette, centre, pieces = null }) {
+        const { cx, cy, length, radius, angle, row } = shape;
+        const kind = shape.kind || 'log';
+        const picked = shape.cut || shape.species ? { species: shape.species || (palette === 'softwood' ? 'pine' : palette === 'driftwood' ? 'drift' : 'oak'), cut: shape.cut || 'round', torn: !!shape.torn } : this.pickWood(random, palette, pieces);
+        const { species, cut } = picked;
         const wood = FIREPLACE_WOODS[species];
         const L = length;
         const R = radius;
@@ -190,20 +284,25 @@ const FireplaceWood = {
             seed: Math.floor(random() * 1e6),
             species,
             cut,
+            kind,
+            torn: !!picked.torn && !split && kind === 'log',
+            endOn: !!shape.endOn,
+            punky: !!wood.punky,
             band: FIREPLACE_LOG_CUTS[cut],
             contacts: []
         };
 
         // A log to one side of the viewer shows the end that points back
-        // toward the middle, and each one also lies a little askew
+        // toward the middle, and each one also lies a little askew; a log
+        // laid across the stack shows almost its whole end
         const lean = (centre - cx) / Math.max(1, centre) * 0.45 + (random() - 0.5) * 0.5;
         log.endSide = lean >= 0 ? 1 : -1;
-        log.faceRx = R * (0.2 + Math.min(1, Math.abs(lean)) * 0.32);
+        log.faceRx = log.endOn ? R * 0.92 : R * (0.2 + Math.min(1, Math.abs(lean)) * 0.32);
 
         const bow = (random() - 0.5) * 0.22 * R;
         const taper = (random() - 0.5) * 0.3;
         const knots = [];
-        const knotCount = 1 + Math.floor(random() * 3);
+        const knotCount = kind === 'log' ? 1 + Math.floor(random() * 3) : kind === 'stick' ? 1 : 0;
         for (let i = 0; i < knotCount; i++) {
             knots.push({
                 u: (random() * 2 - 1) * L * 0.42,
@@ -240,7 +339,7 @@ const FireplaceWood = {
 
         // Stubs of cut-off branches, pointing up out of round wood
         log.stubs = [];
-        if (!split && species !== 'drift' && random() < 0.55) {
+        if (!split && species !== 'drift' && kind === 'log' && !log.endOn && random() < 0.55) {
             log.stubs.push({
                 u: (random() * 2 - 1) * L * 0.32,
                 lean: (random() - 0.5) * 0.9,
@@ -251,7 +350,7 @@ const FireplaceWood = {
 
         // Knots on the bark surface, away from the silhouette
         log.knots = [];
-        const surfaceKnots = split ? 1 : 1 + Math.floor(random() * 3);
+        const surfaceKnots = kind === 'twig' ? 0 : split ? 1 : 1 + Math.floor(random() * 3);
         for (let i = 0; i < surfaceKnots; i++) {
             log.knots.push({
                 u: (random() * 2 - 1) * L * 0.4,
@@ -389,7 +488,7 @@ const FireplaceWood = {
         const n = log.us.length;
         for (let i = 0; i < n; i++) body.push(log.us[i], log.top[i]);
         for (let i = n - 1; i >= 0; i--) body.push(log.us[i], log.bot[i]);
-        return [body, this.faceOutline(log, log.endSide, 0.025), this.faceOutline(log, -log.endSide, 0.09)];
+        return [body, this.faceOutline(log, log.endSide, log.torn ? 0.3 : 0.025), this.faceOutline(log, -log.endSide, 0.09)];
     },
 
     // The log's extent in its own space, stubs and both ends included
@@ -1226,11 +1325,31 @@ const FireplaceWood = {
         };
 
         ctx.save();
-        this.trace(ctx, this.faceOutline(log, log.endSide, 0.025));
+        this.trace(ctx, this.faceOutline(log, log.endSide, log.torn ? 0.3 : 0.025));
         ctx.clip();
 
         ctx.fillStyle = this.rgb(wood.wood);
         ctx.fillRect(f.x - f.rx * 1.6, f.y - f.ry * 1.3, f.rx * 3.2, f.ry * 2.6);
+
+        if (log.torn) {
+            // A snapped end: no rings, just splinters of pale wood fanning
+            // out from the pith, torn fibres and shadow between them.
+            const n = 14 + Math.floor(random() * 8);
+            for (let i = 0; i < n; i++) {
+                const a0 = i / n, a1 = a0 + (0.3 + random() * 0.5) / n;
+                const [x0, y0] = to(...this.facePoint(log, 0.05 + random() * 0.2, a0));
+                const [x1, y1] = to(...this.facePoint(log, 0.75 + random() * 0.5, a0));
+                const [x2, y2] = to(...this.facePoint(log, 0.85 + random() * 0.4, a1));
+                ctx.fillStyle = this.rgba(random() < 0.5 ? wood.ridge : wood.wood, 0.9);
+                ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.lineTo(x2, y2); ctx.closePath(); ctx.fill();
+                ctx.strokeStyle = this.rgba(wood.barkDark, 0.5); ctx.lineWidth = Math.max(0.6, k * 0.8);
+                ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
+            }
+            ctx.fillStyle = this.rgba(wood.heart, 0.5);
+            ctx.beginPath(); ctx.ellipse(f.x, f.y, f.rx * 0.25, f.ry * 0.25, 0, 0, Math.PI * 2); ctx.fill();
+            ctx.restore();
+            return;
+        }
 
         if (log.heart > 0) {
             const heart = ring(log.heart, 0.05, 0.5);
