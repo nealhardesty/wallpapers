@@ -2702,6 +2702,28 @@ no village, no orchard, no day (only the moon), and so on.
   at 4× throttle). Effects `mist` and `beams` shed on Low. Leaves, apples,
   smoke, sparks and flocks scale with `density`.
 - **Why seasonal November:** the fish tank was a placeholder there.
+- **The Mac saver's "stroke" (owner report, 2026-11-11):** now and then
+  the saver showed "just lines and a spinning windmill with nothing else in
+  the right place". Everything that survived is drawn live from vectors
+  (the mill, the bunting, the lamp heads, the animals); everything that
+  vanished is a baked canvas (the land, the tree, leaf and apple sprites,
+  the moon, the geese) or had been placed by a reflow. That is what a
+  WebKit view does when its GPU process dies or its canvas surfaces are
+  purged (the saver's window is "not visible" to the host, so its page is
+  a candidate): every canvas goes blank at once, and nothing in the page is
+  told, except through `contextlost`/`contextrestored` on the visible
+  canvas where WebKit supports them. Two guards: the `contextrestored`
+  event rebakes everything, and every four seconds a probe reads one pixel
+  of the land where it is always opaque (below the horizon, and the bottom
+  row); both transparent means the bakes are gone, and `recover()` lays
+  out again (`resize()`, which keeps the cast in place, resets the moon
+  and tone caches, and the smoke test's drill wipes every layer and sees
+  it come back within four seconds). The second guard: a web view whose
+  frame is not set yet reports a 0 × 0 window; the first layout then
+  scaled every sprite by nothing and the next `resize()` reflowed the
+  cast by infinity, which is also "nothing in the right place". A window
+  under 16 px now gets no layout, no frame and no seed until a real size
+  comes, when it is laid out and seeded as on a first start.
 
 ### 10.23 Fireplace: realistic wood (owner request, 2026-10-29)
 
@@ -3985,7 +4007,7 @@ proves it before anything else is built.
 |---|---|---|---|
 | Live desktop background | **Yes** | One borderless `NSWindow` per display at the desktop window level, holding a `WKWebView` | Low. Plash-style apps do this today. |
 | Static fallback and lock screen | **Yes** | `NSWorkspace.setDesktopImageURL(_:for:options:)`, public API | Low |
-| Screen saver | **Yes, but fragile** | A `.saver` bundle (`ScreenSaverView` subclass) run by Apple's `legacyScreenSaver` host | **Medium–high**: Apple's host has open bugs (below) |
+| Screen saver | **Yes, but fragile** | A `.saver` bundle (`ScreenSaverView` subclass) run by Apple's `legacyScreenSaver` host | **Medium–high**: Apple's host has open bugs (below); its web view can lose every canvas's contents at once (Harvest Valley's "stroke", §10.22: wallpapers that bake layers should probe for it and rebake) |
 | Real "Set as wallpaper" picker entry like Android | **No** | macOS has no third-party live-wallpaper API | n/a: the app *is* the wallpaper |
 
 #### What the research found
