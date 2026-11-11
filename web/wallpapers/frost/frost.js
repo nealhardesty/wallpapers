@@ -95,7 +95,7 @@ class FrostAnimationManager {
         this.config = config;
         if (!this.running) return;
         const changed = keys => keys.some(k => JSON.stringify(old[k]) !== JSON.stringify(config[k]));
-        if (changed(['window', 'frameColour', 'lights', 'blur', 'treeSide', 'coverage'])) this.resize();
+        if (changed(['window', 'frameColour', 'lights', 'blur', 'treeSide', 'treeStyle', 'treeSize', 'treeWidth', 'lightCount', 'coverage'])) this.resize();
         if (changed(['growMinutes'])) this.speed = this.depth / (this.growSeconds() * 0.9);
         if (changed(['doodles', 'doodleMinutes'])) this.planDoodle();
         if (changed(['snow'])) this.flakes = [];
