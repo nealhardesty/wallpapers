@@ -22,17 +22,18 @@ const SmallXmasArt = (() => {
 
     // ---- The tree ----------------------------------------------------------------------------
 
-    const SIZES = { tiny: [20, 3], small: [30, 4], medium: [42, 5] };
+    const SIZES = { tiny: [20, 3], small: [30, 4], medium: [42, 5], big: [60, 6], huge: [84, 7] };
 
     // A little pixel fir: tiers that widen downward, lit from the left (a
     // checkered shade on the right), a dark edge under each tier, snow on
     // its shoulders, a gold garland, a few ornaments; the star, the trunk and
     // a red pot. Returns where its bulbs go for the blinking.
     function tree(size, P, rand, o = {}) {
+        if (o.style === 'charlie') return charlie(size, P, rand, o);
         const [H, T] = SIZES[size] || SIZES.small;
         const potH = 3, trunkH = 1, top = 3;
         const F = H - top - trunkH - potH;
-        const half = Math.round(F * 0.37);
+        const half = Math.max(2, Math.round(F * 0.37 * (o.width ?? 1)));
         const W = half * 2 + 3, cx = Math.floor(W / 2);
         const c = canvas(W, H), g = c.getContext('2d');
         const widths = [];
@@ -78,10 +79,10 @@ const SmallXmasArt = (() => {
             }
         }
         // Ornaments, a pixel each.
-        if (o.ornaments) for (let i = 0; i < Math.round(F / 4); i++) { const p = inside[Math.floor(rand() * inside.length)]; if (p) dot(g, p.x, p.y, P.presents[i % P.presents.length]); }
+        if (o.ornaments) for (let i = 0; i < Math.round(F / 4 * (o.ornamentCount ?? 1) * (o.width ?? 1)); i++) { const p = inside[Math.floor(rand() * inside.length)]; if (p) dot(g, p.x, p.y, P.presents[i % P.presents.length]); }
         // The bulbs: spread over the boughs, not on the edge.
         const lights = [];
-        const want = Math.round(F * 0.6);
+        const want = Math.round(F * 0.6 * (o.lightCount ?? 1) * (o.width ?? 1));
         for (let tries = 0; lights.length < want && tries < 400; tries++) {
             const p = inside[Math.floor(rand() * inside.length)];
             if (p && lights.every(q => Math.abs(q.x - p.x) + Math.abs(q.y - p.y) > 2)) lights.push({ ...p, i: lights.length });
@@ -98,6 +99,44 @@ const SmallXmasArt = (() => {
         for (let x = cx - pw + 1; x <= cx + pw - 1; x++) dot(g, x, ty + 3, P.redDark);
         return { c, w: W, h: H + 1, cx, lights, star: { x: cx, y: 2 } };
     }
+    // A Charlie Brown tree in pixels: a bent stick with a few drooping
+    // branches and a needle or two, one red ball bowing the top, a blanket
+    // round the cross it stands in. Two or three bulbs, the lot of it.
+    function charlie(size, P, rand, o = {}) {
+        const [H0] = SIZES[size] || SIZES.small;
+        const H = Math.max(14, Math.round(H0 * 0.8)), W = Math.max(13, Math.round(H * 0.7 * (o.width ?? 1)) | 1), cx = Math.floor(W / 2);
+        const c = canvas(W, H + 1), g = c.getContext('2d');
+        const baseY = H - 3;
+        // The cross, and the blanket over it.
+        for (let x = cx - 3; x <= cx + 3; x++) dot(g, x, baseY + 1, P.trunk);
+        for (let x = cx - 4; x <= cx + 4; x++) { dot(g, x, baseY, P.blue || P.pot); dot(g, x, baseY + 2, P.blueDark || P.redDark); }
+        for (let x = cx - 3; x <= cx + 3; x += 2) dot(g, x, baseY, P.white);
+        // The trunk, leaning as it climbs.
+        const trunk = [];
+        for (let y = baseY - 1, lean = 0; y >= 2; y--) { if ((baseY - y) % 5 === 4) lean++; trunk.push({ x: cx + lean, y }); }
+        for (const p of trunk) dot(g, p.x, p.y, P.trunk);
+        // Branches: four, drooping, a few needles each.
+        const lights = [];
+        for (let i = 0; i < 4; i++) {
+            const at = trunk[Math.min(trunk.length - 1, Math.round((i + 1) / 5.2 * trunk.length))], sideOf = i % 2 ? 1 : -1;
+            const len = Math.max(2, Math.round((W / 2 - 1) * (1 - i * 0.16)));
+            for (let k = 1; k <= len; k++) {
+                const x = at.x + sideOf * k, y = at.y + Math.round(k * k / (len * 1.6));
+                if (x < 0 || x >= W) break;
+                dot(g, x, y, P.trunk);
+                if (k >= len - 1 || k % 3 === 0) { dot(g, x, y + 1, P.tree); if (y > 1) dot(g, x + (k % 2 ? sideOf : 0), y - 1, P.treeLight); }
+            }
+            if (i < 3 && o.lightCount !== 0) lights.push({ x: at.x + sideOf * Math.max(1, Math.round(len * 0.6)), y: at.y + 1 + Math.round(len * 0.2), i: lights.length });
+        }
+        // The top: a couple of needles, and the red ball that bends it.
+        const top = trunk[trunk.length - 1];
+        dot(g, top.x, top.y - 1, P.tree); dot(g, top.x + 1, top.y - 1, P.treeLight);
+        const bx = Math.min(W - 2, top.x + 2), by = top.y + 2;
+        dot(g, bx, by, P.red || P.presents[0]); dot(g, bx + 1, by, P.red || P.presents[0]); dot(g, bx, by + 1, P.redDark); dot(g, bx + 1, by + 1, P.redDark);
+        dot(g, bx, by - 1, P.goldDark);
+        return { c, w: W, h: H + 1, cx, lights, star: null, charlie: true };
+    }
+
     const LittleHash = (x, y) => { let h = (x * 73856093) ^ (y * 19349663); h = (h ^ (h >>> 13)) * 1274126177; return ((h ^ (h >>> 16)) >>> 0) / 4294967296; };
 
     // A present: a box, its ribbon both ways, and a bow.

@@ -68,7 +68,12 @@ now and then one goes up the tree, and the tree comes down: ornaments
 everywhere, the lights out, a cat with no idea what happened. Then a fade,
 and it's up again. Tap for a laser dot. The tree is Grand by default, wide
 and full, with up to 180 lights and a pile of presents. Choose Cozy for a
-slim tree or Majestic for the biggest.
+slim tree or Majestic for the biggest, then make it yours: height (up to
+the ceiling), width, fullness, up to three times the lights and ornaments,
+gold beads or silver tinsel, a star or a red bow, snow on the boughs, and
+nought to twelve presents. Or choose the Charlie Brown tree: a sapling
+with a few drooping branches, one red ball bending it over, and a blanket
+round its base. The cats still bring it down.
 
 **The Last Bulb on the Strand** 💡 is a string of old C9 bulbs hung along
 the top of the wall (or snaking down it in rows, or right round the
@@ -88,7 +93,8 @@ note on the last bulb says.
 
 **Frost on the Glass** 🧊: you're outside on a cold night, looking in. The
 room behind the window is out of focus, a warm lamp and a Christmas tree
-that's only the soft discs of its lights, and fern frost creeps in from the
+that's only the soft discs of its lights (as big or wide or bright as you
+like, or a Charlie Brown tree with one red ball, or no tree), and fern frost creeps in from the
 corners of each pane, crystal by crystal, glowing amber where the tree
 shines through it and glinting now and then. Someone inside draws in it
 with a fingertip (a heart, a star, a cat's paw print, NOEL backwards from
@@ -99,7 +105,9 @@ breathe on it.
 
 **A Very Small Christmas** 🎄 is a little pixel-art tree near the bottom of
 a big dark screen, on a strip of snow, with a few presents and a toy train
-parked on its track. Its lights blink (twinkle, chase, alternate, all
+parked on its track (tiny to huge, wide or slim, with as many lights and
+ornaments as you like; or a Charlie Brown tree, a bent stick with one red
+ball). Its lights blink (twinkle, chase, alternate, all
 together). Every couple of minutes the train toots and goes round. Now and
 then the whole set moves house: the track packs itself away, the tree hops
 somewhere new with the presents and the train hopping after it in a line,

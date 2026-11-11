@@ -141,7 +141,7 @@ Added for Christmas, drawn in code (designs in §10.27–§10.30):
 
 | id | Files | Size | Notes |
 |---|---|---|---|
-| `cat-ornament` | cat-ornament-logic.js, cat-ornament-cats.js, cat-ornament-room.js, cat-ornament.js | ~2.2k lines | Interactive (a tap's laser dot); nine named cats on one vector rig; the roster, the pendulum, the fall and the odds (`CatOrnamentLogic`), unit-tested; follows `host.now()` (Christmas Eve and Day); keys N, B, T, Z |
+| `cat-ornament` | cat-ornament-logic.js, cat-ornament-cats.js, cat-ornament-room.js, cat-ornament.js | ~2.5k lines | Interactive (a tap's laser dot); nine named cats on one vector rig; the roster, the pendulum, the fall and the odds (`CatOrnamentLogic`), unit-tested; follows `host.now()` (Christmas Eve and Day); keys N, B, T, Z |
 | `last-bulb` | last-bulb-logic.js, last-bulb-art.js, last-bulb.js | ~1.4k lines | Interactive (tap a bulb to jiggle it); a C9 strand whose last bulb is loose, along the rail, in rows, round the border or over a doorway; the flicker scripts, the filament and the strand's path (`LastBulbLogic`), unit-tested; follows `host.now()` (Christmas Eve and Day); keys L, O, D, N |
 | `frost` | frost-logic.js, frost-art.js, frost.js | ~1k lines | Interactive (drag to draw in the frost, tap to breathe on it); fern frost grown tip by tip on an occupancy grid, the window and the doodles (`FrostLogic`), unit-tested; follows `host.now()` (Christmas Eve and Day); keys B, D, T |
 | `small-christmas` | small-christmas-logic.js, small-christmas-art.js, small-christmas.js | ~800 lines | Interactive (tap the tree, the train, the floor); pixel art at its own resolution, scaled up pixelated; palettes, blink patterns, the train's oval and the hops (`SmallXmasLogic`), unit-tested; follows `host.now()` (the sleigh on Christmas Eve, presents on Christmas Day); keys T, M, L, S |
@@ -3307,6 +3307,27 @@ household's cats taking turns with it.
   it"); sleepers startle; the Persian is unimpressed. After 9 s, a fade,
   "Some time later…", everything back, and the next cat's turn. Topple off
   (or reduced motion): the climber jumps down and the tree stays up.
+- **The tree, every way (owner request, 2026-11-11: "serious configuration
+  options for the tree. Like big trees! Wide trees! More ornaments. More
+  lights… I'd love a charlie brown tree too"; configVersion 2).**
+  `treeHeight` (× 0.5–1.3, the top of the range touching the ceiling) and
+  `treeWidth` (× 0.5–1.6, never overflowing a phone) scale the layout;
+  `fullness` scales the sprigs and fringe; `lightCount` and
+  `ornamentCount` (× 0–3) scale what the tree has room for (up to 560
+  lights and 110 ornaments, packed closer as they grow); `garland` is
+  gold beads, silver tinsel (a wobbling ribbon in three strokes with
+  glints) or none; `topper` a star, a red bow or nothing; `flocked` dabs
+  snow along every tier's edge and face; `presents` 0–12 from a list of
+  twelve places. **The Charlie Brown tree** (`tree: 'charlie'`,
+  `CatRoom.charlie`): a spindly leaning sapling, five or six drooping
+  branches with a few sprigs of needles each, one big red ball at the top
+  bending it over, a blue blanket wrapped round its wooden cross, three
+  bulbs at most and no topper; it answers in the same shape as the fir
+  (sprites, hooks at the lowest branch's tips, the ball as its one
+  ornament, an empty front layer), so the cats, the pendulum and the fall
+  work unchanged. The cats: a belly-up cat's head now lolls back (hr
+  0.95) instead of hanging upside down, the fluffy edges and ruffs are
+  finer, heads a touch smaller.
 - **The tree** (`tree`: cozy, grand (default), majestic; owner request,
   2026-11-06: "an impressive tree, much wider"). `CatRoom.TREES` sets how
   wide it is for its height (0.6, 1, 1.2), how much taller it may be on a
@@ -3462,7 +3483,12 @@ soft discs of its lights.
   round clear patch, fogged for a few seconds). Both grow back.
 - **The room** (`frost-art.js`): painted sharp at a quarter size and blurred
   up: warm walls, a lamp, the fire's glow off to one side, a sofa's back,
-  the tree in tiers. Its lights wind round it in a spiral, the nearer ones
+  the tree in tiers. The tree (configVersion 2, 2026-11-11): `treeStyle`
+  a fir, a Charlie Brown tree (a bent sapling in lighter brown so it shows
+  through the blur, five drooping branches with a few dabs of needles, a
+  blanket round its foot, one big red disc for its ball and three bulbs,
+  the lot of it) or none; `treeSize` and `treeWidth` scale it;
+  `lightCount` (0–200) sets its bulbs before the screen's size scales them. Its lights wind round it in a spiral, the nearer ones
   bigger; each a bokeh disc, brighter at its rim, twinkling slowly
   (`twinkle`), with a star and a few far lamps. Warm, coloured, icy blue or
   candlelight; the tree left, middle or right; `blur` sizes the discs.
@@ -3492,7 +3518,13 @@ and a toy train parked on its oval of track. Retro, and cozy.
   scales it up pixelated. Drawn a pixel at a time into sprites; ordered
   (Bayer) dithering for the sky's fall toward the horizon and the snow's
   shading. A retro 12 frames a second (`fps`, 6–30).
-- **The tree** (`SmallXmasArt.tree`, tiny, small or a bit bigger): tiers
+- **The tree** (`SmallXmasArt.tree`, tiny, small, a bit bigger, big or
+  huge (84 pixels tall, seven tiers; configVersion 2, 2026-11-11);
+  `treeWidth` × 0.6–1.8; `lightCount` and `ornamentCount` × the bulbs and
+  the ornament pixels; or `treeStyle: 'charlie'`, a Charlie Brown tree in
+  pixels: a bent stick with four drooping branches and a needle or two,
+  one red ball bowing the top, a blanket over the cross it stands in, two
+  or three bulbs and no star): tiers
   widening downward, lit from the left with a checkered shade on the right,
   a dark edge under each tier, snow on its shoulders, a gold garland,
   pixel ornaments, a star whose arms reach out now and then, a red pot.

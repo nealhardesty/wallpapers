@@ -74,7 +74,7 @@ class SmallChristmasAnimationManager {
         this.config = config;
         if (!this.running) return;
         const changed = keys => keys.some(k => JSON.stringify(old[k]) !== JSON.stringify(config[k]));
-        if (changed(['treeSize', 'lights', 'garland', 'ornaments', 'presents', 'palette', 'pixelSize', 'snow', 'sky', 'scanlines', 'cars'])) this.resize();
+        if (changed(['treeSize', 'treeStyle', 'treeWidth', 'lightCount', 'ornamentCount', 'lights', 'garland', 'ornaments', 'presents', 'palette', 'pixelSize', 'snow', 'sky', 'scanlines', 'cars'])) this.resize();
         if (changed(['moveMinutes', 'train', 'trainMinutes', 'sleigh'])) this.plan();
         this.host.idleUntil(0);
     }
@@ -114,7 +114,7 @@ class SmallChristmasAnimationManager {
         this.canvas.style.width = `${bw * px}px`; this.canvas.style.height = `${bh * px}px`;
         const P = this.P = SmallXmasLogic.palette(c.palette, c.lights);
         const random = WP.seededRandom(1224);
-        this.tree = SmallXmasArt.tree(c.treeSize, P, random, { snow: c.snow > 0, garland: c.garland, ornaments: c.ornaments });
+        this.tree = SmallXmasArt.tree(c.treeSize, P, random, { snow: c.snow > 0, garland: c.garland, ornaments: c.ornaments, style: c.treeStyle, width: c.treeWidth, lightCount: c.lightCount, ornamentCount: c.ornamentCount });
         this.trainArt = SmallXmasArt.train(P);
         this.sleighArt = SmallXmasArt.sleigh(P);
         // The floor: the track's oval, and room below it to the inset.
@@ -412,7 +412,7 @@ class SmallChristmasAnimationManager {
             g.fillRect(left + l.x, ly, 1, 1);
         }
         // The star twinkles: its arms reach out now and then.
-        if (SmallXmasLogic.hash(7, Math.floor(t * 2)) > 0.6) {
+        if (T.star && SmallXmasLogic.hash(7, Math.floor(t * 2)) > 0.6) {
             g.fillStyle = P.white;
             const sx = left + T.star.x, sy = top + T.star.y;
             g.fillRect(sx - 3, sy, 1, 1); g.fillRect(sx + 3, sy, 1, 1); g.fillRect(sx, sy - 3, 1, 1);
