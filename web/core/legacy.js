@@ -151,7 +151,9 @@
     // For the tests and the parity table (SPEC Appendix B).
     WP.LEGACY = { ID, DEFAULTS, GONE: {
         statusBarHeight: 'host insets (§4.3)', quality: 'the Auto governor (§4.8)', dim: 'homepage only: nothing sits on top now',
-        enableSounds: 'neko has no sounds', theme: 'neko: sprite themes became coats',
+        enableSounds: 'neko has no sounds', theme: 'neko: sprite themes became coats; matrix: colour',
+        fontSize: 'matrix: glyphSize (scaled with the screen)', fadeTrails: 'matrix: trails are lit cells going dark, not a fading canvas (§10.32)',
+        characterChangeRate: 'matrix: cycle', tailLength: 'matrix: trail',
     } };
 
     // True if an imported file looks like the old homepage's storage.

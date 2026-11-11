@@ -34,6 +34,7 @@ const OVERRIDES = {
     'cat-ornament': { configVersion: 1, cats: ['moofy', 'ras', 'butters'], inRoom: 3, catSize: 1.2 },
     // Big bulbs to read at thumbnail size; the last one still dark.
     'last-bulb': { configVersion: 1, size: 1.6, sag: 0.7, roomLight: 0.25 },
+    matrix: { configVersion: 2, intro: false },
     // One big pane, well frosted, the tree glowing through.
     frost: { configVersion: 1, window: 'single', coverage: 0.8, frameColour: 'red' },
     // A bit bigger, so the tree, the presents and the train read in a tile.
