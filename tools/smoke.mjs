@@ -670,7 +670,38 @@ const STAGE_CHECKS = {
     // Harvest Valley: alive on the first frame; a tap shakes a tree and
     // apples fall; a squirrel carries one to its door; the Great Pumpkin
     // rises only at night; and every part can be left out.
-    harvest: [['the cast is there on frame one, and a tap shakes a tree loose', async () => {
+    harvest: [['lost canvases are baked again; a window with no size yet waits for one', async () => {
+        await cdp.send('Page.navigate', { url: `${WEB}/stage.html?w=harvest&seed=7&date=2026-11-24T15:00` });
+        await waitFor(() => evaluate('WP.stage?.ready === true'));
+        const probe = `(m => { const g = m.land.getContext('2d', { willReadFrequently: true }); return g.getImageData(Math.floor(m.land.width / 2), m.land.height - 1, 1, 1).data[3]; })(WP.stage.manager)`;
+        if (await evaluate(probe) === 0) record('the land is transparent at the bottom (the loss probe would never fire)');
+        // The drill: wipe every baked layer and sprite, as a lost GPU process does.
+        await evaluate(`(m => { for (const c of [m.land, m.starLayer, ...m.sprites.trees, ...m.sprites.apples, ...m.sprites.leaves, m.sprites.mist, m.sprites.smoke]) if (c && c.getContext) c.getContext('2d').clearRect(0, 0, c.width, c.height); m.lastBakeCheck = m.time - 10; })(WP.stage.manager)`);
+        if (!await waitFor(() => evaluate('WP.stage.manager.recoveries === 1'), 3000)) return record('blank layers were not noticed');
+        if (await evaluate(probe) === 0) record('baked again, but the land is still blank');
+        const cast = await evaluate(`(m => [...m.squirrels, ...m.turkeys, ...m.cats].every(o => Number.isFinite(o.x) && Number.isFinite(o.y)))(WP.stage.manager)`);
+        if (!cast) record('the cast lost its places in the recovery');
+        await shoot('harvest-recovered');
+        // A window reporting no size: no layout, no frame, no error; the real size later lays it out and seeds it.
+        await cdp.send('Page.navigate', { url: `${WEB}/stage.html?w=blank` });
+        await waitFor(() => evaluate('WP.stage?.ready === true'));
+        const sizeless0 = `Object.defineProperty(window, 'innerWidth', { value: 0, configurable: true }); Object.defineProperty(window, 'innerHeight', { value: 0, configurable: true }); 0`;
+        const { identifier } = await cdp.send('Page.addScriptToEvaluateOnNewDocument', { source: sizeless0 });
+        await cdp.send('Page.navigate', { url: `${WEB}/stage.html?w=harvest&seed=7&date=2026-11-24T15:00` });
+        await cdp.send('Page.removeScriptToEvaluateOnNewDocument', { identifier });
+        await sleep(1500);
+        const sizeless = await evaluate(`(m => m ? { L: !!m.L, seeded: m.seeded, running: m.running } : null)(WP.stage.manager)`);
+        if (!sizeless || sizeless.L || sizeless.seeded) record(`laid out a window with no size: ${JSON.stringify(sizeless)}`);
+        // (Deleting the stub leaves no getter at all: the real size goes back the same way.)
+        await evaluate(`Object.defineProperty(window, 'innerWidth', { value: document.documentElement.clientWidth, configurable: true }); Object.defineProperty(window, 'innerHeight', { value: document.documentElement.clientHeight, configurable: true }); window.dispatchEvent(new Event('resize')); 0`);
+        await sleep(800);
+        const sized = await evaluate(`(m => ({ L: !!m.L, seeded: m.seeded, finite: [...m.squirrels, ...m.turkeys, ...m.cats, ...m.apples].every(o => Number.isFinite(o.x) && Number.isFinite(o.y)), W: m.W }))(WP.stage.manager)`);
+        if (!sized.L || !sized.seeded || !sized.finite || sized.W < 100) record(`the size came and it didn't lay out: ${JSON.stringify(sized)}`);
+        // Clean up for the stages after this one.
+        await cdp.send('Page.navigate', { url: `${WEB}/stage.html?w=blank` });
+        await waitFor(() => evaluate('WP.stage?.ready === true'));
+        return true;
+    }], ['the cast is there on frame one, and a tap shakes a tree loose', async () => {
         await cdp.send('Page.navigate', { url: `${WEB}/stage.html?w=harvest&seed=7&date=2026-11-24T15:00` });
         await waitFor(() => evaluate('WP.stage?.ready === true'));
         const first = await evaluate(`(m => ({ frames: WP.host.frames.count, leaves: m.leafPool.length, resting: m.apples.filter(a => a.state === 'rest').length,
