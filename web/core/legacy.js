@@ -154,6 +154,7 @@
         enableSounds: 'neko has no sounds', theme: 'neko: sprite themes became coats; matrix: colour',
         fontSize: 'matrix: glyphSize (scaled with the screen)', fadeTrails: 'matrix: trails are lit cells going dark, not a fading canvas (§10.32)',
         characterChangeRate: 'matrix: cycle', tailLength: 'matrix: trail',
+        windChance: 'cherry-blossoms: gusts (a minute)', windDuration: 'cherry-blossoms: gustLength (seconds)', showBranches: 'cherry-blossoms: tree (§10.33)',
     } };
 
     // True if an imported file looks like the old homepage's storage.

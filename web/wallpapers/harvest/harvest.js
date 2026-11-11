@@ -54,6 +54,9 @@ class HarvestAnimationManager {
         this.millAngle = 0;
         this.moonCache = {};
         this.toneKey = { cloud: '', geese: '' };
+        this.seeded = false;
+        this.recoveries = 0;
+        this.lastBakeCheck = 0;
     }
 
     // ---- Lifecycle ----------------------------------------------------------------------
@@ -74,9 +77,15 @@ class HarvestAnimationManager {
         this.cycleBase = this.host.now().getTime();
         this.holiday = HarvestSky.holiday(this.host.now());
         this.syncEffects(true);
-        this.resize();
-        this.seed();
+        this.seeded = false;
+        this.resize();       // seeds the scene too, once the window has a size
         this.listen();
+        // A host that loses the canvases' contents (the Mac saver's web view
+        // after a GPU process crash, or when its surfaces were purged) blanks
+        // every baked layer at once: the land, the sprites, the moon. The
+        // event says so where it's supported; a probe (update) catches the rest.
+        canvas.addEventListener('contextlost', e => e.preventDefault());
+        canvas.addEventListener('contextrestored', () => this.recover('contextrestored'));
         this.last = 0;
         this.frameId = requestAnimationFrame(now => this.frame(now));
     }
@@ -121,6 +130,7 @@ class HarvestAnimationManager {
         const changed = keys => keys.some(k => old[k] !== config[k]);
         if (changed(['village', 'houses', 'windmill', 'fields', 'pumpkinPatch', 'horizon', 'foliage', 'autumnColors', 'orchard', 'trees', 'treeSize'])) {
             this.resize();
+            if (!this.L) return;
             this.buildCast();
             this.seed();
         } else {
@@ -150,6 +160,10 @@ class HarvestAnimationManager {
         const prev = this.L ? { W: this.W, Hu: this.L.Hu } : null;     // a resize keeps the cast; only the first layout builds it
         const dpr = this.dpr = window.devicePixelRatio || 1;
         const W = this.W = window.innerWidth, H = this.H = window.innerHeight;
+        // No window yet (a saver's web view before its frame is set): wait
+        // for a real size rather than lay out a 0 × 0 valley and reflow the
+        // cast by infinity when the size comes.
+        if (!(W >= 16 && H >= 16)) { this.L = null; return; }
         for (const c of [this.canvas, this.world, this.fore]) { c.width = Math.round(W * dpr); c.height = Math.round(H * dpr); }
         const bottom = this.host.insets?.bottom || 0;
         const random = WP.seededRandom(Math.round(W * 3 + H * 17));
@@ -172,6 +186,27 @@ class HarvestAnimationManager {
         this.great = this.great || new HarvestGreatPumpkin(this);
         this.scarecrow = this.scarecrow || new HarvestScarecrow(this);
         this.toneKey = { cloud: '', geese: '' };
+        this.moonCache = {};
+        if (!this.seeded) this.seed();
+    }
+
+    // Every baked layer gone blank (the land is opaque below the horizon;
+    // read as transparent, it has been lost) means the host dropped the
+    // canvases' contents: bake everything again, keeping the cast where it is.
+    bakesLost() {
+        if (!this.land || !this.L) return false;
+        try {
+            const g = this.land.getContext('2d', { willReadFrequently: true });
+            const x = Math.floor(this.land.width / 2), y1 = Math.min(this.land.height - 1, Math.floor((this.L.hz + 8) * this.dpr)), y2 = this.land.height - 1;
+            return g.getImageData(x, y1, 1, 1).data[3] === 0 && g.getImageData(x, y2, 1, 1).data[3] === 0;
+        } catch (e) { return false; }
+    }
+
+    recover(why) {
+        if (!this.running) return;
+        this.recoveries++;
+        console.warn(`harvest: the baked layers were lost (${why}); baking again`);
+        this.resize();
     }
 
     bakeSprites(random) {
@@ -368,6 +403,7 @@ class HarvestAnimationManager {
     // Look alive at once: some apples already down, leaves in the air, smoke
     // rising, a flock part-way across the sky.
     seed() {
+        this.seeded = true;
         this.apples = []; this.leafPool = []; this.puffs = []; this.sparks = []; this.drops = [];
         for (const t of this.trees) for (const h of t.hang) h.ripe = 0.6 + Math.random() * 0.4;
         for (let i = 0; i < Math.round(this.trees.length * 1.2); i++) {
@@ -414,11 +450,12 @@ class HarvestAnimationManager {
 
     frame(now) {
         if (!this.running) return;
+        this.frameId = requestAnimationFrame(t => this.frame(t));
+        if (!this.L) { this.last = 0; return; }      // no size yet
         const dt = this.last ? Math.min(0.1, (now - this.last) / 1000) : 0;
         this.last = now;
         this.update(dt);
         this.draw();
-        this.frameId = requestAnimationFrame(t => this.frame(t));
     }
 
     leafCap() { return Math.round(this.config.leaves * this.density()); }
@@ -457,6 +494,7 @@ class HarvestAnimationManager {
         this.updateFire(dt);
         this.updateShooting(dt);
         if (!quiet) this.greet();
+        if (!quiet && t - this.lastBakeCheck > 4) { this.lastBakeCheck = t; if (this.bakesLost()) this.recover('blank layers'); }
     }
 
     // A word to the person who just opened it: the holiday, or a notable moon.

@@ -401,6 +401,55 @@ const AVERAGE = `(() => {
 })()`;
 
 const STAGE_CHECKS = {
+    // Cherry Blossoms: a tree with blossom and petals in the air on frame
+    // one; petals land on the grass (the pile grows) and float on water; a
+    // gust comes when called and shakes petals loose; a tap on the bough
+    // shakes it; S changes the sky and N the tree.
+    'cherry-blossoms': [['a bough on frame one, petals in the air and landing, a gust, a tap, the sky and a new tree', async () => {
+        const st = () => evaluate('JSON.parse(JSON.stringify(WP.stage.manager.debugState()))');
+        if (!await stageWith('cherry-blossoms', { configVersion: 2, gusts: 0 }, '&seed=7')) return record('no boot');
+        let s = await st();
+        if (!s.tree || s.tree.limbs < 8 || s.tree.clusters < 20 || s.petals < 100 || s.states.falling < 100) record(`frame one: ${JSON.stringify(s)}`);
+        const avg = await evaluate(AVERAGE);
+        if (!(avg[0] > 120 && avg[2] > 120)) record(`not a pale spring sky on frame one: ${avg}`);
+        await sleep(4000);
+        s = await st();
+        if (s.stats.settled < 5) record(`only ${s.stats.settled} petals landed in four seconds`);
+        if (s.wind.phase !== 'calm' || s.stats.gusts) record(`gusts with none asked for: ${JSON.stringify(s.wind)}`);
+        await shoot('cherry-blossoms-day');
+        // G: a gust, which shakes petals loose (more in the air than the setting).
+        const before = s.petals;
+        await press('g');
+        if (!await waitFor(async () => (s = await st()).wind.phase !== 'calm', 1000)) record(`G: ${JSON.stringify(s.wind)}`);
+        await sleep(1500);
+        s = await st();
+        if (s.wind.strength < 2) record(`the gust is feeble: ${JSON.stringify(s.wind)}`);
+        // A tap on the bough: a flurry (more petals than the target for a while).
+        const cl = await evaluate('(m => m.tree.clusters[Math.floor(m.tree.clusters.length / 2)])(WP.stage.manager)');
+        await mouse('mousePressed', cl.x, cl.y);
+        await mouse('mouseReleased', cl.x, cl.y);
+        await sleep(300);
+        s = await st();
+        if (s.stats.flurries < 1 || s.petals <= s.target) record(`a tap on the bough shook nothing loose: ${JSON.stringify({ flurries: s.stats.flurries, petals: s.petals, target: s.target, before })}`);
+        // S: the sky moves on to dusk; N: a new tree.
+        await press('s');
+        s = await st();
+        if (s.sky !== 'dusk' || !(s.light < 1)) record(`S: ${JSON.stringify({ sky: s.sky, light: s.light })}`);
+        const seed = s.seed;
+        await press('n');
+        s = await st();
+        if (s.seed === seed || !s.tree || s.tree.clusters < 20) record(`N grew no new tree: ${JSON.stringify({ seed, now: s.seed, tree: s.tree })}`);
+        await shoot('cherry-blossoms-dusk');
+        // Water: petals float, with ripples where they land.
+        if (!await stageWith('cherry-blossoms', { configVersion: 2, gusts: 0, ground: 'water', sky: 'night' }, '&seed=7')) return record('no boot on water');
+        await sleep(4000);
+        s = await st();
+        if (!(s.states.afloat > 0)) record(`nothing afloat after four seconds on water: ${JSON.stringify(s.states)}`);
+        const night = await evaluate(AVERAGE);
+        if (!(night[0] + night[1] + night[2] < 330)) record(`not dark at night: ${night}`);
+        await shoot('cherry-blossoms-night-water');
+        return true;
+    }]],
     // Matrix: the film's code. Frame one is full of it (intro off); the
     // symbols sit in fixed cells and only the light moves (a lit cell's
     // glyph index stays until the symbol clock changes it); it paces itself
@@ -621,7 +670,38 @@ const STAGE_CHECKS = {
     // Harvest Valley: alive on the first frame; a tap shakes a tree and
     // apples fall; a squirrel carries one to its door; the Great Pumpkin
     // rises only at night; and every part can be left out.
-    harvest: [['the cast is there on frame one, and a tap shakes a tree loose', async () => {
+    harvest: [['lost canvases are baked again; a window with no size yet waits for one', async () => {
+        await cdp.send('Page.navigate', { url: `${WEB}/stage.html?w=harvest&seed=7&date=2026-11-24T15:00` });
+        await waitFor(() => evaluate('WP.stage?.ready === true'));
+        const probe = `(m => { const g = m.land.getContext('2d', { willReadFrequently: true }); return g.getImageData(Math.floor(m.land.width / 2), m.land.height - 1, 1, 1).data[3]; })(WP.stage.manager)`;
+        if (await evaluate(probe) === 0) record('the land is transparent at the bottom (the loss probe would never fire)');
+        // The drill: wipe every baked layer and sprite, as a lost GPU process does.
+        await evaluate(`(m => { for (const c of [m.land, m.starLayer, ...m.sprites.trees, ...m.sprites.apples, ...m.sprites.leaves, m.sprites.mist, m.sprites.smoke]) if (c && c.getContext) c.getContext('2d').clearRect(0, 0, c.width, c.height); m.lastBakeCheck = m.time - 10; })(WP.stage.manager)`);
+        if (!await waitFor(() => evaluate('WP.stage.manager.recoveries === 1'), 3000)) return record('blank layers were not noticed');
+        if (await evaluate(probe) === 0) record('baked again, but the land is still blank');
+        const cast = await evaluate(`(m => [...m.squirrels, ...m.turkeys, ...m.cats].every(o => Number.isFinite(o.x) && Number.isFinite(o.y)))(WP.stage.manager)`);
+        if (!cast) record('the cast lost its places in the recovery');
+        await shoot('harvest-recovered');
+        // A window reporting no size: no layout, no frame, no error; the real size later lays it out and seeds it.
+        await cdp.send('Page.navigate', { url: `${WEB}/stage.html?w=blank` });
+        await waitFor(() => evaluate('WP.stage?.ready === true'));
+        const sizeless0 = `Object.defineProperty(window, 'innerWidth', { value: 0, configurable: true }); Object.defineProperty(window, 'innerHeight', { value: 0, configurable: true }); 0`;
+        const { identifier } = await cdp.send('Page.addScriptToEvaluateOnNewDocument', { source: sizeless0 });
+        await cdp.send('Page.navigate', { url: `${WEB}/stage.html?w=harvest&seed=7&date=2026-11-24T15:00` });
+        await cdp.send('Page.removeScriptToEvaluateOnNewDocument', { identifier });
+        await sleep(1500);
+        const sizeless = await evaluate(`(m => m ? { L: !!m.L, seeded: m.seeded, running: m.running } : null)(WP.stage.manager)`);
+        if (!sizeless || sizeless.L || sizeless.seeded) record(`laid out a window with no size: ${JSON.stringify(sizeless)}`);
+        // (Deleting the stub leaves no getter at all: the real size goes back the same way.)
+        await evaluate(`Object.defineProperty(window, 'innerWidth', { value: document.documentElement.clientWidth, configurable: true }); Object.defineProperty(window, 'innerHeight', { value: document.documentElement.clientHeight, configurable: true }); window.dispatchEvent(new Event('resize')); 0`);
+        await sleep(800);
+        const sized = await evaluate(`(m => ({ L: !!m.L, seeded: m.seeded, finite: [...m.squirrels, ...m.turkeys, ...m.cats, ...m.apples].every(o => Number.isFinite(o.x) && Number.isFinite(o.y)), W: m.W }))(WP.stage.manager)`);
+        if (!sized.L || !sized.seeded || !sized.finite || sized.W < 100) record(`the size came and it didn't lay out: ${JSON.stringify(sized)}`);
+        // Clean up for the stages after this one.
+        await cdp.send('Page.navigate', { url: `${WEB}/stage.html?w=blank` });
+        await waitFor(() => evaluate('WP.stage?.ready === true'));
+        return true;
+    }], ['the cast is there on frame one, and a tap shakes a tree loose', async () => {
         await cdp.send('Page.navigate', { url: `${WEB}/stage.html?w=harvest&seed=7&date=2026-11-24T15:00` });
         await waitFor(() => evaluate('WP.stage?.ready === true'));
         const first = await evaluate(`(m => ({ frames: WP.host.frames.count, leaves: m.leafPool.length, resting: m.apples.filter(a => a.state === 'rest').length,

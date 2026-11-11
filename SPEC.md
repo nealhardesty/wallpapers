@@ -87,7 +87,7 @@ Imported from the private homepage repo, as a **fresh copy with no git history**
 | `parallax-clouds` | parallax-clouds.js | 25 KB | Advances one fixed step per frame, so it runs faster on 120 Hz screens. |
 | `mountains` | mountains.js | 27 KB | Same per-frame stepping. |
 | `starfield` | starfield.js | 26 KB | |
-| `cherry-blossoms` | cherry-blossoms.js | 21 KB | Leaks a resize listener on every `start()`. |
+| `cherry-blossoms` | cherry-logic.js, cherry-art.js, cherry-blossoms.js | ~1k lines | Rebuilt 2026-11-11 (§10.33): a bough of blossom from a seed, the sky of the hour, wind with gusts, petals that tumble and flutter and settle on the grass or float on the water (`CherryLogic`), unit-tested; follows `host.now()` for the clock sky; keys G, B, N, S, W; tap and drag |
 | `halloween` | halloween.js, halloween.html | 178 KB | Interactive (mouse). Settings are already data-driven (`controlSpec()`). |
 | `neko` | neko.js + `assets/neko/` (79 themes, 2,472 `.ico`, 20 MB) | 28 KB | Interactive. **Licensing, size and filename-case problems** (§7.3). Now the public-domain oneko bitmaps in sprites.js, recoloured per coat (§10.24). |
 | `matrix` | matrix-logic.js, matrix.js | ~800 lines | Rebuilt 2026-11-11 as the film's code (§10.32): fixed cells lit by a passing wave, the 1999 glyphs as strokes (`MatrixLogic`), unit-tested; keys R, L, H; tap to splash |
@@ -805,7 +805,8 @@ and the commits.
 | advent | — | Doors-at-rest layer, baked glow; treat refreshes, particles and confetti × density; idles between its own capped frames (never fully still: today's treat plays) |
 | leaves | — | Drift capped at 6k (Medium) and 2k (Low), shallower banks of the same shape; falling × density |
 | matrix | `depth`, `glow` (medium) | Every glyph at sixteen brightness steps and the bloomed head baked once as a white mask per layer and tinted per hue (the rainbow's twelve cost a few fills); each layer on its own canvas where only the cells whose light or symbol changed are redrawn (a flat 1999 trail is under a hundred cells a frame; a fading trail a couple of thousand), then two blits; paced at the fps setting (30) through idleUntil; columns × density; Low drops the back layer and the bloom |
-| snow, rain, fireflies, cherry-blossoms | — | Spawn rate and cap × density; fireflies' glow sprites 32/64/128 px by tier; cherry-blossoms' sky and branches cached |
+| snow, rain, fireflies | — | Spawn rate and cap × density; fireflies' glow sprites 32/64/128 px by tier |
+| cherry-blossoms | — | The still scene (sky, hills, tree) on a canvas of its own behind, painted per resize; the petals baked pre-rotated (three shapes × twelve turns × three flutter widths per colour), so each is an axis-aligned blit; the settled petals drawn once onto the ground's layer (washed with the ground's colour every 150 so the oldest fade); a frame clears the front canvas, blits the ground strip and draws each petal once; petals × density |
 | starfield | — | Stars × density, joining at the far plane; `onScroll` |
 | mountains, parallax-clouds | — | No density (the layers are the composition, and they cost ~1%); `onScroll` |
 | neko | — | With every cat asleep and no yarn about, idles until the next breath or the next cat sets off |
@@ -2701,6 +2702,28 @@ no village, no orchard, no day (only the moon), and so on.
   at 4× throttle). Effects `mist` and `beams` shed on Low. Leaves, apples,
   smoke, sparks and flocks scale with `density`.
 - **Why seasonal November:** the fish tank was a placeholder there.
+- **The Mac saver's "stroke" (owner report, 2026-11-11):** now and then
+  the saver showed "just lines and a spinning windmill with nothing else in
+  the right place". Everything that survived is drawn live from vectors
+  (the mill, the bunting, the lamp heads, the animals); everything that
+  vanished is a baked canvas (the land, the tree, leaf and apple sprites,
+  the moon, the geese) or had been placed by a reflow. That is what a
+  WebKit view does when its GPU process dies or its canvas surfaces are
+  purged (the saver's window is "not visible" to the host, so its page is
+  a candidate): every canvas goes blank at once, and nothing in the page is
+  told, except through `contextlost`/`contextrestored` on the visible
+  canvas where WebKit supports them. Two guards: the `contextrestored`
+  event rebakes everything, and every four seconds a probe reads one pixel
+  of the land where it is always opaque (below the horizon, and the bottom
+  row); both transparent means the bakes are gone, and `recover()` lays
+  out again (`resize()`, which keeps the cast in place, resets the moon
+  and tone caches, and the smoke test's drill wipes every layer and sees
+  it come back within four seconds). The second guard: a web view whose
+  frame is not set yet reports a 0 × 0 window; the first layout then
+  scaled every sprite by nothing and the next `resize()` reflowed the
+  cast by infinity, which is also "nothing in the right place". A window
+  under 16 px now gets no layout, no frame and no seed until a real size
+  comes, when it is laid out and seeded as on a first start.
 
 ### 10.23 Fireplace: realistic wood (owner request, 2026-10-29)
 
@@ -3802,6 +3825,74 @@ film does something else, and this is built on it:
   ramp, the intro order, the rain (speed, the trail, spacing, the density,
   the intro's hold, strings in order).
 
+### 10.33 Cherry Blossoms, rebuilt (`cherry-blossoms`, owner request, 2026-11-11)
+
+"Cherry blossoms totally doesn't work. Everything just glitches." The old
+one was a sky gradient, eight random squiggles for branches and ovals
+falling in straight lines, with a radial gradient made per petal per
+frame and a colour string built by concatenation (an eight-digit colour
+from the picker made it throw every frame). Rebuilt from nothing:
+
+- **The tree** (`CherryLogic.tree`, from a seed): a bough reaches in from
+  a top corner (`tree`: one bough, boughs from both corners, branches
+  hanging in from the top, or none; `treeSide`), thick at the edge and
+  tapering, bending down and out, throwing `branchCount` branches that
+  throw twigs; every twig tip and many a joint carries a cluster of
+  blossom (`blossoms` sets how thick). Drawn (`CherryArt.tree`) as filled
+  outlines: the body, a shaded underside, a line of light along the top,
+  lenticels on the thick limbs; the blossom as five-petalled flowers (a
+  radial gradient per petal, yellow stamens, a deep centre) in the petal
+  palette's tones, with buds. N grows another. (It does not sway: a
+  rotated full-screen blit a frame cost more than everything else together
+  on a phone, so the tree is still, and the petals do the moving.)
+- **Petals** (`CherryLogic.makePetal`, `stepPetal`): most set off from the
+  blossom clusters, the rest from above the screen. Each falls at its own
+  terminal speed, is carried by the wind at its place (the breeze plus
+  eddies, `windAt`), sways, tumbles (`rotationSpeed`) and flutters
+  (`flutter`: turns on its long axis, drawn as cos of the turn, never
+  edge-on, so it reads as a flake catching the light), nearer ones bigger,
+  faster and drawn last. Three shapes (the notched cherry petal, a round
+  one, a long one) in each colour, baked once (`CherryArt.petals`) at
+  twelve turns and three flutter widths each, so a petal in flight is an
+  axis-aligned blit from the atlas: a rotated drawImage per petal cost ten
+  times as much. On the grass or the path a
+  petal lands and lies flat, drawn once onto a pile layer and forgotten;
+  every 150 the pile is washed with the ground's colour, so the oldest
+  fade into it. On water it floats off with the wind, bobbing, drifting
+  nearer, with a ripple where it landed. `fadeEnabled` fades them out
+  above the ground instead.
+- **Wind** (`makeWind`, `stepWind`): a breeze from one side that wanders,
+  and gusts on top, `gusts` a minute, each rising, blowing and dying away
+  over `gustLength` seconds and sometimes turning the wind round; a gust
+  usually shakes a flurry of petals loose from the blossom. G calls one.
+- **The sky** (`sky`): day, dusk, night (stars, a moon with its halo) or
+  by the clock (`skyAt`: night till five, dawn, day, dusk from five,
+  night from half past nine, blended, rebuilt as the hour's colours move
+  on), with a sun's glow or the moon, and far hills in mist (three
+  ridges, sums of slow waves with a little noise, each paler and higher
+  than the one before). S moves the sky on.
+- **The ground** (`ground`): grass (a green bank with blades at the lip),
+  a path (packed earth with stones and a grassy verge), water (the sky's
+  colour deepened, streaks of light), or none (petals fall out of the
+  bottom). Above `host.insets.bottom`. W moves it on.
+- **Touch:** tap the bough to shake it (a flurry from the clusters
+  nearest the tap), tap the air for a puff of wind from that side, drag
+  to push the air along (the wind follows the finger).
+- **Cost:** see §4.8. Two canvases: the still scene (sky, hills, tree)
+  behind, painted per resize and never copied again, and the moving one in
+  front, cleared each frame for the ground strip (with the pile on it),
+  the ripples and one axis-aligned blit per petal; petals × density. A
+  resize keeps the petals in the air. Smoke: a bough
+  and petals on frame one, landing on the grass, a gust when called, a
+  tap's flurry, S and N, afloat on water at night. Unit
+  (`tools/cherry-blossoms.test.mjs`): noise, the tree (the corner, the
+  taper, the generations, blossom on every twig, depth order, the same
+  tree from the same seed, the other styles), the wind (gusts about as
+  often as asked, never nothing between), a petal's fall and landing, the
+  water, the fade, the sky by the hour with no jumps.
+- configVersion 2: `windChance`, `windDuration` and `showBranches` became
+  `gusts`, `gustLength` and `tree` (legacy GONE).
+
 ## Open questions
 
 New questions go here, each with a recommendation.
@@ -3916,7 +4007,7 @@ proves it before anything else is built.
 |---|---|---|---|
 | Live desktop background | **Yes** | One borderless `NSWindow` per display at the desktop window level, holding a `WKWebView` | Low. Plash-style apps do this today. |
 | Static fallback and lock screen | **Yes** | `NSWorkspace.setDesktopImageURL(_:for:options:)`, public API | Low |
-| Screen saver | **Yes, but fragile** | A `.saver` bundle (`ScreenSaverView` subclass) run by Apple's `legacyScreenSaver` host | **Medium–high**: Apple's host has open bugs (below) |
+| Screen saver | **Yes, but fragile** | A `.saver` bundle (`ScreenSaverView` subclass) run by Apple's `legacyScreenSaver` host | **Medium–high**: Apple's host has open bugs (below); its web view can lose every canvas's contents at once (Harvest Valley's "stroke", §10.22: wallpapers that bake layers should probe for it and rebake) |
 | Real "Set as wallpaper" picker entry like Android | **No** | macOS has no third-party live-wallpaper API | n/a: the app *is* the wallpaper |
 
 #### What the research found

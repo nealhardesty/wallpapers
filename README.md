@@ -489,7 +489,7 @@ you tick it, then seven, with the rest folded away:
   this one (or let it go), `V` another island passes, `O` a small one comes to orbit, `B` a balloon, `W` weather, `S` season, `H` holiday · Weather `V` next view (days, hours, now), `U` °C or °F,
   `R` refresh now · World Clock `V` next view (map, faces, board), `M` centre
   the map on the next place, `L` next map look · Orrery `=`/`+` faster, `-` slower,
-  `0` back to now, `L` look, `S` scale, `V` from above or tilted · Matrix `R` the code comes down again, `L` next look (the 1999 film, the sequels, Resurrections), `H` next colour.
+  `0` back to now, `L` look, `S` scale, `V` from above or tilted · Matrix `R` the code comes down again, `L` next look (the 1999 film, the sequels, Resurrections), `H` next colour · Cherry Blossoms `G` a gust, `B` shake the bough, `N` a new tree, `S` next sky, `W` next ground.
 
 **Touch and drag:** tap or drag on Zen Garden (rake), Koi Pond (ripples;
 feed them in settings), Murmuration (you're the falcon), Lantern Festival,
@@ -499,7 +499,7 @@ The Cat vs. the Ornament (a laser dot for the cats), The Last Bulb on the
 Strand (jiggle a bulb), Frost on the Glass (draw in it; tap to breathe), A Very Small Christmas (the tree
 jingles, the train goes round, the floor is where it moves to), Sky Island (a cat comes, a person
 waves, the lake jumps a fish, a house at night switches its lights, the sky sends a bird),
-Satellites (what's that one?), Matrix (a splash of code), Weather (a day's hours; tap outside to go back),
+Satellites (what's that one?), Matrix (a splash of code), Cherry Blossoms (tap the bough to shake it, the air for a puff of wind; drag to push the air along), Weather (a day's hours; tap outside to go back),
 World Clock (a city becomes home, and the map turns to it; tap it again to go back) and
 the Orrery (tap a planet for its card; drag the tilted view). Each has a setting to ignore touch. On
 Android, a quick sideways swipe changes home screens and never counts.
