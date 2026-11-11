@@ -142,7 +142,7 @@ Added for Christmas, drawn in code (designs in §10.27–§10.30):
 | id | Files | Size | Notes |
 |---|---|---|---|
 | `cat-ornament` | cat-ornament-logic.js, cat-ornament-cats.js, cat-ornament-room.js, cat-ornament.js | ~2.2k lines | Interactive (a tap's laser dot); nine named cats on one vector rig; the roster, the pendulum, the fall and the odds (`CatOrnamentLogic`), unit-tested; follows `host.now()` (Christmas Eve and Day); keys N, B, T, Z |
-| `last-bulb` | last-bulb-logic.js, last-bulb-art.js, last-bulb.js | ~1.1k lines | Interactive (tap a bulb to jiggle it); a C9 strand whose last bulb is loose; the flicker scripts, the filament and the strand's shape (`LastBulbLogic`), unit-tested; follows `host.now()` (Christmas Eve and Day); keys L, O, D |
+| `last-bulb` | last-bulb-logic.js, last-bulb-art.js, last-bulb.js | ~1.4k lines | Interactive (tap a bulb to jiggle it); a C9 strand whose last bulb is loose, along the rail, in rows, round the border or over a doorway; the flicker scripts, the filament and the strand's path (`LastBulbLogic`), unit-tested; follows `host.now()` (Christmas Eve and Day); keys L, O, D, N |
 | `frost` | frost-logic.js, frost-art.js, frost.js | ~1k lines | Interactive (drag to draw in the frost, tap to breathe on it); fern frost grown tip by tip on an occupancy grid, the window and the doodles (`FrostLogic`), unit-tested; follows `host.now()` (Christmas Eve and Day); keys B, D, T |
 | `small-christmas` | small-christmas-logic.js, small-christmas-art.js, small-christmas.js | ~800 lines | Interactive (tap the tree, the train, the floor); pixel art at its own resolution, scaled up pixelated; palettes, blink patterns, the train's oval and the hops (`SmallXmasLogic`), unit-tested; follows `host.now()` (the sleigh on Christmas Eve, presents on Christmas Day); keys T, M, L, S |
 | `sky-island` | sky-island-logic.js, sky-island-art.js, sky-island-land.js, sky-island-actors.js, sky-island.js (and Harvest's harvest-sky.js) | ~3.5k lines | Interactive (tap a cat, a person, the lake, a house at night, the sky); 16-bit pixel art at its own resolution (a pixel is 2 CSS px on a laptop or 1080p), scaled up pixelated; a terraced island seen from above and in front, its underside, the sea of cloud and the ground far below all baked; the calendar (seasons, holidays, Easter, the owner's dates), the names and the island's three-tier layout from a seed (`SkyIslandLogic`), unit-tested over 240 layouts; follows `host.now()` (the hour, the season, every holiday); keys N, P, V, O, B, W, S, H |
@@ -3382,18 +3382,48 @@ Subtle on purpose: almost nothing moves, and when something does it's small.
   `roomLight`, plus a pool of each bulb's colour), so a red bulb reddens
   cream plaster and barely shows on green paper.
 - **Colours:** vintage (red, green, blue, orange, gold), warm white,
-  red-green, blue-white, candy cane, all red, all blue, or the user's own;
-  the last bulb takes its place in the pattern or a colour of its own (the
-  one replacement from a different box). Its end, left or right.
+  red-green, blue-white, candy cane, all red, all blue, pastels, or the
+  user's own; the last bulb takes its place in the pattern or a colour of
+  its own (the one replacement from a different box). Its end, left or right.
+- **The strand, every way (owner request, 2026-11-11: "more options…
+  maybe a strand that wraps around the entire border… configurable is
+  key"; configVersion 2).** The layout is now a path of cup hooks
+  (`LastBulbLogic.layout`: corners, hooks every `hookEvery` bulbs along
+  each run, the corners always; swags between hooks drooping by their
+  horizontal span, so a vertical run hangs straight; a bulb every
+  `spacing` widths along the wire, each with its fraction `u` along the
+  strand for the draft's pulse; the lead-in bulbs off the screen dropped).
+  Routes (`route`, key N): along the picture rail (`rows` 1–5 snakes it
+  back and forth down the wall, dropping down one side then the other, the
+  end always on the chosen side), round the whole border (up one side,
+  along the rail, down the other, back along the bottom above
+  `host.insets.bottom`), or an arch over a doorway (up, across, down, the
+  end part-way down the far side). Hooks off the rail screw into a little
+  plate on the wall. Bulbs (`shape`): C9, a round G40 globe, or a C6 at
+  two thirds (the glass centre per shape, `centreOf`, so the light pools
+  and taps land right); glass painted, clear or frosted (milky, the colour
+  softened); `glow` scales the light's reach; a pine garland (`garland`)
+  is drawn into the wall along every swag (sprigs of needles in two
+  greens, a berry here and there), so the bulbs light it with the wall;
+  two more walls, painted white and charcoal; the tag's text is a setting.
+  **Twinkle bulbs** (`twinklers`, 0–6): the old bimetal blinkers, spread
+  along the strand (`twinklers()`), each on its own slot clock (on a
+  second or three, off a blink), its filament answering as the last
+  bulb's does; each has the wall round it baked lit by everyone but
+  itself, drawn over the lit wall by how dark it is, and a blink redraws
+  only that rect (the corner mechanism, generalised to a list of rects);
+  between blinks the stage idles as before.
 - **Cost:** see §4.8. Bench (phone, 4× throttle): 0.4% Low, ~8.5% Medium.
   Smoke: frame one is lit with the last bulb dark; no frames while still;
   L gives exactly two flicks then light, redrawing only the corner; O puts
   the strand out and the twist brings it back with the last bulb on; a tap
   on it jiggles it; on Christmas Eve, even at 90% stubborn, it lights and
-  isn't due to go out. Unit: palettes, the attempt scripts (always two
-  flicks), playback, the filament (frame-rate independent, heats faster
-  than it cools, a flick is a soft blink), the layout (swags, the tail,
-  mirroring), Christmas Eve's hours.
+  isn't due to go out; round the border with two twinklers, bulbs by every
+  edge and a blink that redraws only its rect. Unit: palettes, the attempt
+  scripts (always two flicks), playback, the filament (frame-rate
+  independent, heats faster than it cools, a flick is a soft blink), the
+  layout (swags, the tail, mirroring; rows, the border, the arch, hooks as
+  asked, no bulb under the tail), the twinklers, Christmas Eve's hours.
 - **Seasonal:** December's list (§4.2).
 
 ### 10.29 Frost on the Glass (`frost`, owner request, November 2026)

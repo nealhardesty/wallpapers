@@ -1014,6 +1014,19 @@ const STAGE_CHECKS = {
         if (!(await st()).eve) record('not Christmas Eve on the 24th at seven');
         if (!await waitFor(async () => (await st()).last === 'lit', 7000)) return record(`on Christmas Eve it didn't light: ${JSON.stringify(await st())}`);
         if ((await st()).next.last !== undefined) record('on Christmas Eve it means to go out again');
+        // Round the border, with twinkle bulbs: bulbs by every edge, and a twinkler blinks on its own (only its corner redrawn).
+        if (!await stageWith('last-bulb', { configVersion: 2, route: 'border', twinklers: 2, garland: 'pine', shape: 'globe', outages: 'off', draft: 0, stubborn: 0.9 }, '&seed=7&date=2026-12-10T20:00')) return record('no boot round the border');
+        s = await st();
+        const W = await evaluate('innerWidth'), H = await evaluate('innerHeight');
+        if (s.route !== 'border' || !s.spread || s.spread.x0 > 60 || s.spread.x1 < W - 60 || s.spread.y0 > 60 || s.spread.y1 < H - 120) record(`the border doesn't go round: ${JSON.stringify(s.spread)}`);
+        if (s.twinklers.length !== 2) record(`${s.twinklers.length} twinklers (want two)`);
+        const fulls2 = s.stats.full, state0 = s.twinklers.map(t => t.on).join();
+        if (!await waitFor(async () => (await st()).twinklers.map(t => t.on).join() !== state0, 5000)) record('no twinkle bulb blinked in five seconds');
+        await sleep(400);
+        s = await st();
+        if (s.stats.full !== fulls2) record(`a twinkle redrew the whole screen ${s.stats.full - fulls2} times`);
+        if (!(s.stats.corner > 0)) record('a twinkle redrew nothing');
+        await shoot('last-bulb-border');
         return true;
     }]],
     // Frost on the Glass: frost on frame one, and it keeps creeping in;
