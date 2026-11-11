@@ -38,6 +38,7 @@ Click one to see it live.
 | [<img src="web/wallpapers/lighthouse/thumb.webp" width="200" alt="Lighthouse">](https://nealhardesty.github.io/wallpapers/?w=lighthouse)<br>🌊 Lighthouse | [<img src="web/wallpapers/wiki-pond/thumb.webp" width="200" alt="Wiki Pond">](https://nealhardesty.github.io/wallpapers/?w=wiki-pond)<br>🪷 Wiki Pond | [<img src="web/wallpapers/satellites/thumb.webp" width="200" alt="Satellites">](https://nealhardesty.github.io/wallpapers/?w=satellites)<br>🛰️ Satellites | [<img src="web/wallpapers/jellyfin/thumb.webp" width="200" alt="Jellyfin">](https://nealhardesty.github.io/wallpapers/?w=jellyfin)<br>📺 Jellyfin |
 | [<img src="web/wallpapers/harvest/thumb.webp" width="200" alt="Harvest Valley">](https://nealhardesty.github.io/wallpapers/?w=harvest)<br>🌾 Harvest Valley | [<img src="web/wallpapers/weather/thumb.webp" width="200" alt="Weather">](https://nealhardesty.github.io/wallpapers/?w=weather)<br>🌦️ Weather | [<img src="web/wallpapers/world-clock/thumb.webp" width="200" alt="World Clock">](https://nealhardesty.github.io/wallpapers/?w=world-clock)<br>🌍 World Clock | [<img src="web/wallpapers/orrery/thumb.webp" width="200" alt="Orrery">](https://nealhardesty.github.io/wallpapers/?w=orrery)<br>🪐 Orrery |
 | [<img src="web/wallpapers/cat-ornament/thumb.webp" width="200" alt="The Cat vs. the Ornament">](https://nealhardesty.github.io/wallpapers/?w=cat-ornament)<br>🐾 The Cat vs. the Ornament | [<img src="web/wallpapers/last-bulb/thumb.webp" width="200" alt="The Last Bulb on the Strand">](https://nealhardesty.github.io/wallpapers/?w=last-bulb)<br>💡 The Last Bulb on the Strand | [<img src="web/wallpapers/frost/thumb.webp" width="200" alt="Frost on the Glass">](https://nealhardesty.github.io/wallpapers/?w=frost)<br>🧊 Frost on the Glass | [<img src="web/wallpapers/small-christmas/thumb.webp" width="200" alt="A Very Small Christmas">](https://nealhardesty.github.io/wallpapers/?w=small-christmas)<br>🎄 A Very Small Christmas |
+| [<img src="web/wallpapers/sky-island/thumb.webp" width="200" alt="Sky Island">](https://nealhardesty.github.io/wallpapers/?w=sky-island)<br>🏝️ Sky Island | | | |
 
 The **Fireplace** 🔥 burns wood you'd recognise: furrowed oak, papery birch,
 scaly pine or bleached driftwood (following its Wood Type), round or split,
@@ -102,7 +103,40 @@ colour, four greens, amber or four greys, with scanlines if you like. Tap
 the tree, the train, or the floor.
 
 In December, Seasonal takes turns, a day each, between the Advent
-calendar, the cats, the bulb, the frost and the very small tree.
+calendar, the cats, the bulb, the frost, the very small tree and Sky
+Island.
+
+**Sky Island** 🏝️ is a small town on an island floating in an enormous
+sky, in fine pixel art, and a new island every time it loads: a mountain
+with goats on it, a lake with a dock and a waterfall pouring off the edge
+into the clouds, a forest, fenced fields, two streets of houses round a
+square with a well, a chapel, often a windmill and a lighthouse, roots and
+glowing crystals underneath, and a cave in the cliff where something
+green mostly sleeps. About twenty townsfolk each have a job and a day: the
+baker's up before dawn, the fisher's on the pier (and a cat keeps stealing
+the catch), kids kick a ball about or fly kites when the wind's up, a
+roofer's up a ladder, the mail does the rounds, a fiddler plays in the
+square of an evening, couples take the benches at sunset, and the night
+watch walks the streets with a lantern. The cats are the household's own
+(Moofy lurks and grins, Butters follows people about, Ras knocks flowerpots
+off sills, Ibbie sleeps, Maus gets the zoomies, Turkey loafs on the dock,
+Harry chases butterflies, Kitty Toes judges from the well), plus strays and
+a couple of dogs, with birds, rabbits, deer, ducks, a fox at dusk and an
+owl at night. The real clock lights the sky and the windows; the real date
+dresses the island for the season (snow, autumn colours, blossom, a frozen
+lake the kids skate on) and for every holiday: pumpkins and a ghost at
+Halloween, lights on every eave and a tree in the square at Christmas,
+fireworks on New Year's Eve and the Fourth, eggs to find at Easter, hearts
+from the chimneys on Valentine's, a rainbow with a pot of gold on St
+Patrick's, and a party (cake, balloons, confetti, dancing) on any dates of
+your own. Showers come from a cloud that sits over the island and leave a
+rainbow. Every few minutes another small island drifts past (a village, a
+lighthouse rock, an orchard, a wizard's tower, an island of cats…), its
+people wave, yours wave back, and sometimes a balloon brings one of them
+over for a look round. Tap a cat to call it, a person to get a wave, the
+lake for a fish, a house at night for its lights, or the sky for a bird.
+Like an island? Keep it (its seed is in the panel, to share); `N` rolls a
+new one.
 
 **Weather** 🌦️ is the forecast for your place from Open-Meteo (no key),
 over a sky that is the weather outside: drifting clouds, rain or snow,
@@ -380,7 +414,8 @@ April, the fish tank in May, fireflies in summer, falling leaves in
 September, Halloween in October, Harvest Valley in November, and in
 December the Christmas wallpapers, a different one each day (the advent
 calendar, The Cat vs. the Ornament, The Last Bulb on the Strand, Frost on
-the Glass and A Very Small Christmas).
+the Glass and A Very Small Christmas). Sky Island, which dresses itself for
+the season and the holiday, takes every other day all year round.
 
 | Key | Action |
 |---|---|
@@ -451,7 +486,8 @@ you tick it, then seven, with the rest folded away:
   turn, `B` bap the ornament, `T` up the tree, `Z` the zoomies · The Last Bulb
   `L` the last bulb tries (or gives up), `O` the strand out (or back), `D` a draft · Frost on the Glass `B` breathe on it,
   `D` someone draws in it, `T` thaw (or frost over again) · A Very Small
-  Christmas `T` the train, `M` move house, `L` jingle, `S` a sleigh · Weather `V` next view (days, hours, now), `U` °C or °F,
+  Christmas `T` the train, `M` move house, `L` jingle, `S` a sleigh · Sky Island `N` a new island, `P` pin
+  this one (or let it go), `V` another island passes, `B` a balloon, `W` weather, `S` season, `H` holiday · Weather `V` next view (days, hours, now), `U` °C or °F,
   `R` refresh now · World Clock `V` next view (map, faces, board), `M` centre
   the map on the next place, `L` next map look · Orrery `=`/`+` faster, `-` slower,
   `0` back to now, `L` look, `S` scale, `V` from above or tilted.
@@ -462,7 +498,8 @@ Rainy Window (draw in the fog), Fireworks, Pixel Room (the cat and the lamp),
 Harvest Valley (shake an apple tree; tap the scarecrow, or the sky for geese),
 The Cat vs. the Ornament (a laser dot for the cats), The Last Bulb on the
 Strand (jiggle a bulb), Frost on the Glass (draw in it; tap to breathe), A Very Small Christmas (the tree
-jingles, the train goes round, the floor is where it moves to),
+jingles, the train goes round, the floor is where it moves to), Sky Island (a cat comes, a person
+waves, the lake jumps a fish, a house at night switches its lights, the sky sends a bird),
 Satellites (what's that one?), Weather (a day's hours; tap outside to go back),
 World Clock (a city becomes home, and the map turns to it; tap it again to go back) and
 the Orrery (tap a planet for its card; drag the tilted view). Each has a setting to ignore touch. On
