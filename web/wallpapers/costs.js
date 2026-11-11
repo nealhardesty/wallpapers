@@ -33,6 +33,7 @@ WP.costs = {
     'rain': 1,
     'rainy-window': 1,
     'satellites': 1,
+    'sky-island': 2,
     'small-christmas': 1,
     'snow': 1,
     'stained-glass': 1,

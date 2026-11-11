@@ -23,7 +23,7 @@ wallpapers' only home. They run in three hosts:
 > measurements on a real phone (6.2's numbers, 6.4a), the first signed
 > release (6.6), the switch-over itself (7.2), and trying Phase 8's touch
 > and location, and Jellyfin, on a phone. The player, the stage, the panel
-> and all 41 wallpapers run from `web/index.html`, as a Chrome new-tab extension, on
+> and all 42 wallpapers run from `web/index.html`, as a Chrome new-tab extension, on
 > GitHub Pages at https://nealhardesty.github.io/wallpapers/, and as an
 > Android live wallpaper. Every wallpaper is tiered and within budget.
 > Phase 11 (Harvest Valley, §10.22) added the 34th wallpaper for Thanksgiving.
@@ -32,7 +32,8 @@ wallpapers' only home. They run in three hosts:
 > the first of four Christmas wallpapers, making 38; The Last Bulb on the
 > Strand (§10.28, 2026-11-06) the second, making 39; Frost on the Glass
 > (§10.29, 2026-11-06) the third, making 40; A Very Small Christmas
-> (§10.30, 2026-11-06) the fourth, making 41.
+> (§10.30, 2026-11-06) the fourth, making 41. Sky Island (§10.31,
+> 2026-11-11), a pixel-art town on an island in the sky, makes 42.
 > Phase 10, the clock overlay (§4.9), was built 2026-10-28; §10 holds the
 > other ideas.
 > Windows (§10.25): the W0 spikes passed, and W1 (the desktop core: behind
@@ -144,6 +145,7 @@ Added for Christmas, drawn in code (designs in §10.27–§10.30):
 | `last-bulb` | last-bulb-logic.js, last-bulb-art.js, last-bulb.js | ~1.1k lines | Interactive (tap a bulb to jiggle it); a C9 strand whose last bulb is loose; the flicker scripts, the filament and the strand's shape (`LastBulbLogic`), unit-tested; follows `host.now()` (Christmas Eve and Day); keys L, O, D |
 | `frost` | frost-logic.js, frost-art.js, frost.js | ~1k lines | Interactive (drag to draw in the frost, tap to breathe on it); fern frost grown tip by tip on an occupancy grid, the window and the doodles (`FrostLogic`), unit-tested; follows `host.now()` (Christmas Eve and Day); keys B, D, T |
 | `small-christmas` | small-christmas-logic.js, small-christmas-art.js, small-christmas.js | ~800 lines | Interactive (tap the tree, the train, the floor); pixel art at its own resolution, scaled up pixelated; palettes, blink patterns, the train's oval and the hops (`SmallXmasLogic`), unit-tested; follows `host.now()` (the sleigh on Christmas Eve, presents on Christmas Day); keys T, M, L, S |
+| `sky-island` | sky-island-logic.js, sky-island-art.js, sky-island-land.js, sky-island-actors.js, sky-island.js (and Harvest's harvest-sky.js) | ~2.6k lines | Interactive (tap a cat, a person, the lake, a house at night, the sky); fine pixel art at its own resolution, scaled up pixelated; the calendar (seasons, holidays, Easter, the owner's dates), the names and the island's layout from a seed (`SkyIslandLogic`), unit-tested over 240 layouts; follows `host.now()` (the hour, the season, every holiday); keys N, P, V, B, W, S, H |
 
 About 1.7 MB of JavaScript in total. **Not imported:** links, weather, clocks,
 search/omniprompt, custom links, status bar, Docker/nginx, the homepage's
@@ -381,6 +383,11 @@ Phase 4 and 6 take it:
   | Oct | halloween |
   | Nov | harvest |
   | Dec | advent, cat-ornament, last-bulb, frost, small-christmas: one a day, in turn (wins over snow's Dec–Apr) |
+
+  Every month also lists **sky-island** (§10.31, 2026-11-11) after its own
+  wallpaper: it dresses itself for the real season and holiday, so it
+  takes every other day of the year (the month's own wallpaper on the 1st),
+  and one day in six in December.
 
   It uses the local calendar month, so it is Northern-Hemisphere only. A
   month may list several (December's Christmas wallpapers): the day of the
@@ -826,6 +833,7 @@ and the commits.
 | frost | `glints` (medium) | Three canvases: the room and frost (redrawn ten times a second at most, six on a slow tier), the frame (baked once) and the snow (every frame, only while it's snowing, else idleUntil the next tenth); the room's blur, the bokeh discs and the frost's backlit colour baked per resize; frost accumulates on a mask (new ice only) and is re-tinted through it when it changes; tips capped at 9,000 × density; a render-scale change keeps the frost, rescaled; snow × density |
 | small-christmas | — | The canvas is the picture's own pixels (a few hundred across), scaled up by CSS with `image-rendering: pixelated`, so a frame is tiny; 12 fps by default (a setting), idleUntil between frames; sky, moon and snow floor one baked layer; every sprite baked per palette; scanlines a baked overlay canvas; snow × density |
 | harvest | `mist`, `beams` (medium) | Land is one baked layer per resize; trees, leaves, apples, geese and clouds are baked sprites; the world is washed once per frame with the hour's light; leaves, apples, smoke, sparks and flocks × density; squirrels × (0.5 + 0.5 density) |
+| sky-island | — | The canvas is the picture's own pixels (a pixel is about 2 CSS px), scaled up pixelated; the terrain is one bake per season; everything that stands still (houses, trees, lamps, trimmings) is baked into one layer per street band, drawn in turn with whoever moves (trees are drawn live, swaying, only on High); the sky is a dithered bake redone as the light changes, the stars four baked twinkle frames; the night is one `source-atop` wash over the island's scratch, with the lit windows and lamps one glow layer redone only when the lit set changes; 20 fps by default (a setting), idleUntil between frames; folk × (0.4 + 0.6 density), strays, wildlife, rain, snow, leaves, fireflies × density. Bench 2026-11-11: Low 17%, Medium 23%, High 29% |
 
 #### In the panel
 
@@ -3468,6 +3476,176 @@ and a toy train parked on its oval of track. Retro, and cozy.
   (its length against Ramanujan's, the way round, wrapping), the hops and
   the new spot, the special days.
 - **Seasonal:** December's list (§4.2), now all five.
+
+### 10.31 Sky Island (`sky-island`, owner request, 2026-11-11)
+
+From the brainstorm's "The Last Floating Island" (a tiny island in an
+enormous sky, one cottage, one resident), but the owner wanted **a small
+town full of people**, in fine pixel art, randomised each load, with other
+small towns floating by, pets everywhere (cats above all), wildlife,
+forests, lakes, small mountains, waterfalls, and holiday and seasonal
+touches. Decisions, from the Q&A: fine pixels (about 2 CSS px each); the
+real clock with overrides; the owner's cats by name and temperament plus
+strays and dogs; a new island every load with "keep this one"; every
+holiday set plus the owner's own dates and a way to pin a season or
+holiday; visitors wave, birds cross, a balloon ferries someone over; a
+light touch; a big island with sky all round; local weather; ~20 folk with
+daily routines; and Seasonal gets it as year-round filler.
+
+- **Pixels:** the canvas is the picture at its own resolution (`pixelSize`
+  × about min(width, height)/400, so 2 on a laptop, 3 on a big monitor, 2
+  on a phone) and CSS scales it up pixelated. Every sprite is rows of
+  characters mapped to colours (`SkyIslandArt.rows`), facing left, flipped
+  to face right. People are 5×8, cats 7×7 (the big and fluffy ones 9×8),
+  with a few frames each (stand, walk, wave, sit, work, jump; sit, sleep,
+  walk, run, loaf, stretch, pounce).
+- **The island from a seed** (`SkyIslandLogic.layout`, pure, in island
+  pixels: x across, y down from the plateau's back line): a rounded slab
+  with wobbly edges and a jagged cliff tapering to a point; a lake at one
+  end reaching the front lip, where the **waterfall** pours off (four baked
+  frames, widening into mist below the cliff), with a dock out from its back
+  shore; the **mountain** at the back on the other side, two to four
+  peaks, snow on top (more in winter), goats on its slopes; two **streets**
+  (three on a phone) through the town between them, the back one running
+  clear of the lake as the lane to the dock; **houses** of several kinds
+  (cottage, tall, wide, tower, barn) and roofs (gable, hip, thatch, flat),
+  a chapel with a bell across from the **square** (paving, a well, two
+  benches, often a market stall), sometimes a windmill (sails turning with
+  the wind) and a lighthouse at the island's end (a beam at night); fenced
+  **fields** (wheat, cabbages, pumpkins, flowers); a **forest** thick at
+  the ends and by the mountain, thin in town (round, tall, birch, apple and
+  pine trees in three sizes); lamps along the streets; meadow flowers;
+  roots trailing from the soil, glowing crystals underneath, and a **cave**
+  in the cliff where a small green dragon mostly sleeps, peeks out now and
+  then, and sometimes puffs sparks. The island has a name
+  (Thistlehollow Isle, Pebblewick Rock…), shown in the panel with its seed.
+  `seed` 0 (the default) draws a new island every load; **Keep this
+  island** (a panel action, or `P`) pins the seed, and again lets it go;
+  `N` rolls a new one. The unit test lays out 120 seeds both ways and
+  checks every house stands on its street clear of the others, the lake
+  and the mountain; the lake meets the lip at the waterfall; fields and
+  trees keep off the houses; every spot is reachable; and the same seed is
+  the same island.
+- **Getting about** (`SkyIslandLogic.route`): everyone walks the streets.
+  Houses stand with their doors on a street, so a walk goes up or down to
+  the nearest street, along it, crossing to the next street only through a
+  gap between its houses (`gaps`, computed once), and across open ground
+  straight from the back street for anything outside the town (the dock,
+  the fields, the island's ends). The test walks every spot from the square
+  and checks no leg wades the lake or passes through a house.
+- **The town's day** (`planFor`, by the hour from `host.now()`): everyone
+  has a role and a home. The baker and the fisher are up at five; the
+  fisher stands at the pier's end with a rod and now and then catches
+  something (half the time the nearest cat runs off with it, and the fisher
+  waves their arms); the farmer hoes the field; kids kick a ball between
+  them in the meadow or the square, fly kites when the wind is up, and
+  skate on the lake when it freezes; the mail carrier does the doors; a
+  gardener waters; a roofer climbs a ladder and hammers on a roof; a
+  merchant minds the stall; a fiddler plays in the square from four; walkers
+  go to the island's ends; strollers pair up on a bench at sunset; lunch is
+  in the square; everyone's home by ten but the night watch, who patrols
+  the streets with a lantern (a pool of light after dark). Umbrellas come
+  out in the rain. A passing island gets a wave from most of them.
+- **Cats** (`Cats`): the owner's roster (the same nine as §10.27, as
+  pixels: Moofy black and fluffy with a white grin, Butters a chunky buff
+  tabby, Waffles white with black splotches, Ras a tuxedo, Ibbie a grey
+  tabby, Maus a tortie, Turkey a big grey tabby, Harry orange and white,
+  Kitty Toes a fluffy blue Persian), each toggleable, plus `strays`. Each
+  picks spots by temperament: sills, roofs, the dock, benches, the well,
+  under trees, by lamps, next to a person. Ibbie sleeps on sills; Turkey
+  loafs on the dock; Ras sits on a sill and knocks the flowerpot off it
+  (it falls and breaks); Maus gets the zoomies (runs about the island for
+  five seconds); Harry pounces at butterflies and birds; Moofy lurks under
+  trees or near someone; Butters follows people; Waffles sits in the field;
+  Kitty Toes judges from the well or a roof. At night they take the sills.
+  A tap on open ground calls the nearest cat over, with a meow (a heart,
+  from Moofy). Hats on holidays: witch, Santa, party, bunny ears.
+- **Dogs** follow their owners about, lie down when they sit, and now and
+  then chase a cat, which runs for a sill; the dog gives up and sits.
+- **Wildlife** (`Wildlife`, × `wildlife` × density): small birds perch on
+  roofs and trees, peck on the ground, and fly off when someone comes
+  near; butterflies over the flowers on spring and summer afternoons;
+  rabbits in the meadow that bolt from people; deer at the mountain's foot
+  that graze, wander and flee behind it; goats along the slopes; ducks on
+  the lake (not when it's frozen); a fish that jumps now and then (and
+  when the lake is tapped); a fox that trots the back lane at dusk; an owl
+  in a pine at night, blinking; flocks of geese (spring and autumn) or
+  small birds across the sky, and birds that fly over from a passing
+  island; Halloween's bats and a ghost over the lake.
+- **The sky:** the sun and moon from Harvest Valley's `HarvestSky.bodies`
+  (the catalog loads `harvest/harvest-sky.js` first); the colours
+  (`SkyIslandLand.light`) ramp over the sun's altitude with a shared night
+  and twilight and a day of the season's (summer's deep blue, spring's
+  fresh, autumn's haze, winter's pale); a dithered gradient baked when the
+  light has moved (every 6 s in twilight, else a minute); stars that
+  twinkle; far clouds behind, a cloud bank below, a couple in front of the
+  cliff, all drifting with the wind; `onScroll` pans them by depth. `sky`
+  is live, a whole day in `cycleMinutes`, or pinned day, golden hour or
+  night (via `HarvestSky.pinned`).
+- **The night** is one wash over the island (`source-atop` on its
+  scratch), then what shines: windows (by a per-day hash, fewer after 23:00;
+  a tap on a house switches its own), lamps, the crystals pulsing, the
+  cave's ember, the lighthouse's beam, fireflies on summer nights, the
+  watch's lantern, Christmas lights blinking.
+- **Weather** (`weather`: whatever comes, fair, a shower, snow): a run of
+  fair weather with showers now and then (more in spring and autumn, snow
+  in winter), from a dark cloud that sits over the island, the rain falling
+  only onto it; a rainbow for a minute after; wind that comes and goes,
+  bends the trees (on High), flies the kites, turns the mill, blows the
+  leaves in autumn and the petals in spring and leans the chimney smoke.
+- **Seasons** (`seasonOf`, or pinned): the grass, the foliage (autumn
+  trees each pick a colour; winter broadleaves are bare with snow on the
+  branches; apples fruit in late summer and blossom in spring), window boxes
+  in the warm months, snow on everything in winter, the lake frozen (and
+  skated on) in January and February, chimney smoke in the cold months.
+- **Holidays** (`holidayOf`, or pinned, with `decorations` off for a quiet
+  one): Valentine's (hearts from the chimneys), St Patrick's (green
+  bunting, shamrocks, a rainbow all day with a pot of gold at its end),
+  Easter (the week before: eggs hidden among the flowers, which the kids
+  find; bunny ears on the cats), the Fourth (bunting, fireworks after
+  dark), Halloween (the week before: pumpkins at every door, lit at night;
+  bats; a ghost; witch hats), Thanksgiving (the week: bunting, pumpkins
+  by the stall), Christmas (all December to the 26th: lights along every
+  eave, a tree in the square, wreaths, snowmen, Santa hats; a sleigh
+  across the sky on the Eve; presents under the tree on the Day), New
+  Year (the Eve from six, and the small hours: fireworks, party hats) and
+  the owner's own **special dates** (`MM-DD Name`, one a line): a party,
+  with a cake in the square, balloons on the lamps, confetti, everyone
+  dancing there from five. Easter is computed; Thanksgiving is the fourth
+  Thursday. Unit-tested for every one.
+- **Visitors** (`Visitors`, about every `visitMinutes`): a small island of
+  a kind (a village, a lighthouse rock, an orchard, a wizard's tower with a
+  lit window, an island of cats, one with a windmill, a bare rock with a
+  pine and a goat) drifts across, far (small, behind ours, hazed) or near
+  (bigger, below, in front of the cloud bank), with its own name. Alongside,
+  its folk wave and ours wave back, a few birds fly over, and (if
+  `balloon`) a hot-air balloon may lift from it with a visitor (or a cat),
+  land on our meadow, let them have a look round the square and the dock
+  for half a minute, and carry them home. `V` and `B` send one now.
+- **Taps** (`touch`): a cat comes over; a person waves back (with a
+  heart); the lake jumps a fish; a house at night switches its windows; the
+  sky sends a bird off from there.
+- **Panel:** a status line (the island's name, seed, population and cats,
+  the season and holiday), **A new island** and **Keep this island** /
+  **Let it go** (shown by the feed's `kept`), the seed as a number to
+  type in or share. Keys: `N` new, `P` pin, `V` visitor, `B` balloon, `W`
+  weather, `S` season, `H` holiday (each cycling, with a toast).
+- **Performance:** §4.8's row. The expensive part was a few hundred
+  `drawImage` calls a frame for things that never move; baking them into
+  bands (split at the streets, so whoever walks a street is in front of its
+  houses and behind the next street's) took the Low tier from 50% to 17%.
+- **Tests.** Unit (`tools/sky-island.test.mjs`): the seeded random, the
+  seasons, Easter and Thanksgiving, every holiday's run-up and day and the
+  owner's dates, the names, 240 layouts' invariants and reproducibility,
+  the routes, the day's plan. Smoke: the cast on frame one (20 folk, 12
+  cats, 2 dogs, animals), a pixelated canvas at about 40 frames in 2 s, the
+  same seed is the same island, `P` pins and unpins (and the storage shows
+  it), a tap calls a cat and it comes; `V` brings a visitor, nobody waves
+  until it's alongside and then both sides do; Halloween's pumpkins,
+  Christmas Eve's lights, tree and lit windows, Easter's eggs, a party on
+  the owner's date with the folk in the square; Low bakes the trees and
+  keeps fewer folk.
+- **Seasonal:** every month's list (§4.2).
 
 ---
 

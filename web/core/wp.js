@@ -6,15 +6,17 @@
     'use strict';
 
     // Seasonal: the wallpaper for each calendar month (0 = January). A list
-    // takes turns, one a day: December's Christmas wallpapers.
+    // takes turns, one a day: the month's own wallpaper on the 1st, then
+    // Sky Island (which dresses itself for the season and the holiday)
+    // every other day; December's Christmas wallpapers in turn.
     WP.SEASONS = [
-        'snow', 'snow', 'snow', 'snow',          // Jan–Apr
-        'fishtank',                              // May
-        'fireflies', 'fireflies', 'fireflies',   // Jun–Aug
-        'leaves',                                // Sep
-        'halloween',                             // Oct
-        'harvest',                               // Nov
-        ['advent', 'cat-ornament', 'last-bulb', 'frost', 'small-christmas'], // Dec (wins over snow), a different one each day
+        ['snow', 'sky-island'], ['snow', 'sky-island'], ['snow', 'sky-island'], ['snow', 'sky-island'],   // Jan–Apr
+        ['fishtank', 'sky-island'],                                                                     // May
+        ['fireflies', 'sky-island'], ['fireflies', 'sky-island'], ['fireflies', 'sky-island'],           // Jun–Aug
+        ['leaves', 'sky-island'],                                                                       // Sep
+        ['halloween', 'sky-island'],                                                                    // Oct
+        ['harvest', 'sky-island'],                                                                      // Nov
+        ['advent', 'cat-ornament', 'last-bulb', 'frost', 'small-christmas', 'sky-island'],              // Dec (wins over snow), a different one each day
     ];
 
     WP.seasonalFor = date => {

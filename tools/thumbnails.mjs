@@ -38,13 +38,16 @@ const OVERRIDES = {
     frost: { configVersion: 1, window: 'single', coverage: 0.8, frameColour: 'red' },
     // A bit bigger, so the tree, the presents and the train read in a tile.
     'small-christmas': { configVersion: 1, treeSize: 'medium', pixelSize: 1.5 },
+    // A summer morning on a fair day, a little bigger so the town reads in a tile.
+    'sky-island': { configVersion: 1, weather: 'fair', islandSize: 1.3, pixelSize: 1.25 },
 };
 // URL parameters for a better picture: satellites as its sample station
 // passes overhead before dawn, weather's sample at a golden dusk (thumb mode never fetches, so it's the sample),
 // World Clock near the June solstice, Europe in its long evening; the Orrery tilted, on a fixed night.
-const PARAMS = { satellites: '&date=2026-10-14T04:47:15', 'pixel-room': '&date=2026-10-22T18:20', 'rainy-window': '&date=2026-10-22T21:00', harvest: '&date=2026-11-20T15:50', neko: '&date=2026-06-10T12:00', weather: '&date=2026-11-05T17:50', 'world-clock': '&date=2026-06-21T19:30:00Z', orrery: '&date=2026-11-05T21:00' };
+const PARAMS = { 'sky-island': '&date=2026-06-20T11:00', satellites: '&date=2026-10-14T04:47:15', 'pixel-room': '&date=2026-10-22T18:20', 'rainy-window': '&date=2026-10-22T21:00', harvest: '&date=2026-11-20T15:50', neko: '&date=2026-06-10T12:00', weather: '&date=2026-11-05T17:50', 'world-clock': '&date=2026-06-21T19:30:00Z', orrery: '&date=2026-11-05T21:00' };
 SETTLE_MS.fireworks = 2600;
 SETTLE_MS.harvest = 4000;
+SETTLE_MS['sky-island'] = 3000;
 
 const { chrome, profile, cdp } = await launch({ width: 1280, height: 800 });
 try {
