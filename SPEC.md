@@ -4310,7 +4310,7 @@ mac/
   Wallpapers.app        menu-bar agent (LSUIElement), owns everything live
     DesktopWindow       one per NSScreen: borderless, desktop level, WKWebView
     SettingsWindow      normal window, index.html?host=mac&panel=open
-    MenuBar             picker with thumb.webp, "Surprise me", pause, quit
+    MenuBar             picker, "Surprise me", pause, quit; MenuBarIcon draws the icon
     Power               occlusion, lock, sleep, low-power, thermal, battery
     AssetScheme         WKURLSchemeHandler for wp://app/ (serves web/ from the bundle)
     BingJson            native fetch of Bing's archive, like Android's BingJson.kt
@@ -4456,6 +4456,18 @@ CI `mac` job.
     desktop, found from the window list), menu bar picker with Surprise Me,
     Next, Previous, Pause, and `make mac-test`, a 16-check self-test that
     runs the real app against a throwaway store.
+  - [x] Menu bar icon (`MenuBarIcon.swift`, 2026-11-12): the project's own
+    icon (§5's `icon.svg`, the window onto a dusk scene) drawn in code at
+    18 pt from the SVG's geometry, not an SF Symbol. Default is a
+    **template image** (black and alpha; the pane solid, the moon, stars,
+    far ridge and fireflies cut out with one even-odd fill), so macOS tints
+    it for light and dark menu bars, inverts it while the menu is open, and
+    honours Increase Contrast and Reduce Transparency like its own status
+    items. **Menu Bar Icon → In Colour** draws the full-colour scene with a
+    faint white edge so the dark sky keeps a shape on a dark bar; the choice
+    is `menuBarIcon` in UserDefaults. The self-test draws both at 2× and
+    reads pixels (corner clear, sky solid and dark blue, moon cut out or
+    pale gold).
   - **Web change:** `bing.js` also fetches `bing.json` on `wp:` pages
     (it was `https?:` only), so the app's native archive is used; Bing's
     own host can't be fetched from a page.

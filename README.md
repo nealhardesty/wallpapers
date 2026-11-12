@@ -277,8 +277,11 @@ most, lower on battery saver or when the phone is warm.
 **On a Mac, as your desktop background** (macOS 14 or later, experimental). Run
 `make mac-run`, or `make mac-install` to put the app in `~/Applications`. The
 wallpaper sits behind your desktop icons, widgets and windows, on every
-display, and the ✨ menu bar item picks a wallpaper, pauses it, opens
-**Settings** (the same panel) and sets it to open at login. It pauses when a
+display, and the menu bar item (the project's icon, a window onto a dusk
+scene) picks a wallpaper, pauses it, opens **Settings** (the same panel) and
+sets it to open at login. The icon is black and white like the rest of the
+bar, so it follows light and dark menu bars and the contrast settings;
+**Menu Bar Icon → In Colour** shows the full-colour one. It pauses when a
 full-screen app covers it, when the screen sleeps or locks, and it runs at a
 lower quality on battery, in Low Power Mode and when the Mac is hot. Wallpapers
 that react to the mouse do: fish follow the pointer, and a click on the bare
