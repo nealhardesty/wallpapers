@@ -17,7 +17,7 @@ class MatrixAnimationManager {
         this.atlases = new Map();
         this.time = 0;
         this.layers = [];
-        this.stats = { frames: 0, cells: 0 };
+        this.stats = { frames: 0, cells: 0, splashed: 0 };
         this.seed = Math.floor(Math.random() * 0x7fffffff) || 1;   // ?seed= makes Math.random repeatable
     }
 
@@ -371,6 +371,7 @@ class MatrixAnimationManager {
             if (!col) continue;
             MatrixLogic.spawn(col, L.rows, { ...p, brightShare: 1 }, L.random, Math.max(0, r0 - Math.abs(c - c0)));
             col.start = 0;
+            this.stats.splashed++;
         }
         this.host.idleUntil(0);
     }
@@ -402,7 +403,7 @@ class MatrixAnimationManager {
         return {
             look: this.config.look, colour: this.config.colour, layers: this.layers.length, cols: L.cols, rows: L.rows,
             drops: L.columns.reduce((n, c) => n + c.drops.length, 0), bright: L.columns.reduce((n, c) => n + c.drops.filter(d => d.bright).length, 0),
-            cells: this.stats.cells, frames: this.stats.frames, time: Math.round(this.time * 10) / 10, atlases: this.atlases.size,
+            cells: this.stats.cells, frames: this.stats.frames, splashed: this.stats.splashed, time: Math.round(this.time * 10) / 10, atlases: this.atlases.size,
             glyphs: this.look().glyphs.length,
         };
     }
