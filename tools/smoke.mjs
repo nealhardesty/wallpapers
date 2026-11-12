@@ -968,6 +968,9 @@ const STAGE_CHECKS = {
         if (!await stageWith('frost', { configVersion: 2, snow: 0, doodles: false, lightCount: 200, treeSize: 1.4 }, at)) return record('no boot with the big window tree');
         s = await evaluate('(m => ({ discs: m.room.discs.length }))(WP.stage.manager)');
         if (s.discs < 150) record(`the big window tree has ${s.discs} discs`);
+        // A change from the panel takes effect live, without a reload.
+        s = await evaluate('(m => { m.applySettings({ ...m.config, treeStyle: "charlie" }); return { style: m.room.tree.style, discs: m.room.discs.length }; })(WP.stage.manager)');
+        if (s.style !== 'charlie' || s.discs > 12) record(`the panel's Charlie Brown tree didn't take live: ${JSON.stringify(s)}`);
         return true;
     }], ['the ornament swings, the tree falls and is put back, a cat chases the dot', async () => {
         const at = '&seed=7&date=2026-12-10T20:00';
