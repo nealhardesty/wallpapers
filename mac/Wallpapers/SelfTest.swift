@@ -35,10 +35,10 @@ final class SelfTest {
         guard let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: wide, pixelsHigh: high, bitsPerSample: 8, samplesPerPixel: 4,
                                          hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0),
               let context = NSGraphicsContext(bitmapImageRep: rep) else { return nil }
-        rep.size = image.size
+        // The bitmap's context is in pixels: draw the image over all of them.
         NSGraphicsContext.saveGraphicsState()
         NSGraphicsContext.current = context
-        image.draw(in: NSRect(origin: .zero, size: image.size))
+        image.draw(in: NSRect(x: 0, y: 0, width: wide, height: high))
         NSGraphicsContext.restoreGraphicsState()
         return rep.colorAt(x: Int(at.0 * CGFloat(scale)), y: Int(at.1 * CGFloat(scale)))
     }
