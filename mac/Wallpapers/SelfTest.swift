@@ -29,6 +29,20 @@ final class SelfTest {
 
     private func pause(_ seconds: Double) async { try? await Task.sleep(nanoseconds: UInt64(seconds * 1e9)) }
 
+    /// The colour of an image at a point (from its top left), drawn at 2×.
+    private func pixel(_ image: NSImage, _ at: (CGFloat, CGFloat)) -> NSColor? {
+        let scale = 2, wide = Int(image.size.width) * scale, high = Int(image.size.height) * scale
+        guard let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: wide, pixelsHigh: high, bitsPerSample: 8, samplesPerPixel: 4,
+                                         hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0),
+              let context = NSGraphicsContext(bitmapImageRep: rep) else { return nil }
+        // The bitmap's context is in pixels: draw the image over all of them.
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = context
+        image.draw(in: NSRect(x: 0, y: 0, width: wide, height: high))
+        NSGraphicsContext.restoreGraphicsState()
+        return rep.colorAt(x: Int(at.0 * CGFloat(scale)), y: Int(at.1 * CGFloat(scale)))
+    }
+
     private func until(_ seconds: Double, _ condition: () async -> Bool) async -> Bool {
         let end = Date().addingTimeInterval(seconds)
         while Date() < end {
@@ -177,6 +191,23 @@ final class SelfTest {
         let json = desktop.power.json(windowVisible: true)
         let parsed = (try? JSONSerialization.jsonObject(with: Data(json.utf8))) as? [String: Any]
         check("power state is the JSON WP.power() takes", parsed?["hidden"] is Bool && parsed?["saver"] is Bool && parsed?["thermal"] is String, json)
+
+        // 9b. The menu bar icon: the app's own artwork, as a template the bar tints and in colour.
+        let mono = MenuBarIcon.image(.monochrome), colour = MenuBarIcon.image(.colour)
+        check("the menu bar icon is menu bar sized, a template in black and white and not in colour",
+              mono.size == NSSize(width: 18, height: 18) && colour.size == mono.size && mono.isTemplate && !colour.isTemplate)
+        // Points from the top left, in points: outside the pane, in the sky, in the moon.
+        let corner = (CGFloat(0.5), CGFloat(0.5)), sky = (CGFloat(9), CGFloat(2.8)), moon = (CGFloat(10.25), CGFloat(7.6))
+        if let a = pixel(mono, corner), let b = pixel(mono, sky), let c = pixel(mono, moon) {
+            check("in black and white the pane is solid, the corner clear and the moon cut out",
+                  a.alphaComponent < 0.1 && b.alphaComponent > 0.9 && b.redComponent < 0.1 && c.alphaComponent < 0.1,
+                  "corner \(a.alphaComponent) sky \(b.alphaComponent) moon \(c.alphaComponent)")
+        } else { check("in black and white the pane is solid, the corner clear and the moon cut out", false, "no bitmap") }
+        if let a = pixel(colour, corner), let b = pixel(colour, sky), let c = pixel(colour, moon) {
+            check("in colour the sky is dark blue and the moon pale gold",
+                  a.alphaComponent < 0.1 && b.alphaComponent > 0.9 && b.blueComponent > b.redComponent && c.redComponent > 0.9 && c.blueComponent < 0.85,
+                  "sky \(b) moon \(c)")
+        } else { check("in colour the sky is dark blue and the moon pale gold", false, "no bitmap") }
 
         // 10. The lock-screen still renders at the display's pixel size.
         if let screen = desktop.screens.first, let url = await Still.render(screen),

@@ -20,8 +20,7 @@ final class MenuBar: NSObject, NSMenuDelegate {
         self.settings = settings
         self.sync = sync
         super.init()
-        item.button?.image = NSImage(systemSymbolName: "sparkles", accessibilityDescription: "Wallpapers")
-        item.button?.image?.isTemplate = true
+        item.button?.image = MenuBarIcon.image(MenuBarIcon.style)
         menu.delegate = self
         item.menu = menu
         build()
@@ -75,6 +74,17 @@ final class MenuBar: NSObject, NSMenuDelegate {
         pause.state = desktop.power.paused ? .on : .off
         let mouse = add("Wallpaper Reacts to the Mouse", #selector(toggleMouse), "")
         mouse.state = desktop.reactsToMouse ? .on : .off
+        let icon = NSMenuItem(title: "Menu Bar Icon", action: nil, keyEquivalent: "")
+        let styles = NSMenu()
+        for style in MenuBarIcon.Style.allCases {
+            let row = styles.addItem(withTitle: style.title, action: #selector(pickIcon(_:)), keyEquivalent: "")
+            row.target = self
+            row.representedObject = style.rawValue
+            row.image = MenuBarIcon.image(style)
+            row.state = MenuBarIcon.style == style ? .on : .off
+        }
+        icon.submenu = styles
+        menu.addItem(icon)
         menu.addItem(.separator())
 
         add("Settings…", #selector(openSettings), ",")
@@ -193,6 +203,11 @@ final class MenuBar: NSObject, NSMenuDelegate {
     @objc private func previous() { desktop.cycle(-1); Task { await refresh() } }
     @objc private func togglePause() { desktop.power.paused.toggle() }
     @objc private func toggleMouse() { desktop.reactsToMouse.toggle() }
+    @objc private func pickIcon(_ sender: NSMenuItem) {
+        guard let style = (sender.representedObject as? String).flatMap(MenuBarIcon.Style.init(rawValue:)) else { return }
+        MenuBarIcon.style = style
+        item.button?.image = MenuBarIcon.image(style)
+    }
     @objc private func openSettings() { settings.show() }
 
     @objc private func toggleLogin() {
