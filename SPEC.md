@@ -33,7 +33,9 @@ wallpapers' only home. They run in three hosts:
 > Strand (§10.28, 2026-11-06) the second, making 39; Frost on the Glass
 > (§10.29, 2026-11-06) the third, making 40; A Very Small Christmas
 > (§10.30, 2026-11-06) the fourth, making 41. Sky Island (§10.31,
-> 2026-11-11), a pixel-art town on an island in the sky, makes 42.
+> 2026-11-11), a pixel-art town on an island in the sky, makes 42. Ice
+> Patrol (§10.34, 2026-11-14), a flight over an ice world from the pilot's
+> seat and the first wallpaper drawn with WebGL, makes 43.
 > Phase 10, the clock overlay (§4.9), was built 2026-10-28; §10 holds the
 > other ideas.
 > Windows (§10.25): the W0 spikes passed, and W1 (the desktop core: behind
@@ -146,6 +148,7 @@ Added for Christmas, drawn in code (designs in §10.27–§10.30):
 | `frost` | frost-logic.js, frost-art.js, frost.js | ~1k lines | Interactive (drag to draw in the frost, tap to breathe on it); fern frost grown tip by tip on an occupancy grid, the window and the doodles (`FrostLogic`), unit-tested; follows `host.now()` (Christmas Eve and Day); keys B, D, T |
 | `small-christmas` | small-christmas-logic.js, small-christmas-art.js, small-christmas.js | ~800 lines | Interactive (tap the tree, the train, the floor); pixel art at its own resolution, scaled up pixelated; palettes, blink patterns, the train's oval and the hops (`SmallXmasLogic`), unit-tested; follows `host.now()` (the sleigh on Christmas Eve, presents on Christmas Day); keys T, M, L, S |
 | `sky-island` | sky-island-logic.js, sky-island-art.js, sky-island-land.js, sky-island-actors.js, sky-island.js (and Harvest's harvest-sky.js) | ~3.5k lines | Interactive (tap a cat, a person, the lake, a house at night, the sky); 16-bit pixel art at its own resolution (a pixel is 2 CSS px on a laptop or 1080p), scaled up pixelated; a terraced island seen from above and in front, its underside, the sea of cloud and the ground far below all baked; the calendar (seasons, holidays, Easter, the owner's dates), the names and the island's three-tier layout from a seed (`SkyIslandLogic`), unit-tested over 240 layouts; follows `host.now()` (the hour, the season, every holiday); keys N, P, V, O, B, W, S, H |
+| `ice-patrol` | ice-logic.js, ice-gl.js, ice-cockpit.js, ice-patrol.js | ~2.5k lines | The first on WebGL (§10.34): an endless snowfield from two baked noise fields, the same height formula in JavaScript and in the shaders (`IceLogic`), unit-tested; a 2D cockpit whose radar sweeps the real terrain; a 2D ridgeline fallback without WebGL; its own watch on the GPU; keys W, T, V, R |
 
 About 1.7 MB of JavaScript in total. **Not imported:** links, weather, clocks,
 search/omniprompt, custom links, status bar, Docker/nginx, the homepage's
@@ -835,6 +838,7 @@ and the commits.
 | small-christmas | — | The canvas is the picture's own pixels (a few hundred across), scaled up by CSS with `image-rendering: pixelated`, so a frame is tiny; 12 fps by default (a setting), idleUntil between frames; sky, moon and snow floor one baked layer; every sprite baked per palette; scanlines a baked overlay canvas; snow × density |
 | harvest | `mist`, `beams` (medium) | Land is one baked layer per resize; trees, leaves, apples, geese and clouds are baked sprites; the world is washed once per frame with the hour's light; leaves, apples, smoke, sparks and flocks × density; squirrels × (0.5 + 0.5 density) |
 | sky-island | — | The canvas is the picture's own pixels (2 CSS px each on a laptop or 1080p, 3 at 1440p, 4 at 4K, 1 on a phone), scaled up pixelated; the terrain (three tiers, their cliffs, the underside, the water) is one bake per season, the roots three sway frames, the sea of cloud two tileable strips and the ground one, rebaked with the light; everything that stands still (houses, trees, lamps, props, trimmings) is baked into one layer per street band, drawn in turn with whoever moves (trees are drawn live, swaying, only on High); the sky is a dithered bake redone as the light changes, the stars four baked twinkle frames; the night is one `source-atop` wash over the island's scratch, with the lit windows and lamps one glow layer redone only when the lit set changes; a passing island is one bake with a few live bits; 20 fps by default (a setting), 12 on Low, paced on a steady timeline through idleUntil; folk × (0.4 + 0.6 density), strays, wildlife, rain, snow, leaves, fireflies × density. Bench 2026-11-11 (v2): Low 21%, Medium 38%, High 46% |
+| ice-patrol | `shadows`, `sparkle` (medium) | WebGL: one grid drawn nine times (96, 64 or 48 cells a side by density), heights and slopes from two noise textures; shadows ten marched steps on High, six on Medium, compiled out when shed (after fading); flakes × density, wrapped in the vertex shader; the cockpit frame painted per light step, the gauges at 15 Hz on a strip of their own; a few dozen height lookups a frame on the main thread. The GPU is watched by the wallpaper itself (late frames give up shadows, then render scale to 0.4), since the governor only times callbacks; software renderers start there. No WebGL: 34 ridgelines a frame in 2D |
 
 #### In the panel
 
@@ -4000,9 +4004,145 @@ from the picker made it throw every frame). Rebuilt from nothing:
 - configVersion 2: `windChance`, `windDuration` and `showBranches` became
   `gusts`, `gustLength` and `tree` (legacy GONE).
 
+### 10.34 Ice Patrol (`ice-patrol`, owner request, 2026-11-14)
+
+The owner's brief: a never-ending flight over an ice planet, from the
+pilot's seat of a snow speeder, the cockpit in view; hills, mountains and
+plains of snow; realism, not pixel art; falling snow on and off; night and
+day; a realistic cockpit with a realistic flight radar. The reference was a
+"night drive over an ice world" ambience video.
+
+**It is our own ice world.** No film's names, craft or cockpit: the
+speeder, its panel and the planet (a low sun, two moons) are drawn from
+nothing but the brief, so the repo's "art drawn in code, nothing that isn't
+ours" rule (§1) holds. The catalog name is one string if the owner wants
+another.
+
+**The first wallpaper on WebGL.** Lit, shadowed snow to the horizon is a
+GPU's work: on a 2D canvas it would be `putImageData` every frame, which
+§4.8 forbids, or a few hundred flat polygons, which isn't realism. WebGL 1
+shaders (they run unchanged on a WebGL 2 context), no extensions, no
+libraries. Where there is no WebGL at all the same flight is drawn as
+ridgelines on a 2D canvas (below).
+
+- **The world (`IceLogic`, pure, unit-tested).** Two tileable 512² noise
+  fields baked at start-up (about 100 ms): `a`, soft fractal noise, and
+  `b`, ridged and domain-warped. The terrain is six looks at them, each at
+  its own scale and turned its own way so the tiles never line up: a biome
+  map (26 km a tile) that says plain, hills or mountains; mountain chains
+  (9 km, up to 1150 m) with gullies and spurs (2.3 km); hills; rolls;
+  drifts. `terrain.height(x, z)` is that formula in JavaScript, for the
+  autopilot, the wingmen, the beacons and the radar.
+- **The same formula in the shaders.** The fields go up as textures (height
+  in 16 bits across two bytes, slopes beside it; the ridged field's slopes
+  in a 16-bit texture of their own, because eight bits shade a sun-grazed
+  mountainside in steps), every mip averaged from the floats. The vertex
+  shader reads heights; the fragment shader reads slopes, so the light on a
+  far mountain keeps its creases however coarse the grid under it. The
+  shader's constants are written from `IceLogic.SHAPE`, and a unit test
+  checks they are.
+- **The ground's grid.** Nine square grids centred on the pilot, each twice
+  as coarse as the one inside it (3 m between vertices underfoot, 768 m at
+  the rim, 24 to 37 km out by tier), one vertex buffer drawn nine times.
+  Towards its rim each grid's odd vertices slide onto their even neighbours
+  and its texture reads blur one mip, so it meets the next grid exactly;
+  the coarser grid discards what the finer one covers.
+- **Camera-relative everything.** World coordinates only exist in
+  JavaScript doubles. The shaders get positions from the camera and, for
+  each layer, where the camera sits in its tile, so an endless flight
+  never runs out of float precision (a test flies 3 × 10⁹ m from home).
+- **Snow that looks like snow.** Sunlight plus blue sky fill (shadows on
+  snow are blue), the bright horizon lighting the slopes that face it, a
+  sheen off the crust, single crystals glittering close by, wind-carved
+  ridges along the prevailing wind, blue ice where the flats are scoured,
+  rock where it is too steep for snow to hold. Shadows are marched through
+  a blurred copy of the big shapes (ten steps on High, six on Medium, none
+  on Low); cloud shadows cross the plains. Small tiles repeat, and from
+  afar that shows as a lattice, so the fine layers fade with distance.
+- **The sky** is one function the fog shares, so the land fades into the
+  sky it is under: a low polar sun (34° at most: long shadows all day),
+  dawn and dusk bands, clouds, about 5,000 stars and a galaxy's band, two
+  moons that are lit balls (their phase is whatever the sun makes it), an
+  aurora, and in ice-crystal air a 22° halo with sun dogs.
+- **Weather** (`weatherStep`): fronts come and go on their own, or the
+  panel fixes clear, flurries, snow or blizzard. Snow thickens the air
+  (26 km of view down to 420 m), greys the sky, takes the sun, and fills a
+  64 m box about the pilot with up to 9,000 flakes, each drawn as the
+  streak it travels while the eye's shutter is open; the box wraps, so it
+  costs no CPU. At speed they pour out of a point ahead.
+- **Night.** The big moon is the lamp (and casts the shadows); the landing
+  lamps throw a pool on the snow ahead and light the flakes; far beacons
+  blink red and stations show a row of windows.
+- **The flight** (`flightStep`, pure): a slow wander, bent away from
+  anything it couldn't comfortably climb, and by turns drawn to the
+  mountains and out over the plain. It holds its clearance over what it is
+  about to cross, climbs smartly and sinks gently, and banks into its
+  turns. Sub-stepped at 1/60 s from elapsed time: the same ground at 10
+  fps as at 120.
+- **Wingmen** (0 to 3) hold slots off a heading that trails ours, so they
+  swing wide in a turn, and each rides its own ground. Engines glow; nav
+  lights and a strobe after dark.
+- **The cockpit** (`IceCockpit`, 2D, over the view): a canopy frame and a
+  panel, repainted only when the light outside moves a step or frost
+  creeps another notch across the glass. Instruments, about 15 times a
+  second:
+  - **Ground-mapping radar** (`radarRay`): a dish nodding ±62° about the
+    nose; each ray's returns are computed from the real terrain (a slope
+    that faces the dish shines, whatever is behind a ridge stays dark), and
+    painted on a tube that slowly forgets, so the picture smears a little
+    in a turn. Wingmen, beacons and stations are contacts.
+  - **Attitude ball**, **heading tape**, and a **terrain-following scope**:
+    the ground the autopilot is about to cross, side on, with PULL UP when
+    it is working hard.
+  - On wide screens: airspeed, caution lamps (AP, LAMP, HEAT, ICE, TERR,
+    WIND) and height and climb bars. All of it reads the world.
+- **Views:** canopy and panel, panel only, or none. `onScroll` turns the
+  head with Android's pages.
+- **Keys:** `W` weather, `T` time of day, `V` view, `R` radar range.
+
+**Cost, and a second governor.** The main thread steers (a few dozen
+height lookups a frame), sweeps the radar and repaints small instruments.
+The GPU does the rest, and the stage's governor (§4.8) can't see it: it
+times the page's own callbacks. So the wallpaper watches its own frames:
+when they arrive late for 2.5 s it gives up its shadows, then pixels
+(render scale 0.75, 0.55, 0.4 of the tier's), remembers the step under
+`host.storage` and tries one better each start. A software renderer
+(SwiftShader, llvmpipe: a VM, headless Chrome) starts at the lightest step.
+
+- Tiers: grid 96/64/48 cells a side, flakes × density, `shadows` and
+  `sparkle` (medium) declared in the catalog; shadows are compiled out of
+  the shader when shed, after fading.
+- A lost context (`webglcontextlost`) is rebuilt; the cockpit repaints
+  (a GPU restart blanks 2D canvases too).
+- **No WebGL:** the flight, sky gradient and terrain as 34 ridgelines per
+  frame on a 2D canvas, each a slice of the real `height`, under the same
+  cockpit. Flat, but alive, and what the smoke test times.
+
+**Tests.** Unit (`tools/ice-patrol.test.mjs`): the fields tile and repeat
+from a seed; the bytes decode to the floats; terrain is continuous with
+both plains and mountains; the flight covers the same ground at 10, 30, 60
+and 120 fps and never comes within 4 m of the snow at any speed, height or
+frame rate; the sun, the moons and the light by the hour; weather comes
+and goes; the radar's shadows; the schema's options match the code's.
+Smoke: in the air on frame one with wingmen, lights, a radar picture and
+live gauges; the 2D fallback at the same speed on Low as High; night
+lights the lamps and the stars; a blizzard closes in; the keys step and
+save; a phone's panel fits above the gesture bar.
+
+**Not built:** terrain as a height-field ray march (dearer per pixel,
+and software renderers crawl); sound; spray off the snow behind the
+wingmen; putting it in Seasonal's winter months (the owner's call).
+
 ## Open questions
 
 New questions go here, each with a recommendation.
+
+- **Ice Patrol in Seasonal?** It would suit January to April beside Snow.
+  *Recommendation:* the owner's call; it isn't in `WP.SEASONS` yet.
+- **Ice Patrol on real devices.** Built and tested on a software renderer
+  only (headless Chrome), where a frame takes a second. *Recommendation:*
+  check Medium on the phone and the Mac screen saver before a release, and
+  record `make bench` and `make android-bench` numbers there.
 
 - **Jellyfin: does playback report to the server?** Reporting updates
   "continue watching" and marks items played, which a wallpaper looping a
