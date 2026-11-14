@@ -1545,6 +1545,90 @@ const STAGE_CHECKS = {
         }
         return true;
     }]],
+    // Ice Patrol (§10.34): in the air on frame one with the instruments
+    // reading the world; the same flight without WebGL; night, weather, the
+    // views and a phone. Headless Chrome draws its WebGL in software, far too
+    // slowly to time, so the speed is measured on the 2D fallback.
+    'ice-patrol': [
+        ['in the air on the first frame: wingmen, lights, a radar picture, live gauges', async () => {
+            if (!await stageWith('ice-patrol', null, '&seed=7')) return record('not ready');
+            await sleep(2500);
+            const paint = "c => { const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data; let n = 0; for (let i = 3; i < d.length; i += 4) n += d[i] > 40; return n / (d.length / 4); }";
+            const s = await evaluate(`(m => ({ flat: m.flat, agl: m.flight.agl, wingmen: m.wingmen.length, craft: m.scene.craft.length, lights: m.scene.lights.length,
+                radar: (${paint})(m.cockpit.radar), gauges: (${paint})(m.cockpit.gauges), frame: (${paint})(m.cockpit.frame),
+                shown: m.cockpit.wrap.style.display !== 'none' }))(WP.stage.manager)`);
+            if (!(s.agl >= 4)) record(`it is ${s.agl} m above the snow`);
+            if (s.wingmen !== 2 || s.craft !== 2 || s.lights < 4) record(`the formation: ${JSON.stringify(s)}`);
+            if (s.radar < 0.01) record(`the radar has painted ${(s.radar * 100).toFixed(1)}% of its tube`);
+            if (s.gauges < 0.03 || s.frame < 0.2 || !s.shown) record(`the cockpit: ${JSON.stringify(s)}`);
+            if (await evaluate(DRAWN) < 30) record('barely drawn');
+            await shoot('ice-patrol-cockpit');
+            return s.agl >= 4;
+        }],
+        ['without WebGL it flies on as ridgelines, as far each second on Low as on High', async () => {
+            const noGl = "(() => { const real = HTMLCanvasElement.prototype.getContext; HTMLCanvasElement.prototype.getContext = function (kind, ...rest) { return /^webgl/.test(kind) ? null : real.call(this, kind, ...rest); }; })()";
+            const { identifier } = await cdp.send('Page.addScriptToEvaluateOnNewDocument', { source: noGl });
+            try {
+                for (const tier of ['low', 'high']) {
+                    if (!await stageWith('ice-patrol', null, `&seed=7&tier=${tier}`)) return record(`${tier}: not ready without WebGL`);
+                    await sleep(500);
+                    const at = () => evaluate('(m => ({ flat: m.flat, d: m.flight.distance, t: performance.now(), n: WP.host.frames.count, speed: m.speed, agl: m.flight.agl }))(WP.stage.manager)');
+                    const a = await at();
+                    await sleep(2500);
+                    const b = await at();
+                    const speed = (b.d - a.d) / ((b.t - a.t) / 1000), fps = (b.n - a.n) / ((b.t - a.t) / 1000);
+                    if (!b.flat) record(`${tier}: still on WebGL`);
+                    if (Math.abs(speed / b.speed - 1) > 0.08) record(`${tier}: ${speed.toFixed(1)} m/s at ${fps.toFixed(0)} fps; expected ${b.speed}`);
+                    if (!(b.agl >= 4)) record(`${tier}: ${b.agl} m above the snow`);
+                    if (await evaluate(DRAWN) < 20) record(`${tier}: barely drawn without WebGL`);
+                }
+                await shoot('ice-patrol-flat');
+            } finally {
+                await cdp.send('Page.removeScriptToEvaluateOnNewDocument', { identifier });
+            }
+            return true;
+        }],
+        ['night lights the lamps and the stars; a blizzard closes in; the keys step and save', async () => {
+            if (!await stageWith('ice-patrol', { configVersion: 1, time: 'day', weather: 'clear' }, '&seed=7')) return record('midday: not ready');
+            await sleep(1500);
+            const day = await evaluate(AVERAGE);
+            if (!await stageWith('ice-patrol', { configVersion: 1, time: 'night', weather: 'clear' }, '&seed=7')) return record('night: not ready');
+            await sleep(1500);
+            const night = await evaluate(AVERAGE);
+            const n = await evaluate('(m => ({ lamps: m.lamps, stars: m.scene.stars, lamp: m.scene.lamp[0], aurora: m.scene.aurora, day: m.day }))(WP.stage.manager)');
+            if (n.lamps < 0.9 || n.stars < 0.9 || n.lamp < 1 || !(n.aurora > 0)) record(`night: ${JSON.stringify(n)}`);
+            if (night.reduce((a, b) => a + b) > day.reduce((a, b) => a + b) * 0.6) record(`night ${night} is hardly darker than midday ${day}`);
+            await shoot('ice-patrol-night');
+            if (!await stageWith('ice-patrol', { configVersion: 1, time: 'day', weather: 'blizzard', lamps: false }, '&seed=7')) return record('blizzard: not ready');
+            await sleep(1500);
+            const b = await evaluate('(m => ({ level: m.weather.level, see: m.air.visibility, flakes: m.scene.flakes, lamps: m.lamps, sun: m.scene.lightCol[0] }))(WP.stage.manager)');
+            if (b.level < 0.99 || b.see > 600 || b.flakes < 0.95 || b.lamps !== 0 || b.sun > 0.4) record(`blizzard: ${JSON.stringify(b)}`);
+            await shoot('ice-patrol-blizzard');
+            // W, T, V and R, as the catalog binds them.
+            const keys = await evaluate(`(m => { const run = key => WP.entry('ice-patrol').keys.find(k => k.keys.includes(key)).run(m, {}); return { w: run('w'), t: run('t'), v: [run('v'), run('v')], r: run('r'), config: m.config, saved: JSON.parse(localStorage.getItem('wp:ice-patrol')) }; })(WP.stage.manager)`);
+            if (keys.config.weather !== 'auto' || keys.config.time !== 'dusk' || keys.config.cockpit !== 'none' || keys.config.radarRange !== 8000) record(`the keys left ${JSON.stringify(keys.config)}`);
+            if ('weather' in keys.saved || keys.saved.time !== 'dusk' || keys.saved.cockpit !== 'none' || keys.saved.radarRange !== 8000) record(`the keys saved ${JSON.stringify(keys.saved)}`);
+            if (!/comes and goes/.test(keys.w) || !/dusk/.test(keys.t) || !/8 km/.test(keys.r)) record(`the keys said ${JSON.stringify([keys.w, keys.t, keys.v, keys.r])}`);
+            if (!await waitFor(() => evaluate("WP.stage.manager.cockpit.wrap.style.display === 'none'"), 8000)) record('V did not take the cockpit away');
+            return true;
+        }],
+        ['a phone held upright: the panel fits, above the gesture bar', async () => {
+            const viewport = { width: 412, height: 915, deviceScaleFactor: 2.625 };
+            try {
+                if (!await bootStage('w=ice-patrol&host=android&seed=7', viewport)) return record('not ready on a phone');
+                await sleep(1500);
+                const g = await evaluate('(m => ({ ...m.cockpit.g, coam: undefined, tanY: m.scene.tanY, inset: WP.host.insets.bottom }))(WP.stage.manager)');
+                if (g.bottom !== 915 - g.inset || g.inset !== 48) record(`the panel ends at ${g.bottom} with a ${g.inset} px inset`);
+                if (g.adi.x - g.adi.r < 0 || g.scope.x + g.scope.w / 2 > 412 || g.wide) record(`the instruments overflow: ${JSON.stringify({ adi: g.adi, scope: g.scope, wide: g.wide })}`);
+                if (g.top < 915 * 0.6) record(`the panel takes ${(100 - g.top / 9.15).toFixed(0)}% of the screen`);
+                if (g.tanY < Math.tan(31 * Math.PI / 180)) record(`a narrow view: tan ${g.tanY}`);
+                await shoot('ice-patrol-phone');
+            } finally {
+                await cdp.send('Emulation.clearDeviceMetricsOverride');
+            }
+            return true;
+        }],
+    ],
     synthwave: [
         ['every palette renders, each its own colours', async () => {
             // The panel's options; the unit tests hold them to the palettes

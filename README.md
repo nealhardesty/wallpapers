@@ -38,7 +38,7 @@ Click one to see it live.
 | [<img src="web/wallpapers/lighthouse/thumb.webp" width="200" alt="Lighthouse">](https://nealhardesty.github.io/wallpapers/?w=lighthouse)<br>🌊 Lighthouse | [<img src="web/wallpapers/wiki-pond/thumb.webp" width="200" alt="Wiki Pond">](https://nealhardesty.github.io/wallpapers/?w=wiki-pond)<br>🪷 Wiki Pond | [<img src="web/wallpapers/satellites/thumb.webp" width="200" alt="Satellites">](https://nealhardesty.github.io/wallpapers/?w=satellites)<br>🛰️ Satellites | [<img src="web/wallpapers/jellyfin/thumb.webp" width="200" alt="Jellyfin">](https://nealhardesty.github.io/wallpapers/?w=jellyfin)<br>📺 Jellyfin |
 | [<img src="web/wallpapers/harvest/thumb.webp" width="200" alt="Harvest Valley">](https://nealhardesty.github.io/wallpapers/?w=harvest)<br>🌾 Harvest Valley | [<img src="web/wallpapers/weather/thumb.webp" width="200" alt="Weather">](https://nealhardesty.github.io/wallpapers/?w=weather)<br>🌦️ Weather | [<img src="web/wallpapers/world-clock/thumb.webp" width="200" alt="World Clock">](https://nealhardesty.github.io/wallpapers/?w=world-clock)<br>🌍 World Clock | [<img src="web/wallpapers/orrery/thumb.webp" width="200" alt="Orrery">](https://nealhardesty.github.io/wallpapers/?w=orrery)<br>🪐 Orrery |
 | [<img src="web/wallpapers/cat-ornament/thumb.webp" width="200" alt="The Cat vs. the Ornament">](https://nealhardesty.github.io/wallpapers/?w=cat-ornament)<br>🐾 The Cat vs. the Ornament | [<img src="web/wallpapers/last-bulb/thumb.webp" width="200" alt="The Last Bulb on the Strand">](https://nealhardesty.github.io/wallpapers/?w=last-bulb)<br>💡 The Last Bulb on the Strand | [<img src="web/wallpapers/frost/thumb.webp" width="200" alt="Frost on the Glass">](https://nealhardesty.github.io/wallpapers/?w=frost)<br>🧊 Frost on the Glass | [<img src="web/wallpapers/small-christmas/thumb.webp" width="200" alt="A Very Small Christmas">](https://nealhardesty.github.io/wallpapers/?w=small-christmas)<br>🎄 A Very Small Christmas |
-| [<img src="web/wallpapers/sky-island/thumb.webp" width="200" alt="Sky Island">](https://nealhardesty.github.io/wallpapers/?w=sky-island)<br>🏝️ Sky Island | | | |
+| [<img src="web/wallpapers/sky-island/thumb.webp" width="200" alt="Sky Island">](https://nealhardesty.github.io/wallpapers/?w=sky-island)<br>🏝️ Sky Island | [<img src="web/wallpapers/ice-patrol/thumb.webp" width="200" alt="Ice Patrol">](https://nealhardesty.github.io/wallpapers/?w=ice-patrol)<br>🛩️ Ice Patrol | | |
 
 The **Fireplace** 🔥 burns wood you'd recognise: furrowed oak, papery birch,
 scaly pine or bleached driftwood (following its Wood Type), round or split,
@@ -157,6 +157,22 @@ their own towers and villages, and everyone waves; a small one comes now and
 then to orbit ours a couple of times; a balloon may bring a visitor (or a
 cat) over for a look round. Tap a cat and it comes; keep an island you like
 with `P`.
+
+**Ice Patrol** 🛩️ is an endless low flight over an ice world, from the
+pilot's seat. Plains of wind-carved snow, rolling hills and mountain chains
+with rock showing where it's too steep for snow to hold, all of it lit: long
+blue shadows under a low sun, alpenglow at dusk, a moonlit night with stars,
+two moons and an aurora, and the landing lamps throwing a pool of light on
+the snow ahead. Snow comes and goes on its own, from a few flurries (and a
+halo round the sun) to a blizzard that closes the world down to the streaks
+pouring past the canopy. Wingmen fly ahead with their engines glowing, and
+far beacons blink out on the ice. The cockpit's instruments are real: the
+radar sweeps the actual terrain ahead (slopes that face it shine, the ground
+behind a ridge stays dark), the attitude ball rolls with the horizon, and
+the terrain scope shows the ground the autopilot is about to cross. `W`
+changes the weather, `T` the time of day, `V` the view (canopy, panel
+only, or none), `R` the radar's range. It is the one wallpaper drawn with
+WebGL, so it wants a GPU; without one it carries on as paper-cut ridgelines.
 
 **Weather** 🌦️ is the forecast for your place from Open-Meteo (no key),
 over a sky that is the weather outside: drifting clouds, rain or snow,
@@ -510,7 +526,7 @@ you tick it, then seven, with the rest folded away:
   this one (or let it go), `V` another island passes, `O` a small one comes to orbit, `B` a balloon, `W` weather, `S` season, `H` holiday · Weather `V` next view (days, hours, now), `U` °C or °F,
   `R` refresh now · World Clock `V` next view (map, faces, board), `M` centre
   the map on the next place, `L` next map look · Orrery `=`/`+` faster, `-` slower,
-  `0` back to now, `L` look, `S` scale, `V` from above or tilted · Matrix `R` the code comes down again, `L` next look (the 1999 film, the sequels, Resurrections), `H` next colour · Cherry Blossoms `G` a gust, `B` shake the bough, `N` a new tree, `S` next sky, `W` next ground · Fireplace `L` a log burns through and a fresh one lands, `W` the wood laid again.
+  `0` back to now, `L` look, `S` scale, `V` from above or tilted · Matrix `R` the code comes down again, `L` next look (the 1999 film, the sequels, Resurrections), `H` next colour · Cherry Blossoms `G` a gust, `B` shake the bough, `N` a new tree, `S` next sky, `W` next ground · Ice Patrol `W` weather, `T` time of day, `V` view, `R` radar range · Fireplace `L` a log burns through and a fresh one lands, `W` the wood laid again.
 
 **Touch and drag:** tap or drag on Zen Garden (rake), Koi Pond (ripples;
 feed them in settings), Murmuration (you're the falcon), Lantern Festival,

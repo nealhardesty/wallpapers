@@ -300,6 +300,16 @@
               { keys: ['i'], label: 'What’s playing', run: tv => tv.showInfo() },
               { keys: ['v'], label: 'Next frame', run: tv => tv.cycleFrame() },
           ] },
+        { id: 'ice-patrol', name: 'Ice Patrol', icon: '🛩️', accent: '#8fd8ff', background: '#0a1420',
+          scripts: ['ice-patrol/ice-logic.js', 'ice-patrol/ice-gl.js', 'ice-patrol/ice-cockpit.js', 'ice-patrol/ice-patrol.js'],
+          make: host => new IcePatrolAnimationManager(host), cost: 'medium',
+          effects: [['shadows', 'medium'], ['sparkle', 'medium']],
+          keys: [
+              { keys: ['w'], label: 'Next weather (comes and goes, clear, flurries, snow, blizzard)', run: patrol => patrol.nextWeather() },
+              { keys: ['t'], label: 'Next time of day (goes round, your clock, dawn, midday, dusk, night)', run: patrol => patrol.nextTime() },
+              { keys: ['v'], label: 'Next view (canopy and panel, panel only, no cockpit)', run: patrol => patrol.nextView() },
+              { keys: ['r'], label: 'Radar range (2, 4, 8 km)', run: patrol => patrol.nextRange() },
+          ] },
         { id: 'bing', name: 'Bing Image of the Day', icon: '🖼️', accent: '#8ab4ff', scripts: ['bing/bing.js'],
           make: host => new BingWallpaperManager(host), cost: 'none', network: ['www.bing.com'] },
     ];

@@ -42,6 +42,8 @@ const OVERRIDES = {
     'small-christmas': { configVersion: 2, treeSize: 'medium', pixelSize: 1.5 },
     // A summer morning on a fair day, a little bigger so the town reads in a tile.
     'sky-island': { configVersion: 2, weather: 'fair', islandSize: 1.2 },
+    // A clear dawn, the long shadows out, a little higher for the view.
+    'ice-patrol': { configVersion: 1, time: 'dawn', weather: 'clear', clearance: 40 },
 };
 // URL parameters for a better picture: satellites as its sample station
 // passes overhead before dawn, weather's sample at a golden dusk (thumb mode never fetches, so it's the sample),
@@ -50,6 +52,7 @@ const PARAMS = { 'sky-island': '&date=2026-06-20T11:00', satellites: '&date=2026
 SETTLE_MS.fireworks = 2600;
 SETTLE_MS.harvest = 4000;
 SETTLE_MS['sky-island'] = 3000;
+SETTLE_MS['ice-patrol'] = 9000;    // headless Chrome draws its WebGL in software: a frame takes a second or two
 
 const { chrome, profile, cdp } = await launch({ width: 1280, height: 800 });
 try {
