@@ -482,13 +482,14 @@ const STAGE_CHECKS = {
         const amber = await evaluate(AVERAGE);
         if (!(amber[0] > amber[2] + 8)) record(`amber isn't warm: ${amber}`);
         await shoot('matrix-classic-amber');
-        // A tap: bright-headed strings from that row in the columns round it.
-        const brightBefore = (await st()).bright;
+        // A tap: bright-headed strings from that row in the seven columns
+        // round it (counted as they start: strings leaving the bottom
+        // meanwhile would make a net count flaky on a slow runner).
         await mouse('mousePressed', 400, 300);
         await mouse('mouseReleased', 400, 300);
         await sleep(200);
         s = await st();
-        if (s.bright < brightBefore + 5) record(`a tap added ${s.bright - brightBefore} bright strings (want seven)`);
+        if (s.splashed !== 7) record(`a tap started ${s.splashed} bright strings (want seven)`);
         // Low: one layer, no bloom.
         if (!await stageWith('matrix', { configVersion: 2, intro: false }, '&seed=7&tier=low')) return record('no boot on Low');
         s = await st();
