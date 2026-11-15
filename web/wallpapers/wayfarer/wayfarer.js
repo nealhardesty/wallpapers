@@ -1,0 +1,962 @@
+// Wayfarer (SPEC §10.38): an endless walk through a cosy fantasy world. A
+// traveller follows a road that never ends, through forests and meadows,
+// along lakes and the sea, over mountain passes and moors, into villages
+// and walled cities, by day and by night, in every season and weather.
+//
+//   way-logic.js    the world: road, countries, places, sky, weather, the journey (pure)
+//   way-models.js   every shape, and a square of the world as triangles (pure)
+//   way-actors.js   people, animals, birds and carts, posed
+//   way-gl.js       the view, in WebGL
+//   wayfarer.js     this: the manager that walks it
+//
+// Cheap by construction (SPEC §4.8): the world is built a square at a time
+// as the walk reaches it (a millisecond or two each, spread over frames),
+// and drawn in a few dozen calls; the main thread poses a few dozen figures
+// and steers the camera. The GPU does the rest, and is watched here.
+
+const WAY_TIMES = { dawn: 0.262, day: 0.4, dusk: 0.738, night: 0.0 };     // 'day' is mid-morning: the sun high enough to be day, low enough to model a street
+const WAY_TIME_ORDER = ['cycle', 'clock', 'dawn', 'day', 'dusk', 'night'];
+const WAY_TIME_NAMES = { cycle: 'the day goes round', clock: 'by your clock', dawn: 'dawn', day: 'day', dusk: 'dusk', night: 'night' };
+const WAY_WEATHER_ORDER = ['auto', 'clear', 'fair', 'cloudy', 'rain'];
+const WAY_WEATHER_NAMES = { auto: 'comes and goes', clear: 'clear', fair: 'fair, with clouds', cloudy: 'overcast', rain: 'rain (snow where it is cold)' };
+const WAY_CAMERAS = ['follow', 'first', 'drift'];
+const WAY_CAMERA_NAMES = { follow: 'Behind the traveller', first: 'Through their eyes', drift: 'Cinematic' };
+const WAY_COMPANIONS = ['fox', 'dog', 'pony', 'cat', 'wisp', 'none'];
+// What a struggling GPU gives up, in turn: shadows, then resolution, then the outer ring of detail.
+const WAY_GPU = [{ scale: 1, shadows: true }, { scale: 1, shadows: false }, { scale: 0.75, shadows: false }, { scale: 0.55, shadows: false, thin: true }, { scale: 0.4, shadows: false, thin: true }];
+const WAY_FAR = 256;            // metres to a side of the far squares
+
+class WayfarerAnimationManager {
+    constructor(host) {
+        this.host = host;
+        this.config = WP.settings.load();
+        this.isRunning = false;
+        this.animationId = null;
+        this.lastTime = 0;
+        this.seconds = 0;
+        this.pan = 0;               // Android's pages, as a turn of the head
+        this.panTarget = 0;
+        this.glance = { yaw: 0, pitch: 0, held: false, idle: 9 };   // a drag looks around; it eases back
+        this.gpu = { step: 0, late: 0, calm: 0, pace: 0, gaveUp: false };
+        this.shadowFade = 0;
+        this.near = new Map();      // squares by key, built and (with WebGL) on the GPU
+        this.far = new Map();
+        this.active = { near: [], far: [], hole: null, key: '' };
+        this.queue = [];
+        this.retired = [];
+        this.actors = new Map();
+        this.traffic = [];
+        this.wonders = [];
+        this.drift = [0, 0, 0];
+        this.cloudDrift = [0.3, 0.7];
+        this.cut = 9;               // seconds since the camera last cut
+        this.shot = { index: 0, t: 0, z0: 0, span: 30 };
+        this.cam = { x: 0, y: 0, z: 0, heading: 0, pitch: 0 };
+        this.scene = { cam: this.cam, lamps: [], near: [], far: [] };
+        this.onResize = () => this.resize();
+        this.onLost = event => { event.preventDefault(); this.renderer.lost = true; };
+        // A lost graphics context takes every buffer with it: build the view again.
+        this.onRestored = () => {
+            this.renderer.lost = false;
+            this.clearSquares();
+            this.flat = !this.renderer.init();
+            if (this.flat) this.ctx = this.canvas.getContext('2d');
+            this.applyQuality(true);
+            this.stream(true);
+            this.resize();
+        };
+    }
+
+    start() {
+        if (this.isRunning) return;
+        this.isRunning = true;
+        const canvas = this.canvas = document.createElement('canvas');
+        Object.assign(canvas.style, { position: 'fixed', inset: '0', width: '100%', height: '100%', zIndex: '-2', pointerEvents: 'none' });
+        document.body.appendChild(canvas);
+        // A veil the cinematic camera dips through when it cuts.
+        const veil = this.veil = document.createElement('div');
+        Object.assign(veil.style, { position: 'fixed', inset: '0', zIndex: '-1', pointerEvents: 'none', background: '#0b0d14', opacity: '0' });
+        document.body.appendChild(veil);
+        this.renderer = new WayRenderer(canvas);
+        // No WebGL (or it was refused): the same walk, painted flat on a 2D canvas.
+        this.flat = !this.renderer.init();
+        if (this.flat) this.ctx = canvas.getContext('2d');
+        canvas.addEventListener('webglcontextlost', this.onLost);
+        canvas.addEventListener('webglcontextrestored', this.onRestored);
+        window.addEventListener('resize', this.onResize);
+        this.moving = new WaySoup(8192);
+        this.stack = new WayStack();
+        this.glows = new WaySprites(900);
+        this.puffs = new WaySprites(256);
+        if (!this.host.params.thumb) {
+            let from = null;
+            const look = (x, y) => {
+                if (!this.config.touch || !from) return;
+                this.glance.yaw = WayLogic.clamp(from.yaw + (x - from.x) / this.width * 2.4, -2.6, 2.6);
+                this.glance.pitch = WayLogic.clamp(from.pitch + (from.y - y) / this.height * 1.2, -0.5, 0.7);
+                this.glance.idle = 0;
+            };
+            this.stopGestures = this.host.gestures({
+                start: (x, y) => { from = { x, y, yaw: this.glance.yaw, pitch: this.glance.pitch }; this.glance.held = true; },
+                move: look, end: () => { this.glance.held = false; from = null; },
+            });
+            this.gpu.step = WayLogic.clamp((Number(this.host.storage.get('gpu')) || 0) - 1, 0, WAY_GPU.length - 1);
+            // No GPU at all: start where it would end up, and stay there.
+            if (this.renderer.software) Object.assign(this.gpu, { step: WAY_GPU.length - 1, gaveUp: true });
+        }
+        this.seedScene();
+        this.applyQuality(true);
+        this.resize();
+        // The whole of the first view before the stage calls it ready.
+        this.stream(true);
+        this.update(0);
+        this.snapCamera();
+        this.draw();
+        this.lastTime = 0;
+        this.animationId = requestAnimationFrame(t => this.frame(t));
+    }
+
+    stop() {
+        this.isRunning = false;
+        cancelAnimationFrame(this.animationId);
+        window.removeEventListener('resize', this.onResize);
+        this.stopGestures?.();
+        this.canvas?.removeEventListener('webglcontextlost', this.onLost);
+        this.canvas?.removeEventListener('webglcontextrestored', this.onRestored);
+        this.renderer?.dispose();
+        this.canvas?.remove();
+        this.veil?.remove();
+        this.canvas = null;
+    }
+
+    // Already on the road on the first frame: a few minutes short of somewhere.
+    seedScene() {
+        const c = this.config, L = WayLogic;
+        this.world = L.world(Math.floor(Math.random() * 2 ** 31), { towns: c.towns, season: c.season });
+        let leg = 40 + Math.floor(Math.random() * 4000);
+        // The panel's thumbnail wants the picture on the tin: a village in the woods, just ahead.
+        if (this.host.params.thumb) while (!(this.world.leg(leg).place === 'village' && this.world.leg(leg).biome === 'forest')) leg++;
+        const before = this.host.params.thumb ? 88 : (this.world.leg(leg).radius || 30) + 35 + 60 * Math.random();
+        this.journey = L.journeyStart(this.world, (leg + 0.5) * L.SLOT - before);
+        this.journey.speed = L.WALK * c.pace;
+        this.day = WAY_TIMES[c.time] ?? 0.31;       // 'cycle' sets off in the morning
+        this.weather = L.weatherStart(c.weather, Math.random);
+        this.nextTraffic = this.journey.distance + 40 + 60 * Math.random();
+        this.nextWonder = 20 + 40 * Math.random();
+        this.companion = { x: null, z: 0, gait: 0, yaw: 0, sit: 0, speed: 0 };
+    }
+
+    // ---- Quality ----------------------------------------------------------------------
+    wants(effect) { return this.host.quality.effects.includes(effect); }
+    applyQuality(now = false) {
+        const q = this.host.quality, shadows = this.wants('shadows') && WAY_GPU[this.gpu.step].shadows;
+        this.shadowTarget = shadows ? 1 : 0;
+        if (now) this.shadowFade = this.shadowTarget;
+        const thin = WAY_GPU[this.gpu.step].thin;
+        // High: 7×7 near squares in 9×9 far. Medium: 5×5 in 7×7. Low: 5×5 in 5×5, and thinner in both.
+        this.nearR = q.density >= 0.85 && !thin ? 3 : 2;
+        this.farR = thin ? 2 : q.density >= 0.85 ? 4 : q.density >= 0.5 ? 3 : 2;
+        this.reach = this.farR * WAY_FAR + WAY_FAR / 2 - 110;          // how far the land is drawn: just inside its edge
+        this.density = q.density;
+        if (!this.flat) {
+            this.renderer.applyQuality({
+                shadows: shadows || this.shadowFade > 0 ? (q.tier === 'high' ? 2048 : 1024) : 0,
+                mirror: this.wants('mirror'),
+                drops: Math.round(4200 * q.density),
+            });
+        }
+    }
+    onQuality() { this.applyQuality(); }
+    onScroll(x) { this.panTarget = (x - 0.5) * 0.7; }
+    onResume() { this.lastTime = 0; }
+
+    applySettings(config) {
+        const before = this.config;
+        this.config = config;
+        if (before.towns !== config.towns || before.season !== config.season) {
+            // Another world along the same road: rebuild what is in view.
+            this.world = WayLogic.world(this.world.seed, { towns: config.towns, season: config.season });
+            this.clearSquares();
+            this.journey.camp = null;
+            this.journey.mode = 'walk';
+            this.stream(true);
+        }
+        if (before.camera !== config.camera) { this.cut = 0; this.shot.t = 0; this.shot.z0 = this.journey.z; this.snap = true; }
+        if (!config.touch) this.glance.yaw = this.glance.pitch = 0;
+    }
+
+    resize() {
+        if (!this.canvas) return;
+        const ratio = window.devicePixelRatio || 1;
+        this.width = window.innerWidth;
+        this.height = window.innerHeight;
+        const scale = ratio * (this.flat ? 1 : WAY_GPU[this.gpu.step].scale);
+        const w = Math.max(1, Math.round(this.width * scale)), h = Math.max(1, Math.round(this.height * scale));
+        if (this.flat) { this.canvas.width = w; this.canvas.height = h; } else this.renderer.resize(w, h);
+    }
+
+    // ---- Keys (declared in the catalog) -----------------------------------------------------
+    cycle(key, order, names) {
+        this.config[key] = order[(order.indexOf(this.config[key]) + 1) % order.length];
+        WP.settings.save(this.config);
+        return names[this.config[key]];
+    }
+    nextCamera() {
+        const name = this.cycle('camera', WAY_CAMERAS, WAY_CAMERA_NAMES);
+        Object.assign(this.shot, { t: 0, z0: this.journey.z });
+        this.cut = 0;
+        this.snap = true;
+        return name;
+    }
+    nextTime() { return `Time: ${this.cycle('time', WAY_TIME_ORDER, WAY_TIME_NAMES)}`; }
+    nextWeather() { return `Weather: ${this.cycle('weather', WAY_WEATHER_ORDER, WAY_WEATHER_NAMES)}`; }
+    // On down the road to just short of the next place, as if an hour had passed.
+    skipAhead() {
+        const L = WayLogic, j = this.journey, short = l => l.zc - (l.radius || 30) - 70;
+        let next = this.world.leg(Math.floor(j.z / L.SLOT));
+        while (short(next) < j.z + 30) next = this.world.leg(next.i + 1);
+        Object.assign(j, L.journeyStart(this.world, short(next)), { distance: j.distance, speed: L.WALK * this.config.pace, sinceRest: j.sinceRest, gazed: j.gazed });
+        this.companion.x = null;
+        this.traffic.length = 0;
+        this.cut = 0;
+        this.shot.t = 0;
+        this.shot.z0 = j.z;
+        this.snap = true;
+        if (this.config.time === 'cycle') this.day = (this.day + 0.04) % 1;
+        this.stream(true);
+        const names = { city: 'a city', village: 'a village', hamlet: 'a hamlet in the pass', stones: 'a ring of standing stones', castle: 'a castle on its hill', elder: 'the elder tree', ruin: 'a ruined tower', abbey: 'a ruined abbey', jetty: 'the lake', cairn: 'the top of the pass', mill: 'a windmill', lighthouse: 'a lighthouse', ring: 'a fairy ring' };
+        return `On to ${names[next.place] || 'the next bend'}`;
+    }
+
+    // ---- The world, a square at a time ----------------------------------------------------------
+    clearSquares() {
+        for (const sq of [...this.near.values(), ...this.far.values(), ...this.retired]) this.renderer.release(sq);
+        this.near.clear();
+        this.far.clear();
+        this.actors.clear();
+        this.queue.length = this.retired.length = 0;
+        this.pending = this.flatItems = this.building = null;
+        this.active = { near: [], far: [], hole: null, key: '' };
+    }
+    // Decide which squares are wanted about the traveller, build what is
+    // missing (all of it now, or a few milliseconds' worth a frame), and
+    // switch to the new set only once it is whole, so nothing is seen half-made.
+    stream(now = false) {
+        if (this.flat) return;
+        const L = WayLogic, me = L.standing(this.journey, this.world), C = L.CHUNK;
+        const cx = Math.floor(me.x / C), cz = Math.floor(me.z / C), fx = Math.floor(me.x / WAY_FAR), fz = Math.floor(me.z / WAY_FAR), key = `${cx},${cz},${this.nearR},${this.farR},${this.density}`;
+        if (key !== this.active.key && key !== this.pending?.key) {
+            const near = [], far = [];
+            for (let j = -this.nearR; j <= this.nearR; j++) for (let i = -this.nearR; i <= this.nearR; i++) near.push([cx + i, cz + j]);
+            for (let j = -this.farR; j <= this.farR; j++) for (let i = -this.farR; i <= this.farR; i++) far.push([fx + i, fz + j]);
+            this.pending = { key, near, far, hole: [(cx - this.nearR) * C, (cz - this.nearR) * C, (cx + this.nearR + 1) * C, (cz + this.nearR + 1) * C] };
+            // A square built for another tier's density is built again; the old one is drawn until the new set is whole.
+            this.queue = [...near.filter(k => this.near.get(k.join())?.density !== this.density).map(k => [k, false]), ...far.filter(k => this.far.get(k.join())?.density !== this.density).map(k => [k, true])];
+            // Nearest first.
+            const away = ([k, isFar]) => Math.hypot((k[0] + 0.5) * (isFar ? WAY_FAR : C) - me.x, (k[1] + 0.5) * (isFar ? WAY_FAR : C) - me.z);
+            this.queue.sort((a, b) => away(a) - away(b));
+        }
+        const started = performance.now();
+        // A square is built a few things at a time, so even a city's never holds a frame up.
+        while ((this.building || this.queue.length) && (now || performance.now() - started < 3)) {
+            if (!this.building) { const [k, isFar] = this.queue.shift(); this.building = { k, isFar, steps: isFar ? WayModels.squareSteps(this.world, k[0], k[1], WAY_FAR, 16, true, this.density) : WayModels.squareSteps(this.world, k[0], k[1], C, this.density < 0.5 ? 16 : 32, false, this.density) }; }      // Low's ground is 4 m to a cell
+            const step = this.building.steps.next();
+            if (!step.done) continue;
+            const { k, isFar } = this.building, sq = step.value;
+            this.building = null;
+            this.renderer.upload(sq);
+            sq.ground = sq.props = sq.water = null;
+            const map = isFar ? this.far : this.near, old = map.get(k.join());
+            if (old) this.retired.push(old);
+            map.set(k.join(), sq);
+        }
+        if (this.pending && !this.queue.length && !this.building) {
+            const p = this.pending, keepNear = new Set(p.near.map(k => k.join())), keepFar = new Set(p.far.map(k => k.join()));
+            for (const [map, keep] of [[this.near, keepNear], [this.far, keepFar]]) for (const [k, sq] of map) if (!keep.has(k)) { this.renderer.release(sq); map.delete(k); }
+            for (const sq of this.retired) this.renderer.release(sq);
+            this.retired.length = 0;
+            this.active = { near: [...this.near.values()], far: [...this.far.values()], hole: p.hole, key: p.key };
+            this.pending = null;
+            this.cast();
+        }
+    }
+
+    // ---- Who lives here ---------------------------------------------------------------------------
+    // Everyone the near squares call for, kept if they were already about.
+    cast() {
+        const L = WayLogic, seen = new Set(), night = this.light ? this.light.lit : 0, wet = this.weather.wet;
+        for (const sq of this.active.near) {
+            sq.spawns.forEach((s, index) => {
+                const id = `${sq.cx},${sq.cz},${index}`;
+                seen.add(id);
+                if (this.actors.has(id)) return;
+                const made = [], v = s.v ?? L.hash(sq.cx * 31 + index, sq.cz, 5), r = k => WayModels.rnd(v + 0.01, k);
+                const life = this.config.life;
+                if (s.k === 'folk') {
+                    // Fewer about after dark and in the rain; the guards stay.
+                    if (s.role !== 'guard' && (r(1) > life * (0.5 + 0.5 * this.density) || (night > 0.6 && r(2) < 0.6) || (wet > 0.3 && r(3) < 0.6))) { this.actors.set(id, made); return; }
+                    const look = WayActors.townsfolk(v, s.role), heading = this.world.heading(s.z);
+                    made.push({ kind: 'folk', role: s.role, look, x: s.x, z: s.z, z0: s.z, d: s.d, yaw: s.faceTo !== undefined ? heading + s.faceTo : s.yaw, range: s.range || 0, dir: r(4) < 0.5 ? -1 : 1, stride: r(5), v, wave: 0 });
+                    if (s.role === 'chat') made.push({ kind: 'folk', role: 'chat', look: WayActors.townsfolk(r(6), 'chat'), x: s.x + Math.sin(s.yaw) * 1.1, z: s.z + Math.cos(s.yaw) * 1.1, yaw: s.yaw + Math.PI, v: r(6), stride: 0, wave: 0 });
+                } else if (s.kind === 'sails' || s.kind === 'beam') made.push({ kind: s.kind, x: s.at[0], y: s.at[1], z: s.at[2], yaw: s.yaw || 0 });
+                else if (s.kind === 'boat') made.push({ kind: 'boat', x: s.x, y: s.y, z: s.z, yaw: v * 6, v, sail: s.sail });
+                else if (s.kind === 'camp') { if (L.camp(this.world, s.slot)?.tended) made.push({ kind: 'camp', x: s.x, y: s.y, z: s.z, yaw: s.yaw, d: s.d, v, look: WayActors.townsfolk(v, 'sit') }); }
+                else if (s.kind === 'child') for (let i = 0; i < s.n * Math.min(1, life); i++) made.push({ kind: 'folk', role: 'child', look: WayActors.townsfolk(r(10 + i), 'child'), x: s.x, z: s.z, x0: s.x, z0: s.z, yaw: 0, stride: i / 3, v: r(10 + i), turn: i / s.n * 6.28, wave: 0 });
+                else {
+                    const n = Math.max(1, Math.round((s.n || 1) * (0.4 + 0.6 * this.density) * Math.min(1.5, life)));
+                    for (let i = 0; i < n; i++) {
+                        const a = r(20 + i) * 6.28, d = i ? 1.5 + 4 * r(30 + i) : 0;
+                        made.push({ kind: s.kind, x: s.x + Math.sin(a) * d, z: s.z + Math.cos(a) * d, x0: s.x, z0: s.z, y: s.y, yaw: r(40 + i) * 6.28, v: r(50 + i), gait: r(60 + i), moving: 0, graze: 1, timer: 2 + 9 * r(70 + i), state: 'idle', fold: 1, alt: 0, perch: s.perch || 0 });
+                    }
+                }
+                this.actors.set(id, made);
+            });
+        }
+        for (const id of this.actors.keys()) if (!seen.has(id)) this.actors.delete(id);
+    }
+
+    // ---- A frame ---------------------------------------------------------------------------------
+    frame(now) {
+        if (!this.isRunning) return;
+        const gap = now - (this.lastTime || now), dtMs = Math.min(Math.max(gap, 0), 100);
+        this.lastTime = now;
+        this.watchGpu(gap);
+        this.update(dtMs);
+        this.stream();
+        this.draw();
+        this.animationId = requestAnimationFrame(t => this.frame(t));
+    }
+
+    // Late frames for a few seconds: give something up. A long calm spell: try taking it back, once.
+    watchGpu(gap) {
+        const gpu = this.gpu;
+        if (this.flat || this.host.params.thumb || gap <= 0) return;
+        gap = Math.min(gap, 3000);
+        const due = 1000 / (this.host.quality.fps || 60);
+        gpu.pace += (gap - gpu.pace) * 0.2;
+        if (gpu.pace > Math.max(due * 1.7, 45)) {
+            gpu.calm = 0;
+            gpu.late += gap;
+            if (gpu.late > 2500 && gpu.step < WAY_GPU.length - 1) this.gpuStep(1);
+        } else {
+            gpu.late = 0;
+            gpu.calm += gap;
+            if (gpu.calm > 90000 && gpu.step > 0 && !gpu.gaveUp) { gpu.gaveUp = true; this.gpuStep(-1); }
+        }
+    }
+    gpuStep(by) {
+        const gpu = this.gpu;
+        gpu.step += by;
+        gpu.late = gpu.calm = gpu.pace = 0;
+        this.host.storage.set('gpu', gpu.step);
+        this.applyQuality();
+        this.resize();
+    }
+
+    update(dtMs) {
+        const L = WayLogic, dt = dtMs / 1000, c = this.config, w = this.world, j = this.journey;
+        this.seconds += dt;
+        this.frameDt = dt;
+        // The hour.
+        if (c.time === 'cycle') this.day = (this.day + dt / (c.dayMinutes * 60)) % 1;
+        else if (c.time === 'clock') { const d = this.host.now(); this.day = (d.getHours() + d.getMinutes() / 60 + d.getSeconds() / 3600) / 24; }
+        else { const gap = ((WAY_TIMES[c.time] - this.day + 1.5) % 1) - 0.5; this.day = (this.day + gap * (1 - Math.exp(-dt / 1.2)) + 1) % 1; }
+        L.weatherStep(this.weather, dt, c.weather, Math.random, c.rainOften);
+        const sky = this.sky = L.bodies(this.day), overcast = L.smooth(0.55, 1, this.weather.cloud);
+        const light = this.light = L.light(sky.sunEl, overcast);
+
+        L.journeyStep(j, dt, w, { pace: c.pace, night: light.night, camps: c.campfire, rests: c.rests });
+        const me = this.standing = L.standing(j, w);
+        this.cold = w.cold(j.z);
+
+        // The wind, and what it carries.
+        const gust = 1.2 + 2.2 * this.weather.wet + 0.6 * Math.sin(this.seconds / 7.1), bearing = 2.2 + 0.4 * Math.sin(this.seconds / 31);
+        this.wind = [Math.sin(bearing) * gust, 0, Math.cos(bearing) * gust];
+        this.cloudDrift[0] += dt * 0.0034;
+        this.cloudDrift[1] += dt * 0.0015;
+
+        // The camera: cuts in the cinematic view, and a hand on the view when dragged.
+        this.cut += dt;
+        this.shot.t += dt;
+        if (c.camera === 'drift' && this.shot.t > L.SHOTS[this.shot.index % L.SHOTS.length].secs) {
+            this.shot = { index: this.shot.index + 1, t: 0, z0: j.z, span: L.WALK * c.pace * L.SHOTS[(this.shot.index + 1) % L.SHOTS.length].secs };
+            this.cut = 0;
+            this.snap = true;
+        }
+        const g = this.glance;
+        g.idle += dt;
+        if (!g.held && g.idle > 4) { const k = 1 - Math.exp(-dt / 1.1); g.yaw -= g.yaw * k; g.pitch -= g.pitch * k; }
+        this.pan += (this.panTarget - this.pan) * (1 - Math.exp(-dt / 0.35));
+        const want = L.camera(c.camera, j, w, this.seconds, this.shot), cam = this.cam, still = this.host.reducedMotion;
+        if (c.camera === 'first' && still) want.y = me.y + 1.66 * (1 - 0.42 * j.sit);
+        // Never under the ground or the water, whatever the shot asked for.
+        want.y = Math.max(want.y, w.surface(want.x, want.z) + 0.45, w.water(want.x, want.z) + 0.5);
+        if (this.snap || this.cam.x === 0) Object.assign(cam, want);
+        else {
+            const k = 1 - Math.exp(-dt * (c.camera === 'drift' ? 30 : 5)), kh = 1 - Math.exp(-dt * (c.camera === 'drift' ? 30 : 3.2));
+            cam.x += (want.x - cam.x) * k; cam.y += (want.y - cam.y) * k; cam.z += (want.z - cam.z) * k;
+            let turn = (want.heading - cam.heading) % (2 * Math.PI);
+            if (turn > Math.PI) turn -= 2 * Math.PI;
+            if (turn < -Math.PI) turn += 2 * Math.PI;
+            cam.heading += turn * kh;
+            cam.pitch += (want.pitch - cam.pitch) * kh;
+        }
+        this.justCut = this.snap;
+        this.snap = false;
+
+        const fade = dt / 1.5;
+        if (this.shadowFade !== this.shadowTarget) {
+            this.shadowFade = L.clamp(this.shadowFade + Math.sign(this.shadowTarget - this.shadowFade) * fade, 0, 1);
+            if (this.shadowFade === 0) this.applyQuality();
+        }
+        this.stepActors(dt, me);
+        this.stepRoad(dt, me);
+        this.stepSky(dt, me);
+    }
+    snapCamera() { this.snap = true; this.update(0); }
+
+    // Everyone's own small life.
+    stepActors(dt, me) {
+        const L = WayLogic, w = this.world, t = this.seconds, cam = this.cam;
+        // A sidestep: whoever is on foot gives way to the camera, the traveller and each other, and drifts back after.
+        const folk = [];
+        for (const group of this.actors.values()) for (const a of group) if (a.kind === 'folk' && Math.abs(a.x - me.x) + Math.abs(a.z - me.z) < 90) folk.push(a);
+        for (const a of folk) {
+            let px = 0, pz = 0;
+            const ax = a.x + (a.ox || 0), az = a.z + (a.oz || 0);
+            const push = (x, z, reach) => { const dx = ax - x, dz = az - z, d = Math.hypot(dx, dz); if (d < reach) { const k = (reach - d) / Math.max(d, 0.05); px += dx * k; pz += dz * k; } };
+            // Further from the lens in front of it than behind: nobody's head fills a corner of the picture.
+            push(cam.x, cam.z, (ax - cam.x) * Math.sin(cam.heading) + (az - cam.z) * Math.cos(cam.heading) > 0 ? 6.2 : 3);
+            if (a.role === 'stroll' || a.role === 'child') { push(me.x, me.z, 1.3); for (const b of folk) if (b !== a) push(b.x + (b.ox || 0), b.z + (b.oz || 0), 0.95); }
+            const k = this.justCut ? 1 : Math.min(1, dt * 5), back = px || pz ? 0 : Math.min(1, dt * 0.6);      // at a cut they are already out of the way
+            a.ox = L.clamp(((a.ox || 0) + px * k) * (1 - back), -6.5, 6.5);
+            a.oz = L.clamp(((a.oz || 0) + pz * k) * (1 - back), -6.5, 6.5);
+        }
+        for (const group of this.actors.values()) {
+            for (const a of group) {
+                const dx = me.x - a.x, dz = me.z - a.z, near = Math.hypot(dx, dz);
+                if (a.kind === 'folk') {
+                    a.wave = near < 7 && a.role !== 'guard' && a.role !== 'child' && a.v < 0.6 ? Math.min(1, a.wave + dt * 3) : Math.max(0, a.wave - dt * 2);
+                    if (a.role === 'stroll') {
+                        // Up and down the street, turning at the ends of a beat.
+                        a.z += a.dir * 0.95 * dt * w.at(a.z).cos;
+                        if (Math.abs(a.z - a.z0) > a.range) a.dir = a.z > a.z0 ? -1 : 1;
+                        a.x = w.place(a.z, a.d)[0];
+                        const to = w.heading(a.z) + (a.dir < 0 ? Math.PI : 0);
+                        let turn = (to - a.yaw) % (2 * Math.PI);
+                        if (turn > Math.PI) turn -= 2 * Math.PI;
+                        if (turn < -Math.PI) turn += 2 * Math.PI;
+                        a.yaw += turn * Math.min(1, dt * 4);
+                        a.stride += 0.95 * dt / 1.4;
+                    } else if (a.role === 'child') {
+                        a.turn += dt * 1.25;
+                        a.x = a.x0 + Math.sin(a.turn) * 2.1; a.z = a.z0 + Math.cos(a.turn) * 1.8;
+                        a.yaw = a.turn + Math.PI / 2;
+                        a.stride += dt * 2.6;
+                    } else if (a.role === 'guard' || a.role === 'stand') a.head = L.clamp(Math.atan2(dx, dz) - a.yaw, -1, 1) * (near < 20 ? 1 : 0);
+                    continue;
+                }
+                if (a.kind === 'sails') { a.turn = (a.turn || 0) + dt * (0.5 + 0.25 * this.weather.wet); continue; }
+                if (a.kind === 'boat' || a.kind === 'beam' || a.kind === 'camp') continue;
+                // Animals.
+                if (a.perch) { a.head = near < 25 ? L.clamp(Math.atan2(dx, dz) - a.yaw, -1.3, 1.3) : 0; continue; }       // the cat on the wall only watches
+                a.timer -= dt;
+                const shy = a.kind === 'deer' || a.kind === 'rabbit' || a.kind === 'crow' || a.kind === 'pigeon' || a.kind === 'hen';
+                if (a.kind === 'wisp' || a.kind === 'gull') continue;
+                if (a.kind === 'duck') { a.turn = (a.turn || a.v * 6) + dt * 0.25; a.x = a.x0 + Math.sin(a.turn + a.v * 9) * 3 * (0.5 + a.v); a.z = a.z0 + Math.cos(a.turn + a.v * 9) * 3 * (0.5 + a.v); a.yaw = a.turn + a.v * 9 + Math.PI / 2; continue; }
+                if (a.kind === 'crow' || a.kind === 'pigeon') {
+                    // On the ground until the traveller comes close; then up, round, and down again further off.
+                    if (a.state === 'idle' && near < 9) { a.state = 'fly'; a.timer = 9 + 6 * a.v; a.turn = Math.atan2(-dx, -dz); }
+                    if (a.state === 'fly') {
+                        a.turn += dt * 0.5 * (a.v < 0.5 ? 1 : -1);
+                        a.alt = Math.min(a.alt + dt * 3.2, 7 + 6 * a.v) * (a.timer < 2.5 ? Math.max(0, a.timer / 2.5) : 1);
+                        a.x += Math.sin(a.turn) * 6 * dt; a.z += Math.cos(a.turn) * 6 * dt; a.yaw = a.turn;
+                        if (a.timer < 0) { a.state = 'idle'; a.alt = 0; }
+                    }
+                    a.fold = a.state === 'fly' ? 0 : 1;
+                    continue;
+                }
+                if (shy && a.state !== 'flee' && near < (a.kind === 'hen' ? 3 : 14)) { a.state = 'flee'; a.timer = a.kind === 'hen' ? 1.2 : 4.5; a.turn = Math.atan2(-dx, -dz) + (a.v - 0.5); }
+                if (a.state === 'flee') {
+                    const speed = a.kind === 'deer' ? 7 : a.kind === 'hen' ? 2 : 4;
+                    a.x += Math.sin(a.turn) * speed * dt; a.z += Math.cos(a.turn) * speed * dt; a.yaw = a.turn; a.gait += dt * (a.kind === 'deer' ? 2.2 : 3.4); a.moving = 1; a.graze = 0;
+                    if (a.timer < 0) { a.state = 'idle'; a.timer = 6; a.x0 = a.x; a.z0 = a.z; }
+                    continue;
+                }
+                if (a.timer < 0) {
+                    // Graze a while, then amble a few steps to fresh grass.
+                    if (a.state === 'idle') { a.state = 'walk'; a.timer = 2 + 3 * Math.random(); const back = Math.hypot(a.x - a.x0, a.z - a.z0) > 7; a.turn = back ? Math.atan2(a.x0 - a.x, a.z0 - a.z) : Math.random() * 6.28; }
+                    else { a.state = 'idle'; a.timer = 5 + 12 * Math.random(); }
+                }
+                const walking = a.state === 'walk' ? 1 : 0, alert = near < 22 && (a.kind === 'deer' || a.kind === 'rabbit' || a.kind === 'cat');
+                a.moving += (walking - a.moving) * Math.min(1, dt * 3);
+                a.graze += ((walking || alert || a.kind === 'cat' ? 0 : 1) - a.graze) * Math.min(1, dt * 2);
+                if (walking) {
+                    let turn = (a.turn - a.yaw) % (2 * Math.PI);
+                    if (turn > Math.PI) turn -= 2 * Math.PI;
+                    if (turn < -Math.PI) turn += 2 * Math.PI;
+                    a.yaw += turn * Math.min(1, dt * 2);
+                    const speed = a.kind === 'rabbit' ? 1.6 : 0.55;
+                    a.x += Math.sin(a.yaw) * speed * dt; a.z += Math.cos(a.yaw) * speed * dt; a.gait += dt * (a.kind === 'rabbit' ? 2.6 : 0.9);
+                }
+                if (alert) a.head = L.clamp(Math.atan2(dx, dz) - a.yaw, -1.2, 1.2); else a.head = 0;
+            }
+        }
+    }
+
+    // Who else is on the road: carts and walkers coming the other way, and the traveller's own companion.
+    stepRoad(dt, me) {
+        const L = WayLogic, w = this.world, j = this.journey, c = this.config;
+        if (j.distance > this.nextTraffic && c.life > 0 && j.mode === 'walk') {
+            this.nextTraffic = j.distance + (130 + 200 * Math.random()) / Math.max(0.3, c.life);
+            const roll = Math.random(), kind = roll < 0.4 ? 'wagon' : roll < 0.75 ? 'walker' : 'rider';
+            this.traffic.push({ kind, z: j.z + 150, d: -1.25, v: Math.random(), speed: kind === 'walker' ? 1.3 : kind === 'wagon' ? 1.9 : 2.6, gait: 0, look: WayActors.townsfolk(Math.random(), 'stroll'), mate: Math.random() < 0.4 ? WayActors.townsfolk(Math.random(), 'stroll') : null });
+        }
+        for (const t of this.traffic) {
+            t.z -= t.speed * dt * w.at(t.z).cos;
+            t.gait += t.speed * dt / (t.kind === 'walker' ? 1.5 : 1.9);
+        }
+        this.traffic = this.traffic.filter(t => t.z > j.z - 90);
+        // Keep to the right while somebody passes.
+        const passing = this.traffic.some(t => Math.abs(t.z - j.z) < 16);
+        if (j.mode === 'walk') j.d += ((passing ? 0.9 : 0) - j.d) * Math.min(1, dt * 0.9);
+
+        // The companion trots where it likes, a little ahead; when the traveller stops, it sits.
+        const k = this.companion, kind = c.companion;
+        if (kind === 'none' || kind === 'wisp') return;
+        // The pony is led, a length ahead on the verge; the others trot where they like.
+        const ahead = kind === 'pony' ? 2.6 : 2.4 + 0.8 * Math.sin(this.seconds / 9), side = kind === 'pony' ? -1.5 : -1.3 + 0.9 * Math.sin(this.seconds / 13.3);
+        const r = w.at(j.z), tz = j.z + ahead * r.cos, [tx] = w.place(tz, j.d + side);
+        if (k.x === null) { k.x = tx; k.z = tz; k.yaw = me.heading; }
+        const dx = tx - k.x, dz = tz - k.z, gap = Math.hypot(dx, dz), want = j.speed < 0.2 && gap < 0.6 ? 0 : Math.min(gap * 1.6, 5);
+        k.speed += (want - k.speed) * Math.min(1, dt * 4);
+        if (gap > 0.05 && k.speed > 0.05) {
+            const to = Math.atan2(dx, dz);
+            let turn = (to - k.yaw) % (2 * Math.PI);
+            if (turn > Math.PI) turn -= 2 * Math.PI;
+            if (turn < -Math.PI) turn += 2 * Math.PI;
+            k.yaw += turn * Math.min(1, dt * 6);
+            k.x += Math.sin(k.yaw) * k.speed * dt; k.z += Math.cos(k.yaw) * k.speed * dt;
+        }
+        k.gait += k.speed * dt / (kind === 'pony' ? 1.5 : 0.75);
+        k.sit += ((k.speed < 0.1 && kind !== 'pony' ? 1 : 0) - k.sit) * Math.min(1, dt * 2.5);
+    }
+
+    // What crosses the sky, never close: geese, a dragon over the hills, an airship, a balloon.
+    stepSky(dt, me) {
+        const c = this.config;
+        if ((this.nextWonder -= dt) < 0) {
+            this.nextWonder = (50 + 90 * Math.random()) / Math.max(0.3, c.life);
+            const roll = Math.random(), night = this.light.night > 0.5;
+            const kind = !c.wonders || roll < 0.45 ? 'geese' : roll < 0.62 ? 'dragon' : roll < 0.82 ? (night ? 'geese' : 'balloon') : 'airship';
+            const bearing = (Math.random() - 0.5) * 1.6 + this.world.heading(me.z), far = kind === 'geese' ? 150 + 100 * Math.random() : 420 + 240 * Math.random(), cross = Math.random() < 0.5 ? -1 : 1;
+            const high = kind === 'geese' ? 40 + 30 * Math.random() : kind === 'balloon' ? 70 + 40 * Math.random() : 120 + 80 * Math.random();
+            // It starts off to one side, ahead, and crosses.
+            this.wonders.push({ kind, x: me.x + Math.sin(bearing) * far - cross * Math.cos(bearing) * 420, z: me.z + Math.cos(bearing) * far + cross * Math.sin(bearing) * 420, y: me.y + high, yaw: bearing + cross * Math.PI / 2 + (Math.random() - 0.5) * 0.4, speed: kind === 'geese' ? 13 : kind === 'dragon' ? 20 : kind === 'airship' ? 7 : 3, age: 0, v: Math.random() });
+        }
+        for (const s of this.wonders) {
+            s.age += dt;
+            if (s.kind === 'dragon') s.yaw += dt * 0.05 * (s.v < 0.5 ? 1 : -1);
+            s.x += Math.sin(s.yaw) * s.speed * dt; s.z += Math.cos(s.yaw) * s.speed * dt;
+        }
+        this.wonders = this.wonders.filter(s => s.age < (s.kind === 'balloon' ? 260 : 130) && Math.hypot(s.x - me.x, s.z - me.z) < 1200);
+    }
+
+    // ---- Drawing ------------------------------------------------------------------------------------
+    draw() {
+        const L = WayLogic, c = this.config, cam = this.cam, light = this.light, sky = this.sky, scene = this.scene, w = this.world, j = this.journey, me = this.standing;
+        const wet = this.weather.wet, overcast = L.smooth(0.55, 1, this.weather.cloud), still = this.host.reducedMotion;
+        // The view: the camera's own, turned by a drag and by Android's pages.
+        const view = this.view = { x: cam.x, y: cam.y, z: cam.z, heading: cam.heading + this.glance.yaw + this.pan, pitch: L.clamp(cam.pitch + this.glance.pitch, -1.3, 1.3) };
+        scene.cam = view;
+        const aspect = this.width / this.height;
+        let tanY = Math.tan(c.fov / 2 * L.RAD);
+        if (aspect < 1) {
+            // A phone held upright still sees 48° across; and looks up a little, for more sky and less road.
+            tanY = Math.min(1.1, Math.max(tanY, Math.tan(24 * L.RAD) / aspect));
+            if (c.camera !== 'drift') view.pitch += 0.17 * (1 - aspect);
+        }
+        scene.tanY = tanY;
+        scene.lift = (this.host.insets.bottom || 0) / this.height;
+
+        // The lamp of the hour: the sun, then the big moon.
+        const useSun = sky.sunEl > -4, moon = sky.moons[0], moonUp = L.smooth(0.0, 0.25, moon[1]) * L.smooth(-4, -9, sky.sunEl) * (1 - 0.7 * overcast);
+        const sunFade = L.smooth(-4, -1.5, sky.sunEl);
+        scene.light = light;
+        scene.sunDir = sky.sun;
+        scene.lightDir = useSun ? sky.sun : moon[1] > 0.05 ? moon : [0.3, 0.9, 0.3];
+        scene.lightCol = useSun ? light.sun.map(v => v * sunFade) : [0.075 * moonUp, 0.115 * moonUp, 0.24 * moonUp];
+        scene.sunCol = light.sun.map(v => v * sunFade);
+        scene.glow = light.sun.map(v => v * (0.2 + 0.5 * light.golden) * sunFade);
+        scene.moons = sky.moons;
+        const n = light.night;
+        scene.moonCol = [0.5 + 1.3 * n, 0.52 + 1.3 * n, 0.58 + 1.4 * n, 0.7 + 1.0 * n, 0.5 + 0.6 * n, 0.3 + 0.3 * n].map(v => v * (1 - 0.85 * overcast));
+        scene.stars = light.stars;
+        scene.time = this.seconds;
+        scene.lit = light.lit;
+        scene.wet = wet * (1 - this.cold);
+        // The air: clear by day, soft at dawn, close in the rain; mist lies in the low ground.
+        const b = w.biome(j.z), misty = b.near.biome === 'forest' || b.near.biome === 'grove' || b.near.biome === 'lake' || b.near.biome === 'moor' ? 1 : 0.4;
+        scene.fog = [1 / (this.reach + 458) + 0.0003 * light.golden + 0.0035 * wet + 0.0003 * n, (0.001 + 0.003 * light.golden * (1 - light.day * 0.5) + 0.0016 * n) * misty, w.at(j.z).y + 3 - view.y, this.reach];
+        scene.wind = [this.wind[0] * 0.16, this.wind[2] * 0.16, this.seconds, still ? 0.3 : 1];
+        scene.cloud = [L.mix(0.66, 0.3, this.weather.cloud), 0.1, 0.96];
+        // Clouds: white by day, lit from below and dark above at the ends of it.
+        scene.cloudCol = [...light.sun.map((v, i) => v * sunFade * (0.75 + 0.6 * light.golden) + light.fill[i] * (1.25 - 0.6 * light.golden) + n * 0.1), L.mix(1.7, 0.8, Math.max(overcast, light.golden * 0.8))];
+        scene.cloudOff = this.cloudDrift;
+        const alpine = Math.max(b.a === 'pass' ? 1 - b.t : 0, b.b === 'pass' ? b.t : 0);
+        scene.range = [0.1 + 0.1 * alpine, j.z / 60000, 0.085 + 0.02 * alpine - 0.04 * w.season(j.z).snow];
+        scene.near = this.active.near;
+        scene.far = this.active.far;
+        scene.hole = this.active.hole;
+        // Shadows: about the traveller, fading as the light gets low or dull.
+        scene.focus = [me.x - view.x, me.y - view.y, me.z - view.z];
+        scene.shadowReach = this.host.quality.tier === 'high' ? 110 : 70;
+        scene.shadow = this.shadowFade * (1 - 0.85 * overcast) * L.smooth(0.03, 0.14, scene.lightDir[1]) * (useSun ? 0.9 : 0.6);
+
+        this.lamps = [];
+        if (!this.flat) {
+            this.moving.clear();
+            this.glows.clear();
+            this.puffs.clear();
+            this.drawLife(view, me);
+            this.drawLights(view, me);
+        }
+        this.lamps.sort((p, q) => q[7] - p[7]);
+        scene.lamps = this.lamps.slice(0, 4);
+        scene.moving = this.moving;
+        scene.glows = this.glows;
+        scene.puffs = this.puffs;
+
+        // What falls: rain, or snow where it is cold; else leaves, petals, or the grove's motes.
+        const season = w.season(j.z), box = this.renderer.box;
+        let vel = [this.wind[0], -9.5, this.wind[2]];
+        if (wet > 0.02) {
+            const snow = this.cold > 0.5;
+            scene.fall = wet * (snow ? 0.8 : 1);
+            vel = snow ? [this.wind[0], -1.3, this.wind[2]] : vel;
+            scene.streak = snow ? 1 / 90 : 1 / 26;
+            scene.dropSize = snow ? 0.05 : 0.02;
+            scene.flutter = snow ? 0.4 : 0;
+            scene.fallTint = snow ? [0.95, 0.96, 1, 0.9] : [0.78, 0.83, 0.94, 0.5];
+        } else {
+            const leaves = Math.max(season.index === 2 ? 1 - season.t : season.next === 2 ? season.t : 0, 0), petals = season.index === 0 ? 1 - season.t : season.next === 0 ? season.t : 0;
+            const wooded = b.near.biome === 'forest' || b.near.biome === 'meadow' || b.near.biome === 'lake' || b.near.biome === 'farm' ? 1 : 0, grove = b.near.biome === 'grove' ? 1 : 0;
+            scene.fall = grove ? 0.08 : Math.max(leaves, petals) * wooded * 0.045;
+            vel = grove ? [this.wind[0] * 0.1, 0.25, this.wind[2] * 0.1] : [this.wind[0] * 0.5, -0.8, this.wind[2] * 0.5];
+            scene.streak = 1 / 200;
+            scene.dropSize = grove ? 0.04 : 0.085;
+            scene.flutter = 0.9;
+            scene.fallTint = grove ? [0.5, 1, 0.9, 0.5 + 0.4 * n] : leaves > petals ? [0.86, 0.48, 0.16, 0.95] : [1, 0.78, 0.86, 0.95];
+        }
+        for (let i = 0; i < 3; i++) this.drift[i] = (this.drift[i] + vel[i] * (this.frameDt || 0)) % box[i];
+        scene.fallVel = vel;
+        scene.fallShift = [view.x, view.y, view.z].map((p, i) => (((p - this.drift[i]) % box[i]) + box[i]) % box[i]);
+
+        if (this.flat) this.drawFlat(scene, view, me);
+        else if (!this.renderer.lost) this.renderer.render(scene);
+        // The cinematic cut: a breath of dark either side of it.
+        const dip = c.camera === 'drift' ? Math.max(L.smooth(0.55, 0, this.cut), L.smooth(L.SHOTS[this.shot.index % L.SHOTS.length].secs - 0.5, L.SHOTS[this.shot.index % L.SHOTS.length].secs, this.shot.t)) : L.smooth(0.5, 0, this.cut);
+        const shade = dip.toFixed(2);
+        if (shade !== this.veilShade) { this.veilShade = shade; this.veil.style.opacity = shade; }
+    }
+
+    // Everything that moves, stamped from the camera into one soup; and their lights.
+    drawLife(view, me) {
+        const L = WayLogic, A = WayActors, c = this.config, w = this.world, j = this.journey, out = this.moving, st = this.stack, t = this.seconds, lit = this.light.lit;
+        const rel = (x, y, z) => [x - view.x, y - view.y, z - view.z];
+        const feet = (x, z) => w.surface(x, z);
+        // Nobody is posed who is far off, or behind the eye (unless near enough to throw a shadow into the picture).
+        const sh = Math.sin(view.heading), ch = Math.cos(view.heading);
+        const inView = (x, z, far = 150) => { const dx = x - view.x, dz = z - view.z, away = Math.hypot(dx, dz); return away < far && (away < 12 || dx * sh + dz * ch > -4); };
+
+        // The traveller (not their own body from behind their own eyes), and the companion.
+        const look = A.LOOKS[c.traveller] || A.LOOKS.ranger, lantern = lit > 0.35;
+        if (c.camera !== 'first') {
+            const p = rel(me.x, me.y, me.z);
+            A.person(out, st, p[0], p[1], p[2], look, { yaw: me.heading, stride: j.stride, moving: j.moving, sit: j.sit, t, lantern, lit: true, act: j.sit > 0.6 ? 'warm' : '', head: j.look * 0.5 });
+        }
+        if (lantern || look.hand === 'crystal') {
+            // The light they carry: a glow at the staff's head, and a pool about their feet.
+            const hx = me.x + Math.cos(me.heading) * 0.35 + Math.sin(me.heading) * 0.3, hz = me.z - Math.sin(me.heading) * 0.35 + Math.cos(me.heading) * 0.3, p = rel(hx, me.y + 1.75 - 0.5 * j.sit, hz), k = look.hand === 'crystal' ? [0.45, 0.85, 1.0] : [1.0, 0.62, 0.26], s = look.hand === 'crystal' ? 0.35 + 0.65 * lit : lit;
+            if (c.camera !== 'first') this.glows.add(p[0], p[1], p[2], 1.1, k[0] * 0.5 * s, k[1] * 0.5 * s, k[2] * 0.5 * s, 1);
+            this.lamps.push([p[0], p[1], p[2], k[0] * 1.5 * s, k[1] * 1.5 * s, k[2] * 1.5 * s, 16, 100]);
+        }
+        const kind = c.companion, k = this.companion;
+        if (kind === 'wisp') {
+            const a = t * 0.7, p = rel(me.x + Math.sin(a) * 1.3, me.y + 1.9 + 0.3 * Math.sin(t * 1.3), me.z + Math.cos(a * 1.3) * 1.3), s = 0.5 + 0.5 * lit;
+            this.glows.add(p[0], p[1], p[2], 0.55, 0.5 * s, 0.9 * s, 0.8 * s, 1);
+            this.glows.add(p[0], p[1], p[2], 0.14, 0.9, 1, 1, 1);
+            this.lamps.push([p[0], p[1], p[2], 0.3 * lit, 0.7 * lit, 0.6 * lit, 9, 60]);
+        } else if (kind !== 'none' && k.x !== null) {
+            const p = rel(k.x, feet(k.x, k.z), k.z);
+            A.beast(out, st, kind, p[0], p[1], p[2], { yaw: k.yaw, gait: k.gait, moving: Math.min(1, k.speed / 1.2), sit: k.sit, t, bound: false });
+        }
+
+        // The camp: the fire the traveller sits by, and other travellers' fires along the road.
+        const fire = (x, y, z, strength) => {
+            const p = rel(x, y, z), flick = 0.8 + 0.2 * Math.sin(t * 11) * Math.sin(t * 7.3) + 0.1 * Math.sin(t * 23);
+            st.reset(p[0], p[1], p[2], t * 0.6, 1).size(strength, strength * (0.85 + 0.25 * flick), strength);
+            out.stamp(WayModels.fixed('fire'), st.top, null, 0, Math.floor(t * 9) & 255, 1);
+            this.glows.add(p[0], p[1] + 0.5, p[2], 2.2 * strength, 1.0 * flick * strength * 0.55, 0.5 * flick * strength * 0.55, 0.14 * strength * 0.55, 1);
+            this.glows.add(p[0], p[1] + 0.06, p[2], 5.5, 0.5 * flick * strength * (0.3 + 0.7 * lit), 0.24 * flick * strength * (0.3 + 0.7 * lit), 0.07 * strength * (0.3 + 0.7 * lit), 1, 1);
+            this.lamps.push([p[0], p[1] + 0.7, p[2], 2.6 * flick * strength, 1.2 * flick * strength, 0.4 * strength, 26, 90 * strength]);
+            for (let i = 0; i < 5; i++) {              // sparks, and a thread of smoke
+                const age = (t * 0.55 + i / 5) % 1, sx = Math.sin(i * 2.4 + t * 0.7) * 0.25 * age;
+                this.glows.add(p[0] + sx, p[1] + 0.6 + age * 2.2, p[2] + Math.cos(i * 1.9) * 0.2 * age, 0.07, 1.0 * (1 - age) * strength, 0.6 * (1 - age) * strength, 0.2 * (1 - age) * strength, 1);
+            }
+            this.smoke(view, [x, y + 0.9, z], 0.6 * strength);
+        };
+        if (j.camp && j.fire > 0.02) fire(j.camp.x, j.camp.y, j.camp.z, j.fire);
+
+        // The road's other travellers.
+        for (const tr of this.traffic) {
+            const [x] = w.place(tr.z, tr.d), y = feet(x, tr.z), yaw = w.heading(tr.z) + Math.PI, p = rel(x, y, tr.z);
+            if (!inView(x, tr.z, 190)) continue;
+            if (tr.kind === 'walker') {
+                A.person(out, st, p[0], p[1], p[2], tr.look, { yaw, stride: tr.gait, moving: 1, t, size: tr.look.size, act: Math.abs(tr.z - j.z) < 8 ? 'wave' : '' });
+                if (tr.mate) A.person(out, st, p[0] - Math.cos(yaw) * 0.9, p[1], p[2] + Math.sin(yaw) * 0.9, tr.mate, { yaw, stride: tr.gait + 0.3, moving: 1, t, size: tr.mate.size });
+            } else {
+                const fz = Math.cos(yaw), fx = Math.sin(yaw);
+                A.beast(out, st, 'horse', p[0] + fx * (tr.kind === 'wagon' ? 3.2 : 0), p[1], p[2] + fz * (tr.kind === 'wagon' ? 3.2 : 0), { yaw, gait: tr.gait, moving: 1, t }, tr.v < 0.5 ? [150, 110, 80] : [210, 200, 190]);
+                if (tr.kind === 'wagon') {
+                    st.reset(p[0], p[1], p[2], yaw, 1);
+                    out.stamp(A.wagon(), st.top, null, 0, 0, lit > 0.3 ? 1 : 0);
+                    for (const [wx, wz] of [[-0.92, 0.9], [0.92, 0.9], [-0.92, -0.9], [0.92, -0.9]]) { st.push().move(wx, 0.6, wz).rx(tr.gait * 3).rz(Math.PI / 2); out.stamp(WayModels.fixed('wheel'), st.top); st.pop(); }
+                    A.person(out, st, p[0] + fx * 1.25, p[1] + 0.52, p[2] + fz * 1.25, tr.look, { yaw, stride: 0, moving: 0, sit: 1, t, size: tr.look.size });
+                    if (lit > 0.3) { this.glows.add(p[0] + fx * 1.2, p[1] + 1.8, p[2] + fz * 1.2, 1.6, 0.5 * lit, 0.32 * lit, 0.14 * lit, 1); this.lamps.push([p[0] + fx * 1.2, p[1] + 1.8, p[2] + fz * 1.2, 1.2 * lit, 0.75 * lit, 0.32 * lit, 14, 50]); }
+                } else A.person(out, st, p[0] + fx * 0.1, p[1] + 0.98, p[2] + fz * 0.1, tr.look, { yaw, stride: 0, moving: 0, sit: 1, t, size: tr.look.size, act: Math.abs(tr.z - j.z) < 8 ? 'wave' : '' });
+            }
+        }
+
+        // Those who live here.
+        for (const group of this.actors.values()) {
+            for (const a of group) {
+                if (!inView(a.x, a.z, a.kind === 'beam' || a.kind === 'sails' ? 400 : 160)) continue;
+                if (a.kind === 'folk') {
+                    const fx = a.x + (a.ox || 0), fz = a.z + (a.oz || 0), p = rel(fx, feet(fx, fz), fz), sitting = a.role === 'sit' || a.role === 'fish';
+                    A.person(out, st, p[0], p[1] - (sitting ? 0.02 : 0), p[2], a.look, { yaw: a.yaw, stride: a.stride, moving: a.role === 'stroll' || a.role === 'child' ? 1 : 0, sit: sitting ? 1 : 0, t: t + a.v * 9, size: a.look.size, head: a.head || 0, act: a.wave > 0.3 ? 'wave' : a.role === 'chat' ? 'chat' : a.role === 'hoe' ? 'hoe' : a.role === 'fish' ? 'fish' : '' });
+                } else if (a.kind === 'sails') {
+                    const p = rel(a.x, a.y, a.z);
+                    st.reset(p[0], p[1], p[2], a.yaw, 1).rz(a.turn || 0);
+                    out.stamp(WayModels.fixed('sails'), st.top);
+                } else if (a.kind === 'beam') {
+                    if (lit < 0.2) continue;
+                    const p = rel(a.x, a.y, a.z);
+                    // Two beams sweeping round, as beads of light thinning with distance.
+                    for (const turn of [0, Math.PI]) for (let i = 1; i <= 7; i++) { const reach = i * i * 1.6 + 2, k = lit * 0.34 / i; this.glows.add(p[0] + Math.sin(t * 0.5 + turn) * reach, p[1] - reach * 0.03, p[2] + Math.cos(t * 0.5 + turn) * reach, 1.2 + reach * 0.16, k, 0.9 * k, 0.62 * k, 1); }
+                } else if (a.kind === 'boat') {
+                    const p = rel(a.x, a.y + 0.05 + 0.05 * Math.sin(t * 1.1 + a.v * 9), a.z);
+                    st.reset(p[0], p[1], p[2], a.yaw + 0.1 * Math.sin(t * 0.3 + a.v * 5), 1.25).rz(0.05 * Math.sin(t * 0.9 + a.v * 7));
+                    out.stamp(WayModels.fixed('boat', Math.floor(a.v * 3)), st.top);
+                    if (a.sail) out.stamp(WayModels.fixed('sail'), st.top);
+                } else if (a.kind === 'camp') {
+                    if (this.light.night < 0.4 || (j.camp && j.camp.slot !== undefined && Math.abs(j.camp.z - a.z) < 2)) continue;
+                    fire(a.x, a.y, a.z, 1);
+                    const side = a.d > 0 ? -1 : 1, hd = w.heading(a.z), sx = a.x + Math.cos(hd) * side * 1.5, sz = a.z - Math.sin(hd) * side * 1.5, p = rel(sx, feet(sx, sz), sz);
+                    A.person(out, st, p[0], p[1], p[2], a.look, { yaw: hd + (side > 0 ? -Math.PI / 2 : Math.PI / 2), stride: 0, moving: 0, sit: 1, t: t + 3, act: 'warm', size: a.look.size });
+                    const tp = rel(a.x - Math.cos(hd) * side * 2.6, a.y, a.z + Math.sin(hd) * side * 2.6);
+                    st.reset(tp[0], tp[1], tp[2], hd, 1);
+                    out.stamp(WayModels.fixed('tent'), st.top, [null, null, null, WayModels.BRIGHT[Math.floor(a.v * 5.99)]]);
+                } else if (a.kind === 'wisp') {
+                    // By day a wisp is a mote of light; at night it is a lantern with no one holding it.
+                    const s = 0.12 + 0.88 * lit, p = rel(a.x + Math.sin(t * 0.5 + a.v * 20) * 2.5, a.y + 1.2 + 0.7 * Math.sin(t * 0.8 + a.v * 9), a.z + Math.cos(t * 0.37 + a.v * 30) * 2.5);
+                    this.glows.add(p[0], p[1], p[2], 0.2 + 0.4 * lit, 0.4 * s, 0.9 * s, 0.75 * s, 1);
+                    this.glows.add(p[0], p[1], p[2], 0.08, 0.9 * s, 1 * s, 1 * s, 1);
+                } else if (a.kind === 'gull') {
+                    const turn = t * 0.35 * (a.v < 0.5 ? 1 : -1) + a.v * 20, rad = 14 + 16 * a.v, p = rel(a.x0 + Math.sin(turn) * rad, a.y + 11 + 12 * a.v + 2 * Math.sin(t * 0.3 + a.v * 7), a.z0 + Math.cos(turn) * rad);
+                    A.bird(out, st, 'gull', p[0], p[1], p[2], { yaw: turn + (a.v < 0.5 ? 1 : -1) * Math.PI / 2, flap: 0.12 * Math.sin(t * 1.4 + a.v * 9), roll: (a.v < 0.5 ? -1 : 1) * 0.3 });
+                } else if (a.kind === 'duck' || a.kind === 'hen' || a.kind === 'crow' || a.kind === 'pigeon') {
+                    const y = a.kind === 'duck' ? a.y - 0.02 : feet(a.x, a.z) + 0.1 + (a.alt || 0), p = rel(a.x, y, a.z), flying = a.state === 'fly';
+                    A.bird(out, st, a.kind, p[0], p[1] + (a.kind === 'hen' ? 0.08 : 0), p[2], { yaw: a.yaw, fold: flying ? 0 : 1, flap: flying ? 0.7 * Math.sin(t * 13 + a.v * 9) : 0, pitch: !flying && a.kind !== 'duck' ? 0.35 * Math.max(0, Math.sin(t * 2.1 + a.v * 30)) : 0 });
+                } else if (A.BEASTS[a.kind]) {
+                    const p = rel(a.x, feet(a.x, a.z) + a.perch, a.z), coat = a.kind === 'cat' ? [[60, 56, 60], [220, 140, 60], [236, 232, 224], [130, 126, 124]][Math.floor(a.v * 3.99)] : a.kind === 'cow' && a.v < 0.4 ? [70, 60, 56] : null;
+                    A.beast(out, st, a.kind, p[0], p[1], p[2], { yaw: a.yaw, gait: a.gait, moving: a.moving, graze: a.kind === 'cat' ? 0 : a.graze, t: t + a.v * 9, size: 0.85 + 0.3 * a.v, sit: a.kind === 'cat' && a.state === 'idle' ? 1 : 0, head: a.head || 0, bound: a.state === 'flee' && a.kind === 'deer' }, coat);
+                }
+            }
+        }
+
+        // The sky's travellers.
+        for (const s of this.wonders) {
+            const p = rel(s.x, s.y, s.z);
+            if (s.kind === 'geese') { for (let i = 0; i < 9; i++) { const row = Math.ceil(i / 2), side = i % 2 ? 1 : -1; A.bird(out, st, 'goose', p[0] + (Math.cos(s.yaw) * side * row * 1.6 - Math.sin(s.yaw) * row * 1.9), p[1] + 0.2 * Math.sin(t + i), p[2] + (-Math.sin(s.yaw) * side * row * 1.6 - Math.cos(s.yaw) * row * 1.9), { yaw: s.yaw, flap: 0.55 * Math.sin(t * 5.5 + i * 0.7) }); } }
+            else if (s.kind === 'dragon') A.bird(out, st, 'dragon', p[0], p[1], p[2], { yaw: s.yaw, flap: 0.5 * Math.sin(t * 1.9), roll: (s.v < 0.5 ? -1 : 1) * 0.12, pitch: 0.06 * Math.sin(t * 0.4) });
+            else {
+                st.reset(p[0], p[1] + 2 * Math.sin(t * 0.2), p[2], s.yaw, 1);
+                out.stamp(s.kind === 'airship' ? A.airship() : A.balloon(), st.top, [null, null, null, WayModels.BRIGHT[Math.floor(s.v * 5.99)]], 0, 0, lit > 0.2 ? 1 : 0);
+            }
+        }
+    }
+
+    // A chimney's or a fire's smoke: a few puffs, each its own age, rising and leaning with the wind.
+    smoke(view, at, thick = 1) {
+        const t = this.seconds, f = this.light.fill, grey = 0.2 + 0.26 * this.light.day;
+        for (let i = 0; i < 5; i++) {
+            const age = (((t * 0.09 + i / 5 + at[0] * 0.37) % 1) + 1) % 1, a = (1 - age) * Math.min(1, age * 4) * 0.17 * thick;
+            this.puffs.add(at[0] - view.x + this.wind[0] * age * age * 1.6 + Math.sin(age * 5 + i) * 0.25, at[1] - view.y + age * 6, at[2] - view.z + this.wind[2] * age * age * 1.6, 0.45 + age * 2.2, (0.2 + f[0]) * grey * a, (0.2 + f[1]) * grey * a, (0.2 + f[2]) * grey * a, a);
+        }
+    }
+
+    // Lit windows and lanterns: a glow each, a pool on the ground under a street lamp, and the nearest few as real lamps.
+    drawLights(view, me) {
+        const lit = this.light.lit, t = this.seconds, L = WayLogic;
+        for (const sq of this.active.near) {
+            if (Math.hypot(sq.x0 + 32 - view.x, sq.z0 + 32 - view.z) > 230) continue;
+            if (lit > 0.02) {
+                for (const l of sq.lights) {
+                    const x = l[0] - view.x, y = l[1] - view.y, z = l[2] - view.z;
+                    if (x * x + z * z > (l[7] ? 32400 : 8100)) continue;          // window glows to 90 m, lanterns to 180
+                    const flick = 0.9 + 0.1 * Math.sin(t * 5 + l[0] * 3), s = lit * flick * (l[7] ? 0.42 : 0.11);
+                    this.glows.add(x, y, z, l[3], l[4] * s, l[5] * s, l[6] * s, 1);
+                    if (l[7] === 2) {
+                        this.glows.add(x, y - 2.38, z, 5.2, l[4] * lit * 0.34, l[5] * lit * 0.3, l[6] * lit * 0.22, 1, 1);
+                        const away = Math.hypot(l[0] - me.x, l[2] - me.z), k = L.smooth(46, 26, away) * lit * flick;
+                        if (k > 0) this.lamps.push([x, y, z, 1.5 * k, 0.95 * k, 0.45 * k, 22, k * (60 - away)]);
+                    }
+                }
+            }
+            if (Math.hypot(sq.x0 + 32 - view.x, sq.z0 + 32 - view.z) < 170) for (const s of sq.smokes) this.smoke(view, s);
+        }
+        // Fireflies on a warm night, wherever there is cover: a box of them about the eye, each blinking in its own time.
+        const b = this.world.biome(me.z).near.biome, cover = b === 'forest' || b === 'grove' || b === 'lake' || b === 'meadow' ? 1 : 0;
+        const flies = Math.round(46 * this.density * cover * this.light.night * (1 - this.cold) * (1 - this.weather.wet));
+        for (let i = 0; i < flies; i++) {
+            const h = k => L.hash(i, k, 91), bx = 44, by = 5, x = ((h(0) * bx - view.x + Math.sin(t * 0.3 + i) * 1.5) % bx + bx) % bx - bx / 2, z = ((h(1) * bx - view.z + Math.cos(t * 0.23 + i * 2) * 1.5) % bx + bx) % bx - bx / 2;
+            const blink = Math.max(0, Math.sin(t * (0.9 + h(2)) + i * 2.4)) ** 3, y = this.world.ground(view.x + x, view.z + z) - view.y + 0.4 + h(3) * by * 0.5 + 0.3 * Math.sin(t * 0.7 + i);
+            if (blink > 0.05 && x * x + z * z > 9) this.glows.add(x, y, z, 0.075, 0.8 * blink, 1.0 * blink, 0.3 * blink, 1);
+        }
+    }
+
+    // ---- Without WebGL: the same walk, painted flat ---------------------------------------------------
+    // Slices of the real ground, back to front, in the country's colours; the
+    // road; the nearest trees and houses as cut-outs; the traveller.
+    drawFlat(scene, view, me) {
+        const L = WayLogic, ctx = this.ctx, W = this.canvas.width, H = this.canvas.height, w = this.world, light = scene.light, j = this.journey;
+        const tone = c => `rgb(${c.map(v => Math.round(255 * Math.pow(1 - Math.exp(-v * 1.3), 0.4545))).join(',')})`;
+        const sky = ctx.createLinearGradient(0, 0, 0, H * 0.62);
+        sky.addColorStop(0, tone(light.zenith));
+        sky.addColorStop(1, tone(light.horizon.map((v, i) => v + scene.glow[i] * 0.5)));
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.fillStyle = sky;
+        ctx.fillRect(0, 0, W, H);
+        const tanY = scene.tanY, tanX = tanY * W / H, sh = Math.sin(view.heading), ch = Math.cos(view.heading), sp = Math.sin(view.pitch), cp = Math.cos(view.pitch);
+        // A point in the world, on the screen: [x, y, depth] or null behind the eye.
+        const project = (x, y, z) => {
+            const dx = x - view.x, dy = y - view.y, dz = z - view.z, fwd = (dx * sh + dz * ch) * cp + dy * sp;
+            if (fwd < 0.5) return null;
+            return [W / 2 + (dx * ch - dz * sh) / fwd / tanX * W / 2, H / 2 * (1 - scene.lift) - (dy * cp - (dx * sh + dz * ch) * sp) / fwd / tanY * H / 2, fwd];
+        };
+        const lightOn = [0, 1, 2].map(i => light.fill[i] * 0.9 + scene.lightCol[i] * 0.55);
+        const shade = (c, depth, k = 1) => tone(L.mix3(c.map((v, i) => (v / 255) ** 2 * lightOn[i] * k), light.horizon, 1 - Math.exp(-depth * scene.fog[0] * 1.2)));
+        // The far ranges.
+        const horizon = H / 2 * (1 - scene.lift) + Math.tan(view.pitch) / tanY * H / 2;
+        ctx.fillStyle = tone(L.mix3([0.2, 0.24, 0.32].map((v, i) => v * lightOn[i]), light.horizon, 0.6));
+        ctx.beginPath();
+        ctx.moveTo(0, H);
+        for (let i = 0; i <= 48; i++) { const a = view.heading + Math.atan((i / 24 - 1) * tanX); ctx.lineTo(i / 48 * W, horizon - (0.03 + 0.12 * L.noise1(a * 3 + 40, 9) + 0.03 * L.noise1(a * 14, 4)) * (1 + scene.range[0] * 5) / tanY * H / 2); }
+        ctx.lineTo(W, H);
+        ctx.fill();
+        // The ground, in slices.
+        const rows = 30, cols = 30, grass = WayModels.GRASS, season = w.season(j.z);
+        for (let row = rows - 1; row >= 0; row--) {
+            const d = 5 * Math.pow(1.21, row), r = w.at(view.z + ch * d * cp), g0 = grass[r.near.biome], g = L.mix3(g0[season.index], g0[season.next], season.t), snowy = Math.max(season.snow, r.near.biome === 'pass' ? 0.35 : 0);
+            ctx.fillStyle = shade(L.mix3(g, [242, 246, 252], snowy).map(v => v * (0.9 + 0.1 * (row % 2))), d);
+            ctx.beginPath();
+            ctx.moveTo(-10, H + 10);
+            let wetFrom = -1;
+            const pts = [];
+            for (let col = 0; col <= cols; col++) {
+                const side = (col / cols * 2 - 1) * 1.15 * tanX, x = view.x + (sh + ch * side) * d, z = view.z + (ch - sh * side) * d, level = w.water(x, z), y = Math.max(w.ground(x, z), level);
+                const p = project(x, y, z) || [W / 2 + side * W, H, d];
+                pts.push([p[0], p[1], y === level]);
+                ctx.lineTo(p[0], p[1]);
+                void wetFrom;
+            }
+            ctx.lineTo(W + 10, H + 10);
+            ctx.fill();
+            // Water lies flat in its slice.
+            ctx.fillStyle = tone(L.mix3([0.1, 0.3, 0.42].map((v, i) => v * lightOn[i] * 1.3), light.horizon, 0.35));
+            for (let col = 0; col < cols; col++) if (pts[col][2] && pts[col + 1][2]) ctx.fillRect(pts[col][0] - 1, Math.min(pts[col][1], pts[col + 1][1]), pts[col + 1][0] - pts[col][0] + 2, H * 0.08 * 5 / (5 + d));
+        }
+        // The road ahead, as a ribbon.
+        ctx.fillStyle = shade([176, 142, 98], 20);
+        ctx.beginPath();
+        const edge = [];
+        for (let k = 0; k < 44; k++) {
+            const z = view.z - 4 + k * k * 0.14 + k * 0.8, r = w.at(z);
+            const a = project(r.x - 1.9 / r.cos, w.surface(r.x, z) + 0.03, z), bb = project(r.x + 1.9 / r.cos, w.surface(r.x, z) + 0.03, z);
+            if (a && bb) edge.push([a, bb]);
+        }
+        edge.forEach(([a], i) => (i ? ctx.lineTo(a[0], a[1]) : ctx.moveTo(a[0], a[1])));
+        for (let i = edge.length - 1; i >= 0; i--) ctx.lineTo(edge[i][1][0], edge[i][1][1]);
+        ctx.fill();
+        // What stands near, back to front.
+        const C = L.CHUNK, cx = Math.floor(me.x / C), cz = Math.floor(me.z / C);
+        this.flatItems = this.flatItems?.key === `${cx},${cz}` ? this.flatItems : { key: `${cx},${cz}`, list: [] };
+        if (!this.flatItems.list.length) for (let jj = -1; jj <= 3; jj++) for (let i = -2; i <= 2; i++) for (const item of w.scatter(cx + i, cz + jj)) if (item.k === 'tree' || item.k === 'house' || item.k === 'tower' || item.k === 'lamp') this.flatItems.list.push(item);
+        const seen = [];
+        for (const item of this.flatItems.list) { const p = project(item.x, item.y, item.z); if (p && p[2] < 240 && p[0] > -200 && p[0] < W + 200) seen.push([p, item]); }
+        seen.sort((a, b) => b[0][2] - a[0][2]);
+        const lit = light.lit;
+        for (const [p, item] of seen) {
+            const s = H / 2 / tanY / p[2];           // pixels to a metre there
+            if (item.k === 'tree') {
+                const tall = 8 * item.s, leaf = WayModels.leafTint(item.kind, w.season(item.z), item.v);
+                ctx.fillStyle = shade([104, 76, 56], p[2]);
+                ctx.fillRect(p[0] - 0.25 * s, p[1] - tall * 0.5 * s, 0.5 * s, tall * 0.5 * s);
+                ctx.fillStyle = shade(leaf, p[2], 1.1);
+                ctx.beginPath();
+                if (item.kind === 'fir' || item.kind === 'pine') { ctx.moveTo(p[0], p[1] - tall * 1.3 * s); ctx.lineTo(p[0] + 2.6 * item.s * s, p[1] - tall * 0.2 * s); ctx.lineTo(p[0] - 2.6 * item.s * s, p[1] - tall * 0.2 * s); }
+                else ctx.ellipse(p[0], p[1] - tall * 0.72 * s, 3.4 * item.s * s, 2.9 * item.s * s, 0, 0, 6.2832);
+                ctx.fill();
+            } else if (item.k === 'house' || item.k === 'tower') {
+                const wide = (item.w || item.r * 2) * s, tall = (item.h || 0.5 + item.floors * 2.75) * s, roof = item.k === 'tower' ? item.r * 2 * s : item.dp * 0.6 * s;
+                ctx.fillStyle = shade(item.k === 'tower' ? [156, 152, 146] : WayModels.PLASTER[Math.floor(item.v * 4.99)], p[2]);
+                ctx.fillRect(p[0] - wide / 2, p[1] - tall, wide, tall);
+                ctx.fillStyle = shade([192, 88, 58], p[2]);
+                ctx.beginPath(); ctx.moveTo(p[0] - wide * 0.56, p[1] - tall); ctx.lineTo(p[0], p[1] - tall - roof); ctx.lineTo(p[0] + wide * 0.56, p[1] - tall); ctx.fill();
+                ctx.fillStyle = lit > 0.3 ? `rgba(255,190,96,${lit})` : shade([64, 84, 112], p[2]);
+                for (let f = 0; f < (item.floors || 2); f++) for (const side of [-0.25, 0.25]) ctx.fillRect(p[0] + side * wide - 0.4 * s, p[1] - (1.9 + f * 2.75) * s, 0.8 * s, 1.0 * s);
+            } else {
+                ctx.fillStyle = shade([58, 58, 66], p[2]);
+                ctx.fillRect(p[0] - 0.08 * s, p[1] - 2.7 * s, 0.16 * s, 2.7 * s);
+                if (lit > 0.3) { ctx.fillStyle = `rgba(255,190,96,${lit})`; ctx.beginPath(); ctx.arc(p[0], p[1] - 2.5 * s, 0.3 * s, 0, 6.2832); ctx.fill(); }
+            }
+        }
+        // The traveller: a cloak, a head, a staff, and the stride.
+        const p = this.config.camera === 'first' ? null : project(me.x, me.y, me.z);
+        if (p) {
+            const s = H / 2 / tanY / p[2], look = WayActors.LOOKS[this.config.traveller] || WayActors.LOOKS.ranger, swing = Math.sin(j.stride * 6.2832) * 0.28 * j.moving, sit = j.sit * 0.45;
+            ctx.strokeStyle = shade(look.legs, p[2]);
+            ctx.lineWidth = Math.max(1, 0.2 * s);
+            ctx.lineCap = 'round';
+            for (const side of [-1, 1]) { ctx.beginPath(); ctx.moveTo(p[0] + side * 0.1 * s, p[1] - (0.88 - sit) * s); ctx.lineTo(p[0] + (side * 0.12 + side * swing * 0.5) * s, p[1]); ctx.stroke(); }
+            ctx.fillStyle = shade(look.cloak, p[2]);
+            ctx.beginPath(); ctx.moveTo(p[0] - 0.3 * s, p[1] - (1.5 - sit) * s); ctx.lineTo(p[0] + 0.3 * s, p[1] - (1.5 - sit) * s); ctx.lineTo(p[0] + 0.42 * s, p[1] - (0.35 - sit * 0.5) * s); ctx.lineTo(p[0] - 0.42 * s, p[1] - (0.35 - sit * 0.5) * s); ctx.fill();
+            ctx.beginPath(); ctx.arc(p[0], p[1] - (1.66 - sit) * s, 0.2 * s, 0, 6.2832); ctx.fill();
+            ctx.strokeStyle = shade([120, 88, 60], p[2]);
+            ctx.lineWidth = Math.max(1, 0.06 * s);
+            ctx.beginPath(); ctx.moveTo(p[0] + 0.45 * s, p[1]); ctx.lineTo(p[0] + (0.42 + swing * 0.3) * s, p[1] - (1.95 - sit) * s); ctx.stroke();
+            if (lit > 0.3) { ctx.fillStyle = `rgba(255,190,96,${lit})`; ctx.beginPath(); ctx.arc(p[0] + 0.45 * s, p[1] - (1.6 - sit) * s, 0.12 * s, 0, 6.2832); ctx.fill(); }
+        }
+    }
+
+    // Where a point of the world falls on the screen, in CSS pixels: [x, y], or null behind the eye.
+    onScreen(x, y, z) {
+        const v = this.view, sh = Math.sin(v.heading), ch = Math.cos(v.heading), sp = Math.sin(v.pitch), cp = Math.cos(v.pitch), dx = x - v.x, dy = y - v.y, dz = z - v.z;
+        const fwd = (dx * sh + dz * ch) * cp + dy * sp, tanY = this.scene.tanY;
+        if (fwd < 0.2) return null;
+        return [this.width / 2 + (dx * ch - dz * sh) / fwd / (tanY * this.width / this.height) * this.width / 2, this.height / 2 * (1 - this.scene.lift) - (dy * cp - (dx * sh + dz * ch) * sp) / fwd / tanY * this.height / 2];
+    }
+
+    // What the tests ask about.
+    debugState() {
+        const j = this.journey, me = this.standing, r = this.world.at(j.z);
+        return {
+            flat: this.flat, z: j.z, d: j.d, distance: j.distance, speed: j.speed, mode: j.mode, y: me.y, ground: this.world.surface(me.x, me.z), biome: r.near.biome, place: r.near.place,
+            near: this.active.near.length, far: this.active.far.length, queue: this.queue.length, actors: [...this.actors.values()].reduce((n, g) => n + g.length, 0), moving: this.moving.n,
+            glows: this.glows.n, puffs: this.puffs.n, lamps: this.lamps.length, day: this.day, lit: this.light.lit, night: this.light.night, stars: this.light.stars, cloud: this.weather.cloud, wet: this.weather.wet,
+            fall: this.scene.fall, shadow: this.scene.shadow, camera: this.config.camera, cam: { ...this.cam }, clear: this.cam.y - Math.max(this.world.surface(this.cam.x, this.cam.z), this.world.water(this.cam.x, this.cam.z)),
+            feet: this.onScreen(me.x, me.y, me.z), head: this.onScreen(me.x, me.y + 1.85, me.z), shot: this.shot.index, veil: Number(this.veilShade), tanY: this.scene.tanY, gpu: this.gpu.step, drawn: this.renderer.drawn, traffic: this.traffic.length, wonders: this.wonders.length, companion: this.companion.x !== null,
+        };
+    }
+}
