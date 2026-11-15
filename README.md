@@ -38,7 +38,7 @@ Click one to see it live.
 | [<img src="web/wallpapers/lighthouse/thumb.webp" width="200" alt="Lighthouse">](https://nealhardesty.github.io/wallpapers/?w=lighthouse)<br>🌊 Lighthouse | [<img src="web/wallpapers/wiki-pond/thumb.webp" width="200" alt="Wiki Pond">](https://nealhardesty.github.io/wallpapers/?w=wiki-pond)<br>🪷 Wiki Pond | [<img src="web/wallpapers/satellites/thumb.webp" width="200" alt="Satellites">](https://nealhardesty.github.io/wallpapers/?w=satellites)<br>🛰️ Satellites | [<img src="web/wallpapers/jellyfin/thumb.webp" width="200" alt="Jellyfin">](https://nealhardesty.github.io/wallpapers/?w=jellyfin)<br>📺 Jellyfin |
 | [<img src="web/wallpapers/harvest/thumb.webp" width="200" alt="Harvest Valley">](https://nealhardesty.github.io/wallpapers/?w=harvest)<br>🌾 Harvest Valley | [<img src="web/wallpapers/weather/thumb.webp" width="200" alt="Weather">](https://nealhardesty.github.io/wallpapers/?w=weather)<br>🌦️ Weather | [<img src="web/wallpapers/world-clock/thumb.webp" width="200" alt="World Clock">](https://nealhardesty.github.io/wallpapers/?w=world-clock)<br>🌍 World Clock | [<img src="web/wallpapers/orrery/thumb.webp" width="200" alt="Orrery">](https://nealhardesty.github.io/wallpapers/?w=orrery)<br>🪐 Orrery |
 | [<img src="web/wallpapers/cat-ornament/thumb.webp" width="200" alt="The Cat vs. the Ornament">](https://nealhardesty.github.io/wallpapers/?w=cat-ornament)<br>🐾 The Cat vs. the Ornament | [<img src="web/wallpapers/last-bulb/thumb.webp" width="200" alt="The Last Bulb on the Strand">](https://nealhardesty.github.io/wallpapers/?w=last-bulb)<br>💡 The Last Bulb on the Strand | [<img src="web/wallpapers/frost/thumb.webp" width="200" alt="Frost on the Glass">](https://nealhardesty.github.io/wallpapers/?w=frost)<br>🧊 Frost on the Glass | [<img src="web/wallpapers/small-christmas/thumb.webp" width="200" alt="A Very Small Christmas">](https://nealhardesty.github.io/wallpapers/?w=small-christmas)<br>🎄 A Very Small Christmas |
-| [<img src="web/wallpapers/sky-island/thumb.webp" width="200" alt="Sky Island">](https://nealhardesty.github.io/wallpapers/?w=sky-island)<br>🏝️ Sky Island | [<img src="web/wallpapers/ice-patrol/thumb.webp" width="200" alt="Ice Patrol">](https://nealhardesty.github.io/wallpapers/?w=ice-patrol)<br>🛩️ Ice Patrol | | |
+| [<img src="web/wallpapers/sky-island/thumb.webp" width="200" alt="Sky Island">](https://nealhardesty.github.io/wallpapers/?w=sky-island)<br>🏝️ Sky Island | [<img src="web/wallpapers/ice-patrol/thumb.webp" width="200" alt="Ice Patrol">](https://nealhardesty.github.io/wallpapers/?w=ice-patrol)<br>🛩️ Ice Patrol | [<img src="web/wallpapers/sumo/thumb.webp" width="200" alt="Sumo Championship">](https://nealhardesty.github.io/wallpapers/?w=sumo)<br>🤼 Sumo Championship | |
 
 The **Fireplace** 🔥 burns wood you'd recognise: furrowed oak, papery birch,
 scaly pine or bleached driftwood (following its Wood Type), round or split,
@@ -178,6 +178,27 @@ a wall you couldn't climb), and five seconds after you let go it takes over
 again. `X` changes the weather, `T` the time of day, `V` the view (canopy,
 panel only, or none), `R` the radar's range. It is the one wallpaper drawn with
 WebGL, so it wants a GPU; without one it carries on as paper-cut ridgelines.
+
+**Sumo Championship** 🤼 is a tournament that never ends, drawn as a
+woodblock print that moves and written in Japanese. Sixteen wrestlers meet
+over fifteen days, each under a ring name built the way real ones are but
+from words no stable would choose: 団子山 (Dangoyama, "Dumpling
+Mountain"), 河馬川 (Kabagawa, "Hippo River"), 昼寝の桜 (Hirunenozakura,
+"Afternoon Nap Cherry"). Each bout has its ritual (salt thrown, a leg
+raised and stamped down, the crouch and the stare) and is then decided in a
+few seconds by its own small physics: shoves, thrusts, belt grips,
+slap-downs, a sidestep on the straw. The referee's fan points to the
+winner and the caption names the winning technique (決まり手). At the end
+of the last day (千秋楽) the cup is given, with a prize of doubtful use,
+and the new ranking sheet (新番付) is written: promotions and demotions,
+two down to the second division and two up, the old retire, and two cups
+in a row make a 横綱. Ranks, days, results and the standings (星取表, a
+white disc for a win and a black one for a loss) are all in Japanese, with
+the reading and meaning in small English underneath unless you turn that
+off; a device with no Japanese font gets Roman letters instead. The league
+is remembered between visits and only moves on while you watch. An upset
+brings the crowd's cushions down; a tap throws one. `N` goes to the
+finish, `B` holds up the ranking sheet.
 
 **Weather** 🌦️ is the forecast for your place from Open-Meteo (no key),
 over a sky that is the weather outside: drifting clouds, rain or snow,
@@ -534,7 +555,7 @@ you tick it, then seven, with the rest folded away:
   this one (or let it go), `V` another island passes, `O` a small one comes to orbit, `B` a balloon, `W` weather, `S` season, `H` holiday · Weather `V` next view (days, hours, now), `U` °C or °F,
   `R` refresh now · World Clock `V` next view (map, faces, board), `M` centre
   the map on the next place, `L` next map look · Orrery `=`/`+` faster, `-` slower,
-  `0` back to now, `L` look, `S` scale, `V` from above or tilted · Matrix `R` the code comes down again, `L` next look (the 1999 film, the sequels, Resurrections), `H` next colour · Cherry Blossoms `G` a gust, `B` shake the bough, `N` a new tree, `S` next sky, `W` next ground · Ice Patrol `W` `A` `S` `D` or arrows fly it, `Q`/`E` throttle, `X` weather, `T` time of day, `V` view, `R` radar range · Fireplace `L` a log burns through and a fresh one lands, `W` the wood laid again.
+  `0` back to now, `L` look, `S` scale, `V` from above or tilted · Matrix `R` the code comes down again, `L` next look (the 1999 film, the sequels, Resurrections), `H` next colour · Cherry Blossoms `G` a gust, `B` shake the bough, `N` a new tree, `S` next sky, `W` next ground · Sumo Championship `N` to the finish or the next bout, `B` the ranking sheet · Ice Patrol `W` `A` `S` `D` or arrows fly it, `Q`/`E` throttle, `X` weather, `T` time of day, `V` view, `R` radar range · Fireplace `L` a log burns through and a fresh one lands, `W` the wood laid again.
 
 **Touch and drag:** tap or drag on Zen Garden (rake), Koi Pond (ripples;
 feed them in settings), Murmuration (you're the falcon), Lantern Festival,

@@ -35,7 +35,9 @@ wallpapers' only home. They run in three hosts:
 > (§10.30, 2026-11-06) the fourth, making 41. Sky Island (§10.31,
 > 2026-11-11), a pixel-art town on an island in the sky, makes 42. Ice
 > Patrol (§10.34, 2026-11-14), a flight over an ice world from the pilot's
-> seat and the first wallpaper drawn with WebGL, makes 43.
+> seat and the first wallpaper drawn with WebGL, makes 43. Sumo
+> Championship (§10.35, 2026-11-15), a never-ending tournament as a moving
+> woodblock print, makes 44.
 > Phase 10, the clock overlay (§4.9), was built 2026-10-28; §10 holds the
 > other ideas.
 > Windows (§10.25): the W0 spikes passed, and W1 (the desktop core: behind
@@ -149,6 +151,7 @@ Added for Christmas, drawn in code (designs in §10.27–§10.30):
 | `small-christmas` | small-christmas-logic.js, small-christmas-art.js, small-christmas.js | ~800 lines | Interactive (tap the tree, the train, the floor); pixel art at its own resolution, scaled up pixelated; palettes, blink patterns, the train's oval and the hops (`SmallXmasLogic`), unit-tested; follows `host.now()` (the sleigh on Christmas Eve, presents on Christmas Day); keys T, M, L, S |
 | `sky-island` | sky-island-logic.js, sky-island-art.js, sky-island-land.js, sky-island-actors.js, sky-island.js (and Harvest's harvest-sky.js) | ~3.5k lines | Interactive (tap a cat, a person, the lake, a house at night, the sky); 16-bit pixel art at its own resolution (a pixel is 2 CSS px on a laptop or 1080p), scaled up pixelated; a terraced island seen from above and in front, its underside, the sea of cloud and the ground far below all baked; the calendar (seasons, holidays, Easter, the owner's dates), the names and the island's three-tier layout from a seed (`SkyIslandLogic`), unit-tested over 240 layouts; follows `host.now()` (the hour, the season, every holiday); keys N, P, V, O, B, W, S, H |
 | `ice-patrol` | ice-logic.js, ice-gl.js, ice-cockpit.js, ice-patrol.js | ~2.5k lines | The first on WebGL (§10.34): an endless snowfield from two baked noise fields, the same height formula in JavaScript and in the shaders (`IceLogic`), unit-tested; a 2D cockpit whose radar sweeps the real terrain; a 2D ridgeline fallback without WebGL; its own watch on the GPU; interactive (fly it by hand: keys and a drag; the autopilot takes it back after 5 s); keys W A S D, arrows, Q, E, X, T, V, R |
+| `sumo` | sumo-logic.js, sumo-art.js, sumo.js | ~1.3k lines | No network; a league of invented wrestlers kept in `host.storage`, written in Japanese with an English gloss (§10.35); bouts and tournaments pure and seeded (`SumoLogic`), unit-tested; interactive (a tap throws a cushion); evening by `host.now()`; keys N, B |
 
 About 1.7 MB of JavaScript in total. **Not imported:** links, weather, clocks,
 search/omniprompt, custom links, status bar, Docker/nginx, the homepage's
@@ -839,6 +842,7 @@ and the commits.
 | harvest | `mist`, `beams` (medium) | Land is one baked layer per resize; trees, leaves, apples, geese and clouds are baked sprites; the world is washed once per frame with the hour's light; leaves, apples, smoke, sparks and flocks × density; squirrels × (0.5 + 0.5 density) |
 | sky-island | — | The canvas is the picture's own pixels (2 CSS px each on a laptop or 1080p, 3 at 1440p, 4 at 4K, 1 on a phone), scaled up pixelated; the terrain (three tiers, their cliffs, the underside, the water) is one bake per season, the roots three sway frames, the sea of cloud two tileable strips and the ground one, rebaked with the light; everything that stands still (houses, trees, lamps, props, trimmings) is baked into one layer per street band, drawn in turn with whoever moves (trees are drawn live, swaying, only on High); the sky is a dithered bake redone as the light changes, the stars four baked twinkle frames; the night is one `source-atop` wash over the island's scratch, with the lit windows and lamps one glow layer redone only when the lit set changes; a passing island is one bake with a few live bits; 20 fps by default (a setting), 12 on Low, paced on a steady timeline through idleUntil; folk × (0.4 + 0.6 density), strays, wildlife, rain, snow, leaves, fireflies × density. Bench 2026-11-11 (v2): Low 21%, Medium 38%, High 46% |
 | ice-patrol | `shadows`, `sparkle` (medium) | WebGL: one grid drawn nine times (96, 64 or 48 cells a side by density), heights and slopes from two noise textures; shadows ten marched steps on High, six on Medium, compiled out when shed (after fading); flakes × density, wrapped in the vertex shader; the cockpit frame painted per light step, the gauges at 15 Hz on a strip of their own; a few dozen height lookups a frame on the main thread. The GPU is watched by the wallpaper itself (late frames give up shadows, then render scale to 0.4), since the governor only times callbacks; software renderers start there. No WebGL: 34 ridgelines a frame in 2D |
+| sumo | — | The hall is one cached canvas (rebuilt on resize, tier and at dusk); a frame draws it, three jointed figures and a few marks. The crowd's rows and the cushions thrown follow density |
 
 #### In the panel
 
@@ -4157,6 +4161,84 @@ save; a phone's panel fits above the gesture bar.
 **Not built:** terrain as a height-field ray march (dearer per pixel,
 and software renderers crawl); sound; spray off the snow behind the
 wingmen; putting it in Seasonal's winter months (the owner's call).
+
+### 10.35 Sumo Championship (`sumo`, owner pick, 2026-11-15)
+
+From an idea list the owner shared ("two miniature sumo wrestlers attempt
+to force each other out of a circular ring ... each has strength, balance,
+agility and aggression ratings; a tournament bracket automatically
+progresses, complete with promotions and demotions"). The first of three
+sports wallpapers; the owner chose a different look for each (this one a
+side-on woodblock print) and seasons that only advance while watched.
+
+**In Japanese (owner, 2026-11-15: "actual Japanese style names, in
+kanji/hiragana; make it Japanese themed").** Ring names are built as real
+ones are (a word, sometimes の, an ending such as 山, 海, 龍, 錦), each
+with its hiragana reading, a romanisation and an English meaning. The
+first words are ones no stable would choose (団子 dumpling, 河馬 hippo,
+昼寝 afternoon nap, 布団 futon), which keeps the fun and makes a clash
+with a real wrestler's name unlikely; it cannot be ruled out, since no
+list of real names is consulted. Stables are invented; the six
+tournaments are named by season or month (初場所, 春場所, 夏場所,
+七月場所, 秋場所, 十一月場所), never by a city. Ranks (横綱, 大関, 関脇,
+小結, 前頭三枚目), days (初日, 中日, 千秋楽), techniques (寄り切り,
+叩き込み, うっちゃり), the standings (星取表) and the news (新番付:
+優勝, 昇進, 陥落, 引退, 新入幕) are the sport's own words. The title is
+written downwards. `gloss` (on by default) puts readings in Roman letters
+and meanings in small English under the Japanese. A device that cannot
+write Japanese (`SumoArt.hasKanji`: two characters drawn once and
+compared, the one pixel read in the wallpaper) gets Roman letters and
+English instead: headless Chrome in CI is such a device.
+
+- **The rules (`SumoLogic`, pure, seeded, unit-tested).**
+  - *Wrestlers:* sixteen, each with strength, balance, agility, aggression
+    and weight (0 to 1), an age and a peak. No first word is used twice on
+    a sheet, and no whole name twice in two hundred.
+  - *A bout:* two bodies on the ring's east-west line (the bales at ±1),
+    stepped at 60 Hz. After the charge they move as a pair, pushed by the
+    difference of their drives. Each has `poise`: thrusts, a fast retreat,
+    standing on the straw and failed tricks spend it, and at zero he goes
+    down. Every half second or so each picks a move by its worth just
+    then: push, thrust, belt grip, pull, throw, sidestep, brace. The
+    technique is named from how it ended (eleven of them: `yorikiri`
+    frontal force-out, `hatakikomi` slap-down, `utchari` backward pivot
+    throw at the edge ...). A sidestep at the charge is rare, and the
+    weaker, nimbler man's trick. Bouts run 2 to 25 s, about 5 s typically;
+    the top of the sheet beats the bottom about four times in five.
+  - *A tournament:* fifteen days, a round robin (everyone meets everyone
+    once), ordered so the top man meets his nearest rivals last and each
+    day's best pair fights last. Most wins takes the cup, after a playoff
+    if shared.
+  - *The new sheet (`nextBasho`):* places move by wins over losses; two
+    cups running make a Yokozuna, who is never demoted but retires after
+    two losing tournaments; the old retire; with the lowest losing
+    records that makes two leaving, and two rookies come up (one in four
+    a prodigy). Ratings drift up before a wrestler's peak and down after.
+- **The show (`SumoAnimationManager`).** Per bout: enter, salt, stomp
+  (east then west), crouch, the bout, the referee's fan and a caption,
+  leave. After a day: the standings, with each record as white and black
+  discs. After the fifteenth: the cup and a prize, then the news of the
+  new sheet. `ritual` off skips salt and stomps except in a day's last
+  bout; `pace` scales the ritual. An upset (a Yokozuna beaten, or a man
+  seven places lower winning) brings cushions down.
+- **The look (`SumoArt`).** Flat colours in one dark line, an indigo wash
+  at the top of the sheet, paper grain. The hall (banners with crests that
+  mean nothing, the crowd, the hanging roof and its four tassels, the clay
+  platform and its ring) is one canvas painted per size; each frame draws
+  it, the referee and two jointed figures. Evening by `host.now()` (after
+  six) or pinned. An upright phone hangs the banners across the top.
+- **State:** the league is `host.storage` key `world` (plain data, saved
+  after every bout; never in thumb mode). **Keys:** `N` to the finish, or
+  on to the next thing; `B` the ranking sheet. A tap throws a cushion
+  (`touch`). The panel's "Found a new league" starts again.
+- **Tests.** Unit (`tools/sumo.test.mjs`): names, the schedule, 1,500
+  bouts all ending with a fitting technique, the better man usually but
+  not always winning, thirty tournaments keeping a whole sheet, a saved
+  league carrying on. Smoke: in the ring on frame one, a bout decided and
+  saved and resumed by a new tab; the last day through the cup to the next
+  tournament; a phone's layout and a tap.
+- **Not built:** sound; the lower divisions (only two names a tournament
+  cross the line); special prizes.
 
 ## Open questions
 
