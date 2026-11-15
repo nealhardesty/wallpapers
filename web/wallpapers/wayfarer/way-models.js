@@ -691,7 +691,9 @@ const WayModels = (() => {
         s.quad([-T, -3 + drop1, len], [-T, -3 + drop0, 0], [-T, H + drop0, 0], [-T, H + drop1, len], [-1, 0, 0], [0.6, 0.6, 1, 1]);
         s.paint([176, 172, 164], 0).quad([-T, H + drop0, 0], [T, H + drop0, 0], [T, H + drop1, len], [-T, H + drop1, len], [0, 1, 0]);
         const n = Math.max(2, Math.round(len / 2.4));
-        for (let i = 0; i < n; i += 2) { const z = (i + 0.5) / n * len, d = drop0 + (drop1 - drop0) * z / len; for (const x of [T - 0.2, -T + 0.2]) s.paint(C.stone, 0).box(x, H + d + 0.5, z, 0.22, 0.5, len / n * 0.5, 1); }
+        // (From a way off the battlements are a low kerb each side; close to, merlons.)
+        if (lite) for (const x of [T - 0.2, -T + 0.2]) s.paint(C.stone, 0).box(x, H + (drop0 + drop1) / 2 + 0.3, len / 2, 0.22, 0.3, len / 2, 1);
+        else for (let i = 0; i < n; i += 2) { const z = (i + 0.5) / n * len, d = drop0 + (drop1 - drop0) * z / len; for (const x of [T - 0.2, -T + 0.2]) s.paint(C.stone, 0).box(x, H + d + 0.5, z, 0.22, 0.5, len / n * 0.5, 1); }
         if (grand && !lite) {
             const d = (drop0 + drop1) / 2;
             s.paint([176, 172, 164], 0).box(T + 0.1, H - 1.3 + d, len / 2, 0.16, 0.18, len / 2, 1);
@@ -855,7 +857,7 @@ const WayModels = (() => {
         }
         // What stands here.
         const props = new WaySoup(far ? 2048 : 8192), lights = [], smokes = [], spawns = [], beacons = [];
-        const band = detail > 1 ? 26 : 13;
+        const band = detail > 1 ? 18 : 9;
         const items = [];
         const per = L.CHUNK, across = size / per;
         for (let b = 0; b < across; b++) for (let a = 0; a < across; a++) for (const item of w.scatter(cx * across + a, cz * across + b, far)) items.push(item);
@@ -888,7 +890,7 @@ const WayModels = (() => {
                 temp.clear();
                 // Far off, and in the back rows of a grand city, a house is its shape, its roof and its lit windows; by the road it is trimmed.
                 const lite = far || (item.row >= 2 && !(detail > 1 && item.row < 4)) || (item.row === 1 && detail === 0);
-                const got = house(temp, lite ? { ...item, lite: true } : detail > 0 && Math.abs(item.d) < band + 4 ? { ...item, fine: true } : item), m = place(lx, item.y - 0.25, lz, item.yaw);
+                const got = house(temp, lite ? { ...item, lite: true } : detail > 1 && Math.abs(item.d) < band + 4 ? { ...item, fine: true } : item), m = place(lx, item.y - 0.25, lz, item.yaw);
                 TINT[1] = PLASTER[Math.floor(v * 4.99)]; TINT[2] = lerp3(C.timber, [120, 80, 56], rnd(v, 2)); TINT[3] = BRIGHT[Math.floor(rnd(v, 3) * 5.99)]; TINT[5] = lerp3(ROOFS[item.roof], [255, 255, 255], 0.1 * rnd(v, 4));
                 props.stamp(temp, m, TINT, snow, phase, 1);
                 
@@ -905,13 +907,13 @@ const WayModels = (() => {
             if (item.k === 'wall') {
                 temp.clear();
                 const len = Math.hypot(item.x1 - item.x, item.z1 - item.z), y1 = w.ground(item.x1, item.z1);
-                wall(temp, len, 0, y1 - item.y, item.grand, far);
+                wall(temp, len, 0, y1 - item.y, item.grand, far || detail === 0);
                 props.stamp(temp, place(lx, item.y, lz, Math.atan2(item.x1 - item.x, item.z1 - item.z)), null, snow);
                 continue;
             }
             if (BIGS.has(item.k)) {
                 temp.clear();
-                const got = big(temp, far ? { ...item, lite: true } : item), m = place(lx, item.k === 'drawbridge' ? w.bridge(item.z) ?? item.y : item.y - 0.2, lz, item.yaw);
+                const got = big(temp, far || (detail === 0 && (item.grand || item.k === 'citadel' || item.k === 'cathedral' || item.k === 'hall')) ? { ...item, lite: true } : item), m = place(lx, item.k === 'drawbridge' ? w.bridge(item.z) ?? item.y : item.y - 0.2, lz, item.yaw);
                 TINT[1] = item.k === 'elder' ? leafTint('oak', season, v) : PLASTER[1]; TINT[2] = null; TINT[3] = BRIGHT[Math.floor(v * 5.99)]; TINT[5] = lerp3(ROOFS[item.roof ?? 2], [255, 255, 255], 0.08);
                 props.stamp(temp, m, TINT, snow, phase);
                 const to = p => [m[0] * p[0] + m[2] * p[2] + item.x, p[1] + item.y - 0.2, m[8] * p[0] + m[10] * p[2] + item.z];
@@ -935,7 +937,7 @@ const WayModels = (() => {
                 const g = GRASS[item.b || 'meadow'], gc = lerp3(g[season.index], g[season.next], season.t);
                 TINT[1] = item.k === 'bush' ? leafTint('oak', season, v) : item.k === 'reed' ? [150, 170, 90] : season.snow > 0.5 ? [176, 160, 112] : [gc[0] * 0.92, gc[1] * 0.98, gc[2] * 0.9];
                 TINT[3] = item.k === 'heather' ? [150 + 30 * v, 92, 150] : BRIGHT[Math.floor(v * 5.99)];
-                model3 = small(item.k, Math.floor(v * 3));
+                model3 = detail > 0 && (item.k === 'bush' ? Math.abs(w.lateral(item.x, item.z)) < band : (item.k === 'tuft' || item.k === 'flower') && Math.abs(w.lateral(item.x, item.z)) < band / 2) ? WayDetail.small(item.k, Math.floor(v * 3)) : small(item.k, Math.floor(v * 3));
                 m = place(lx, item.y, lz, item.yaw, item.s * (item.k === 'reed' ? 1.5 : 1.05));
             } else if (item.k === 'rock') { model3 = detail > 0 ? WayDetail.rock(Math.floor(v * 3)) : small('rock', Math.floor(v * 3)); m = place(lx, item.y, lz, item.yaw, item.s * 1.2); }
             else if (item.k === 'lily') { model3 = small('lily', Math.floor(v * 3)); m = place(lx, item.y, lz, v * 6, 0.7 + 0.5 * v); }
@@ -945,10 +947,10 @@ const WayModels = (() => {
                 lit = item.glow ? 1 : 0;
                 if (item.glow && (item.tree || rnd(v, 13) < 0.3)) lights.push([item.x, item.y + (item.tree ? 16 : 0.5), item.z, item.tree ? 9 : 1.6, 0.4, 0.9, 0.75, 1]);
             } else if (item.k === 'lamp') {
-                model3 = fixed('lamp'); m = place(lx, item.y, lz, item.yaw);
+                model3 = (detail > 0 && WayDetail.fixed('lamp')) || fixed('lamp'); m = place(lx, item.y, lz, item.yaw);
                 lights.push([item.x + Math.sin(item.yaw) * 0.5, item.y + 2.45, item.z + Math.cos(item.yaw) * 0.5, 2.4, 1, 0.72, 0.36, 2]);
             } else if (item.k === 'bunting') { model3 = fixed('bunting'); const h = w.heading(item.z); m = mul(place(lx, item.y, lz, h), [item.span / 2, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0]); }
-            else if (item.k === 'stall') { TINT[3] = BRIGHT[Math.floor(v * 5.99)]; model3 = fixed('stall', Math.floor(v * 4.99)); m = place(lx, item.y, lz, item.yaw); darken(item.x, item.z, 2.4, 0.35); }
+            else if (item.k === 'stall') { TINT[3] = BRIGHT[Math.floor(v * 5.99)]; model3 = (detail > 0 && WayDetail.fixed('stall', Math.floor(v * 4.99))) || fixed('stall', Math.floor(v * 4.99)); m = place(lx, item.y, lz, item.yaw); darken(item.x, item.z, 2.4, 0.35); }
             else if (item.k === 'well' || item.k === 'fountain') { TINT[5] = ROOFS[1]; model3 = (detail > 0 && WayDetail.fixed(item.k)) || fixed(item.k); m = place(lx, item.y, lz, item.yaw); }
             else if (item.k === 'boat') {
                 const level = w.water(item.x, item.z);
@@ -956,13 +958,13 @@ const WayModels = (() => {
                 spawns.push({ ...item, kind: 'boat', y: level });
                 continue;
             } else if (item.k === 'jetty') { model3 = fixed('jetty'); m = place(lx, w.water(item.x, item.z) > -1e8 ? w.water(item.x, item.z) : item.y, lz, item.yaw + Math.PI); }
-            else if (item.k === 'bridge') { model3 = fixed('bridge'); m = place(lx, item.deck, lz, item.yaw); }
+            else if (item.k === 'bridge') { model3 = (detail > 0 && WayDetail.fixed('bridge')) || fixed('bridge'); m = place(lx, item.deck, lz, item.yaw); }
             else if (item.k === 'camp') { model3 = fixed('camp'); m = place(lx, item.y, lz, item.yaw + (item.d > 0 ? 0 : Math.PI)); spawns.push({ ...item, kind: 'camp' }); }
             else if (item.k === 'stone') { model3 = fixed('stone', Math.floor(v * 3)); m = item.flat ? mul(place(lx, item.y + 0.5, lz, item.yaw, 1.4), rotX(1.45)) : place(lx, item.y, lz, item.yaw, 1.6, item.h); }
             else if (item.k === 'washing') { model3 = fixed('washing', Math.floor(v * 3)); m = mul(place(lx, item.y + (item.up || 0), lz, item.yaw), [item.span / 2, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0]); }
             else if (item.k === 'clutter' || item.k === 'planter' || item.k === 'board') { TINT[3] = BRIGHT[Math.floor(v * 5.99)]; TINT[5] = ROOFS[1]; model3 = fixed(item.k, Math.floor(v * 3)); m = place(lx, item.y, lz, item.yaw + (item.k === 'clutter' ? v * 0.6 - 0.3 : 0)); darken(item.x, item.z, 1.3, 0.35); }
             else if (item.k === 'fence' || item.k === 'drywall' || item.k === 'sign' || item.k === 'milestone' || item.k === 'shrine' || item.k === 'logs' || item.k === 'bench' || item.k === 'cart' || item.k === 'cairn') {
-                model3 = (detail > 0 && WayDetail.fixed(item.k)) || fixed(item.k, Math.floor(v * 3)); m = place(lx, item.y, lz, item.yaw, item.k === 'cairn' ? 1.5 : 1);
+                model3 = (detail > 0 && WayDetail.fixed(item.k, Math.floor(v * 3))) || fixed(item.k, Math.floor(v * 3)); m = place(lx, item.y, lz, item.yaw, item.k === 'cairn' ? 1.5 : 1);
                 if (item.k === 'shrine') lights.push([item.x, item.y + 0.7, item.z, 1.5, 1, 0.7, 0.34, 1]);
             }
             // Small plants keep their colour in the pass; only winter whitens them.

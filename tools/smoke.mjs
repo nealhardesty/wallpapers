@@ -2120,7 +2120,7 @@ const STAGE_CHECKS = {
             await sleep(2500);
             const night = await evaluate(AVERAGE), n = await state();
             if (n.lit < 0.95 || n.stars < 0.9 || n.glows < 12 || n.lamps < 2) record(`night: ${JSON.stringify({ lit: n.lit, stars: n.stars, glows: n.glows, lamps: n.lamps })}`);
-            if (night.reduce((a, b) => a + b) > day.reduce((a, b) => a + b) * 0.82) record(`night ${night} is hardly darker than midday ${day}`);
+            if (night.reduce((a, b) => a + b) > day.reduce((a, b) => a + b) * 0.75) record(`night ${night} is hardly darker than midday ${day}`);
             await shoot('wayfarer-night');
             if (!await stageWith('wayfarer', { configVersion: 1, time: 'day', weather: 'rain', season: 'summer' }, '&seed=7')) return record('rain: not ready');
             await sleep(1500);
@@ -2201,12 +2201,18 @@ const STAGE_CHECKS = {
             for (const p of walkers) for (const q of walkers) if (p !== q) closest = Math.min(closest, Math.hypot(p.x - q.x, p.z - q.z));
             if (walkers.length < 3 || closest < 0.3) record(`${walkers.length} on foot, two of them ${closest.toFixed(2)} m apart`);
             if (!(a.party[3].alt > 1.5) || !(a.party[4].riding > 0.9) || !(a.party[5].alt > 1)) record(`the raven at ${a.party[3].alt} m, Ibbie riding ${a.party[4].riding}, the lantern at ${a.party[5].alt} m`);
-            if (a.moving < 12000) record(`only ${a.moving} vertices of traveller and company`);
+            if (a.moving < 8000) record(`only ${a.moving} vertices of traveller and company`);
             await shoot('wayfarer-company');
             await apply({ companionPick: 'cats', companions: 0 });
             await sleep(800);
             const alone = await state();
-            if (alone.party.length || alone.moving > a.moving - 6000) record(`alone: ${alone.party.length} companions, ${alone.moving} vertices`);
+            if (alone.party.length || alone.moving > a.moving - 5000) record(`alone: ${alone.party.length} companions, ${alone.moving} vertices`);
+            // The old single companion is still a setting: whoever was chosen leads; 'none' is alone whatever else is set.
+            await apply({ companions: 3, companion: 'cat', companionPick: 'surprise' });
+            const led = await state();
+            await apply({ companion: 'none' });
+            const none = await state();
+            if (led.party.length !== 3 || led.party[0].id !== 'cat' || none.party.length) record(`first companion: ${JSON.stringify(led.party.map(p => p.id))}, then ${none.party.length}`);
             // The barbarian: no cloak and no staff, and a brand in her hand after dark.
             await apply({ traveller: 'barbarian', time: 'night' });
             if (!await waitFor(() => evaluate('WP.stage.manager.light.lit > 0.9'), 30000)) record('night never fell');

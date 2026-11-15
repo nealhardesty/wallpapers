@@ -191,7 +191,8 @@ its own. A traveller and their company follow a road that wanders on for
 ever (nine travellers to choose from: a hooded ranger, a wizard, a bard, a
 knight, a barbarian woman and man in furs, an antlered elf druid who turns
 into a bear, an owl-beast or a great black cat for a stretch, an elf ranger
-with a longbow, and a rogue who slips past the guards unseen; and up to six
+with a longbow, and a rogue who slips past the guards unseen, vaults a fence and stops to
+stroke the cat; and a first companion of your choosing with up to five more
 of 46 companions, from a hound, a donkey and a goose to a dragon whelp, a
 paper-lantern spirit and a snail with a lit window, with Moofy, Butters,
 Waffles, Ras The Destroyer, Ibbie, Maus, Turkey, Harry and Kitty Toes among

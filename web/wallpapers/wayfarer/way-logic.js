@@ -55,7 +55,7 @@ const WayLogic = (() => {
     const ROAD = { half: 1.9, village: 2.7, city: 3.3 };
     // A grand city: its wall's oval (A along the road, B across), the ground levelled for it, the moat outside the wall,
     // the market square, and the rock the castle stands on (d to the city's own side, dz along the road from its middle).
-    const GRAND = { A: 142, B: 112, radius: 150, plaza: 23, moat: [5, 17], rock: { d: 66, dz: 20, r0: 27, r1: 39, h: 16 }, cross: [-74, 0, 74], lanes: [25.4, 50.6] };
+    const GRAND = { A: 142, B: 112, radius: 150, plaza: 23, moat: [5, 17], rock: { d: 66, dz: 20, r0: 27, r1: 40, h: 25 }, cross: [-74, 0, 74], lanes: [25.4, 50.6] };
     // How far outside a grand city's wall a point is (metres along the line from the city's middle; negative inside).
     const beyondWall = (d, dz) => { const away = Math.hypot(d, dz), rho = Math.hypot(d / GRAND.B, dz / GRAND.A); return rho > 1e-6 ? away * (1 - 1 / rho) : -GRAND.B; };
     const moatQ = out => (GRAND.moat[1] - GRAND.moat[0]) / 2 - Math.abs(out - (GRAND.moat[0] + GRAND.moat[1]) / 2);
@@ -92,7 +92,7 @@ const WayLogic = (() => {
         // A grand city wants gentle, open country, and never stands next to another. It lies level from gate to
         // gate, halfway in height between its neighbours, so the road does its climbing outside the walls.
         const height = i => 40 + 12 * hash(i, 0, s(2)) + LAND[BIOMES[biomeIndex(i)]].lift;
-        const couldBeGrand = i => { const b = BIOMES[biomeIndex(i)]; return (b === 'meadow' || b === 'farm') && hash(i, 7, s(2)) < 0.26 * towns; };
+        const couldBeGrand = i => { const b = BIOMES[biomeIndex(i)], before = BIOMES[biomeIndex(i - 1)]; return (b === 'meadow' || b === 'farm') && before !== 'pass' && before !== 'forest' && hash(i, 7, s(2)) < 0.34 * towns; };
         const isGrand = i => couldBeGrand(i) && !couldBeGrand(i - 1);
 
         // A leg: its country, how high its middle lies, and the place there.
@@ -105,8 +105,10 @@ const WayLogic = (() => {
             l = { i, biome, land, zc, e: 40 + 12 * r(0) + land.lift, side: r(1) < 0.5 ? -1 : 1, place: 'none', radius: 0, lake: null, sea: null, mound: null, stream: null, plaza: null };
             // Settled, or a landmark. Cities want room; the pass gets a hamlet.
             const roll = r(2), open = biome !== 'pass' && biome !== 'lake' && biome !== 'coast';
-            if (roll < 0.2 * towns && open) l.place = 'city';
-            else if (roll < 0.56 * towns) l.place = biome === 'pass' ? 'hamlet' : 'village';
+            // (The leg before a grand city keeps to a landmark: nothing stands between the road and the sight of its towers.)
+            const clear = isGrand(i + 1);
+            if (roll < 0.2 * towns && open && !clear) l.place = 'city';
+            else if (roll < 0.56 * towns && !clear) l.place = biome === 'pass' ? 'hamlet' : 'village';
             else l.place = { meadow: r(3) < 0.5 ? 'stones' : 'castle', forest: r(3) < 0.5 ? 'elder' : 'ruin', lake: 'jetty', pass: 'cairn', farm: 'mill', moor: r(3) < 0.5 ? 'abbey' : 'castle', coast: 'lighthouse', grove: 'ring' }[biome];
             // In open, gentle country some of the cities are grand: a wider wall with a moat, and a castle on a rock inside it.
             if (isGrand(i)) { l.place = 'city'; l.grand = GRAND; l.e = (height(i - 1) + height(i + 1)) / 2; }
@@ -394,7 +396,7 @@ const WayLogic = (() => {
                 put('mill', zc - A - 66, -sd * 36, { v: rnd(71), deep: true });
                 // What stands inside, before the houses: they keep clear of all of it.
                 put('citadel', zc + rock.dz, rock.d, { v: rnd(72), far: true, r0: rock.r0 });
-                put('ramp', zc + rock.dz, sd * 8.5, { v: rnd(73), len: Math.abs(rock.d) - rock.r0 - 8.5, rise: rock.h, far: true }, Math.PI);
+                put('ramp', zc + rock.dz, sd * 5.5, { v: rnd(73), len: Math.abs(rock.d) - rock.r0 - 5.5, rise: rock.h, far: true }, Math.PI);
                 put('cathedral', zc + 60, -sd * 66, { v: rnd(74), far: true });
                 put('hall', zc - 38, -sd * 39, { v: rnd(75), far: true });
                 put('markethall', zc + 30, -sd * 33, { v: rnd(76) });
@@ -869,6 +871,8 @@ const WayLogic = (() => {
     // Something worth stopping for near z: which way to look (-1 left, 1 right, 0 ahead), or null.
     function sight(w, z) {
         const r = w.at(z), p = r.near, dz = r.dz;
+        // The first sight of a grand city, from the last of the country before it: toward its castle.
+        if (r.b.grand && Math.abs(z - (r.b.zc - GRAND.A - 215)) < 3) { const to = w.place(r.b.zc + GRAND.rock.dz, r.b.rock.d); return { id: r.b.i * 4 + 0.5, look: clamp((Math.atan2(to[0] - w.roadX(z), to[1] - z) - w.heading(z)) / 1.2, -1, 1), long: 3 }; }
         if ((p.lake || p.sea) && Math.abs(dz + 30) < 3) return { id: p.i * 4, look: (p.lake || p.sea).side };
         // Before a grand city's gate: the whole of it, and the castle above the wall.
         if (p.grand && Math.abs(dz + GRAND.A + 34) < 3) return { id: p.i * 4 + 1, look: p.side * 0.3, long: 5 };
@@ -990,19 +994,21 @@ const WayLogic = (() => {
     // group in turn; a group smaller than the count doubles up (two hounds), but never the named cats.
     function party(seed, options = {}) {
         const count = clamp(Math.round(options.count ?? 3), 0, 6), pick = options.pick || 'surprise';
+        // first: one who always comes (it leads the company and counts toward it); 'none' is nobody at all.
+        if (options.first === 'none') return [];
         if (pick === 'choose') return (options.choice || []).filter(id => COMPANION[id]).slice(0, 6);
         const shuffled = (list, salt) => list.map((c, i) => [hash(seed, i * 31 + salt, 9173), c]).sort((a, b) => a[0] - b[0]).map(e => e[1]);
-        const out = [], has = fn => out.some(id => fn(COMPANION[id]));
+        const out = COMPANION[options.first] && count ? [options.first] : [], has = fn => out.some(id => fn(COMPANION[id]));
         // Not two on a rope, nor two on the pack, when it is left to chance.
         const fits = c => !(c.role === 'led' && has(o => o.role === 'led')) && !(c.role === 'ride' && has(o => o.role === 'ride'));
         if (GROUPS.includes(pick)) {
             const pool = shuffled(COMPANIONS.filter(c => c.group === pick), 1);
-            for (const c of pool) if (out.length < count && fits(c)) out.push(c.id);
+            for (const c of pool) if (out.length < count && fits(c) && !out.includes(c.id)) out.push(c.id);
             for (let lap = 0; out.length < count && lap < 6; lap++) for (const c of pool) if (out.length < count && !c.cat) out.push(c.id);
             return out;
         }
         const order = [COMPANIONS.filter(c => c.group === 'cats'), ...shuffled(GROUPS.slice(1), 2).map(g => COMPANIONS.filter(c => c.group === g))];
-        for (let k = 0; out.length < count; k++) { const pool = shuffled(order[k % order.length], 3 + k).filter(c => !out.includes(c.id) && fits(c) && (k || c.cat)); if (pool.length) out.push(pool[0].id); }
+        for (let k = has(c => c.cat) ? 1 : 0; out.length < count; k++) { const pool = shuffled(order[k % order.length], 3 + k).filter(c => !out.includes(c.id) && fits(c) && (k || c.cat)); if (pool.length) out.push(pool[0].id); }
         return out;
     }
 
@@ -1087,6 +1093,9 @@ const WayLogic = (() => {
             haste = 1.2; down = 0;
             if (c.mode !== 'go') { c.mode = 'go'; c.prey = null; c.timer = 6 + 8 * random(); }
         }
+        // Somebody who likes cats has stopped: the first cat of the company comes to her hand.
+        c.petted = !!ctx.pet && stopped && ctx.pet === c;
+        if (c.petted) { tx = me.x + Math.cos(me.heading) * 0.42 + Math.sin(me.heading) * 0.3; tz = me.z - Math.sin(me.heading) * 0.42 + Math.cos(me.heading) * 0.3; spot = { x: tx, z: tz, face: me.heading + 2.4 }; rest = Math.hypot(c.x - tx, c.z - tz) < 0.5 ? 1 : 0; haste = 1.4; }
         const air = role === 'fly' || role === 'soar' || role === 'hover' || role === 'flit';
         if (c.x === null || Math.hypot(c.x - me.x, c.z - me.z) > 45) { c.x = tx; c.z = tz; c.yaw = me.heading; c.y = w.surface(tx, tz); c.mode = 'go'; c.prey = null; }
         if (role === 'ride') {
@@ -1123,7 +1132,8 @@ const WayLogic = (() => {
             } else if (spot && rest > 0.5) c.yaw = turnTo(c.yaw, spot.face, dt * 3);
             // Nobody walks through anybody: later ones step round earlier ones, and everyone round the traveller.
             const apart = (ox, oz, room) => { const ax = c.x - ox, az = c.z - oz, a = Math.hypot(ax, az); if (a < room && a > 1e-4) { const push = Math.min(room - a, dt * 3) / a; c.x += ax * push; c.z += az * push; } };
-            apart(me.x, me.z, 0.42 + kind.big * 0.6);
+            apart(me.x, me.z, c.petted ? 0.3 : 0.42 + kind.big * 0.6);
+            if (ctx.avoid) apart(ctx.avoid.x, ctx.avoid.z, ctx.avoid.room + kind.big);           // nobody stands in front of a low camera
             for (const o of others) { if (o === c) break; if (o.x !== null && o.alt < 0.8 && o.riding < 0.5) apart(o.x, o.z, (kind.big + o.kind.big) * 0.62 + 0.12); }
             c.gait += c.speed * dt;
             c.alt = ease(c.alt, 0, 0.3); c.wing = ease(c.wing, 0, 0.3);
@@ -1187,6 +1197,19 @@ const WayLogic = (() => {
         if (!walking) { s.hide = false; s.left = 0; }
         s.hidden = clamp(s.hidden + (s.hide ? 1 : -1) * dt / 0.9, 0, 1);
         return s;
+    }
+    // Fences run beside the road in farm and meadow country (WayLogic's scatter puts them there): how far out one
+    // stands on this side at z (metres), or 0.
+    function fenceAt(w, z, side) {
+        const r = w.at(z), b = r.t > 0.5 ? r.b : r.a, run = w.hash(Math.floor(Math.round(z / 4) / 9), side, 50);
+        if (r.near.radius && Math.abs(r.dz) < r.near.radius + 6) return 0;
+        return b.biome === 'farm' && run < 0.8 ? 3.5 : b.biome === 'meadow' && run < 0.3 ? 3.4 : 0;
+    }
+    // The rogue does not walk round a fence between the road and a fire: she goes over it. 0 on the ground, 1 at the top of the vault.
+    function vault(j, w) {
+        if (j.mode !== 'toCamp' && j.mode !== 'fromCamp') return 0;
+        const at = fenceAt(w, j.z, Math.sign(j.d) || 1), u = at ? (Math.abs(j.d) - at + 0.85) / 1.7 : -1;
+        return u > 0 && u < 1 ? Math.sin(Math.PI * u) : 0;
     }
     // Something startling at the traveller's own heels (a bear, where she was): the cats in the company bristle and drop back.
     function spook(party) { for (const c of party) if (c.kind.cat) { c.alarm = 1; c.bristle = true; } }
@@ -1281,7 +1304,7 @@ const WayLogic = (() => {
         RAD, TAU, SLOT, CHUNK, BIOMES, LAND, SEASONS, ROAD, GRAND, WEATHER, WALK, SHOTS, beyondWall,
         clamp, mix, mix3, smooth, hash, noise1, noise2,
         world, camp, nextCamp, bodies, light, weatherStart, weatherStep,
-        COMPANIONS, COMPANION, GROUPS, party, partyStart, companionStart, companionStep, FORMS, SHIFT, shiftStart, shiftStep, stealthStart, stealthStep, spook,
+        COMPANIONS, COMPANION, GROUPS, party, partyStart, companionStart, companionStep, FORMS, SHIFT, shiftStart, shiftStep, stealthStart, stealthStep, spook, fenceAt, vault,
         journeyStart, journeyStep, standing, sight, camera, ORBIT, orbitStart, orbitGrab, orbitDrag, orbitStep, orbitCamera, sightline, inOpen, wrapPi,
     };
 })();

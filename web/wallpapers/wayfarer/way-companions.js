@@ -84,13 +84,21 @@ const WayCompanions = (() => {
             s.paint([120, 255, 200], 0).fx(0, 255).blob(x * (x0 + 0.22 * k), y0 + 0.5 * k, z0, 0.014 * k, 0.014 * k, 0.014 * k, { segs: 5, bands: 3, lump: 0, under: 1 }).fx(0);
         }
     }
-    function quadParts(id) {
-        const q = KINDS[id], g = q.girth * (1 + 0.16 * (q.fluff || 0)), len = q.len, h = q.head, legL = q.tall * 0.42, leg = q.leg, deep = q.deep ?? 1.04, k = 'quad:' + id + ':';
+    // Rings between the rings, so a coat's markings have somewhere to be painted; and tufts of fur along an edge.
+    const finer = (path, n = 2) => { const out = []; for (let i = 0; i < path.length - 1; i++) for (let k = 0; k < n; k++) { const t = k / n, e = t * t * (3 - 2 * t); out.push(path[i].map((v, j) => v + (path[i + 1][j] - v) * (j < 3 ? t : e))); } out.push(path[path.length - 1]); return out; };
+    const tuft = (s, at, out, len, wide, tone = 1) => { const col = s.col, l = Math.hypot(out[0], out[1], out[2]) || 1, sx = out[1] / l * wide, sy = -out[0] / l * wide, sz = wide * 0.6; s.col = [Math.min(255, col[0] * tone), Math.min(255, col[1] * tone), Math.min(255, col[2] * tone)]; s.tri([at[0] - sx, at[1] - sy, at[2] - sz], [at[0] + sx, at[1] + sy, at[2] + sz], [at[0] + out[0] * len, at[1] + out[1] * len, at[2] + out[2] * len], [out[0] / l, out[1] / l + 0.3, out[2] / l]); s.col = col; };
+    // lite: the same animal in a third of the triangles, for further off and for the Low tier.
+    function quadParts(id, lite = false) {
+        const F = lite ? (path => path) : finer;
+        const q = KINDS[id], g = q.girth * (1 + 0.16 * (q.fluff || 0)), len = q.len, h = q.head, legL = q.tall * 0.42, leg = q.leg, deep = q.deep ?? 1.04, k = `quad:${id}:${lite ? 'lite' : 'fine'}:`;
         const dye = name => (x, y, z) => (q.mark && q.mark(name, x, y, z)) || (name === 'body' && q.under && y < -0.42 * g ? q.under : null);
         const furry = q.shag || q.fluff ? shag : null;
         return {
             body: part(k + 'body', s => {
-                s.mark(dye('body')).paint(q.coat, 0).fx(0).tube([[0, 0.02 * g, -len * 0.5, g * 0.45, 1], [0, 0.02 * g, -len * 0.38, g * (q.hip ?? 0.95), deep], [0, -0.05 * g, -len * 0.04, g * (q.belly ?? 1), deep], [0, 0, len * 0.28, g * (q.chest ?? 1.03), deep * 1.04], [0, 0.1 * g, len * 0.48, g * 0.6, 1.05]], 12, { cap: 3, k: furry });
+                // A rump, a waist behind the ribs, a barrel of a chest, and the root of the neck; a shoulder and a haunch each side.
+                s.mark(dye('body')).paint(q.coat, 0).fx(0).tube(F([[0, 0.04 * g, -len * 0.52, g * 0.3, 1], [0, 0.03 * g, -len * 0.44, g * 0.74 * (q.hip ?? 0.95), deep], [0, 0.02 * g, -len * 0.3, g * 1.02 * (q.hip ?? 0.95), deep], [0, -0.03 * g, -len * 0.1, g * 0.94 * (q.belly ?? 1), deep], [0, -0.06 * g, len * 0.1, g * (q.belly ?? 1), deep * 1.02], [0, -0.02 * g, len * 0.28, g * 1.06 * (q.chest ?? 1.03), deep * 1.06], [0, 0.06 * g, len * 0.42, g * 0.8, 1.06], [0, 0.12 * g, len * 0.5, g * 0.52, 1.05]], 3), lite ? 9 : 16, { cap: 3, k: furry });
+                if (!q.shell && !q.spines && !lite) for (const x of [-1, 1]) { ball(s, x * g * 0.5, -g * 0.12, len * 0.31, g * 0.5 * leg, g * 0.62, g * 0.5, 9, 5, furry ? 0.08 : 0); ball(s, x * g * 0.5, -g * 0.05, -len * 0.33, g * 0.56 * leg * (q.haunch || 1), g * 0.7, g * 0.6, 9, 5, furry ? 0.08 : 0); }
+                if (!lite && (q.cat || q.shag || q.fluff)) for (let i = 0; i < 9; i++) { const a = (i - 4) * 0.3; tuft(s, [Math.sin(a) * g * 0.6, -g * 0.5 - 0.1 * g * Math.cos(a), len * 0.36], [Math.sin(a) * 0.5, -0.8, 0.5], g * (0.3 + 0.2 * hashf(i, 4)) * (q.fluff ? 1.6 : 1), g * 0.13, 0.9 + 0.2 * hashf(i, 5)); }
                 if (q.fluff) { ball(s, 0, 0.02, len * 0.36, g * 1.04, g * 1.0, g * 0.62, 9, 5, 0.14); ball(s, 0, -0.1 * g, -len * 0.3, g * 1.02, g * 0.95, g * 0.7, 9, 5, 0.14); }
                 if (q.wool) for (let i = 0; i < 9; i++) { const a = i * 2.4, z = -len * 0.4 + i * len * 0.1; s.blob(Math.sin(a) * g * 0.5, g * (0.3 + 0.3 * Math.cos(a)), z, g * 0.6, g * 0.56, g * 0.6, { segs: 6, bands: 4, lump: 0.2, seed: i, under: 0.75 }); }
                 s.mark(null);
@@ -115,18 +123,18 @@ const WayCompanions = (() => {
                 if (q.druid) for (const x of [-1, 1]) for (let i = 0; i < 3; i++) s.paint([120, 255, 200], 0).fx(0, 230).blob(x * g * (0.9 - 0.04 * i), g * (0.34 - 0.14 * i), len * (0.26 - 0.07 * i), 0.012, g * 0.11, g * 0.2, { segs: 6, bands: 3, lump: 0, under: 1 }).fx(0);       // her marks, on the shoulder
                 if (q.ridge) for (let i = 0; i < 7; i++) { const z = len * 0.36 - i * len * 0.12; s.paint([240, 190, 90], 0).prism(4, 0, g * deep * 0.94, z, 0.022, g * deep * 0.94 + 0.055 - 0.004 * i, 0, { squash: 1.6, flat: true }); }
             }),
-            fore: part(k + 'fore', s => s.mark(dye('leg')).paint(q.coat, 0).fx(0).tube([[0, 0.08 * g, 0, g * 0.36 * leg, 1], [0, -legL * 0.5, 0, g * 0.27 * leg, 1], [0, -legL, 0, g * 0.19 * leg, 1]], 8, { k: furry }).mark(null)),
-            hind: part(k + 'hind', s => s.mark(dye('leg')).paint(q.coat, 0).fx(0).tube([[0, 0.1 * g, 0, g * 0.5 * leg * (q.haunch || 1), 1.2], [0, -legL * 0.45, -0.02 * g, g * 0.32 * leg, 1.1], [0, -legL, 0, g * 0.2 * leg, 1]], 8, { k: furry }).mark(null)),
+            fore: part(k + 'fore', s => { s.mark(dye('leg')).paint(q.coat, 0).fx(0).tube(F([[0, 0.1 * g, 0, g * 0.42 * leg, 1.1], [0, -legL * 0.3, 0.01, g * 0.36 * leg, 1.1], [0, -legL * 0.7, 0, g * 0.26 * leg, 1], [0, -legL * 1.04, 0, g * 0.21 * leg, 1]]), lite ? 6 : 10, { k: furry, cap: 3 }); ball(s, 0, -legL, -g * 0.02, g * 0.23 * leg, g * 0.22 * leg, g * 0.25 * leg, 8, 4); s.mark(null); }),
+            hind: part(k + 'hind', s => { s.mark(dye('leg')).paint(q.coat, 0).fx(0).tube(F([[0, 0.14 * g, 0, g * 0.5 * leg * (q.haunch || 1), 1.3], [0, -legL * 0.3, 0.02 * g, g * 0.46 * leg * (q.haunch || 1), 1.25], [0, -legL * 0.72, -0.01 * g, g * 0.28 * leg, 1.1], [0, -legL * 1.04, 0, g * 0.21 * leg, 1]]), lite ? 6 : 10, { k: furry, cap: 3 }); ball(s, 0, -legL, g * 0.03, g * 0.23 * leg, g * 0.22 * leg, g * 0.26 * leg, 8, 4); s.mark(null); }),
             shin: part(k + 'shin', s => {
-                s.mark(dye('shin')).paint(q.coat, 0).fx(0).tube([[0, 0.01, 0, g * 0.2 * leg, 1], [0, -legL * 0.55, 0, g * 0.15 * leg, 1], [0, -legL * 0.9, 0, g * 0.16 * leg, 1]], 7);
+                s.mark(dye('shin')).paint(q.coat, 0).fx(0).tube(F([[0, 0.04, 0, g * 0.21 * leg, 1], [0, -legL * 0.3, 0, g * 0.19 * leg, 1], [0, -legL * 0.62, 0, g * 0.155 * leg, 1], [0, -legL * 0.9, 0.004, g * 0.17 * leg, 1]]), lite ? 6 : 10, { cap: 1 });
                 s.mark(dye('paw'));
                 if (q.hoof) s.paint([56, 48, 46], 0).prism(7, 0, -legL * 1.0, g * 0.02, g * 0.2 * leg, -legL * 0.86, g * 0.17 * leg, { cap: true });
-                else ball(s.paint(q.coat, 0), 0, -legL * 0.94, g * 0.1 * leg, g * 0.2 * leg, g * 0.13 * leg, g * 0.28 * leg, 7, 4);
+                else { ball(s.paint(q.coat, 0), 0, -legL * 0.94, g * 0.1 * leg, g * 0.22 * leg, g * 0.14 * leg, g * 0.3 * leg, 9, 5); if (!lite) for (const x of [-1, 0, 1]) ball(s, x * g * 0.13 * leg, -legL * 0.96, g * 0.33 * leg, g * 0.075 * leg, g * 0.08 * leg, g * 0.1 * leg, 5, 3); }
                 s.mark(null);
             }),
             neck: part(k + 'neck', s => {
                 const nl = q.neck[0];
-                s.mark(dye('neck')).paint(q.coat, 0).fx(0).tube([[0, -0.02, 0, g * 0.62, 1], [0, nl * 0.5, 0, (g * 0.62 + h * 0.74) / 2, 1], [0, nl + h * 0.2, 0, h * 0.74, 1]], 9, { k: furry });
+                s.mark(dye('neck')).paint(q.coat, 0).fx(0).tube(F([[0, -0.06 * g - 0.02, 0, g * 0.74, 1], [0, nl * 0.3, 0, g * 0.6 * 0.6 + h * 0.74 * 0.5, 1], [0, nl * 0.75, 0, (g * 0.5 + h * 0.8) / 2, 1], [0, nl + h * 0.2, 0, h * 0.76, 1]]), lite ? 8 : 12, { k: furry });
                 s.mark(null);
                 if (q.fluff) ball(s, 0, nl * 0.5, 0.01, h * 1.15 * q.fluff, nl * 0.7 + 0.02, h * 1.15 * q.fluff, 9, 4, 0.16);          // a ruff
                 if (q.mane) for (let i = 0; i < 5; i++) s.paint(q.mane, 0).blob(0, nl * (0.1 + i * 0.22), -h * 0.72, 0.035, nl * 0.2, 0.08, { segs: 5, bands: 3, lump: 0.2, seed: i });
@@ -138,10 +146,11 @@ const WayCompanions = (() => {
             head: part(k + 'head', s => {
                 const [ml, mr] = q.muzzle, wide = q.cat ? 1.08 : 1;
                 s.mark(dye('head')).paint(q.face || q.coat, 0).fx(0);
-                ball(s, 0, 0, h * 0.3, h * 0.88 * wide, h * 0.84, h, 10, 6, q.fluff ? 0.07 : 0);
+                ball(s, 0, 0, h * 0.3, h * 0.88 * wide, h * 0.84, h, lite ? 9 : 14, lite ? 5 : 8, q.fluff ? 0.07 : 0);
+                if (!lite && (q.cat || q.fluff)) for (const x of [-1, 1]) for (let i = 0; i < 3; i++) tuft(s, [x * h * 0.74, -h * (0.1 + 0.16 * i), h * 0.5], [x * 1, -0.35 - 0.2 * i, -0.1], h * (0.42 - 0.07 * i) * (q.fluff ? 1.5 : 1), h * 0.13);       // whiskers of fur at the cheeks
                 if (q.cat) for (const x of [-1, 1]) ball(s, x * h * 0.52, -h * 0.3, h * 0.55, h * 0.4, h * 0.34, h * 0.42, 7, 4, q.fluff ? 0.1 : 0);          // cheeks
                 s.mark(dye('muzzle'));
-                s.tube([[0, -h * 0.14, h * 0.82, mr * 1.2, 0.86], [0, -h * 0.24, h * 0.86 + ml * 0.6, mr, 0.8], [0, -h * 0.28, h * 0.86 + ml, mr * (q.snout ? 0.95 : 0.66), 0.8]], 8, { cap: 2 });
+                s.tube(F([[0, -h * 0.1, h * 0.7, mr * 1.36, 0.9], [0, -h * 0.16, h * 0.86, mr * 1.2, 0.86], [0, -h * 0.24, h * 0.86 + ml * 0.6, mr, 0.8], [0, -h * 0.28, h * 0.86 + ml, mr * (q.snout ? 0.95 : 0.7), 0.8]]), lite ? 7 : 10, { cap: 2 });
                 s.mark(null);
                 const tip = h * 0.86 + ml;
                 if (q.snout) s.paint(q.nose, 0).prism(8, 0, -h * 0.28 - 0.001, tip, mr * 0.9, -h * 0.28, tip + 0.012, { squash: 0.8 }).tube([[0, -h * 0.28, tip - 0.01, mr * 0.96, 0.8], [0, -h * 0.28, tip + 0.012, mr * 0.9, 0.8]], 8, { cap: 2 });
@@ -169,7 +178,7 @@ const WayCompanions = (() => {
             tail: part(k + 'tail', s => {
                 const [kind, t] = q.tail, plain = { cap: 2, k: furry };
                 s.mark(dye('tail')).paint(q.coat, 0).fx(0);
-                if (kind === 'whip') s.tube([[0, 0, 0, g * 0.2, 1], [0, t * 0.5, 0.02, g * 0.15, 1], [0, t * 0.85, 0.01, g * 0.12, 1], [0, t, -0.01, g * 0.06, 1]], 7, plain);
+                if (kind === 'whip') s.tube(F([[0, -0.02, 0, g * 0.24, 1], [0, t * 0.3, 0.03, g * 0.18, 1], [0, t * 0.6, 0.02, g * 0.15, 1], [0, t * 0.88, -0.03, g * 0.13, 1], [0, t, -0.08, g * 0.07, 1]], 3), lite ? 6 : 9, plain);
                 else if (kind === 'brush') s.tube([[0, 0, 0, g * 0.3, 1], [0, t * 0.4, 0, g * 0.56, 1], [0, t * 0.78, 0, g * 0.5, 1], [0, t, 0, 0, 1]], 8, { k: shag });
                 else if (kind === 'plume') s.tube([[0, 0, 0, g * 0.28, 1], [0, t * 0.3, 0, g * 0.6, 1], [0, t * 0.7, 0.02, g * 0.72, 1], [0, t * 0.95, 0.03, g * 0.36, 1], [0, t, 0.03, 0, 1]], 8, { k: shag });
                 else if (kind === 'fall') s.paint(q.mane || q.coat, 0).tube([[0, 0, 0, g * 0.16, 1], [0, t * 0.3, 0, g * 0.3, 0.8], [0, t * 0.8, 0.02, g * 0.34, 0.7], [0, t, 0.03, g * 0.1, 0.7]], 8, { k: shag, cap: 2 });
@@ -204,7 +213,7 @@ const WayCompanions = (() => {
     // pose: { yaw, gait (turns of its stride), moving (0 to 1), rest (0 to 1, settled), down (head to the ground),
     // head (a turn of it), alarm, alt, wing, ride, t, size }.
     function quad(out, st, id, x, y, z, pose) {
-        const q = KINDS[id], P = q.parts || (q.parts = quadParts(id)), size = (q.size || 1) * (pose.size || 1), g = q.girth, len = q.len, G = GAITS[q.gait], t = pose.t || 0;
+        const q = KINDS[id], P = pose.lite ? q.lite || (q.lite = quadParts(id, true)) : q.parts || (q.parts = quadParts(id)), size = (q.size || 1) * (pose.size || 1), g = q.girth, len = q.len, G = GAITS[q.gait], t = pose.t || 0;
         const tau = pose.gait * TAU, mv = pose.moving || 0, rest = pose.rest || 0, style = q.rest, legL = q.tall * 0.42;
         const sit = style === 'sit' ? rest : 0, lie = style === 'sit' || style === 'graze' ? 0 : rest, belly = style === 'belly' ? L.smooth(0.5, 1, rest) : 0, curl = style === 'curl' ? rest : 0, tuck = style === 'tuck' ? rest : 0, fly = pose.wing || 0;
         const put = model => out.stamp(model, st.top, null);
@@ -254,6 +263,7 @@ const WayCompanions = (() => {
         duckling: { size: 0.42, len: 0.3, r: 0.11, neck: 0.06, head: 0.07, beak: [0.045, 0.024, [226, 150, 60], false, true], span: 0.16, chord: 0.1, leg: 0.07, body: [246, 220, 110], wing: [226, 196, 96], belly: [250, 236, 160], feet: [226, 140, 50], flap: 3, upright: 0.2, stride: 0.1 },
         raven: { size: 1, len: 0.34, r: 0.085, neck: 0.06, head: 0.055, beak: [0.07, 0.02, [30, 28, 34], false], span: 0.52, chord: 0.2, leg: 0.08, body: shiny([34, 32, 44], 0.35), wing: shiny([28, 26, 38], 0.35), belly: shiny([40, 38, 52], 0.3), feet: [40, 38, 42], flap: 1.4, upright: 0.5, stride: 0.18, fingers: true },
         owl: { size: 1, len: 0.3, r: 0.12, neck: 0.02, head: 0.1, beak: [0.03, 0.016, [226, 190, 110], true], span: 0.56, chord: 0.24, leg: 0.06, body: [150, 118, 84], wing: [124, 96, 70], belly: [236, 222, 196], feet: [200, 180, 140], discs: true, tufts: true, eye: [250, 190, 50], barred: true, flap: 1, upright: 1.05, stride: 0.14 },
+        gull: { size: 1.2, len: 0.36, r: 0.09, neck: 0.05, head: 0.052, beak: [0.06, 0.018, [236, 190, 60], true], span: 0.66, chord: 0.17, leg: 0.07, body: [246, 246, 242], wing: [196, 202, 214], belly: [250, 250, 248], feet: [236, 170, 80], flap: 0.5, glide: true, upright: 0.3, stride: 0.16, fingers: true },
         hawk: { size: 1, len: 0.38, r: 0.095, neck: 0.04, head: 0.055, beak: [0.045, 0.02, [236, 200, 80], true], span: 0.72, chord: 0.22, leg: 0.09, body: [124, 86, 60], wing: [96, 68, 52], belly: [240, 228, 206], feet: [236, 200, 80], barred: true, eye: [250, 210, 60], flap: 0.6, glide: true, upright: 0.85, stride: 0.16, fingers: true },
     };
     function birdParts(id) {
@@ -266,6 +276,8 @@ const WayCompanions = (() => {
         };
         return {
             body: part(k + 'body', s => {
+                s.paint(b.body, 0).fx(0);
+                for (let row = 0; row < 3; row++) for (let i = 0; i < 7; i++) { const a = (i - 3) * 0.42 + row * 0.2, z = len * (0.18 - row * 0.2); tuft(s, [Math.sin(a) * r * 0.86, -Math.cos(a) * r * 0.86, z], [Math.sin(a) * 0.3, -Math.cos(a) * 0.3, -1], r * 0.5, r * 0.2, i % 2 ? 1.08 : 0.92); }
                 s.mark((x, y, z) => y < -r * 0.25 ? (b.barred && Math.sin(z * 90 + y * 60) > 0.5 ? b.body : b.belly) : null).paint(b.body, 0).fx(0);
                 s.tube([[0, 0.05 * r, -len * 0.5, r * 0.3, 0.7], [0, 0, -len * 0.2, r * 0.9, 0.94], [0, -0.04 * r, len * 0.12, r, 1], [0, 0.08 * r, len * 0.44, r * 0.6, 1]], 10, { cap: 3 });
                 s.mark(null);
@@ -291,8 +303,8 @@ const WayCompanions = (() => {
                 if (b.comb) { for (let i = 0; i < 3; i++) s.paint([206, 50, 50], 0).blob(0, top + h * 1.2, h * (0.5 - i * 0.4), h * 0.14, h * 0.3, h * 0.26, { segs: 5, bands: 3, lump: 0 }); s.blob(0, top - h * 0.25, h * 0.8, h * 0.16, h * 0.3, h * 0.14, { segs: 5, bands: 3, lump: 0 }); }
             }),
             // The right wing in two lengths, out along +x.
-            inner: part(k + 'inner', s => { s.fx(0); feathers(s, 0, b.span * 0.5, b.chord, b.chord * 0.95, 4, false); s.paint(b.body, 0).tube([[0, 0.005, b.chord * 0.3, 0.02, 1], [b.span * 0.5, 0.005, b.chord * 0.3, 0.016, 1]], 5); }),
-            outer: part(k + 'outer', s => { s.fx(0); feathers(s, 0, b.span * 0.5, b.chord * 0.95, b.chord * (b.fingers ? 0.5 : 0.3), 5, b.fingers); s.paint(b.body, 0).tube([[0, 0.005, b.chord * 0.3, 0.016, 1], [b.span * 0.48, 0.005, b.chord * 0.16, 0.006, 1]], 5); }),
+            inner: part(k + 'inner', s => { s.fx(0); feathers(s, 0, b.span * 0.5, b.chord, b.chord * 0.95, 5, false); s.at(M.move(0, 0.012, b.chord * 0.14)); feathers(s, 0, b.span * 0.5, b.chord * 0.5, b.chord * 0.46, 6, false); s.at(null); s.paint(b.body, 0).tube([[0, 0.005, b.chord * 0.3, 0.02, 1], [b.span * 0.5, 0.005, b.chord * 0.3, 0.016, 1]], 5); }),
+            outer: part(k + 'outer', s => { s.fx(0); feathers(s, 0, b.span * 0.5, b.chord * 0.95, b.chord * (b.fingers ? 0.5 : 0.3), 6, b.fingers); s.at(M.move(0, 0.012, b.chord * 0.14)); feathers(s, 0, b.span * 0.42, b.chord * 0.46, b.chord * 0.2, 5, false); s.at(null); s.paint(b.body, 0).tube([[0, 0.005, b.chord * 0.3, 0.016, 1], [b.span * 0.48, 0.005, b.chord * 0.16, 0.006, 1]], 5); }),
             leg: part(k + 'leg', s => {
                 s.paint(b.feet, 0).fx(0).tube([[0, 0, 0, 0.014, 1], [0, -b.leg, 0, 0.011, 1]], 5);
                 for (const a of [-0.5, 0, 0.5]) s.tube([[0, -b.leg, 0, 0.01, 0.6], [Math.sin(a) * 0.05, -b.leg - 0.004, Math.cos(a) * 0.055, 0.004, 0.6]], 4);
@@ -328,6 +340,7 @@ const WayCompanions = (() => {
             s.mark(bars).paint([132, 102, 78], 0).fx(0).tube([[0, 0.42, -0.02, 0.2, 0.9], [0, 0.6, 0, 0.44, 0.92], [0, 0.95, 0.02, 0.5, 0.9], [0, 1.3, 0.02, 0.42, 0.88], [0, 1.52, 0.03, 0.34, 0.9]], 12, { cap: 1, k: shag });
             s.blob(0, 1.68, 0.04, 0.36, 0.33, 0.33, { segs: 12, bands: 7, lump: 0.05, seed: 0.3, under: 0.8 });
             s.mark(null);
+            for (let row = 0; row < 7; row++) { const y = 1.44 - row * 0.14, R = [0.38, 0.44, 0.49, 0.51, 0.5, 0.46, 0.38][row], n = 15; for (let i = 0; i < n; i++) { const a = (i + (row % 2) * 0.5) / n * TAU, front = Math.cos(a) > 0.5; s.paint(front ? (row % 2 ? [226, 208, 176] : [176, 144, 110]) : (row % 2 ? [132, 102, 78] : [104, 80, 62]), 0); tuft(s, [Math.sin(a) * R, y, Math.cos(a) * R * 0.9 + 0.02], [Math.sin(a) * 0.25, -1, Math.cos(a) * 0.25], 0.17, 0.085); } }
             for (const x of [-1, 1]) {
                 s.paint([236, 222, 196], 0).blob(x * 0.15, 1.7, 0.3, 0.17, 0.18, 0.08, { segs: 10, bands: 4, lump: 0, under: 0.9 });                        // the face's two discs
                 s.paint(shiny([255, 196, 60], 0.8), 0).fx(0, 120).blob(x * 0.15, 1.72, 0.365, 0.075, 0.075, 0.04, { segs: 8, bands: 4, lump: 0, under: 1 }).fx(0).paint(BLACK, 0).blob(x * 0.15, 1.72, 0.395, 0.036, 0.036, 0.02, { segs: 6, bands: 3, lump: 0, under: 1 });

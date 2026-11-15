@@ -11,7 +11,8 @@ WP.defaults('wayfarer', {
     traveller: 'ranger',   // ranger, wizard, bard, knight, barbarian, northman, druid, archer, rogue
     warpaint: true,        // the barbarians' blue bars across the cheeks
     craft: 'sometimes',    // never, sometimes, often: how often the druid changes shape and the rogue goes unseen
-    companions: 3,         // how many walk with the traveller (0 to 6)
+    companion: 'fox',      // the first of the company, who always comes: any of them, 'any' (nobody in particular) or 'none' (walk alone)
+    companions: 3,         // how many walk with the traveller, the first included (0 to 6)
     companionPick: 'surprise',     // surprise (a named cat and one from each kind, by the world's seed), cats, dogs, farm, wild, fantastic, or choose
     companionChoice: ['moofy', 'hound', 'raven'],      // who, when it is 'choose'
     rests: true,           // stops to look at a view

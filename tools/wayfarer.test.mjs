@@ -382,6 +382,8 @@ test('settings: the panel offers what the code knows, and the keys are declared'
     assert.deepEqual(options('time'), constant('WAY_TIME_ORDER'));
     assert.deepEqual(options('weather'), constant('WAY_WEATHER_ORDER'));
     assert.deepEqual(options('companionPick'), constant('WAY_PICKS'));
+    assert.deepEqual(options('companion'), constant('WAY_FIRST'));
+    assert.equal(context.WP.defaultsOf('wayfarer').companion, 'fox', 'the old single companion is still a setting, and still a fox');
     assert.deepEqual(options('companionChoice'), plain(L.COMPANIONS.map(c => c.id)));
     assert.deepEqual(plain(schema.find(c => c.key === 'companionChoice').options.map(o => o[1])), plain(L.COMPANIONS.map(c => c.label)), 'the chips name them as the code does');
     assert.deepEqual(options('orbitMode'), constant('WAY_ORBITS'));
@@ -493,7 +495,7 @@ test('the company: every kind can be posed, the count is honoured, the named cat
         for (const pose of [{ gait: 0.3, moving: 1 }, { gait: 0, rest: 1 }, { gait: 1.2, moving: 1, alt: 3, wing: 1, bank: 0.3 }, { gait: 0.1, down: 1, alarm: 1 }, { gait: 0.7, moving: 0.5, rest: 0.5, head: 0.4 }]) {
             out.clear();
             K.pose(c.id, out, st, 1, 2, 3, { yaw: 0.4, t: 3, ...pose }, fx);
-            assert.ok(out.n % 3 === 0 && (c.id === 'wisp' || out.n > 300) && out.n < 9000, `${c.id}: ${out.n} vertices`);
+            assert.ok(out.n % 3 === 0 && (c.id === 'wisp' || out.n > 300) && out.n < 14000, `${c.id}: ${out.n} vertices`);
             for (let i = 0; i < out.n; i++) for (let k = 0; k < 3; k++) assert.ok(Math.abs(out.F[i * 6 + k]) < 12, `${c.id}: a vertex astray`);
             sizes.push(out.n);
         }
@@ -531,6 +533,16 @@ test('the company: every kind can be posed, the count is honoured, the named cat
     assert.deepEqual(plain(L.party(1, { pick: 'choose', choice: ['moofy', 'nobody', 'hawk', 'snail'] })), ['moofy', 'hawk', 'snail']);
     assert.equal(L.party(1, { pick: 'choose', choice: L.COMPANIONS.map(c => c.id) }).length, 6);
     assert.deepEqual(plain(L.party(1, { pick: 'choose', choice: [] })), []);
+    // The first companion (the old single choice, kept): it leads and counts; 'none' is alone, whatever else is set.
+    for (const first of ['fox', 'dog', 'pony', 'cat', 'wisp', 'moofy', 'snail']) for (const pick of ['surprise', ...L.GROUPS]) {
+        const party = L.party(11, { count: 3, pick, first });
+        assert.ok(party.length === 3 && party[0] === first && new Set(party).size === 3, `${first} first of ${pick}: ${party}`);
+        assert.deepEqual(plain(L.party(11, { count: 1, pick, first })), [first]);
+    }
+    assert.ok(L.COMPANION[L.party(11, { count: 3, first: 'fox' })[1]].from, 'a named cat comes second');
+    assert.deepEqual(plain(L.party(11, { count: 6, first: 'none' })), []);
+    assert.deepEqual(plain(L.party(11, { count: 0, first: 'fox' })), []);
+    assert.equal(L.party(11, { count: 4, first: 'any' }).length, 4);
 });
 
 test('the company on the road: out of one another\'s way and the traveller\'s, on the road, round the fire at night, the same at 10 fps as at 120', () => {
@@ -596,7 +608,7 @@ test('the travellers\' craft: the druid changes shape and back by the seed, neve
         P.person(out, st, 0, 0, 0, look, { yaw: 1, t: 2, stride: 0, moving: 0, ...pose });
         let lo = Infinity, hi = -Infinity;
         for (let i = 0; i < out.n; i++) { for (let k = 0; k < 3; k++) assert.ok(Number.isFinite(out.F[i * 6 + k])); lo = Math.min(lo, out.F[i * 6 + 1]); hi = Math.max(hi, out.F[i * 6 + 1]); }
-        assert.ok(out.n > 6000 && out.n < 16000 && lo > -0.3 && hi > 1.1 && hi < 3.4, `${name} ${JSON.stringify(pose)}: ${out.n} vertices from ${lo.toFixed(2)} to ${hi.toFixed(2)}`);
+        assert.ok(out.n > 15000 && out.n < 32000 && lo > -0.3 && hi > 1.1 && hi < 3.4, `${name} ${JSON.stringify(pose)}: ${out.n} vertices from ${lo.toFixed(2)} to ${hi.toFixed(2)}`);
     }
     // The druid.
     const run = (fps, often, seed = 5, secs = 1500, opts = {}) => {
@@ -642,6 +654,25 @@ test('the travellers\' craft: the druid changes shape and back by the seed, neve
     j.mode = 'walk';
     L.shiftStep(s, 0.1, j, { often: 'never' });
     assert.ok(s.change < 1 && s.to === 'self', 'it waited for the road');
+    // The rogue goes over a fence between the road and a fire (and only where a fence stands); and has a hand for a cat.
+    const farm = [...Array(400).keys()].map(i => world.leg(i + 100)).find(l => l.biome === 'farm' && !l.radius);
+    let fenced = null;
+    for (let z = farm.zc - 100; z < farm.zc + 100 && !fenced; z += 4) for (const side of [-1, 1]) if (L.fenceAt(world, z, side) && !world.at(z).near.radius) fenced = { z, side, at: L.fenceAt(world, z, side) };
+    assert.ok(fenced && world.scatter(Math.floor(world.place(fenced.z, fenced.side * fenced.at)[0] / 64), Math.floor(fenced.z / 64)).some(it => it.k === 'fence' && Math.abs(it.z - Math.round(fenced.z / 4) * 4) < 0.01 && Math.sign(it.d) === fenced.side), 'where the logic says a fence is, the land has one');
+    const over = L.journeyStart(world, fenced.z);
+    let top = 0;
+    for (let d = 0; d <= 7; d += 0.05) { over.d = fenced.side * d; over.mode = 'toCamp'; const v = L.vault(over, world); assert.ok(v >= 0 && v <= 1); top = Math.max(top, v); if (Math.abs(d - fenced.at) > 0.9) assert.equal(v, 0); }
+    assert.ok(top > 0.99, 'a vault at the fence');
+    over.mode = 'walk'; over.d = fenced.side * fenced.at;
+    assert.equal(L.vault(over, world), 0, 'not on the road');
+    const pets = L.partyStart(['dog', 'ras']), halt = L.journeyStart(world, 5000);
+    halt.mode = 'gaze'; halt.speed = 0;
+    for (let i = 0; i < 200; i++) for (const c of pets) L.companionStep(c, 0.05, world, halt, { t: i * 0.05, night: 0, passing: false, others: pets, scare: null, random: seeded(4), pet: pets[1] });
+    const meNow = L.standing(halt, world);
+    assert.ok(pets[1].petted && !pets[0].petted && Math.hypot(pets[1].x - meNow.x, pets[1].z - meNow.z) < 0.8 && pets[1].rest > 0.8, `the cat comes to her hand: ${Math.hypot(pets[1].x - meNow.x, pets[1].z - meNow.z).toFixed(2)} m, settled ${pets[1].rest.toFixed(2)}`);
+    // A low camera keeps the ground before it clear of the company.
+    const shy = L.partyStart(['dog']), lens = L.standing(halt, world);
+    for (let i = 0; i < 200; i++) L.companionStep(shy[0], 0.05, world, halt, { t: i * 0.05, night: 0, passing: false, others: shy, scare: null, random: seeded(4), avoid: { x: shy[0].x ?? lens.x, z: shy[0].z ?? lens.z + 2.5, room: 2.1 } });
     // The cats bristle when a bear appears where she was.
     const party = L.partyStart(['moofy', 'dog']);
     L.spook(party);
@@ -702,10 +733,12 @@ test('grand cities: rarer, level from gate to gate behind a moat, a castle on it
         const [cd, cdz] = at(citadel);
         assert.ok(Math.abs(cd - rock.d) < 0.01 && Math.abs(cdz - rock.dz) < 0.01 && L.beyondWall(cd + Math.sign(cd) * rock.r1, cdz) < 0, 'the rock is inside the wall');
         const way = of('ramp')[0];
-        assert.ok(Math.abs(world.lateral(way.x, way.z)) > 6 && Math.abs(Math.abs(world.lateral(way.x, way.z)) + way.len - (Math.abs(rock.d) - rock.r0)) < 0.5 && Math.abs(way.rise - rock.h) < 0.01);
+        assert.ok(Math.abs(world.lateral(way.x, way.z)) > 5 && Math.abs(Math.abs(world.lateral(way.x, way.z)) + way.len - (Math.abs(rock.d) - rock.r0)) < 0.5 && Math.abs(way.rise - rock.h) < 0.01);
         // She stops to look before the gate.
         const view = L.sight(world, l.zc - G.A - 34);
         assert.ok(view && view.long > 0 && Math.sign(view.look) === l.side, 'a view before the gate, toward the castle');
+        const first = L.sight(world, l.zc - G.A - 215);
+        assert.ok(first && first.id !== view.id && Math.abs(first.look) <= 1 && !world.leg(i - 1).radius && !['pass', 'forest'].includes(world.leg(i - 1).biome), 'and a first sight of it from open country, with no town in the way');
         // Squares: the middle one with the fine models within budget; the far ones carry the skyline and its lights.
         if (grand > 2) continue;
         const sq = M.square(world, Math.floor(citadel.x / 64), Math.floor(citadel.z / 64), 64, 32, false, 1, 2);
@@ -728,12 +761,12 @@ test('fine models: what stands by the road near the traveller is built finer, wi
     const find = want => [...Array(300).keys()].map(i => world.leg(i + 100)).find(want);
     for (const kind of ['oak', 'apple', 'poplar', 'fir', 'pine', 'birch', 'willow', 'snag', 'glade', 'shroom']) for (let v = 0; v < 3; v++) {
         const fine = D.tree(kind, v);
-        assert.ok(fine.n % 3 === 0 && fine.n > 600 && fine.n < 2400, `${kind}: ${fine.n} vertices`);
+        assert.ok(fine.n % 3 === 0 && fine.n > 600 && fine.n < 3600, `${kind}: ${fine.n} vertices`);
         let top = -Infinity, wide = 0;
         for (let i = 0; i < fine.n; i++) { top = Math.max(top, fine.F[i * 6 + 1]); wide = Math.max(wide, Math.hypot(fine.F[i * 6], fine.F[i * 6 + 2])); }
         assert.ok(top > 3.5 && top < 13 && wide < 5.2, `${kind}: ${top.toFixed(1)} m tall, ${wide.toFixed(1)} m wide`);
     }
-    assert.ok(D.rock(0).n > 150 && D.fixed('well').n > M.fixed('well').n && D.fixed('fence') && D.fixed('lamp') === null);
+    assert.ok(D.rock(0).n > 150 && D.fixed('well').n > M.fixed('well').n && D.fixed('fence') && D.fixed('cart', 1).n > M.fixed('cart', 1).n && D.fixed('stall', 2).n > M.fixed('stall', 2).n && D.fixed('lamp').n > M.fixed('lamp').n && D.fixed('bridge').n > M.fixed('bridge').n && D.fixed('bench') && D.small('bush', 0).n > 600 && D.fixed('milestone') === null);
     const wood = find(l => l.biome === 'forest' && !l.radius), cx = Math.floor(world.roadX(wood.zc) / 64), cz = Math.floor(wood.zc / 64);
     const plain0 = M.square(world, cx, cz, 64, 32, false, 1, 0), narrow = M.square(world, cx, cz, 64, 32, false, 1, 1), fine = M.square(world, cx, cz, 64, 32, false, 1, 2);
     assert.ok(plain0.props.n < narrow.props.n && narrow.props.n < fine.props.n && fine.props.n < 150000, `a forest square: ${plain0.props.n}, ${narrow.props.n}, ${fine.props.n} vertices`);

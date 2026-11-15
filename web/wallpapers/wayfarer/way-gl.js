@@ -198,7 +198,7 @@ void main() {
     float dab = texture2D(uPaint, uv / 4.0).g, wash = texture2D(uPaint, uv / 16.0).r;
     // Leaves get the heavier brush: clumps of light and shade.
     float leafy = step(0.05, vExtra.x), fade = exp(-dist / 90.0);
-    vec3 albedo = vColour.rgb * (1.0 + ((dab - 0.5) * 0.26 + (wash - 0.5) * 0.2) * fade);
+    vec3 albedo = vColour.rgb * (1.0 + ((dab - 0.5) * 0.26 + (wash - 0.5) * 0.2) * fade * (1.0 - 0.8 * uRound));        // (the brush is for scenery: skin and fur are painted in their models)
     albedo *= mix(vec3(1.0), mix(vec3(0.72, 0.8, 0.9), vec3(1.24, 1.18, 0.92), smoothstep(0.4, 0.6, dab * 0.6 + wash * 0.4)), 0.6 * leafy * (0.3 + 0.7 * fade));
     albedo = mix(albedo, albedo * vec3(0.72, 0.74, 0.8), uWet);
     if (vColour.a < 0.0) {

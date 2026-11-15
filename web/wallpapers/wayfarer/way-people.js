@@ -8,7 +8,7 @@
 const WayPeople = (() => {
     const L = WayLogic, M = WayModels, A = WayActors, C = M.C, W = C.white, TAU = Math.PI * 2;
     const LEATHER = [96, 68, 48], DARK = [64, 46, 36], STEEL = Object.assign([176, 180, 190], { shine: 0.9 }), GOLD = C.gold, BONE = [240, 232, 212];
-    const SIDES = 10;         // round a limb
+    const SIDES = 12;         // round a limb
     const part = (key, make) => M.model('person:' + key, make);
     const noise = (i, k) => { const s = Math.sin(i * 12.9898 + k * 78.233) * 43758.5453; return s - Math.floor(s); };
     // Painted on: the folds of cloth, the mottle of fur, the links of mail; and a hem cut ragged.
@@ -20,10 +20,22 @@ const WayPeople = (() => {
 
     // The trunk as rings from the hips to the root of the neck: [x, y, z, half-width, depth as a share of it].
     const TRUNK = {
-        m: [[0, 0, 0, 0.2, 0.66], [0, 0.09, 0, 0.19, 0.66], [0, 0.2, 0, 0.18, 0.63], [0, 0.34, 0.006, 0.228, 0.6], [0, 0.46, 0.006, 0.266, 0.55], [0, 0.545, 0, 0.245, 0.48], [0, 0.6, 0, 0.085, 0.82]],
-        f: [[0, 0, 0, 0.2, 0.68], [0, 0.09, 0, 0.194, 0.68], [0, 0.21, 0, 0.152, 0.68], [0, 0.33, 0.008, 0.184, 0.68], [0, 0.43, 0.012, 0.212, 0.66], [0, 0.535, 0, 0.216, 0.47], [0, 0.6, 0, 0.074, 0.84]],
-        // Fuller in the hip and the breast, under her robes.
-        c: [[0, 0, 0, 0.216, 0.7], [0, 0.09, 0, 0.208, 0.7], [0, 0.21, 0, 0.156, 0.7], [0, 0.32, 0.014, 0.192, 0.74], [0, 0.42, 0.024, 0.226, 0.76], [0, 0.535, 0, 0.216, 0.48], [0, 0.6, 0, 0.074, 0.84]],
+        m: [[0, -0.02, 0, 0.17, 0.72], [0, 0.04, 0, 0.192, 0.7], [0, 0.12, 0, 0.182, 0.68], [0, 0.21, 0, 0.166, 0.66], [0, 0.31, 0.008, 0.196, 0.66], [0, 0.4, 0.014, 0.228, 0.63], [0, 0.47, 0.01, 0.236, 0.58], [0, 0.52, 0.002, 0.212, 0.54], [0, 0.56, -0.004, 0.15, 0.6], [0, 0.6, -0.004, 0.08, 0.86]],
+        // A woman's: a narrow waist over the hips, a bust, slight shoulders, a slim neck.
+        f: [[0, -0.02, 0, 0.17, 0.74], [0, 0.04, 0, 0.198, 0.72], [0, 0.11, 0, 0.19, 0.7], [0, 0.2, 0, 0.128, 0.72], [0, 0.29, 0.008, 0.146, 0.74], [0, 0.36, 0.022, 0.166, 0.84], [0, 0.42, 0.024, 0.172, 0.84], [0, 0.475, 0.008, 0.172, 0.62], [0, 0.525, 0, 0.164, 0.52], [0, 0.565, -0.004, 0.105, 0.62], [0, 0.6, -0.004, 0.062, 0.86]],
+        // Fuller in the hip and the breast, under her robes: an hourglass.
+        c: [[0, -0.02, 0, 0.18, 0.74], [0, 0.04, 0, 0.214, 0.72], [0, 0.11, 0, 0.204, 0.7], [0, 0.2, 0, 0.128, 0.74], [0, 0.28, 0.01, 0.148, 0.78], [0, 0.35, 0.034, 0.176, 0.96], [0, 0.42, 0.036, 0.182, 0.94], [0, 0.475, 0.012, 0.174, 0.66], [0, 0.525, 0, 0.164, 0.52], [0, 0.565, -0.004, 0.105, 0.62], [0, 0.6, -0.004, 0.062, 0.86]],
+    };
+    // More rings between the rings (so paint has somewhere to go), and a limb slimmed for a slighter build.
+    const finer = (path, n = 2) => { const out = []; for (let i = 0; i < path.length - 1; i++) for (let k = 0; k < n; k++) { const t = k / n, e = t * t * (3 - 2 * t); out.push(path[i].map((v, j) => v + (path[i + 1][j] - v) * (j === 1 ? t : e))); } out.push(path[path.length - 1]); return out; };
+    const slim = (path, k) => path.map(p => [p[0], p[1], p[2], p[3] * k, p[4] ?? 1]);
+    // Tufts of fur standing out of an edge: a ring of them round an oval at a height, pointing out and down (or up).
+    const tufts = (s, y, rx, ratio, z0, n, len, droop, seed = 0) => {
+        for (let i = 0; i < n; i++) {
+            const a = (i + 0.5 * noise(i, seed)) / n * TAU, c = Math.cos(a), sn = Math.sin(a), w = 0.9 / n * TAU, l = len * (0.6 + 0.8 * noise(i, seed + 1)), tone = 0.72 + 0.4 * noise(i, seed + 2);
+            const p = b => [Math.sin(b) * rx, y, z0 + Math.cos(b) * rx * ratio];
+            s.paint([255 * tone, 255 * tone, 255 * tone], 1).tri(p(a - w), p(a + w), [sn * (rx + l), y + droop * l, z0 + c * (rx + l) * ratio], [sn, 0.3, c], [0.75, 0.75, 1]);
+        }
     };
     // A band lying on the trunk between two heights, a little proud of it.
     const band = (build, y0, y1, out = 0.012, steps = 3) => {
@@ -32,61 +44,73 @@ const WayPeople = (() => {
     };
 
     const P = {
-        thigh: v => part('thigh:' + v, s => {
+        // (g: how slight the limb is: 1 a man's, less a woman's.)
+        thigh: (v, g = 1) => part(`thigh:${v}:${g}`, s => {
             const skin = v !== 'cloth';
-            s.paint(W, skin ? 4 : 2).fx(0).tube([[0, 0.05, 0, 0.098, 1.08], [0, -0.07, 0.006, 0.113, 1.1], [0, -0.21, 0.01, 0.099, 1.08], [0, -0.35, 0.004, 0.08, 1.05], [0, -0.44, 0, 0.074, 1]], SIDES, { k: skin ? null : fold(0.1), cap: 1 });
-            ball(s, 0, -0.43, 0.012, 0.076, 0.07, 0.078, 6, 3);                                                                       // the knee
-            if (v === 'fur') s.paint(W, 1).tube([[0, 0.06, 0, 0.112, 1.08], [0, -0.04, 0.004, 0.126, 1.1], [0, -0.14, 0.008, 0.118, 1.1]], 8, { k: fur, rag: rag(2) });
+            s.paint(W, skin ? 4 : 2).fx(0).tube(slim(finer([[0, 0.07, 0, 0.092, 1.06], [0, -0.03, 0.008, 0.118, 1.12], [0, -0.16, 0.014, 0.112, 1.12], [0, -0.3, 0.008, 0.09, 1.06], [0, -0.4, 0.002, 0.076, 1.0], [0, -0.47, 0, 0.07, 1.0]]), g), SIDES, { k: skin ? null : fold(0.1), cap: 3, ao: i => i < 2 ? 0.7 : 1 });
+            ball(s, 0, -0.425, 0.016, 0.08 * g, 0.078, 0.084 * g, 9, 5);                                                                       // the knee, over the joint
+            if (v === 'fur') { s.paint(W, 1).tube(slim([[0, 0.07, 0, 0.108, 1.08], [0, -0.03, 0.006, 0.13, 1.12], [0, -0.12, 0.01, 0.124, 1.12]], g), SIDES, { k: fur }); tufts(s, -0.12, 0.118 * g, 1.12, 0.01, 11, 0.05, -1.1, 3); }
         }),
-        shin: v => part('shin:' + v, s => {
+        shin: (v, g = 1) => part(`shin:${v}:${g}`, s => {
             const skin = v !== 'boot', furry = v === 'fur';
-            s.paint(W, skin ? 4 : 2).fx(0).tube([[0, 0.03, 0, 0.075, 1.05], [0, -0.07, -0.012, 0.088, 1.1], [0, -0.17, -0.01, 0.074, 1.05], [0, -0.26, 0, 0.058, 1]], SIDES, { k: skin ? null : fold(0.08, 1.3) });
-            // The boot: a turned cuff, a shaft, a heel and a toe, on a sole.
-            s.paint(furry ? W : LEATHER, furry ? 1 : 0).tube([[0, -0.2, 0, 0.084, 1.05], [0, -0.3, 0, 0.071, 1], [0, -0.39, 0.008, 0.074, 1], [0, -0.455, 0.012, 0.082, 1]], 8, { k: furry ? fur : (i, k) => 1 - 0.05 * i });
-            s.tube([[0, -0.15, -0.002, furry ? 0.1 : 0.09, 1.05], [0, -0.215, 0, furry ? 0.104 : 0.095, 1.05]], 8, { k: furry ? fur : null, rag: furry ? rag(0, 0.3) : null });
-            s.tube([[0, -0.412, -0.035, 0.07, 0.74], [0, -0.418, 0.07, 0.078, 0.68], [0, -0.43, 0.16, 0.067, 0.56], [0, -0.44, 0.218, 0.034, 0.5]], 8, { cap: 3, k: furry ? fur : null });
-            s.paint([54, 40, 32], 0).box(0, -0.468, 0.075, 0.074, 0.014, 0.152, 1);
-            if (furry) for (const y of [-0.275, -0.345]) s.paint(LEATHER, 0).tube([[0, y + 0.013, 0.002, 0.081, 1], [0, y - 0.013, 0.004, 0.08, 1]], 8);        // bound with thongs
-            else s.paint(GOLD, 0).box(0.086, -0.19, 0, 0.008, 0.016, 0.016, 1);
+            s.paint(W, skin ? 4 : 2).fx(0).tube(slim(finer([[0, 0.06, 0, 0.07, 1.0], [0, -0.03, -0.004, 0.082, 1.08], [0, -0.12, -0.016, 0.094, 1.14], [0, -0.21, -0.012, 0.076, 1.08], [0, -0.3, -0.002, 0.056, 1.0], [0, -0.38, 0, 0.05, 1.0]]), g), SIDES, { k: skin ? null : fold(0.08, 1.3), cap: 1 });
+            // The boot: a turned cuff, a shaft that narrows to the ankle, a heel and a toe, on a sole.
+            s.paint(furry ? W : LEATHER, furry ? 1 : 0).tube(slim(finer([[0, -0.17, -0.004, 0.09, 1.08], [0, -0.26, -0.004, 0.074, 1.04], [0, -0.35, 0.002, 0.06, 1.0], [0, -0.41, 0.006, 0.066, 1.0], [0, -0.455, 0.012, 0.078, 1.0]]), g), SIDES, { k: furry ? fur : (i, k) => 1 - 0.02 * i - 0.05 * (k % 3 === 0) });
+            if (furry) { tufts(s, -0.17, 0.092 * g, 1.08, -0.004, 12, 0.055, 0.7, 5); tufts(s, -0.2, 0.094 * g, 1.08, -0.004, 12, 0.05, -0.9, 6); }
+            else s.tube(slim([[0, -0.135, -0.004, 0.092, 1.08], [0, -0.165, -0.004, 0.1, 1.08], [0, -0.2, -0.004, 0.094, 1.08]], g), SIDES);
+            ball(s, 0, -0.4, -0.01, 0.062 * g, 0.05, 0.07 * g, 8, 4);                                                                           // the ankle and heel
+            s.tube(slim(finer([[0, -0.41, -0.05, 0.062, 0.8], [0, -0.415, 0.05, 0.078, 0.72], [0, -0.428, 0.14, 0.07, 0.6], [0, -0.44, 0.215, 0.036, 0.5]]), g), 10, { cap: 3, k: furry ? fur : null });
+            s.paint([54, 40, 32], 0).box(0, -0.468, 0.07, 0.074 * g, 0.014, 0.15, 1);
+            if (furry) for (const y of [-0.28, -0.35]) s.paint(LEATHER, 0).tube(slim([[0, y + 0.012, 0, 0.08 - (y < -0.3 ? 0.012 : 0), 1.03], [0, y - 0.012, 0.002, 0.078 - (y < -0.3 ? 0.012 : 0), 1.03]], g), SIDES);
+            else s.paint(GOLD, 0).box(0.088 * g, -0.165, 0, 0.008, 0.016, 0.016, 1);
         }),
-        upper: v => part('upper:' + v, s => {
+        upper: (v, g = 1) => part(`upper:${v}:${g}`, s => {
             const skin = v === 'bare' || v === 'ring';
-            s.paint(W, skin ? 4 : 1).fx(0);
-            ball(s, 0, -0.015, 0, skin ? 0.098 : 0.108, 0.098, skin ? 0.098 : 0.106, 8, 4);
-            s.tube([[0, -0.03, 0, 0.09, 1], [0, -0.13, 0.006, skin ? 0.088 : 0.095, 1.05], [0, -0.24, 0, 0.072, 1], [0, -0.31, 0, 0.066, 1]], SIDES, { k: skin ? null : fold(0.1, 1.1) });
-            ball(s, 0, -0.305, -0.004, 0.066, 0.06, 0.068, 6, 3);
-            if (v === 'ring') s.paint(GOLD, 0).tube([[0, -0.132, 0.005, 0.095, 1.05], [0, -0.166, 0.005, 0.094, 1.05]], 8);
-            if (v === 'plate') { s.paint(STEEL, 0).blob(0, 0.005, 0, 0.128, 0.088, 0.128, { segs: 8, bands: 4, lump: 0, under: 0.6 }); s.tube([[0, -0.07, 0, 0.112, 1], [0, -0.13, 0, 0.104, 1]], 8); }
+            // A shoulder that slopes into the arm: the deltoid, the swell of the upper arm, and a cap over the elbow.
+            s.paint(W, skin ? 4 : 1).fx(0).tube(slim(finer([[-0.01, 0.075, 0, 0.03, 1], [0, 0.05, 0, 0.082, 1.0], [0, -0.01, 0, 0.104, 1.04], [0, -0.09, 0.004, 0.098, 1.06], [0, -0.17, 0.006, 0.086, 1.06], [0, -0.25, 0.002, 0.072, 1.0], [0, -0.33, 0, 0.064, 1.0]]), g), SIDES, { k: skin ? null : fold(0.1, 1.1), cap: 3 });
+            ball(s, 0, -0.308, -0.008, 0.07 * g, 0.064, 0.074 * g, 8, 5);
+            if (v === 'ring') s.paint(GOLD, 0).tube(slim([[0, -0.12, 0.005, 0.098, 1.06], [0, -0.132, 0.005, 0.102, 1.06], [0, -0.16, 0.005, 0.1, 1.06], [0, -0.172, 0.005, 0.094, 1.06]], g), SIDES);
+            if (v === 'plate') { s.paint(STEEL, 0).blob(0, 0.01, 0, 0.13, 0.09, 0.13, { segs: 10, bands: 5, lump: 0, under: 0.6 }); s.tube([[0, -0.06, 0, 0.114, 1], [0, -0.13, 0, 0.104, 1], [0, -0.14, 0, 0.11, 1]], SIDES); }
         }),
-        fore: v => part('fore:' + v, s => {
+        fore: (v, g = 1) => part(`fore:${v}:${g}`, s => {
             const skin = v === 'bare' || v === 'bracer';
-            s.paint(W, skin ? 4 : 1).fx(0).tube([[0, 0.01, 0, 0.066, 1], [0, -0.07, 0.004, 0.073, 1.05], [0, -0.19, 0, 0.055, 1], [0, -0.275, 0, 0.045, 1]], SIDES, { k: skin ? null : fold(0.08, 1.5) });
-            if (v === 'sleeve') s.paint(LEATHER, 0).tube([[0, -0.2, 0, 0.063, 1], [0, -0.268, 0, 0.056, 1]], 8);
+            s.paint(W, skin ? 4 : 1).fx(0).tube(slim(finer([[0, 0.04, 0, 0.06, 1.0], [0, -0.04, 0.004, 0.078, 1.06], [0, -0.11, 0.006, 0.074, 1.08], [0, -0.2, 0.002, 0.056, 1.0], [0, -0.285, 0, 0.042, 0.9]]), g), SIDES, { k: skin ? null : fold(0.08, 1.5), cap: 1 });
+            if (v === 'sleeve') s.paint(LEATHER, 0).tube(slim([[0, -0.19, 0.002, 0.064, 1], [0, -0.2, 0.002, 0.068, 1], [0, -0.265, 0, 0.058, 1], [0, -0.275, 0, 0.052, 1]], g), SIDES);
             if (v === 'bracer') {
-                s.paint(LEATHER, 0).tube([[0, -0.085, 0.003, 0.08, 1.05], [0, -0.17, 0.001, 0.066, 1], [0, -0.258, 0, 0.054, 1]], 8, { k: (i, k) => k % 2 ? 0.84 : 1 });
-                s.paint(GOLD, 0).tube([[0, -0.08, 0.003, 0.083, 1.05], [0, -0.1, 0.003, 0.081, 1.05]], 8).tube([[0, -0.245, 0, 0.058, 1], [0, -0.262, 0, 0.056, 1]], 8);
+                s.paint(LEATHER, 0).tube(slim(finer([[0, -0.075, 0.004, 0.084, 1.06], [0, -0.16, 0.004, 0.07, 1.04], [0, -0.262, 0, 0.052, 0.95]]), g), SIDES, { k: (i, k) => k % 3 === 0 ? 0.8 : 1 });
+                s.paint(GOLD, 0).tube(slim([[0, -0.07, 0.004, 0.087, 1.06], [0, -0.092, 0.004, 0.085, 1.06]], g), SIDES).tube(slim([[0, -0.248, 0, 0.057, 0.95], [0, -0.266, 0, 0.054, 0.95]], g), SIDES);
             }
-            if (v === 'gauntlet') s.paint(STEEL, 0).tube([[0, -0.09, 0, 0.082, 1], [0, -0.17, 0, 0.066, 1], [0, -0.265, 0, 0.058, 1]], 8);
-            // The hand: a palm, the fingers curled as one, and a thumb.
+            if (v === 'gauntlet') s.paint(STEEL, 0).tube([[0, -0.08, 0, 0.086, 1], [0, -0.17, 0, 0.068, 1], [0, -0.27, 0, 0.058, 1], [0, -0.28, 0, 0.064, 1]], SIDES);
+            // The hand: the heel of it, a palm, four fingers that curl round whatever they hold, and a thumb across them.
             s.paint(W, 4);
-            ball(s, 0, -0.322, 0.004, 0.043, 0.05, 0.03, 7, 4);
-            ball(s, 0, -0.384, 0.016, 0.039, 0.036, 0.027, 6, 3);
-            s.tube([[0.012, -0.3, 0.026, 0.016, 1], [0.02, -0.342, 0.05, 0.0145, 1], [0.016, -0.382, 0.058, 0.009, 1]], 5, { cap: 2 });
+            const h = 0.9 + 0.1 * g;
+            ball(s, 0, -0.3, 0.002, 0.04 * h, 0.03, 0.03 * h, 8, 4);
+            s.tube([[0, -0.295, 0.004, 0.04 * h, 0.62], [0, -0.335, 0.006, 0.047 * h, 0.56], [0, -0.365, 0.01, 0.044 * h, 0.5]], 10, { cap: 2 });
+            for (let i = 0; i < 4; i++) { const x = (-0.033 + i * 0.022) * h, l = (i === 0 || i === 3 ? 0.88 : 1) * h; s.tube([[x, -0.36, 0.012, 0.0115 * h, 1], [x, -0.36 - 0.036 * l, 0.022, 0.011 * h, 1], [x, -0.36 - 0.058 * l, 0.042, 0.0098 * h, 1], [x, -0.36 - 0.05 * l, 0.062, 0.0085 * h, 1]], 6, { cap: 2 }); }
+            s.tube([[0.036 * h, -0.31, 0.014, 0.015 * h, 1], [0.05 * h, -0.34, 0.036, 0.0135 * h, 1], [0.034 * h, -0.368, 0.058, 0.011 * h, 1], [0.016 * h, -0.38, 0.068, 0.0085 * h, 1]], 6, { cap: 2 });
         }),
         // build m or f; garb: tunic, robe, dress, mail, fur, hide.
         torso: (build, garb) => part(`torso:${build}:${garb}`, s => {
             const T = TRUNK[build], bare = garb === 'fur' || garb === 'hide', wide = T[0][3], trunk = build === 'm' ? 'm' : build;
-            s.paint(W, bare ? 4 : 1).fx(0).tube(T, 14, { k: bare ? null : garb === 'mail' ? mail : fold(0.1, 0.7), cap: 1 });
-            s.paint(W, 4).tube([[0, 0.57, 0, 0.07, 0.9], [0, 0.67, 0.004, 0.058, 0.95]], 8);                                  // the neck
+            const F = finer(T, 3);
+            // (Bare: the hollow down the middle of a strong belly and the lines across it, and the shadow under the ribs.)
+            const toned = (i, k) => { const y = F[i][1], front = k === 4 || k === 3; return y > 0.13 && y < 0.31 ? (k === 4 ? 0.94 : 1) * (front && Math.abs(((y - 0.13) / 0.06) % 1 - 0.5) > 0.42 ? 0.93 : 1) : 1; };
+            s.paint(W, bare ? 4 : 1).fx(0).tube(F, 16, { k: bare ? toned : garb === 'mail' ? mail : fold(0.08, 0.5), cap: 1, turn: Math.PI / 16 * 0 });
+            const nk = build === 'm' ? 1 : 0.8;
+            s.paint(W, 4).tube([[0, 0.55, -0.004, 0.085 * nk, 0.9], [0, 0.6, 0, 0.066 * nk, 0.92], [0, 0.66, 0.006, 0.058 * nk, 0.95], [0, 0.7, 0.01, 0.062 * nk, 0.95]], 10);                                  // the neck
+            if (bare) for (const x of [-1, 1]) s.tube([[x * 0.02, 0.555, 0.07 * nk, 0.012, 1], [x * 0.09, 0.548, 0.05, 0.013, 1], [x * 0.17, 0.54, 0.01, 0.01, 1]], 5);          // the collarbones
             if (garb === 'fur') {
                 // A fur top, tied behind the neck; a necklace of teeth.
-                s.paint(W, 1).tube(band('f', 0.352, 0.495, 0.02, 3).map((r, i) => [r[0], r[1], r[2] + 0.006, r[3] + (i === 1 || i === 2 ? 0.008 : 0), r[4] * 1.06]), 12, { k: fur, rag: (i, k) => i === 0 || i === 3 ? 0.95 + 0.1 * noise(k, i) : 1 });
+                const top = band('f', 0.325, 0.465, 0.022, 4);
+                s.paint(W, 1).tube(top, 16, { k: fur });
+                tufts(s, 0.325, top[0][3], top[0][4], top[0][2], 22, 0.03, -1.2, 11); tufts(s, 0.465, top[4][3], top[4][4], top[4][2], 20, 0.028, 1.0, 12); tufts(s, 0.4, top[2][3] + 0.004, top[2][4], top[2][2], 18, 0.02, -0.4, 13);
                 for (const x of [-1, 1]) s.paint(LEATHER, 0).tube([[x * 0.1, 0.49, 0.13, 0.011, 1], [x * 0.085, 0.575, 0.075, 0.011, 1], [x * 0.05, 0.6, -0.02, 0.011, 1], [0, 0.585, -0.075, 0.011, 1]], 4);
                 for (let i = -3; i <= 3; i++) { const a = i * 0.3; s.paint(BONE, 0).tube([[Math.sin(a) * 0.1, 0.545 - Math.cos(a) * 0.035, 0.07 + Math.cos(a) * 0.075, 0.009, 1], [Math.sin(a) * 0.105, 0.515 - Math.cos(a) * 0.045, 0.08 + Math.cos(a) * 0.08, 0.002, 1]], 4); }
                 s.paint(LEATHER, 0).tube([[-0.1, 0.57, 0, 0.012, 1], [0, 0.56, 0.065, 0.012, 1], [0.1, 0.57, 0, 0.012, 1]], 4, { ref: [0, 1, 0] });
             } else if (garb === 'hide') {
                 // A pelt across the shoulders, and a strap from shoulder to hip.
-                s.paint(W, 1).tube([[0, 0.44, 0, 0.3, 0.56], [0, 0.52, 0, 0.3, 0.56], [0, 0.6, 0, 0.2, 0.62], [0, 0.63, 0, 0.11, 0.8]], 12, { k: fur, rag: rag(0, 0.3) });
+                s.paint(W, 1).tube([[0, 0.45, 0, 0.275, 0.6], [0, 0.52, 0, 0.275, 0.58], [0, 0.585, 0, 0.19, 0.62], [0, 0.62, 0, 0.11, 0.8]], 14, { k: fur });
+                tufts(s, 0.45, 0.275, 0.6, 0, 26, 0.06, -1.0, 21); tufts(s, 0.53, 0.27, 0.58, 0, 22, 0.04, -0.3, 22);
             } else {
                 s.paint(W, 1).tube([[0, 0.565, 0, 0.115, 0.8], [0, 0.615, 0, 0.088, 0.86]], 10, { k: (i, k) => 0.9 });               // a collar
                 if (garb === 'tunic') s.paint(DARK, 0).quad([-0.012, 0.42, wide * 0.6 + 0.002], [0.012, 0.42, wide * 0.6 + 0.002], [0.03, 0.58, 0.085], [-0.03, 0.58, 0.085], [0, 0.3, 0.95]);      // laced at the throat
@@ -96,13 +120,16 @@ const WayPeople = (() => {
                 const tilt = 0.62, c = Math.cos(tilt), n = Math.sin(tilt), r = build === 'f' ? 0.248 : 0.274;
                 s.paint(LEATHER, 0).tube([[0.014 * n, 0.33 - 0.014 * c, 0, r, build === 'f' ? 0.565 : 0.54], [-0.014 * n, 0.33 + 0.014 * c, 0, r, build === 'f' ? 0.565 : 0.54]], 14, { ref: [0, 0, 1] });
                 s.paint(GOLD, 0).box(-0.06, 0.4, build === 'f' ? 0.135 : 0.15, 0.02, 0.02, 0.008, 1);
-                s.paint(W, 1).tube([[0, -0.085, 0, 0.15, 0.78], [0, -0.01, 0, 0.207, 0.7], [0, 0.1, 0, 0.202, 0.69]], 12, { k: fur });
-                s.tube([[0, 0.12, 0, 0.208, 0.7], [0, 0.02, 0, 0.228, 0.74], [0, -0.1, 0, 0.262, 0.8], [0, -0.23, 0, 0.292, 0.84]], 14, { k: fur, rag: (i, k) => i === 3 ? 0.8 + 0.3 * noise(k, 5) : 1 });
+                s.paint(W, 1).tube([[0, -0.085, 0, 0.15, 0.78], [0, -0.01, 0, 0.2, 0.72], [0, 0.1, 0, 0.198, 0.71]], 14, { k: fur });
+                // The kilt: two lengths of pelt, the upper short, each ending in tufts; open a little at one hip.
+                s.tube([[0, 0.11, 0, 0.204, 0.72], [0, 0.03, 0, 0.222, 0.74], [0, -0.06, 0, 0.244, 0.78]], 16, { k: fur });
+                s.tube([[0, 0.05, 0, 0.212, 0.73], [0, -0.08, 0, 0.242, 0.78], [0, -0.2, 0, 0.268, 0.82]], 16, { k: (i, k) => fur(i, k) * (k === 12 || k === 13 ? 0.55 : 0.92), rag: (i, k) => (k === 12 || k === 13) && i ? 0.86 : 1 });
+                tufts(s, -0.06, 0.244, 0.78, 0, 24, 0.045, -1.3, 31); tufts(s, -0.2, 0.268, 0.82, 0, 26, 0.06, -1.5, 32); tufts(s, 0.105, 0.208, 0.72, 0, 20, 0.022, 0.6, 33);
             }
             // A belt with a buckle; a pouch at one hip and a knife at the other.
-            const by = garb === 'fur' || garb === 'hide' ? 0.12 : 0.15, belt = band(trunk, by - 0.035, by + 0.035, 0.014, 1);
+            const by = garb === 'fur' || garb === 'hide' ? 0.12 : 0.15, belt = band(trunk, by - 0.035, by + 0.035, 0.024, 2);
             if (garb === 'fur' || garb === 'hide') { belt[0][3] += 0.012; belt[1][3] += 0.012; }
-            s.paint(garb === 'robe' ? GOLD : garb === 'leaf' ? [84, 130, 66] : LEATHER, 0).tube(belt, 12);
+            s.paint(garb === 'robe' ? GOLD : garb === 'leaf' ? [84, 130, 66] : LEATHER, 0).tube(belt, 16);
             s.paint(GOLD, 0).box(0, by, belt[0][3] * belt[0][4] + 0.004, 0.034, 0.034, 0.008, 1).paint(DARK, 0).box(0, by, belt[0][3] * belt[0][4] + 0.011, 0.016, 0.016, 0.004, 1);
             if (garb !== 'robe' && garb !== 'dress' && garb !== 'leaf') {
                 s.paint([134, 98, 66], 0).box(belt[0][3] * 0.82, by - 0.07, 0.07, 0.035, 0.06, 0.05, 0.75, [DARK, 0]).paint(GOLD, 0).box(belt[0][3] * 0.82 + 0.036, by - 0.05, 0.07, 0.004, 0.012, 0.012, 1);
@@ -110,17 +137,17 @@ const WayPeople = (() => {
             }
             if (garb === 'tunic' || garb === 'mail' || garb === 'leathers') s.paint(W, 1).tube([[0, 0.12, 0, wide + 0.012, 0.68], [0, 0, 0, wide + 0.035, 0.72], [0, -0.12, 0, wide + 0.058, 0.76], [0, -0.22, 0, wide + 0.074, 0.78]], 12, { k: garb === 'mail' ? mail : fold(0.14, 0.4), rag: rag(3, 0.08) });
             if (garb === 'mail') for (const z of [1, -1]) s.paint(W, 3).quad([-0.13, -0.3, z * 0.2], [0.13, -0.3, z * 0.2], [0.15, 0.54, z * 0.158], [-0.15, 0.54, z * 0.158], [0, 0.05, z], [0.75, 0.75, 1, 1]);        // a tabard
-            if (garb === 'dress') s.paint(W, 3).tube(band('f', 0.17, 0.36, 0.01, 2), 12, { k: (i, k) => k === 3 ? 0.6 : 1 });           // a laced bodice
+            if (garb === 'dress') s.paint(W, 3).tube(band('f', 0.17, 0.36, 0.02, 6), 16, { k: (i, k) => k === 3 ? 0.6 : 1 });           // a laced bodice
             if (garb === 'leaf') {
                 // A druid's robe: a bodice of bark-brown leather laced with vine, a mantle of feathers on the shoulders, and a stone at the belt.
-                s.paint([98, 72, 52], 0).tube(band(trunk, 0.16, 0.4, 0.011, 3), 14, { k: (i, k) => 0.82 + 0.2 * noise(k, i) });
+                s.paint([98, 72, 52], 0).tube(band(trunk, 0.16, 0.4, 0.02, 8), 16, { k: (i, k) => 0.82 + 0.2 * noise(k, i) });
                 for (let i = 0; i < 4; i++) s.paint([120, 170, 84], 0).tube([[-0.04, 0.2 + i * 0.05, wide * 0.72, 0.006, 1], [0.04, 0.225 + i * 0.05, wide * 0.72 + 0.004, 0.006, 1]], 4);
                 for (let i = 0; i < 12; i++) { const a = i / 12 * TAU, r0 = 0.2, r1 = 0.33, c = Math.cos(a), n = Math.sin(a), tone = 0.8 + 0.3 * noise(i, 7); s.paint([255 * tone, 255 * tone, 255 * tone], 3).tri([n * r0 - c * 0.06, 0.6, c * r0 * 0.6 + n * 0.04], [n * r0 + c * 0.06, 0.6, c * r0 * 0.6 - n * 0.04], [n * r1, 0.44 + 0.02 * (i % 2), c * r1 * 0.62], [n * 0.5, 0.8, c * 0.5]); }
                 s.paint([90, 220, 190], 0).fx(0, 200).blob(0, 0.15, wide * 0.7 + 0.022, 0.024, 0.024, 0.012, { segs: 6, bands: 3, lump: 0, under: 1 }).fx(0);
             }
             if (garb === 'leathers') {
                 // Fitted leathers: a second belt slung low, pouches, a strap across the chest with a buckle, a high collar.
-                s.paint(DARK, 0).tube(band(trunk, 0.2, 0.44, 0.008, 3), 14, { k: (i, k) => k % 3 ? 0.92 : 0.7 });
+                s.paint(DARK, 0).tube(band(trunk, 0.2, 0.44, 0.018, 8), 16, { k: (i, k) => k % 3 ? 0.92 : 0.7 });
                 const tilt = -0.5, c = Math.cos(tilt), n = Math.sin(tilt);
                 s.paint(LEATHER, 0).tube([[0.014 * n, 0.33 - 0.014 * c, 0, 0.246, 0.57], [-0.014 * n, 0.33 + 0.014 * c, 0, 0.246, 0.57]], 14, { ref: [0, 0, 1] });
                 s.paint(GOLD, 0).box(0.05, 0.37, 0.142, 0.018, 0.018, 0.008, 1);
@@ -195,48 +222,56 @@ const WayPeople = (() => {
             s.paint(W, 7).fx(0).tube([ring(0.14, 0.168, 0.2, 1.1), ring(0.07, 0.19, 0.2, 1.1), ring(-0.04, 0.2, 0.2, 1.08), ring(-0.14, 0.17, 0.21, 1.02), ring(-0.21, 0.09, 0.22, 1), ring(-0.24, 0, 0.22, 1)], 10, { cap: 2, k: fold(0.1, 0.6) });
             s.paint([70, 70, 70], 7).tube([ring(0.138, 0.162, 0.2, 1.1), ring(0.05, 0.18, 0.2, 1.1)], 10, { ao: () => 0.55 });
             s.paint(W, 7).tube([[0, 0.06, -0.01, 0.17, 0.9], [0, -0.02, -0.01, 0.23, 0.8], [0, -0.07, -0.01, 0.262, 0.76]], 10, { k: fold(0.14, 0.5), rag: rag(2, 0.08) });
-            s.paint([210, 210, 210], 7).tube([[0, 0.04, 0.03, 0.118, 1.0], [0, 0.1, 0.034, 0.126, 1.02], [0, 0.148, 0.03, 0.132, 1.04]], 10, { k: fold(0.12, 1.1) });
+            s.paint([210, 210, 210], 7).tube([[0, -0.01, 0.03, 0.11, 1.0], [0, 0.06, 0.04, 0.128, 1.06], [0, 0.115, 0.042, 0.136, 1.1], [0, 0.146, 0.034, 0.136, 1.08], [0, 0.152, 0.026, 0.13, 1.08]], 12, { k: fold(0.14, 1.1) });
         }),
+        // A head: chin, jaw, cheekbones, brow and cranium as one form; eyes set into it under lids, a nose with a
+        // bridge, lips, ears. v: m, f or e (one of the Evenfolk), then p for warpaint or 1, 2 for the Evenfolk's marks.
         face: v => part('face:' + v, s => {
-            const f = v[0] !== 'm', paint = v[1] === 'p', elf = v[0] === 'e';
-            // A flush in the cheeks and a warmer nose and ears, painted into the skin.
-            s.mark((x, y, z) => { const c = Math.max(0, 1 - Math.hypot(Math.abs(x) - 0.07, y - 0.125, (z - 0.11) * 0.7) / 0.05); return c > 0 ? [255, 255 - (f ? 34 : 20) * c, 255 - (f ? 30 : 22) * c] : null; });
-            s.paint(W, 4).fx(0).blob(0, 0.168, 0, f ? 0.14 : 0.148, 0.168, 0.152, { segs: 12, bands: 8, lump: 0, under: 0.82 });
-            s.blob(0, 0.072, 0.036, f ? 0.086 : 0.108, f ? 0.066 : 0.07, f ? 0.094 : 0.102, { segs: 9, bands: 5, lump: 0, under: 0.8 });                 // the jaw
-            s.mark(null);
-            s.tube(f ? [[0, 0.19, 0.136, 0.009, 1], [0, 0.15, 0.156, 0.013, 1], [0, 0.126, 0.158, 0.0165, 0.85], [0, 0.114, 0.142, 0.009, 1]] : [[0, 0.2, 0.134, 0.011, 1], [0, 0.15, 0.164, 0.019, 1], [0, 0.118, 0.158, 0.024, 0.8], [0, 0.106, 0.14, 0.011, 1]], 6);           // the nose
-            if (!f) s.box(0, 0.207, 0.136, 0.09, 0.012, 0.014, 1);                                                                    // a heavy brow
+            const f = v[0] !== 'm', paint = v[1] === 'p', elf = v[0] === 'e', j = f ? 0.86 : 1;
+            const skull = finer([[0, -0.012, 0.05, 0.03 * j, 1.0], [0, 0.012, 0.042, 0.066 * j, 1.0], [0, 0.05, 0.026, 0.1 * j, 1.04], [0, 0.095, 0.012, 0.124 * (f ? 0.93 : 1), 1.08], [0, 0.13, 0.006, 0.141, 1.1], [0, 0.185, 0, 0.144, 1.1], [0, 0.23, -0.006, 0.143, 1.1], [0, 0.275, -0.012, 0.13, 1.1], [0, 0.31, -0.016, 0.1, 1.1], [0, 0.332, -0.018, 0.05, 1.1], [0, 0.338, -0.018, 0, 1]], 2);
+            s.paint(W, 4).fx(0).tube(skull, 16, { cap: 1, ao: i => i < 3 ? 0.75 : 1 });
+            const ey = 0.178, front = 0.151;
             for (const x of [-1, 1]) {
-                s.paint(W, 4).blob(x * 0.146, 0.158, -0.004, 0.02, 0.038, 0.028, { segs: 6, bands: 3, lump: 0 });
-                const ey = f ? 0.172 : 0.175, ew = f ? 0.025 : 0.022, eh = f ? 0.0155 : 0.0125;
-                s.paint([250, 248, 244], 0).gloss(0.5).blob(x * 0.054, ey, 0.136, ew, eh, 0.012, { segs: 8, bands: 3, lump: 0, under: 1 });
-                if (elf) s.paint(v[1] === '2' ? [150, 230, 255] : [255, 214, 120], 0).fx(0, 170).blob(x * 0.055, ey, 0.143, 0.0125, 0.0135, 0.007, { segs: 7, bands: 3, lump: 0, under: 1 }).fx(0);
-                else s.paint(f ? [56, 120, 96] : [84, 66, 50], 0).blob(x * 0.055, ey, 0.143, f ? 0.012 : 0.0105, f ? 0.013 : 0.0115, 0.007, { segs: 7, bands: 3, lump: 0, under: 1 });
-                s.paint([22, 18, 18], 0).gloss(1).blob(x * 0.055, ey, 0.1475, 0.0055, 0.006, 0.004, { segs: 6, bands: 3, lump: 0, under: 1 }).gloss(0);
-                s.paint([28, 22, 22], 0).quad([x * 0.028, ey + eh - 0.003, 0.149], [x * 0.082, ey + eh - 0.001, 0.1405], [x * 0.084, ey + eh + 0.003, 0.14], [x * 0.028, ey + eh + 0.001, 0.149], [0, 0.3, 0.95]);        // the lid's line
+                const ex = x * 0.054;
+                // The socket's shadow, the white set into it, the iris, the pupil and a point of light; a lid over it.
+                s.paint([210, 190, 190], 4).blob(ex, ey, front - 0.012, 0.031, 0.021, 0.012, { segs: 8, bands: 4, lump: 0, under: 1 });
+                s.paint([250, 248, 244], 0).gloss(0.4).blob(ex, ey, front - 0.006, 0.0235, 0.0135 + (f ? 0.002 : 0), 0.01, { segs: 10, bands: 4, lump: 0, under: 1 });
+                s.paint(elf ? (v[1] === '2' ? [120, 190, 230] : [236, 180, 84]) : f ? [70, 128, 104] : [96, 74, 54], 0).blob(ex + x * 0.001, ey - 0.001, front + 0.0005, 0.0105, 0.0115, 0.006, { segs: 8, bands: 3, lump: 0, under: 1 });
+                s.paint([20, 16, 18], 0).gloss(1).blob(ex + x * 0.001, ey - 0.001, front + 0.0045, 0.005, 0.0055, 0.003, { segs: 6, bands: 3, lump: 0, under: 1 });
+                s.paint([255, 255, 255], 0).fx(0, elf ? 90 : 0).blob(ex + 0.004, ey + 0.004, front + 0.0065, 0.0022, 0.0022, 0.001, { segs: 4, bands: 2, lump: 0, under: 1 }).fx(0).gloss(0);
+                s.paint(W, 4).tube([[ex - x * 0.026, ey + 0.008, front - 0.006, 0.005, 1], [ex, ey + 0.016, front + 0.004, 0.0075, 1], [ex + x * 0.027, ey + 0.007, front - 0.012, 0.005, 1]], 5, { ref: [0, 1, 0] });
+                s.paint([40, 30, 30], 0).tube([[ex - x * 0.025, ey + 0.006, front - 0.003, 0.0022, 1], [ex, ey + 0.0125, front + 0.0065, f ? 0.0034 : 0.0026, 1], [ex + x * 0.029, ey + 0.007, front - 0.01, f ? 0.003 : 0.0022, 1]], 4, { ref: [0, 1, 0] });      // the lashes' line
                 // A brow: arched and fine, or straight and heavy.
-                s.paint(W, 6).quad([x * 0.026, ey + (f ? 0.03 : 0.023), 0.151], [x * 0.086, ey + (f ? 0.036 : 0.029), 0.141], [x * 0.086, ey + (f ? 0.041 : 0.037), 0.141], [x * 0.026, ey + (f ? 0.036 : 0.032), 0.151], [0, 0, 1], [0.6, 0.6, 0.6, 0.6]);
+                s.paint([200, 200, 200], 6).tube([[ex - x * 0.03, ey + (f ? 0.03 : 0.024), front + 0.002, f ? 0.004 : 0.0065, 1], [ex + x * 0.004, ey + (f ? 0.04 : 0.031), front + 0.004, f ? 0.0052 : 0.008, 1], [ex + x * 0.036, ey + (f ? 0.034 : 0.03), front - 0.014, f ? 0.003 : 0.006, 1]], 5, { ref: [0, 1, 0] });
+                s.paint(W, 4);
+                if (!f) s.tube([[ex - x * 0.034, ey + 0.022, front - 0.006, 0.011, 1], [ex + x * 0.04, ey + 0.026, front - 0.018, 0.011, 1]], 5, { ref: [0, 1, 0] });           // a heavy brow under it
+                // An ear; the Evenfolk's are long and swept back.
+                if (elf) s.tube([[x * 0.136, 0.168, 0.0, 0.03, 0.5], [x * 0.19, 0.212, -0.07, 0.032, 0.4], [x * 0.25, 0.28, -0.18, 0.02, 0.4], [x * 0.285, 0.33, -0.27, 0, 1]], 7, { ref: [0, 1, 0] });
+                else { s.blob(x * 0.146, 0.168, -0.006, 0.016, 0.036, 0.026, { segs: 7, bands: 4, lump: 0 }); s.paint([200, 170, 170], 4).blob(x * 0.152, 0.168, 0, 0.008, 0.02, 0.012, { segs: 5, bands: 3, lump: 0 }); }
+                if (elf) for (let i = 0; i < 3; i++) s.paint([236, 250, 255], 0).fx(0, 110).blob(x * (0.074 + i * 0.02), 0.146 - i * 0.004, 0.13 - i * 0.013, 0.006 - i * 0.001, 0.006 - i * 0.001, 0.003, { segs: 5, bands: 3, lump: 0, under: 1 }).fx(0);
                 // Warpaint: two bars across each cheek.
-                if (paint) for (const [y, w2] of [[0.146, 0.04], [0.124, 0.03]]) s.paint([52, 110, 168], 0).quad([x * 0.066, y - 0.007, 0.137], [x * (0.066 + w2), y - 0.003, 0.137 - w2 * 0.66], [x * (0.066 + w2), y + 0.005, 0.137 - w2 * 0.66], [x * 0.066, y + 0.003, 0.137], [x * 0.5, 0, 0.86]);
-                if (elf) {
-                    // The Evenfolk's long ears, swept back; and their own marks: three pale stars along the cheekbone (a line at the chin for some).
-                    s.paint(W, 4).tube([[x * 0.138, 0.165, 0.0, 0.03, 0.5], [x * 0.2, 0.215, -0.08, 0.03, 0.4], [x * 0.262, 0.29, -0.2, 0.016, 0.4], [x * 0.285, 0.33, -0.27, 0, 1]], 6, { ref: [0, 1, 0] });
-                    for (let i = 0; i < 3; i++) s.paint([236, 250, 255], 0).fx(0, 120).blob(x * (0.07 + i * 0.022), 0.15 - i * 0.004, 0.134 - i * 0.012, 0.0075 - i * 0.001, 0.0075 - i * 0.001, 0.004, { segs: 5, bands: 3, lump: 0, under: 1 }).fx(0);
-                }
-                // The corners of the mouth, turned up a little.
-                s.paint(f ? [168, 70, 74] : [140, 90, 80], 0).quad([x * 0.016, 0.0925, 0.1385], [x * (f ? 0.034 : 0.04), 0.098, 0.133], [x * (f ? 0.034 : 0.04), 0.1, 0.133], [x * 0.016, 0.098, 0.1385], [x * 0.2, 0, 0.98]);
+                if (paint) for (const [y, w2] of [[0.15, 0.04], [0.13, 0.03]]) s.paint([52, 110, 168], 0).quad([x * 0.07, y - 0.006, 0.137], [x * (0.07 + w2), y - 0.002, 0.137 - w2 * 0.6], [x * (0.07 + w2), y + 0.005, 0.137 - w2 * 0.6], [x * 0.07, y + 0.003, 0.137], [x * 0.5, 0, 0.86]);
+                s.paint(W, 4).blob(x * 0.016, 0.119, front + 0.008, 0.011, 0.009, 0.011, { segs: 5, bands: 3, lump: 0 });                             // the wings of the nose
             }
-            s.paint(f ? [176, 74, 78] : [146, 94, 84], 0).blob(0, 0.0975, 0.132, f ? 0.021 : 0.026, 0.0055, 0.008, { segs: 6, bands: 3, lump: 0, under: 1 });
-            s.paint(f ? [204, 98, 98] : [160, 106, 94], 0).blob(0, 0.0885, 0.131, f ? 0.017 : 0.022, 0.0065, 0.008, { segs: 6, bands: 3, lump: 0, under: 1 });
-            if (elf && v[1] === '1') s.paint([236, 250, 255], 0).fx(0, 120).quad([-0.004, 0.03, 0.128], [0.004, 0.03, 0.128], [0.004, 0.076, 0.136], [-0.004, 0.076, 0.136], [0, 0, 1]).fx(0);
+            // The nose: a bridge from between the brows, a tip, and the turn under it.
+            s.paint(W, 4).tube(f ? [[0, 0.2, front - 0.004, 0.011, 1], [0, 0.165, front + 0.008, 0.011, 1], [0, 0.135, front + 0.02, 0.0135, 1], [0, 0.123, front + 0.021, 0.014, 0.9], [0, 0.114, front + 0.006, 0.01, 1]] : [[0, 0.205, front - 0.002, 0.014, 1], [0, 0.165, front + 0.012, 0.015, 1], [0, 0.13, front + 0.026, 0.019, 1], [0, 0.118, front + 0.026, 0.02, 0.9], [0, 0.108, front + 0.006, 0.013, 1]], 7, { cap: 2 });
+            // The mouth: a bow of an upper lip, a fuller lower one, and the line between; the chin under it.
+            const lip = f ? [186, 92, 96] : [168, 112, 100], my = 0.084;
+            s.paint([lip[0] * 0.86, lip[1] * 0.8, lip[2] * 0.8], 0).tube([[-(f ? 0.027 : 0.032), my + 0.002, front - 0.016, 0.003, 1], [-0.01, my + 0.006, front - 0.004, 0.0062, 1], [0, my + 0.004, front - 0.002, 0.005, 1], [0.01, my + 0.006, front - 0.004, 0.0062, 1], [f ? 0.027 : 0.032, my + 0.002, front - 0.016, 0.003, 1]], 5, { ref: [0, 1, 0] });
+            s.paint(lip, 0).tube([[-(f ? 0.024 : 0.028), my - 0.003, front - 0.017, 0.003, 1], [0, my - 0.008, front - 0.004, f ? 0.0085 : 0.0075, 1], [f ? 0.024 : 0.028, my - 0.003, front - 0.017, 0.003, 1]], 5, { ref: [0, 1, 0] });
+            s.paint([96, 50, 52], 0).tube([[-(f ? 0.028 : 0.033), my + 0.0015, front - 0.0145, 0.0016, 1], [0, my - 0.001, front - 0.0005, 0.0018, 1], [f ? 0.028 : 0.033, my + 0.0015, front - 0.0145, 0.0016, 1]], 4, { ref: [0, 1, 0] });
+            if (elf && v[1] === '1') s.paint([236, 250, 255], 0).fx(0, 110).quad([-0.0035, 0.008, front - 0.012], [0.0035, 0.008, front - 0.012], [0.0035, 0.06, front - 0.002], [-0.0035, 0.06, front - 0.002], [0, 0, 1]).fx(0);
         }),
         hair: v => part('hair:' + v, s => {
             s.paint(W, 6).fx(0);
             const strands = (i, k) => 0.86 + 0.22 * noise(k, 1) - 0.03 * i;
             if (v !== 'bald') {
-                s.mark((x, y, z) => { const k = 0.8 + 0.2 * Math.abs(Math.sin(Math.atan2(x, y - 0.1) * 9)); return [255 * k, 255 * k, 255 * k]; });      // combed back from the brow
-                s.blob(0, 0.21, -0.026, 0.16, 0.162, 0.162, { segs: 12, bands: 6, lump: 0.04, seed: 0.4, under: 0.75 });
-                s.mark(null);
+                // Over the crown and down behind the ears, in locks; a fringe that falls across the brow.
+                const locks = (i, k) => 0.8 + 0.24 * noise(k, 1) * (k % 2 ? 1 : 0.6) - 0.02 * i;
+                s.tube(finer([[0, 0.12, -0.05, 0.146, 0.86], [0, 0.19, -0.04, 0.156, 0.98], [0, 0.25, -0.03, 0.156, 1.06], [0, 0.3, -0.03, 0.134, 1.08], [0, 0.335, -0.03, 0.09, 1.08], [0, 0.352, -0.03, 0.03, 1.08], [0, 0.355, -0.03, 0, 1]], 2), 18, { k: locks });
+                const loose = v === 'short' || v === 'bun' ? 0.7 : 1;
+                for (let i = -3; i <= 3; i++) { const x = i * 0.036, side = Math.sign(i) || 1; s.tube([[x * 0.8, 0.325 - Math.abs(i) * 0.012, 0.06, 0.03, 0.5], [x, 0.275 - Math.abs(i) * 0.006, 0.128 - Math.abs(i) * 0.012, 0.03, 0.4], [x + side * 0.012, 0.232 + Math.abs(i) * 0.004 * loose, 0.146 - Math.abs(i) * 0.016, 0.018, 0.4], [x + side * 0.02, 0.212, 0.146 - Math.abs(i) * 0.018, 0, 1]], 6, { k: locks, ref: [1, 0, 0] }); }
+                for (const x of [-1, 1]) s.tube([[x * 0.13, 0.28, 0.03, 0.036, 0.5], [x * 0.15, 0.2, 0.05, 0.034, 0.45], [x * 0.152, 0.12 * loose + 0.05, 0.05, 0.022, 0.45], [x * 0.148, 0.07 * loose + 0.05, 0.045, 0, 1]], 6, { k: locks });
             }
             if (v === 'bald') s.tube([[0, 0.12, -0.03, 0.156, 0.95], [0, 0.2, -0.04, 0.15, 0.9]], 10, { k: strands });
             if (v === 'long') s.tube([[0, 0.26, -0.085, 0.11, 0.7], [0, 0.1, -0.13, 0.142, 0.52], [0, -0.08, -0.15, 0.13, 0.42], [0, -0.24, -0.14, 0.095, 0.4], [0, -0.34, -0.13, 0.03, 0.4]], 10, { k: strands });
@@ -395,10 +430,12 @@ const WayPeople = (() => {
         const covered = look.hat === 'hood' || look.hat === 'helm' || look.hat === 'kerchief' || look.hat === 'cowl';
         const v = look.v ?? 0.5, style = look.hairStyle || (covered ? null : build !== 'm' ? (v < 0.4 ? 'long' : v < 0.75 ? 'bun' : 'braid') : v > 0.85 ? 'bald' : 'short');
         const arms = look.arms || (wild ? 'bare' : garb === 'mail' ? 'plate' : 'sleeve');
+        // A woman's limbs are slighter and her shoulders narrower.
+        const g = build === 'm' ? 1 : build === 'c' ? 0.88 : 0.84;
         k = {
-            build, garb, shoulder: build === 'm' ? 0.3 : 0.275,
-            thigh: P.thigh(wild ? 'fur' : 'cloth'), shin: P.shin(wild ? 'fur' : 'boot'),
-            upper: P.upper(arms === 'bare' ? 'ring' : arms === 'plate' ? 'plate' : 'sleeve'), fore: P.fore(arms === 'bare' || arms === 'bracer' ? 'bracer' : arms === 'plate' ? 'gauntlet' : 'sleeve'),
+            build, garb, shoulder: build === 'm' ? 0.268 : 0.224, hips: build === 'm' ? 0.1 : 0.098,
+            thigh: P.thigh(wild ? 'fur' : 'cloth', build === 'm' ? 1 : 0.92), shin: P.shin(wild ? 'fur' : 'boot', g),
+            upper: P.upper(arms === 'bare' ? 'ring' : arms === 'plate' ? 'plate' : 'sleeve', g), fore: P.fore(arms === 'bare' || arms === 'bracer' ? 'bracer' : arms === 'plate' ? 'gauntlet' : 'sleeve', g),
             torso: P.torso(build, garb), skirt: garb === 'leaf' ? P.leafskirt() : garb === 'robe' || garb === 'dress' ? P.skirt(garb === 'robe' || v > 0.3) : null,
             face: P.face(look.face || ((build === 'm' ? 'm' : 'f') + (look.paint ? 'p' : '-'))), hair: style ? P.hair(style) : null,
             beard: look.beard ? P.beard(look.beard) : build === 'm' && !look.hairStyle && v > 0.62 && look.hat !== 'helm' ? P.beard(v > 0.9 ? 'long' : 'short') : null,
@@ -414,11 +451,12 @@ const WayPeople = (() => {
         tints[1] = look.tunic; tints[2] = look.legs; tints[3] = look.cloak; tints[4] = A.SKIN[look.skin]; tints[6] = A.HAIR[look.hair]; tints[7] = look.hatCol || look.cloak;
         const lit = pose.lit ? 1 : 0, put = model => out.stamp(model, st.top, tints, 0, 0, lit);
         // crouch: a stalking walk, low, the knees bent and the back forward.
-        const crouch = (pose.crouch || 0) * (1 - sit), bob = 0.028 * Math.cos(tau * 2) * mv, hip = 0.88 - 0.44 * sit - 0.17 * crouch + bob;
+        // vault: over a fence, a hand on the rail, the knees drawn up.
+        const vault = pose.vault || 0, act0 = pose.act || '', crouch = Math.max(pose.crouch || 0, act0 === 'stroke' ? 0.75 : 0, vault * 0.6) * (1 - sit), bob = 0.028 * Math.cos(tau * 2) * mv, hip = 0.88 - 0.44 * sit - 0.17 * crouch + bob + 0.95 * vault;
         st.reset(x, y, z, pose.yaw, size).move(0, hip, 0).rx(0.05 * mv + 0.12 * sit);
         for (const side of [-1, 1]) {
             const ph = tau + (side > 0 ? Math.PI : 0), swing = 0.55 * Math.sin(ph) * mv, knee = 0.85 * Math.max(0, Math.cos(ph)) * mv;
-            st.push().move(side * 0.105, 0, 0).rx(-swing * (1 - sit) - 1.45 * sit - 0.05 * mv - 0.62 * crouch);
+            st.push().move(side * K.hips, 0, 0).rx((-swing * (1 - sit) - 1.45 * sit - 0.05 * mv) * (1 - vault) - 0.62 * crouch - 0.9 * vault).rz(side * 0.25 * vault);
             put(K.thigh);
             if (look.daggers) { st.push().size(side, 1, 1); put(P.dagger()); st.pop(); }
             st.move(0, -0.42, 0).rx(knee * (1 - sit) + 1.4 * sit + 1.1 * crouch);
@@ -437,7 +475,7 @@ const WayPeople = (() => {
         const act = pose.act || '', torch = !!(pose.lantern && look.torch && sit < 0.5);
         for (const side of [-1, 1]) {
             const ph = tau + (side > 0 ? 0 : Math.PI), holds = side > 0 && look.hand, brand = side < 0 && torch;
-            let shoulder = 0.42 * Math.sin(ph) * mv, elbow = -0.25 - 0.2 * mv, out2 = 0.12;
+            let shoulder = 0.42 * Math.sin(ph) * mv, elbow = -0.25 - 0.2 * mv, out2 = 0.1;
             if (holds) { shoulder = -0.55 + 0.22 * Math.sin(tau + 0.6) * mv; elbow = -0.75; }
             if (sit > 0) { shoulder = L.mix(shoulder, -0.55, sit); elbow = L.mix(elbow, -0.9, sit); }
             if (brand) { shoulder = -1.0 + 0.05 * Math.sin(tau) * mv; elbow = -0.85; out2 = 0.3; }
@@ -451,7 +489,10 @@ const WayPeople = (() => {
             // Tossing a knife and catching it.
             if (act === 'flip' && side > 0) { shoulder = -0.45; elbow = -1.25 + 0.12 * Math.sin(t * 3.1); out2 = 0.2; }
             if (crouch) { shoulder -= 0.4 * crouch; elbow -= 0.5 * crouch; }
-            st.push().move(side * K.shoulder, 0.5, 0).rz(side * out2).rx(shoulder);
+            // A hand down to the cat that has come to be stroked; a hand on the rail, going over.
+            if (act === 'stroke' && side > 0) { shoulder = -0.75 + 0.14 * Math.sin(t * 3.2); elbow = -0.25; out2 = 0.45; }
+            if (vault && side < 0) { shoulder = L.mix(shoulder, 0.5, vault); elbow = L.mix(elbow, -0.1, vault); out2 = 0.5 * vault; }
+            st.push().move(side * K.shoulder, 0.47, 0).rz(side * out2).rx(shoulder);
             put(K.upper);
             st.move(0, -0.3, 0).rx(elbow);
             put(K.fore);

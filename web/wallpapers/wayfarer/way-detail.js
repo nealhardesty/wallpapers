@@ -21,13 +21,21 @@ const WayDetail = (() => {
     // Slot 1 is the leaf, 2 the trunk, 3 blossom or fruit.
     const tree = (kind, variant) => M.model(`fine:${kind}:${variant}`, s => {
         const r = k => M.rnd(variant + 1, k + kind.length * 3), lean = (r(1) - 0.5) * 0.5, lz = (r(2) - 0.5) * 0.4;
-        const bark = (i, k) => 0.8 + 0.32 * hashf(i * 7 + k, variant + 1);
+        const bark = (i, k) => (k % 2 ? 0.74 : 1.04) * (0.86 + 0.2 * hashf(i * 7 + k, variant + 1));          // ridged
         const trunk = (h, r0, r1, col = C.trunk, roots = 4) => {
-            s.paint(col, 2).fx(0).tube([[0, -0.4, 0, r0 * 1.5, 1], [lean * 0.04, 0.3, lz * 0.04, r0 * 1.02, 1], [lean * 0.42, h * 0.5, lz * 0.42, (r0 + r1) / 2, 1], [lean, h, lz, r1, 1]], 7, { k: bark, ao: i => i ? 1 : 0.55 });
+            s.paint(col, 2).fx(0).tube([[0, -0.4, 0, r0 * 1.6, 1], [lean * 0.02, 0.2, lz * 0.02, r0 * 1.12, 1], [lean * 0.12, h * 0.25, lz * 0.12, r0 * 0.96, 1], [lean * 0.42, h * 0.55, lz * 0.42, (r0 + r1) / 2, 1], [lean * 0.8, h * 0.85, lz * 0.8, r1 * 1.05, 1], [lean, h, lz, r1, 1]], 10, { k: bark, ao: i => i ? 1 : 0.55 });
             for (let i = 0; i < roots; i++) { const a = i / roots * TAU + r(30) * 6; s.tube([[Math.sin(a) * r0 * 0.5, 0.55, Math.cos(a) * r0 * 0.5, r0 * 0.42, 1], [Math.sin(a) * r0 * 1.7, 0.04, Math.cos(a) * r0 * 1.7, r0 * 0.3, 1], [Math.sin(a) * r0 * 2.8, -0.3, Math.cos(a) * r0 * 2.8, r0 * 0.1, 1]], 5, { k: bark, ao: () => 0.7 }); }
         };
         const bough = (from, to, r0, col = C.trunk) => s.paint(col, 2).fx(0).tube([[from[0], from[1], from[2], r0, 1], [(from[0] + to[0]) / 2, (from[1] + to[1]) / 2 + 0.25, (from[2] + to[2]) / 2, r0 * 0.7, 1], [to[0], to[1], to[2], r0 * 0.34, 1]], 5, { k: bark });
-        const clump = (x, y, z, rx, ry, rz, sway, n, tone = 1, o = {}) => s.paint([255 * tone, 255 * tone, 255 * tone], 1).fx(sway).blob(x + lean, y, z + lz, rx, ry, rz, { segs: 7, bands: 4, lump: 0.2, seed: variant + n * 0.37 + 0.1, under: 0.55, ...o });
+        const clump = (x, y, z, rx, ry, rz, sway, n, tone = 1, o = {}) => {
+            s.paint([255 * tone, 255 * tone, 255 * tone], 1).fx(sway).blob(x + lean, y, z + lz, rx, ry, rz, { segs: 8, bands: 5, lump: 0.17, seed: variant + n * 0.37 + 0.1, under: 0.55, ...o });
+            // Sprays of leaves standing out of it, so its edge against the sky is leaves and not a ball.
+            for (let i = 0; i < 6; i++) {
+                const a = i * 2.4 + n, up = 0.9 - 1.5 * hashf(i, n + variant), c = Math.sqrt(Math.max(0, 1 - up * up)), ox = Math.sin(a) * c, oz = Math.cos(a) * c, t2 = tone * (0.86 + 0.3 * hashf(i, n + 7));
+                const px = x + lean + ox * rx * 0.94, py = y + up * ry * 0.94, pz = z + lz + oz * rz * 0.94, w = 0.34 * Math.min(rx, 2.2) / 1.6, tx = -oz * w, tz = ox * w;
+                s.paint([255 * t2, 255 * t2, 255 * t2], 1).fx(Math.min(255, sway + 50)).tri([px - tx, py - 0.1, pz - tz], [px + tx, py + 0.1, pz + tz], [px + ox * w * 2.4, py + up * w * 2.4 + 0.1, pz + oz * w * 2.4], [ox, up * 0.6 + 0.4, oz], [0.8, 0.8, 1]);
+            }
+        };
         if (kind === 'oak' || kind === 'apple') {
             const b = kind === 'oak' ? 1 : 0.62;
             trunk(3.5 * b, 0.5 * b, 0.32 * b);
@@ -94,11 +102,11 @@ const WayDetail = (() => {
     const rock = variant => M.model(`fine:rock:${variant}`, s => {
         const r = k => M.rnd(variant + 2, k);
         const boulder = (cx, cy, cz, rx, ry, rz, seed) => {
-            const segs = 7, bands = 4, at = (i, j) => { const lat = j / bands * Math.PI, a = seed * 9 + (i % segs) / segs * TAU, pole = j === 0 || j === bands, k = 1 + (pole ? 0 : (hashf((i % segs) * 3 + j * 11, seed) - 0.5) * 0.5); return [cx + Math.sin(lat) * Math.sin(a) * rx * k, cy + Math.cos(lat) * ry * k, cz + Math.sin(lat) * Math.cos(a) * rz * k]; };
+            const segs = 9, bands = 6, at = (i, j) => { const lat = j / bands * Math.PI, a = seed * 9 + (i % segs) / segs * TAU, pole = j === 0 || j === bands, k = 1 + (pole ? 0 : (hashf((i % segs) * 3 + j * 11, seed) - 0.5) * 0.5); return [cx + Math.sin(lat) * Math.sin(a) * rx * k, cy + Math.cos(lat) * ry * k, cz + Math.sin(lat) * Math.cos(a) * rz * k]; };
             const face = (a, b, c) => {
                 const mx = (a[0] + b[0] + c[0]) / 3 - cx, my = (a[1] + b[1] + c[1]) / 3 - cy, mz = (a[2] + b[2] + c[2]) / 3 - cz;
                 let nx = (b[1] - a[1]) * (c[2] - a[2]) - (b[2] - a[2]) * (c[1] - a[1]), ny = (b[2] - a[2]) * (c[0] - a[0]) - (b[0] - a[0]) * (c[2] - a[2]), nz = (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
-                const l = (Math.hypot(nx, ny, nz) || 1) * (nx * mx + ny * my + nz * mz < 0 ? -1 : 1), tone = 0.82 + 0.3 * hashf(a[0] * 31 + b[1] * 17, c[2] * 13 + seed), up = ny / l;
+                const bed = Math.floor(((a[1] + b[1] + c[1]) / 3 + 0.02 * mx) / 0.13), l = (Math.hypot(nx, ny, nz) || 1) * (nx * mx + ny * my + nz * mz < 0 ? -1 : 1), tone = (0.84 + 0.22 * hashf(a[0] * 31 + b[1] * 17, c[2] * 13 + seed)) * (bed % 2 ? 0.86 : 1.04), up = ny / l;          // in beds
                 s.paint([C.rock[0] * tone * (1 + 0.06 * up), C.rock[1] * tone * (1 + 0.05 * up), C.rock[2] * tone], 0).tri(a, b, c, [nx / l, ny / l, nz / l], [a[1] < 0.1 ? 0.6 : 1, b[1] < 0.1 ? 0.6 : 1, c[1] < 0.1 ? 0.6 : 1]);
             };
             for (let j = 0; j < bands; j++) for (let i = 0; i < segs; i++) { if (j < bands - 1) face(at(i, j), at(i, j + 1), at(i + 1, j + 1)); if (j > 0) face(at(i, j), at(i + 1, j + 1), at(i + 1, j)); }
@@ -107,11 +115,82 @@ const WayDetail = (() => {
         boulder(0, 0.26, 0, 0.82, 0.58, 0.66, variant + 0.3);
         if (r(1) < 0.7) boulder(0.68, 0.1, 0.34, 0.36, 0.26, 0.34, variant + 1.7);
         if (r(2) < 0.5) boulder(-0.5, 0.06, -0.56, 0.24, 0.16, 0.22, variant + 2.9);
-        s.paint(C.moss, 0).blob(-0.12 + 0.3 * r(3), 0.66, 0.1, 0.42, 0.14, 0.36, { segs: 6, bands: 3, lump: 0.3, seed: variant });
+        s.paint(C.moss, 0).blob(-0.12 + 0.3 * r(3), 0.66, 0.1, 0.42, 0.14, 0.36, { segs: 8, bands: 4, lump: 0.3, seed: variant }).blob(0.5, 0.3, 0.36, 0.2, 0.08, 0.18, { segs: 6, bands: 3, lump: 0.3, seed: variant + 1 });
+        for (let i = 0; i < 5; i++) { const a = i * 1.3 + variant; s.paint([120, 170, 80], 0).fx(120).tri([Math.sin(a) * 0.95 - 0.04, 0, Math.cos(a) * 0.8], [Math.sin(a) * 0.95 + 0.04, 0, Math.cos(a) * 0.8], [Math.sin(a) * 1.05, 0.3 + 0.1 * r(10 + i), Math.cos(a) * 0.9], [Math.sin(a), 0.6, Math.cos(a)], [0.6, 0.6, 1]); }
+        s.fx(0);
+    });
+
+    // A bush is a huddle of leaf clumps on a few stems; a tuft is a dozen blades; flowers have heads with petals.
+    const small = (kind, variant) => M.model(`fine:${kind}:${variant}`, s => {
+        const r = k => M.rnd(variant + 2, k);
+        if (kind === 'bush') {
+            for (let i = 0; i < 6; i++) {
+                const a = i * 1.05 + r(1) * 6, d = i ? 0.5 + 0.2 * r(i + 2) : 0, y = i ? 0.42 + 0.2 * r(i + 8) : 0.72, w = i ? 0.5 + 0.14 * r(i + 14) : 0.62, tone = 0.84 + 0.3 * r(i + 20), x = Math.sin(a) * d, z = Math.cos(a) * d;
+                s.paint([255 * tone, 255 * tone, 255 * tone], 1).fx(40).blob(x, y, z, w, w * 0.78, w, { segs: 8, bands: 5, lump: 0.2, seed: variant + i, under: 0.55 });
+                for (let k = 0; k < 6; k++) { const b = k * 1.05 + i, up = 0.2 + 0.7 * hashf(k, i + variant), c = Math.sqrt(1 - up * up), ox = Math.sin(b) * c, oz = Math.cos(b) * c, px = x + ox * w * 0.92, py = y + up * w * 0.72, pz = z + oz * w * 0.92; s.fx(90).tri([px + oz * 0.07, py - 0.03, pz - ox * 0.07], [px - oz * 0.07, py + 0.03, pz + ox * 0.07], [px + ox * 0.22, py + up * 0.22 + 0.04, pz + oz * 0.22], [ox, up * 0.6 + 0.4, oz], [0.8, 0.8, 1]); }
+                if (i) s.paint(C.trunk, 0).fx(0).tube([[x * 0.2, -0.1, z * 0.2, 0.035, 1], [x * 0.8, y - 0.2, z * 0.8, 0.02, 1]], 4);
+            }
+        } else if (kind === 'tuft') {
+            for (let i = 0; i < 13; i++) { const a = i * 2.4 + r(i), d = 0.03 + 0.14 * r(i + 20), x = Math.sin(a) * d, z = Math.cos(a) * d, out = 0.1 + 0.2 * r(i + 9), h = 0.26 + 0.34 * r(i + 4), px = Math.cos(a) * 0.035, pz = -Math.sin(a) * 0.035, tone = 0.84 + 0.3 * r(i + 30); s.paint([255 * tone, 255 * tone, 255 * tone], 1).fx(130).tri([x - px, 0, z - pz], [x + px, 0, z + pz], [x + Math.sin(a) * out, h, z + Math.cos(a) * out], [Math.sin(a) * 0.5, 0.85, Math.cos(a) * 0.5], [0.55, 0.55, 1]); }
+        } else if (kind === 'flower') {
+            for (let i = 0; i < 6; i++) {
+                const a = i * 1.3 + r(i) * 3, d = 0.12 + 0.4 * r(i + 5), x = Math.sin(a) * d, z = Math.cos(a) * d, h = 0.24 + 0.24 * r(i + 7);
+                s.paint(C.white, 1).fx(140).tri([x - 0.02, 0, z], [x + 0.02, 0, z], [x, h, z], [0, 0.5, 1]).tri([x, h * 0.4, z], [x + 0.09, h * 0.5, z + 0.03], [x + 0.03, h * 0.62, z], [0, 1, 0]);
+                for (let k = 0; k < 5; k++) { const b = k * 1.257; s.paint(C.white, 3).tri([x, h, z], [x + Math.sin(b - 0.5) * 0.06, h + 0.015, z + Math.cos(b - 0.5) * 0.06], [x + Math.sin(b + 0.5) * 0.06, h + 0.015, z + Math.cos(b + 0.5) * 0.06], [0, 1, 0]); }
+                s.paint([250, 220, 90], 0).blob(x, h + 0.012, z, 0.018, 0.012, 0.018, { segs: 5, bands: 2, lump: 0, under: 1 });
+            }
+        }
+        s.fx(0);
     });
 
     // What else by the road is worth a second look.
+    const base = (s, kind, variant) => s.stamp(M.fixed(kind, variant), [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0]);
     const FIXED = {
+        // A cart: the plain one's bed and load, with stakes and rails along its sides, an axle, a tailboard and a lantern hook.
+        cart: (s, variant) => {
+            base(s, 'cart', variant);
+            s.paint(C.timber, 0).fx(0).at(M.mul(M.move(0, 0.6, 0.2), M.rotZ(Math.PI / 2))).tube([[0, -0.95, 0, 0.05, 1], [0, 0.95, 0, 0.05, 1]], 6, { cap: 3 });
+            s.at(null);
+            for (const x of [-0.78, 0.78]) { for (let i = 0; i < 5; i++) s.paint(C.plank, 0).tube([[x, 0.86, -1.2 + i * 0.6, 0.035, 1], [x * 1.04, 1.56, -1.2 + i * 0.6, 0.03, 1]], 5, { cap: 2 }); s.paint([130, 96, 66], 0).tube([[x * 1.04, 1.5, -1.3, 0.03, 1], [x * 1.04, 1.5, 1.3, 0.03, 1]], 5, { cap: 3 }); }
+            for (const x of [-0.5, 0.5]) s.paint(C.plank, 0).tube([[x, 0.76, 1.2, 0.045, 1], [x, 0.72, 2.4, 0.04, 1], [x * 0.9, 0.62, 3.2, 0.035, 1]], 6, { cap: 2 });
+            s.paint(C.iron, 0).tube([[0.8, 1.56, 1.2, 0.012, 1], [0.95, 1.62, 1.2, 0.012, 1], [0.95, 1.5, 1.2, 0.012, 1]], 4).paint(C.flame, 0).fx(0, 255).box(0.95, 1.42, 1.2, 0.04, 0.06, 0.04, 1).fx(0);
+            for (const [x, z] of [[-0.3, 0.8], [0.3, 0.95], [0, -1.0]]) s.paint([196, 176, 136], 0).blob(x, 1.2, z, 0.26, 0.3, 0.22, { segs: 7, bands: 4, seed: x + z, lump: 0.1, under: 0.5 });
+        },
+        // A stall: turned posts, a valance cut in scallops along the awning's edge, a till, and a hanging scale.
+        stall: (s, variant) => {
+            base(s, 'stall', variant);
+            for (const [x, z] of [[-1.3, -0.6], [1.3, -0.6], [-1.3, 0.75], [1.3, 0.75]]) s.paint(C.plank, 0).fx(0).tube([[x, 0, z, 0.075, 1], [x, 0.5, z, 0.06, 1], [x, 0.56, z, 0.085, 1], [x, 0.62, z, 0.06, 1], [x, 2.3, z, 0.055, 1]], 7);
+            for (let i = 0; i < 12; i++) { const x0 = -1.55 + i * 3.1 / 12; s.paint(i % 2 ? [248, 240, 226] : C.white, i % 2 ? 0 : 3).fx(0, 0, 60).tri([x0, 2.2, 0.96], [x0 + 3.1 / 12, 2.2, 0.96], [x0 + 3.1 / 24, 1.96, 0.98], [0, 0, 1], [1, 1, 0.8]); }
+            s.fx(0).paint(C.iron, 0).tube([[1.0, 2.3, 0.5, 0.008, 1], [1.0, 1.75, 0.5, 0.008, 1]], 3).paint(shine([200, 160, 80]), 0).prism(7, 1.0, 1.66, 0.5, 0.1, 1.7, 0.13, { cap: true }).box(1.0, 1.75, 0.5, 0.14, 0.008, 0.008, 1);
+            s.paint([110, 80, 56], 0).box(-1.75, 0.32, 0.3, 0.28, 0.32, 0.28, 0.6, [C.plank, 0]).paint([196, 176, 136], 0).blob(-1.75, 0.84, 0.3, 0.24, 0.24, 0.22, { segs: 7, bands: 4, seed: variant, lump: 0.12, under: 0.5 });
+        },
+        // A bench of slats, with arms.
+        bench: s => {
+            s.fx(0);
+            for (let i = 0; i < 4; i++) s.paint(i % 2 ? C.plank : [164, 124, 86], 0).box(0, 0.46, -0.17 + i * 0.115, 0.92, 0.022, 0.05, 1);
+            for (let i = 0; i < 3; i++) s.paint(i % 2 ? [164, 124, 86] : C.plank, 0).box(0, 0.64 + i * 0.13, -0.25 - i * 0.02, 0.92, 0.05, 0.02, 1);
+            for (const x of [-0.82, 0.82]) { s.paint(C.iron, 0).tube([[x, 0, 0.2, 0.03, 1], [x, 0.44, 0.18, 0.026, 1], [x, 0.66, 0.2, 0.024, 1], [x, 0.7, 0.0, 0.024, 1], [x, 0.66, -0.24, 0.024, 1], [x, 1.0, -0.3, 0.024, 1]], 5).tube([[x, 0, -0.22, 0.03, 1], [x, 0.66, -0.24, 0.026, 1]], 5); }
+        },
+        // A lamp post: a stepped foot, a fluted post, a scrolled bracket, a lantern of four panes under a cap.
+        lamp: s => {
+            s.paint(C.iron, 0).fx(0).tube([[0, -0.1, 0, 0.17, 1], [0, 0.08, 0, 0.15, 1], [0, 0.14, 0, 0.1, 1], [0, 0.5, 0, 0.075, 1], [0, 0.56, 0, 0.1, 1], [0, 0.62, 0, 0.07, 1], [0, 2.6, 0, 0.05, 1], [0, 2.8, 0, 0.055, 1], [0, 2.86, 0, 0, 1]], 8, { k: (i, k) => k % 2 ? 0.82 : 1.05 });
+            s.tube([[0, 2.72, 0, 0.022, 1], [0, 2.82, 0.2, 0.02, 1], [0, 2.78, 0.42, 0.018, 1], [0, 2.7, 0.5, 0.016, 1]], 5).tube([[0, 2.5, 0.02, 0.016, 1], [0, 2.6, 0.2, 0.014, 1], [0, 2.74, 0.26, 0.012, 1]], 4);
+            s.paint([214, 176, 110], 0).fx(0, 255).prism(4, 0, 2.3, 0.5, 0.075, 2.56, 0.115, { turn: 0.785, flat: true });
+            s.fx(0).paint(C.iron, 0).prism(4, 0, 2.56, 0.5, 0.18, 2.7, 0.03, { turn: 0.785, flat: true }).box(0, 2.28, 0.5, 0.07, 0.02, 0.07, 1).blob(0, 2.73, 0.5, 0.03, 0.03, 0.03, { segs: 5, bands: 3, lump: 0 });
+            for (let i = 0; i < 4; i++) { const a = i * Math.PI / 2 + 0.785; s.box(Math.sin(a) * 0.1, 2.43, 0.5 + Math.cos(a) * 0.1, 0.008, 0.14, 0.008, 1); }
+        },
+        // A bridge: the plain one's arch and parapets, with the arch's ring of stones and its keystone, a coping, and cutwaters.
+        bridge: s => {
+            base(s, 'bridge', 0);
+            s.course(false).fx(0);
+            for (const x of [-2.34, 2.34]) {
+                for (let i = 0; i < 11; i++) { const a = (i + 0.5) / 11 * Math.PI, z = -Math.cos(a) * 6.9, y = -0.5 - 2.4 * (1 - Math.sin(a)) + 0.25; s.paint(i === 5 ? [196, 190, 180] : i % 2 ? [150, 146, 142] : [128, 124, 122], 0).at(M.mul(M.move(x, y, z), M.rotX(Math.PI / 2 - a))).box(0, 0, 0, 0.06, i === 5 ? 0.42 : 0.3, 0.56, 1); }
+                s.at(null).paint([186, 182, 174], 0).box(x - Math.sign(x) * 0.17, 1.02, 0, 0.26, 0.07, 11, 1);
+                s.course(true).paint(C.stone, 0).prism(4, x + Math.sign(x) * 0.5, -4, 7.4, 0.9, 0.3, 0.3, { flat: true, turn: 0.785 }).prism(4, x + Math.sign(x) * 0.5, -4, -7.4, 0.9, 0.3, 0.3, { flat: true, turn: 0.785 });
+                s.course(false);
+            }
+        },
+
         well: s => {
             // A round wall of coursed stone under a shingled roof on two posts; a windlass, a rope and a bucket.
             s.course(true).paint(C.stone, 0).fx(0).tube([[0, -0.2, 0, 1.08, 1], [0, 0.82, 0, 1.0, 1], [0, 0.9, 0, 1.04, 1], [0, 0.9, 0, 0.8, 1], [0, 0.5, 0, 0.8, 1]], 12, { ao: i => i ? 1 : 0.6 });
@@ -135,7 +214,8 @@ const WayDetail = (() => {
             s.at(null);
         },
     };
-    const fixed = kind => FIXED[kind] ? M.model('fine:' + kind, FIXED[kind]) : null;
+    const shine = col => Object.assign(col, { shine: 0.8 });
+    const fixed = (kind, variant = 0) => FIXED[kind] ? M.model(`fine:${kind}:${variant}`, s => FIXED[kind](s, variant)) : null;
 
     // ---- The pieces of a grand city ------------------------------------------------------------------
     const tw = (s, x, z, o) => { M.tower(s.at(M.move(x, 0, z)), o); s.at(null); };
@@ -338,5 +418,5 @@ const WayDetail = (() => {
         return { glow: got.glow || [], smoke: got.smoke || null, beacons: got.beacons || [] };
     }
 
-    return { tree, rock, fixed, big, BIG };
+    return { tree, rock, small, fixed, big, BIG };
 })();
