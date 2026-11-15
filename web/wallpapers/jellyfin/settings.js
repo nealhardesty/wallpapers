@@ -10,6 +10,7 @@
         return [['', loaded.length ? first(loaded[0][1]) : none], ...loaded];
     };
     const XMAS = config => ['christmas-lights', 'snowed-in', 'christmas-tree'].includes(config.frame);
+    const BIG_TV = config => config.frame === 'big-tv';
     const LANGUAGES = [['eng', 'English'], ['spa', 'Español'], ['fre', 'Français'], ['ger', 'Deutsch'], ['ita', 'Italiano'], ['por', 'Português'],
         ['dut', 'Nederlands'], ['swe', 'Svenska'], ['nor', 'Norsk'], ['dan', 'Dansk'], ['fin', 'Suomi'], ['pol', 'Polski'],
         ['rus', 'Русский'], ['jpn', '日本語'], ['kor', '한국어'], ['chi', '中文'], ['ara', 'العربية'], ['hin', 'हिन्दी']];
@@ -56,10 +57,17 @@
 
         { group: '🖼️ Frame' },
         { key: 'frame', label: 'Frame', type: 'select',
-          options: [['old-tv', '📺 Old TV'], ['mantel', '🔥 Mantel'], ['cinema', '🎭 Cinema'], ['drive-in', '🚗 Drive-in'], ['porthole', '⚓ Porthole'],
+          options: [['old-tv', '📺 Old TV'], ['big-tv', '🪵 Big Old TV'], ['mantel', '🔥 Mantel'], ['cinema', '🎭 Cinema'], ['drive-in', '🚗 Drive-in'], ['porthole', '⚓ Porthole'],
               ['gallery', '🖼️ Gallery'], ['arcade', '🕹️ Arcade'], ['ambilight', '🌈 Ambilight'], ['camcorder', '📹 Camcorder'], ['vhs', '📼 VHS'],
               ['christmas-lights', '✨ Christmas Lights'], ['snowed-in', '☃️ Snowed In'], ['christmas-tree', '🎄 Christmas Tree'],
               ['seasonal', '📅 Seasonal (mantel in winter, drive-in in summer)'], ['none', '⬛ None']] },
+        { key: 'bigTvWood', label: 'Cabinet', type: 'select', when: BIG_TV,
+          options: [['walnut', '🟤 Walnut'], ['oak', '🌳 Oak'], ['mahogany', '🔴 Mahogany'], ['maple', '🍁 Maple'], ['ebony', '⚫ Ebony'],
+              ['avocado', '🥑 Avocado enamel'], ['tangerine', '🍊 Tangerine enamel'], ['turquoise', '🩵 Turquoise enamel'], ['cream', '🍦 Cream enamel']] },
+        { key: 'bigTvStyle', label: 'Style', type: 'select', when: BIG_TV, options: [['seventies', '🟫 1970s, squared'], ['fifties', '🛋️ 1950s, rounded']] },
+        { key: 'bigTvControls', label: 'Controls', type: 'select', when: BIG_TV, options: [['side', '➡️ Down the side'], ['below', '⬇️ Along the bottom']],
+          help: 'An upright screen always gets them along the bottom' },
+        { key: 'bigTvOrnament', label: 'On top of the set', type: 'select', when: BIG_TV, options: [['plant', '🪴 A plant'], ['cat', '🐈 A china cat'], ['none', 'Nothing']] },
         { key: 'xmasTv', label: 'TV ornament', type: 'select', when: config => config.frame === 'christmas-tree', options: [['small', 'Small'], ['medium', 'Medium'], ['large', 'Large']],
           help: 'The video plays in an ornament on the tree' },
         { key: 'xmasTopper', label: 'On top of the tree', type: 'select', when: config => config.frame === 'christmas-tree', options: [['star', '⭐ A star'], ['bow', '🎀 A bow'], ['none', 'Nothing']] },

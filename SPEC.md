@@ -3097,6 +3097,40 @@ letterbox. The screen rect always keeps the video's aspect ratio, and
   - Between items, a burst of snow from a few pre-rendered noise tiles
     (never per-frame random pixels), with a hiss if sound is on.
   - On `stop()`, the classic collapse to a bright dot.
+- **Big Old TV** (`big-tv`, 2026-11-15, owner idea): the Old TV's
+  sibling, nearly all screen.
+  - The video takes about 88% of a landscape viewport's width (less only
+    where the height runs out first: about 81% at 16:9 with the controls
+    along the bottom) and about 92% of an upright one's. A slim cabinet
+    round the bezel, stubby legs, small rabbit ears that only just fit
+    under the top edge, and the Old TV's room behind.
+  - Very small controls in a thin strip: a channel knob and a volume
+    knob (under 3% of the screen's width), three sliders, a red pilot
+    light (dark on pause), a speaker grille and a brass badge with a star
+    and no name.
+  - Options, settings named `bigTv…`, shown only for this frame and read
+    from `env.config`; a change repaints the art once.
+    - `bigTvWood`: walnut (cathedral arches), oak (pores and ray flecks),
+      mahogany (ribbon stripe), maple (curl and bird's eyes), ebony
+      (brown streaks), or an enamel with no grain: avocado, tangerine,
+      turquoise, cream.
+    - `bigTvStyle`: `seventies` (square corners, rails with mitred
+      uprights, knurled metal knobs, a slatted grille, straight legs) or
+      `fifties` (a round-cornered shell, a rounder tube, brass trim,
+      cream knobs with brass caps, gold grille cloth, splayed legs with
+      brass feet).
+    - `bigTvControls`: `side` or `below`. Upright it is always below.
+    - `bigTvOrnament`: `plant`, `cat` (china, with a gold collar) or
+      `none`, on a lace doily.
+  - Upright, with room: the set stands on a matching stand (walnut under
+    an enamel set) with a shelf of records over two doors. Any screen
+    with enough wall over the set gets a sunburst clock, its hands on the
+    overlay from `host.now()`, redrawn once a minute.
+  - The tube is the Old TV's (`JellyfinFrames.crt`, exported by
+    `frames/old-tv.js`: the wall, the glass, and the snow, power-off dot
+    and rolling bar as `tube(turn)`). The overlay always draws the
+    channel knob where the channel is now, since the art isn't repainted
+    for a new item.
 - **Mantel:** a cosy room at night, with the video on a framed screen
   above a fireplace.
   - A small fire burns below, drawn like the fireplace wallpaper's but
@@ -3230,6 +3264,8 @@ default is to spend as little as possible.
 - `startMuted` (on), `volume`
 - `subtitles` (always), `subtitleLanguage` (`eng`), `burnInImageSubs`
 - `frame` (Old TV), `fit`, `showTitle`
+- `bigTvWood` (walnut), `bigTvStyle` (seventies), `bigTvControls`
+  (side), `bigTvOrnament` (plant): the Big Old TV's own
 - `maxResolution` (auto), `posterMode` (auto), `reportPlayback` (off)
 
 **Privacy:** titles in the panel and on frames come from the user's own

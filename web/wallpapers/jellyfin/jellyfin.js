@@ -121,8 +121,8 @@ class JellyfinAnimationManager {
         this.config = config;
         if (this.video) this.video.volume = config.volume;
         const changed = keys => keys.some(key => JSON.stringify(before[key]) !== JSON.stringify(config[key]));
-        // A frame's own options (the Christmas frames' are all xmas…) repaint it.
-        if (changed(['frame', 'fit', ...Object.keys(config).filter(key => key.startsWith('xmas'))])) { this.pickFrame(); this.resize(); }
+        // A frame's own options (xmas… for the Christmas frames, bigTv… for the Big Old TV) repaint it.
+        if (changed(['frame', 'fit', ...Object.keys(config).filter(key => /^(xmas|bigTv)[A-Z]/.test(key))])) { this.pickFrame(); this.resize(); }
         else if (changed(['showTitle'])) this.dirty();
         if (changed(['server'])) {
             this.feed = { status: {}, options: {} };

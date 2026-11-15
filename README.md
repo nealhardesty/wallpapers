@@ -592,6 +592,16 @@ the picture's colours onto the wall, a camcorder viewfinder or a VHS deck, a
 submarine porthole, an arcade cabinet, or none at all. **Seasonal** picks
 the mantel in winter and the drive-in in summer.
 
+🪵 **Big Old TV** is the old TV's bigger sibling: nearly all screen, in a
+slim cabinet with tiny knobs, a pilot light, a speaker grille and small
+rabbit ears just in view. Pick its cabinet in the panel (walnut, oak,
+mahogany, maple or ebony, each with its own grain, or avocado, tangerine,
+turquoise or cream enamel), its style (squared 1970s or rounded 1950s),
+where the controls go (down the side or along the bottom) and what sits
+on top (a plant or a china cat on a doily). An upright phone gets it on a
+matching stand with a shelf of records, under a sunburst clock that tells
+the time.
+
 Three more are for Christmas, each with its own options in the panel
 (light colours and twinkle, chase, fade or steady, plus the ones below):
 - ✨ **Christmas Lights**: the video nearly full screen with a string of
