@@ -169,9 +169,14 @@ pouring past the canopy. Wingmen fly ahead with their engines glowing, and
 far beacons blink out on the ice. The cockpit's instruments are real: the
 radar sweeps the actual terrain ahead (slopes that face it shine, the ground
 behind a ridge stays dark), the attitude ball rolls with the horizon, and
-the terrain scope shows the ground the autopilot is about to cross. `W`
-changes the weather, `T` the time of day, `V` the view (canopy, panel
-only, or none), `R` the radar's range. It is the one wallpaper drawn with
+the terrain scope shows the ground the autopilot is about to cross. The
+panel comes in three sizes (full, small, extra small) for more of the view.
+You can fly it yourself: `W` `A` `S` `D` or the arrows turn, climb and dive,
+`Q` and `E` are the throttle, and a drag on the screen works as a stick.
+You can't hit anything (the autopilot keeps the height, and turns away from
+a wall you couldn't climb), and five seconds after you let go it takes over
+again. `X` changes the weather, `T` the time of day, `V` the view (canopy,
+panel only, or none), `R` the radar's range. It is the one wallpaper drawn with
 WebGL, so it wants a GPU; without one it carries on as paper-cut ridgelines.
 
 **Weather** 🌦️ is the forecast for your place from Open-Meteo (no key),
@@ -529,7 +534,7 @@ you tick it, then seven, with the rest folded away:
   this one (or let it go), `V` another island passes, `O` a small one comes to orbit, `B` a balloon, `W` weather, `S` season, `H` holiday · Weather `V` next view (days, hours, now), `U` °C or °F,
   `R` refresh now · World Clock `V` next view (map, faces, board), `M` centre
   the map on the next place, `L` next map look · Orrery `=`/`+` faster, `-` slower,
-  `0` back to now, `L` look, `S` scale, `V` from above or tilted · Matrix `R` the code comes down again, `L` next look (the 1999 film, the sequels, Resurrections), `H` next colour · Cherry Blossoms `G` a gust, `B` shake the bough, `N` a new tree, `S` next sky, `W` next ground · Ice Patrol `W` weather, `T` time of day, `V` view, `R` radar range · Fireplace `L` a log burns through and a fresh one lands, `W` the wood laid again.
+  `0` back to now, `L` look, `S` scale, `V` from above or tilted · Matrix `R` the code comes down again, `L` next look (the 1999 film, the sequels, Resurrections), `H` next colour · Cherry Blossoms `G` a gust, `B` shake the bough, `N` a new tree, `S` next sky, `W` next ground · Ice Patrol `W` `A` `S` `D` or arrows fly it, `Q`/`E` throttle, `X` weather, `T` time of day, `V` view, `R` radar range · Fireplace `L` a log burns through and a fresh one lands, `W` the wood laid again.
 
 **Touch and drag:** tap or drag on Zen Garden (rake), Koi Pond (ripples;
 feed them in settings), Murmuration (you're the falcon), Lantern Festival,

@@ -133,6 +133,54 @@ test('flight: it holds its height over open snow', () => {
     assert.equal(s.pull, 0);
 });
 
+test('by hand: the stick turns it, climbs it and gives it back after five seconds', () => {
+    const flat = () => 0, s = L.flightStart(flat, 22, 0.3), p = L.pilotStart();
+    const run = (seconds, input) => {
+        for (let i = 0; i < seconds * 60; i++) { L.pilotStep(p, 1 / 60, input, 22); L.flightStep(s, 1 / 60, flat, 80 * p.throttle, 22, null, p); }
+    };
+    run(5, null);
+    assert.equal(p.active, false);
+    assert.equal(p.hold, 0, 'hands off, the autopilot flies alone');
+    const from = s.heading;
+    run(3, { turn: 1, climb: 1, throttle: 1 });
+    assert.ok(p.active && p.hold > 0.99);
+    assert.ok(s.heading - from > 0.8, `turned ${s.heading - from} rad right in 3 s`);
+    assert.ok(s.roll > L.FLIGHT.maxBank && s.roll <= L.PILOT.bank + 1e-9, `banked ${s.roll}`);
+    assert.ok(s.agl > 100, `climbed to ${s.agl} m`);
+    assert.ok(p.throttle > 2, `throttle ${p.throttle}`);
+    run(4.9, null);
+    assert.ok(p.active, 'still the pilot at 4.9 s');
+    assert.ok(Math.abs(s.turn) < 0.02 && s.agl > 100, 'stick centred: straight on, at the height it was left');
+    run(0.2, null);
+    assert.equal(p.active, false, 'the autopilot has it at 5 s');
+    run(30, null);
+    assert.equal(p.hold, 0);
+    assert.ok(Math.abs(s.agl - 22) < 1 && Math.abs(p.throttle - 1) < 0.01 && Math.abs(p.lift) < 0.1, `back to ${s.agl} m at ${p.throttle}x`);
+    // The limits: no higher than PILOT.high, no lower than PILOT.low, however long it is held.
+    run(20, { turn: 0, climb: 1, throttle: 0 });
+    assert.ok(Math.abs(s.agl - L.PILOT.high) < 2, `ceiling ${s.agl}`);
+    run(60, { turn: 0, climb: -1, throttle: -1 });
+    assert.ok(Math.abs(s.agl - L.PILOT.low) < 1, `floor ${s.agl}`);
+    assert.equal(p.throttle, L.PILOT.slow);
+});
+
+test('by hand: no stick, speed or frame rate can put it into the snow', () => {
+    const random = seeded(11);
+    for (const [fps, clearance] of [[60, 22], [10, 10], [30, 160], [120, 22]]) {
+        const s = L.flightStart(land.height, clearance, 0.3), p = L.pilotStart();
+        let low = Infinity, input = null;
+        for (let frame = 0; frame < 900 * fps; frame++) {
+            // A new whim every couple of seconds: mostly diving, flat out, turning hard at whatever is there.
+            if (frame % (2 * fps) === 0) input = random() < 0.1 ? null : { turn: Math.round(random() * 2 - 1), climb: random() < 0.75 ? -1 : 1, throttle: random() < 0.8 ? 1 : -1 };
+            L.pilotStep(p, 1 / fps, input, clearance);
+            L.flightAdvance(s, 1000 / fps, land.height, Math.min(220, 200 * p.throttle), clearance, land.mountains, p);
+            low = Math.min(low, s.agl);
+        }
+        assert.ok(low >= 3.99, `${fps} fps, ${clearance} m: came within ${low.toFixed(2)} m`);
+        assert.ok(Number.isFinite(s.x + s.y + s.z + s.heading + s.pitch + s.roll));
+    }
+});
+
 test('sky: a low sun that rises and sets, a moon up through the night', () => {
     const noon = L.bodies(0.5), midnight = L.bodies(0), dawn = L.bodies(0.25);
     assert.ok(Math.abs(noon.sunEl - L.SUN_MAX) < 1e-6);
@@ -243,7 +291,10 @@ test('settings: the panel offers what the code knows, and the keys step through 
     const wingmen = schema.find(c => c.key === 'wingmen');
     assert.equal(wingmen.max, vm.runInContext('ICE_SLOTS.length', context), 'a slot for every wingman');
     const entry = context.WP.entry('ice-patrol');
-    assert.deepEqual(plain(entry.keys.flatMap(k => k.keys)), ['w', 't', 'v', 'r']);
+    assert.deepEqual(plain(entry.keys.flatMap(k => k.keys)), ['a', 'd', 'w', 's', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'q', 'e', 'x', 't', 'v', 'r']);
+    const stick = plain(vm.runInContext('ICE_STICK', context));
+    for (const binding of entry.keys.slice(0, 2)) for (const key of binding.keys) assert.ok(stick[key.toLowerCase()], `${key} pushes the stick`);
+    assert.deepEqual(options('panelSize'), Object.keys(plain(vm.runInContext('ICE_PANEL_SIZES', context))));
     assert.deepEqual(plain(entry.effects.map(([name]) => name)), ['shadows', 'sparkle']);
 });
 

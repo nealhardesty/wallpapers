@@ -1566,7 +1566,7 @@ const STAGE_CHECKS = {
             await shoot('ice-patrol-cockpit');
             return s.agl >= 4;
         }],
-        ['without WebGL it flies on as ridgelines, as far each second on Low as on High', async () => {
+        ['without WebGL it flies on as ridgelines, as far each second on Low as on High; and by hand, until let go', async () => {
             const noGl = "(() => { const real = HTMLCanvasElement.prototype.getContext; HTMLCanvasElement.prototype.getContext = function (kind, ...rest) { return /^webgl/.test(kind) ? null : real.call(this, kind, ...rest); }; })()";
             const { identifier } = await cdp.send('Page.addScriptToEvaluateOnNewDocument', { source: noGl });
             try {
@@ -1584,6 +1584,31 @@ const STAGE_CHECKS = {
                     if (await evaluate(DRAWN) < 20) record(`${tier}: barely drawn without WebGL`);
                 }
                 await shoot('ice-patrol-flat');
+                // By hand, on the quick 2D view: D turns it right, a press the player forwards counts too, and five seconds hands-off give it back.
+                if (!await stageWith('ice-patrol', { configVersion: 1, panelSize: 'tiny' }, '&seed=7')) return record('by hand: not ready');
+                const hand = () => evaluate('(m => ({ active: m.pilot.active, hold: m.pilot.hold, turn: m.flight.turn, roll: m.flight.roll, lift: m.pilot.lift, throttle: m.pilot.throttle, agl: m.flight.agl, ph: m.cockpit.g.ph, h: innerHeight }))(WP.stage.manager)');
+                const before = await hand();
+                if (before.active || before.hold !== 0) record(`flown by hand before a key: ${JSON.stringify(before)}`);
+                if (before.ph > before.h * 0.34 * 0.5) record(`the extra small panel is ${before.ph} px of ${before.h}`);
+                const key = (type, name) => evaluate(`document.dispatchEvent(new KeyboardEvent('${type}', { key: '${name}', bubbles: true }))`);
+                await key('keydown', 'd');
+                await key('keydown', 'ArrowUp');
+                await key('keydown', 'e');
+                await sleep(2000);
+                const flown = await hand();
+                if (!flown.active || flown.turn < 0.3 || flown.roll < 0.5 || flown.lift < 40 || flown.throttle < 1.5) record(`D, Up and E held for 2 s: ${JSON.stringify(flown)}`);
+                for (const name of ['d', 'ArrowUp', 'e']) await key('keyup', name);
+                await sleep(2500);
+                const let_ = await hand();
+                if (!let_.active || Math.abs(let_.turn) > 0.1 || let_.lift < 40) record(`2.5 s after letting go: ${JSON.stringify(let_)}`);
+                await sleep(3500);
+                const back = await hand();
+                if (back.active) record('the autopilot did not take it back after 5 s');
+                await evaluate("WP.entry('ice-patrol').keys.find(k => k.keys.includes('a')).run(WP.stage.manager, { key: 'A' })");
+                await sleep(300);
+                const tapped = await hand();
+                if (!tapped.active || tapped.turn >= 0) record(`a forwarded A: ${JSON.stringify(tapped)}`);
+                if (await evaluate("localStorage.getItem('wp:ice-patrol')") !== JSON.stringify({ configVersion: 1, panelSize: 'tiny' })) record('flying by hand saved something');
             } finally {
                 await cdp.send('Page.removeScriptToEvaluateOnNewDocument', { identifier });
             }
@@ -1605,8 +1630,8 @@ const STAGE_CHECKS = {
             const b = await evaluate('(m => ({ level: m.weather.level, see: m.air.visibility, flakes: m.scene.flakes, lamps: m.lamps, sun: m.scene.lightCol[0] }))(WP.stage.manager)');
             if (b.level < 0.99 || b.see > 600 || b.flakes < 0.95 || b.lamps !== 0 || b.sun > 0.4) record(`blizzard: ${JSON.stringify(b)}`);
             await shoot('ice-patrol-blizzard');
-            // W, T, V and R, as the catalog binds them.
-            const keys = await evaluate(`(m => { const run = key => WP.entry('ice-patrol').keys.find(k => k.keys.includes(key)).run(m, {}); return { w: run('w'), t: run('t'), v: [run('v'), run('v')], r: run('r'), config: m.config, saved: JSON.parse(localStorage.getItem('wp:ice-patrol')) }; })(WP.stage.manager)`);
+            // X, T, V and R, as the catalog binds them.
+            const keys = await evaluate(`(m => { const run = key => WP.entry('ice-patrol').keys.find(k => k.keys.includes(key)).run(m, {}); return { w: run('x'), t: run('t'), v: [run('v'), run('v')], r: run('r'), config: m.config, saved: JSON.parse(localStorage.getItem('wp:ice-patrol')) }; })(WP.stage.manager)`);
             if (keys.config.weather !== 'auto' || keys.config.time !== 'dusk' || keys.config.cockpit !== 'none' || keys.config.radarRange !== 8000) record(`the keys left ${JSON.stringify(keys.config)}`);
             if ('weather' in keys.saved || keys.saved.time !== 'dusk' || keys.saved.cockpit !== 'none' || keys.saved.radarRange !== 8000) record(`the keys saved ${JSON.stringify(keys.saved)}`);
             if (!/comes and goes/.test(keys.w) || !/dusk/.test(keys.t) || !/8 km/.test(keys.r)) record(`the keys said ${JSON.stringify([keys.w, keys.t, keys.v, keys.r])}`);

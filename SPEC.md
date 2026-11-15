@@ -148,7 +148,7 @@ Added for Christmas, drawn in code (designs in §10.27–§10.30):
 | `frost` | frost-logic.js, frost-art.js, frost.js | ~1k lines | Interactive (drag to draw in the frost, tap to breathe on it); fern frost grown tip by tip on an occupancy grid, the window and the doodles (`FrostLogic`), unit-tested; follows `host.now()` (Christmas Eve and Day); keys B, D, T |
 | `small-christmas` | small-christmas-logic.js, small-christmas-art.js, small-christmas.js | ~800 lines | Interactive (tap the tree, the train, the floor); pixel art at its own resolution, scaled up pixelated; palettes, blink patterns, the train's oval and the hops (`SmallXmasLogic`), unit-tested; follows `host.now()` (the sleigh on Christmas Eve, presents on Christmas Day); keys T, M, L, S |
 | `sky-island` | sky-island-logic.js, sky-island-art.js, sky-island-land.js, sky-island-actors.js, sky-island.js (and Harvest's harvest-sky.js) | ~3.5k lines | Interactive (tap a cat, a person, the lake, a house at night, the sky); 16-bit pixel art at its own resolution (a pixel is 2 CSS px on a laptop or 1080p), scaled up pixelated; a terraced island seen from above and in front, its underside, the sea of cloud and the ground far below all baked; the calendar (seasons, holidays, Easter, the owner's dates), the names and the island's three-tier layout from a seed (`SkyIslandLogic`), unit-tested over 240 layouts; follows `host.now()` (the hour, the season, every holiday); keys N, P, V, O, B, W, S, H |
-| `ice-patrol` | ice-logic.js, ice-gl.js, ice-cockpit.js, ice-patrol.js | ~2.5k lines | The first on WebGL (§10.34): an endless snowfield from two baked noise fields, the same height formula in JavaScript and in the shaders (`IceLogic`), unit-tested; a 2D cockpit whose radar sweeps the real terrain; a 2D ridgeline fallback without WebGL; its own watch on the GPU; keys W, T, V, R |
+| `ice-patrol` | ice-logic.js, ice-gl.js, ice-cockpit.js, ice-patrol.js | ~2.5k lines | The first on WebGL (§10.34): an endless snowfield from two baked noise fields, the same height formula in JavaScript and in the shaders (`IceLogic`), unit-tested; a 2D cockpit whose radar sweeps the real terrain; a 2D ridgeline fallback without WebGL; its own watch on the GPU; interactive (fly it by hand: keys and a drag; the autopilot takes it back after 5 s); keys W A S D, arrows, Q, E, X, T, V, R |
 
 About 1.7 MB of JavaScript in total. **Not imported:** links, weather, clocks,
 search/omniprompt, custom links, status bar, Docker/nginx, the homepage's
@@ -4097,8 +4097,30 @@ ridgelines on a 2D canvas (below).
   - On wide screens: airspeed, caution lamps (AP, LAMP, HEAT, ICE, TERR,
     WIND) and height and climb bars. All of it reads the world.
 - **Views:** canopy and panel, panel only, or none. `onScroll` turns the
-  head with Android's pages.
-- **Keys:** `W` weather, `T` time of day, `V` view, `R` radar range.
+  head with Android's pages. The panel has three sizes (`panelSize`: full,
+  small ×0.68, extra small ×0.48): everything on it is drawn in shares of
+  its height, so a smaller one is the same panel lower down, and the outer
+  instruments fit narrower screens.
+- **By hand** (2026-11-15; `IceLogic.pilotStep`, `PILOT`). `W A S D` or the
+  arrows turn (0.42 rad/s, banking to 0.85 rad), climb and dive; `Q`/`E`
+  are the throttle (×0.45 to ×2.2, to 220 m/s at most: the dial's end); a
+  drag is a stick centred where it began (setting `touch`). The hand
+  never holds the height: it moves the *clearance the autopilot keeps*
+  (8 to 420 m above the snow), so the look-ahead climb and the hard floor
+  still apply, and **it cannot reach the ground**. When the ground ahead
+  wants more than 0.6 s of full climb, the steering blends back to the
+  autopilot's turn for lower ground (wholly, at 1.5 s). Five seconds
+  with no key or finger down and the autopilot has it: the turn eases to
+  its wander, the height sinks to the setting, the throttle returns to
+  cruise. The scope reads `TF MAN` meanwhile. Nothing is saved.
+  - Held keys need a key-up, which declared keys (§4.5) don't carry. With
+    focus in the stage, the manager's own `keydown`/`keyup` hold a key
+    (dropped on blur). A press forwarded by the player arrives only
+    through the catalog (`nudge`): it counts for 0.6 s, longer than a
+    keyboard's repeat delay, so a held key stays held either way.
+  - `Ctrl` and `Shift` are not used: Ctrl+W closes the tab.
+- **Keys:** flying as above; `X` weather (it was `W` in 0.18.0), `T`
+  time of day, `V` view, `R` radar range.
 
 **Cost, and a second governor.** The main thread steers (a few dozen
 height lookups a frame), sweeps the radar and repaints small instruments.
@@ -4122,10 +4144,13 @@ when they arrive late for 2.5 s it gives up its shadows, then pixels
 from a seed; the bytes decode to the floats; terrain is continuous with
 both plains and mountains; the flight covers the same ground at 10, 30, 60
 and 120 fps and never comes within 4 m of the snow at any speed, height or
-frame rate; the sun, the moons and the light by the hour; weather comes
+frame rate; by hand, the stick turns, climbs and is given back at five
+seconds, and fifteen minutes of diving flat out at whatever is there never
+comes within 4 m either; the sun, the moons and the light by the hour; weather comes
 and goes; the radar's shadows; the schema's options match the code's.
 Smoke: in the air on frame one with wingmen, lights, a radar picture and
-live gauges; the 2D fallback at the same speed on Low as High; night
+live gauges; the 2D fallback at the same speed on Low as High, and flown there by
+held keys and a forwarded press until let go; night
 lights the lamps and the stars; a blizzard closes in; the keys step and
 save; a phone's panel fits above the gesture bar.
 

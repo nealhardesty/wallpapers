@@ -225,8 +225,12 @@ const IceLogic = (() => {
     }
 
     // One step of at most 1/60 s; flightAdvance splits a frame into them.
-    function flightStep(s, dt, ground, speed, clearance, lure) {
-        const here = ground(s.x, s.z);
+    // `pilot` (pilotStart, below) is a hand on the stick: it turns, and
+    // raises or lowers the height being held. The height-keeping stays the
+    // autopilot's throughout, so nothing the hand does can reach the ground.
+    function flightStep(s, dt, ground, speed, clearance, lure, pilot) {
+        const here = ground(s.x, s.z), hold = pilot ? pilot.hold : 0;
+        if (pilot) clearance += pilot.lift;
         // Steering: a slow wander, bent away from whatever stands higher
         // than it could comfortably climb to. Open country costs nothing, so
         // the wander leads; in the mountains the passes win. `lure` (0 to 1
@@ -252,8 +256,14 @@ const IceLogic = (() => {
             sum += w;
             want += w * FLIGHT.feel[i];
         });
-        const turnTarget = clamp(want / sum * 0.38, -FLIGHT.maxTurn, FLIGHT.maxTurn);
-        s.turn += (turnTarget - s.turn) * (1 - Math.exp(-dt / 1.3));
+        let turnTarget = clamp(want / sum * 0.38, -FLIGHT.maxTurn, FLIGHT.maxTurn);
+        if (hold > 0) {
+            // The hand steers, until the ground ahead wants more climb than
+            // there is: then the autopilot turns for lower ground instead.
+            const danger = clamp(((s.target - s.y) / (speed * 0.55) - 0.6) / 0.9, 0, 1);
+            turnTarget = mix(turnTarget, mix(pilot.turn * PILOT.turn, turnTarget, danger), hold);
+        }
+        s.turn += (turnTarget - s.turn) * (1 - Math.exp(-dt / mix(1.3, 0.35, hold)));
         s.heading += s.turn * dt;
 
         // Height: clear the ground it is about to cross; nearer counts in
@@ -274,7 +284,7 @@ const IceLogic = (() => {
         s.z += cos * speed * dt;
         s.distance += speed * dt;
         s.t += dt;
-        s.roll += (clamp(s.turn * 3.1, -FLIGHT.maxBank, FLIGHT.maxBank) - s.roll) * (1 - Math.exp(-dt / 0.45));
+        s.roll += (clamp(s.turn * 3.1, -1, 1) * mix(FLIGHT.maxBank, PILOT.bank, hold) - s.roll) * (1 - Math.exp(-dt / 0.45));
         s.pitch += (Math.atan2(s.climb, speed) - s.pitch) * (1 - Math.exp(-dt / 0.35));
         s.agl = s.y - here;
         s.target = target;
@@ -283,14 +293,51 @@ const IceLogic = (() => {
     }
 
     // A frame of dtMs (clamped at 100 ms): the same ground covered at any frame rate.
-    function flightAdvance(s, dtMs, ground, speed, clearance, lure) {
+    function flightAdvance(s, dtMs, ground, speed, clearance, lure, pilot) {
         let left = clamp(dtMs, 0, 100) / 1000;
         while (left > 1e-9) {
             const dt = Math.min(left, 1 / 60);
-            flightStep(s, dt, ground, speed, clearance, lure);
+            flightStep(s, dt, ground, speed, clearance, lure, pilot);
             left -= dt;
         }
         return s;
+    }
+
+    // ---- A hand on the stick ------------------------------------------------------
+    // Manual control over the autopilot. `input` is { turn, climb, throttle },
+    // each -1 to 1, while a key or a finger is down, and null when hands are
+    // off. Five seconds of that and the autopilot has it back: the heading
+    // eases into its own wander, the height sinks to the setting, and the
+    // throttle returns to cruise.
+    const PILOT = {
+        handBack: 5,          // seconds hands-off before the autopilot takes over
+        turn: 0.42,           // radians a second at full stick
+        bank: 0.85,           // radians, against the autopilot's gentler FLIGHT.maxBank
+        lift: 55,             // metres a second the held height moves
+        low: 8, high: 420,    // the heights it can be flown between, metres above the snow
+        slow: 0.45, fast: 2.2,   // × the Speed setting
+    };
+
+    function pilotStart() {
+        return { turn: 0, climb: 0, lift: 0, throttle: 1, hold: 0, idle: Infinity, active: false };
+    }
+
+    function pilotStep(p, dt, input, clearance) {
+        p.idle = input ? 0 : p.idle + dt;
+        p.active = p.idle < PILOT.handBack;
+        const ease = 1 - Math.exp(-dt / 0.2);
+        p.turn += (clamp(input ? input.turn : 0, -1, 1) - p.turn) * ease;
+        p.climb += (clamp(input ? input.climb : 0, -1, 1) - p.climb) * ease;
+        p.hold += ((p.active ? 1 : 0) - p.hold) * (1 - Math.exp(-dt / (p.active ? 0.25 : 1.6)));
+        if (p.hold < 1e-4) p.hold = 0;
+        if (p.active) {
+            p.lift = clamp(p.lift + p.climb * PILOT.lift * dt, Math.min(0, PILOT.low - clearance), Math.max(0, PILOT.high - clearance));
+            p.throttle = clamp(p.throttle * Math.exp(clamp(input ? input.throttle : 0, -1, 1) * 0.6 * dt), PILOT.slow, PILOT.fast);
+        } else {
+            p.lift *= Math.exp(-dt / 4);
+            p.throttle += (1 - p.throttle) * (1 - Math.exp(-dt / 3));
+        }
+        return p;
     }
 
     // ---- Sky ------------------------------------------------------------------
@@ -423,7 +470,7 @@ const IceLogic = (() => {
         clamp, smooth, mix, mix3, RAD,
         bake, pack, slopes, sample, perlin, lattice,
         LAYERS, SHAPE, uvOf, terrain,
-        FLIGHT, flightStart, flightStep, flightAdvance,
+        FLIGHT, flightStart, flightStep, flightAdvance, PILOT, pilotStart, pilotStep,
         SUN_MAX, bodies, light, LIGHT,
         WEATHER, weatherStart, weatherStep, air,
         radarRay,
