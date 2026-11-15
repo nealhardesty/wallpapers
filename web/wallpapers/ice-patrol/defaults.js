@@ -12,9 +12,11 @@ WP.defaults('ice-patrol', {
     snowOften: 1,          // × how much of the time it snows, in 'auto'
     aurora: true,
     wingmen: 2,
+    touch: true,           // a drag steers
     beacons: true,         // survey beacons and stations out on the ice
     lamps: true,           // landing lamps after dark and in heavy snow
     cockpit: 'full',       // full, panel, none
+    panelSize: 'full',     // the instrument panel: full, small, tiny
     glow: 'green',         // the instruments' phosphor: green, amber, blue
     radarRange: 4000,      // metres
 });

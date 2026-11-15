@@ -15,6 +15,7 @@
 // because the old paint is fixed to the tube. The scope beside it is the
 // ground the autopilot is about to cross.
 
+const ICE_PANEL_SIZES = { full: 1, small: 0.68, tiny: 0.48 };
 const ICE_GLOWS = { green: [90, 255, 150], amber: [255, 186, 72], blue: [120, 205, 255] };
 
 class IceCockpit {
@@ -54,7 +55,8 @@ class IceCockpit {
     layout(w, h, ratio, config) {
         if (!this.wrap) return;
         const P = this.PAD, bottom = h - (this.host.insets?.bottom || 0);
-        const ph = Math.max(110, Math.min(0.34 * h, w / 2.72, bottom * 0.5));
+        // The panel is drawn in shares of its height, so a smaller one is the same panel, lower down.
+        const ph = Math.max(110, Math.min(0.34 * h, w / 2.72, bottom * 0.5)) * (ICE_PANEL_SIZES[config.panelSize] || 1);
         const top = bottom - ph, cx = w / 2, R = ph * 0.385;
         const g = this.g = { w, h, ratio, bottom, ph, top, cx, R };
         g.radar = { x: cx, y: top + ph * 0.56, r: R };
@@ -733,7 +735,7 @@ class IceCockpit {
         if (f.pull > 0.55 && s.seconds % 0.5 < 0.3) {
             ctx.fillStyle = '#ff5a48';
             ctx.fillText('PULL UP', x0 + sc.w * 0.95, y0 + sc.h * 0.05);
-        } else ctx.fillText('TF AUTO', x0 + sc.w * 0.95, y0 + sc.h * 0.05);
+        } else ctx.fillText(s.manual ? 'TF MAN' : 'TF AUTO', x0 + sc.w * 0.95, y0 + sc.h * 0.05);
         ctx.restore();
     }
 

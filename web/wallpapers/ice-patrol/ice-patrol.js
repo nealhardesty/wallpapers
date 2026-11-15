@@ -21,6 +21,10 @@ const ICE_VIEWS = ['full', 'panel', 'none'];
 const ICE_VIEW_NAMES = { full: 'Canopy and panel', panel: 'Panel only', none: 'No cockpit' };
 const ICE_RANGES = [2000, 4000, 8000];
 const ICE_CRUISE = 80;          // metres a second at Speed 1
+const ICE_TOP = 220;            // the airspeed dial ends at 800 km/h
+// Flying it by hand (IceLogic.pilotStep): what each key pushes.
+const ICE_STICK = { a: 'left', arrowleft: 'left', d: 'right', arrowright: 'right', w: 'up', arrowup: 'up', s: 'down', arrowdown: 'down', q: 'slow', e: 'fast' };
+const ICE_TAP = 0.6;            // seconds a key counts as held when only its press was seen (longer than a keyboard's repeat delay)
 const ICE_WIND = 0.7;           // the prevailing wind's bearing, radians: the drifts lie along it
 // Where the wingmen fly, from the lead: metres right, up and ahead.
 // What a struggling GPU gives up, in turn: shadows, then resolution.
@@ -49,7 +53,19 @@ class IcePatrolAnimationManager {
         this.beaconCache = new Map();
         this.contacts = [];
         this.scene = { cam: {}, craft: [], lights: [], layers: [] };
+        this.held = new Map();   // what the keys are pushing: until when, in this.seconds
+        this.drag = null;        // a finger or the mouse as a stick: { turn, climb }
+        this.input = { turn: 0, climb: 0, throttle: 0 };
         this.onResize = () => this.resize();
+        // A key held while this page has focus: down until it comes up. (A press
+        // the player forwards arrives through the catalog instead: nudge().)
+        this.onKey = event => {
+            const push = ICE_STICK[event.key.toLowerCase()];
+            if (!push) return;
+            if (event.type === 'keyup') this.held.delete(push);
+            else if (!event.ctrlKey && !event.metaKey && !event.altKey && !event.target.closest?.('input, select, textarea')) this.held.set(push, Infinity);
+        };
+        this.onLetGo = () => { this.held.clear(); this.drag = null; };
         this.onLost = event => { event.preventDefault(); this.renderer.lost = true; };
         // A lost graphics context takes every canvas's picture with it: build the view again, and repaint the cockpit.
         this.onRestored = () => { this.renderer.lost = false; this.flat = !this.renderer.init(); this.applyQuality(true); this.resize(); };
@@ -74,6 +90,20 @@ class IcePatrolAnimationManager {
         this.cockpit = new IceCockpit(this.host, this.terrain);
         this.cockpit.mount();
         window.addEventListener('resize', this.onResize);
+        if (!this.host.params.thumb) {
+            document.addEventListener('keydown', this.onKey);
+            document.addEventListener('keyup', this.onKey);
+            window.addEventListener('blur', this.onLetGo);
+            document.addEventListener('visibilitychange', this.onLetGo);
+            // The stick is centred where the drag began, and full over a quarter of the screen away.
+            let from = null;
+            const stick = (x, y) => {
+                if (!this.config.touch) return;
+                const reach = Math.min(this.width, this.height) * 0.25;
+                this.drag = { turn: IceLogic.clamp((x - from.x) / reach, -1, 1), climb: IceLogic.clamp((from.y - y) / reach, -1, 1) };
+            };
+            this.stopGestures = this.host.gestures({ start: (x, y) => { from = { x, y }; stick(x, y); }, move: stick, end: () => { this.drag = null; } });
+        }
 
         if (!this.host.params.thumb) {
             this.gpu.step = IceLogic.clamp((Number(this.host.storage.get('gpu')) || 0) - 1, 0, ICE_GPU.length - 1);
@@ -94,6 +124,11 @@ class IcePatrolAnimationManager {
         this.isRunning = false;
         cancelAnimationFrame(this.animationId);
         window.removeEventListener('resize', this.onResize);
+        document.removeEventListener('keydown', this.onKey);
+        document.removeEventListener('keyup', this.onKey);
+        window.removeEventListener('blur', this.onLetGo);
+        document.removeEventListener('visibilitychange', this.onLetGo);
+        this.stopGestures?.();
         this.canvas?.removeEventListener('webglcontextlost', this.onLost);
         this.canvas?.removeEventListener('webglcontextrestored', this.onRestored);
         this.renderer?.dispose();
@@ -102,12 +137,13 @@ class IcePatrolAnimationManager {
         this.canvas = null;
     }
 
-    get speed() { return ICE_CRUISE * this.config.speed * (this.host.reducedMotion ? 0.5 : 1); }
+    get speed() { return Math.min(ICE_TOP, ICE_CRUISE * this.config.speed * (this.pilot?.throttle ?? 1) * (this.host.reducedMotion ? 0.5 : 1)); }
 
     // Already under way on the first frame: somewhere out on the ice, at
     // height, settled into the turn, the wingmen in their slots.
     seedScene() {
         const ground = this.terrain.height, flight = this.flight = IceLogic.flightStart(ground, this.config.clearance, Math.random());
+        this.pilot = IceLogic.pilotStart();
         flight.x = (Math.random() - 0.5) * 2e5;
         flight.z = (Math.random() - 0.5) * 2e5;
         flight.y = ground(flight.x, flight.z) + this.config.clearance;
@@ -154,6 +190,7 @@ class IcePatrolAnimationManager {
     applySettings(config) {
         const before = this.config;
         this.config = config;
+        if (!config.touch) this.drag = null;
         if (before.weather !== config.weather && config.weather in IceLogic.WEATHER) this.weather.target = IceLogic.WEATHER[config.weather];
         this.syncWingmen();
         this.resize();
@@ -177,6 +214,24 @@ class IcePatrolAnimationManager {
         this.applySettings(this.config);
         return names[this.config[key]];
     }
+    // A flying key's press, by way of the catalog. With focus here the key's
+    // own events already hold it; forwarded by the player there is only the
+    // press, so it counts for a moment, and a held key's repeats keep it down.
+    nudge(key) {
+        const push = ICE_STICK[key.toLowerCase()];
+        if (push && this.held.get(push) !== Infinity) this.held.set(push, this.seconds + ICE_TAP);
+    }
+    // What the hands are asking for this frame, or null with hands off.
+    stick() {
+        for (const [push, until] of this.held) if (until < this.seconds) this.held.delete(push);
+        if (!this.held.size && !this.drag) return null;
+        const on = push => this.held.has(push) ? 1 : 0, input = this.input;
+        input.turn = on('right') - on('left') + (this.drag?.turn || 0);
+        input.climb = on('up') - on('down') + (this.drag?.climb || 0);
+        input.throttle = on('fast') - on('slow');
+        return input;
+    }
+
     nextWeather() { return `Weather: ${this.cycle('weather', ICE_WEATHER_ORDER, ICE_WEATHER_NAMES)}`; }
     nextTime() { return `Time: ${this.cycle('time', ICE_TIME_ORDER, ICE_TIME_NAMES)}`; }
     nextView() { return this.cycle('cockpit', ICE_VIEWS, ICE_VIEW_NAMES); }
@@ -234,7 +289,8 @@ class IcePatrolAnimationManager {
     update(dtMs) {
         const dt = dtMs / 1000, c = this.config, ground = this.terrain.height, flight = this.flight;
         this.seconds += dt;
-        IceLogic.flightAdvance(flight, dtMs, ground, this.speed, c.clearance, this.terrain.mountains);
+        IceLogic.pilotStep(this.pilot, dt, this.stick(), c.clearance);
+        IceLogic.flightAdvance(flight, dtMs, ground, this.speed, c.clearance, this.terrain.mountains, this.pilot);
 
         // The hour.
         if (c.time === 'cycle') this.day = (this.day + dt / (c.dayMinutes * 60)) % 1;
@@ -411,7 +467,7 @@ class IcePatrolAnimationManager {
 
         this.cockpit.update({
             config: c, seconds: this.seconds, flight, speed: v, light, night, lamps, level, flakes: air.flakes,
-            contacts: this.contacts, sway: still ? 0 : 1, pan: this.pan, horizon: light.horizon,
+            manual: this.pilot.active, contacts: this.contacts, sway: still ? 0 : 1, pan: this.pan, horizon: light.horizon,
         });
     }
 

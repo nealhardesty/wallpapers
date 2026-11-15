@@ -154,8 +154,10 @@ final class SelfTest {
         _ = await js(web, mirrorKeys)
         let written = await until(5) { FileManager.default.fileExists(atPath: self.sync.file.path) }
         check("changing a setting writes saver.json", written)
-        await pause(0.5)
-        let mirror = (try? Data(contentsOf: sync.file)).flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
+        // The write is debounced, and an earlier one may have made the file: wait for this setting to land in it.
+        func read() -> [String: Any]? { (try? Data(contentsOf: sync.file)).flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] } }
+        _ = await until(10) { (read()?["storage"] as? [String: String])?["wp:selftest-mirror"] != nil }
+        let mirror = read()
         let stored = mirror?["storage"] as? [String: String] ?? [:]
         check("saver.json carries the setting", stored["wp:selftest-mirror"] == "{\"n\":7}", "\(stored["wp:selftest-mirror"] ?? "missing")")
         check("saver.json leaves out sign-in tokens and the first-run hint", stored["wp:jellyfin:auth"] == nil && stored["wp:hinted"] == nil)
@@ -163,8 +165,8 @@ final class SelfTest {
         let picks = Set(entries.filter { $0["pick"] as? Bool == true }.compactMap { $0["id"] as? String })
         check("Random's pool skips blank, Jellyfin and Bing", entries.count > 20 && picks.count > 15 && !picks.contains("blank") && !picks.contains("jellyfin") && !picks.contains("bing"), "\(picks.count) of \(entries.count)")
         sync.choice = "random"; sync.clock = true; sync.rotateMinutes = 15
-        await pause(2)
-        let saver = ((try? Data(contentsOf: sync.file)).flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] })?["saver"] as? [String: Any]
+        _ = await until(10) { (read()?["saver"] as? [String: Any])?["rotateMinutes"] as? Int == 15 }
+        let saver = read()?["saver"] as? [String: Any]
         check("the menu's saver choices reach saver.json", saver?["choice"] as? String == "random" && saver?["clock"] as? Bool == true && saver?["rotateMinutes"] as? Int == 15, "\(String(describing: saver))")
         sync.choice = "same"; sync.clock = false; sync.rotateMinutes = 5
         _ = await js(web, "localStorage.removeItem('wp:selftest-mirror'); localStorage.removeItem('wp:jellyfin:auth'); localStorage.removeItem('wp:hinted');")
