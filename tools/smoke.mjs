@@ -1546,6 +1546,152 @@ const STAGE_CHECKS = {
         }
         return true;
     }]],
+    // Pocket Hockey (§10.36): mid-game on frame one; a goal scored, called and
+    // saved, and a new tab carrying on; a period's end, the resurfacer and the
+    // out-of-town scores; the final, the cup and the summer; the goalie who
+    // scores; a phone, and a tap.
+    'pocket-hockey': [
+        ['mid-game on the first frame, in a few hundred pixels; a goal is scored, called and saved; a new tab carries on from there', async () => {
+            if (!await stageWith('pocket-hockey', null, '&seed=7')) return record('not ready');
+            const first = await counts(`({ show: m.show, phase: m.game.phase, tick: m.game.tick, on: m.game.P.filter(p => p.on).length, owner: m.game.puck.owner, teams: m.world.teams.length,
+                canvas: [m.canvas.width, innerWidth, getComputedStyle(m.canvas).imageRendering], league: !!localStorage.getItem('wp:pocket-hockey:league'), game: !!localStorage.getItem('wp:pocket-hockey:game') })`);
+            if (first.show !== 'game' || first.phase !== 'play' || first.tick < 1500 || first.on !== 8 || first.owner < 0 || first.teams !== 8) record(`the first frame: ${JSON.stringify(first)}`);
+            if (first.canvas[0] > first.canvas[1] / 2 || first.canvas[2] !== 'pixelated') record(`the canvas: ${first.canvas}`);
+            if (!first.league || !first.game) record('a new league was not saved at once');
+            await sleep(1000);
+            const ran = await counts('m.game.tick') - first.tick;
+            if (ran < 25 || ran > 95) record(`${ran} steps of the game in a second`);
+            // Play on, in the wallpaper, until somebody scores.
+            const goal = await counts(`(() => { const L = HockeyLogic, g = m.game, had = g.goals.length; let n = 0; while (g.goals.length === had && !g.done && n++ < 40000) { L.step(g); m.afterStep(g, false); }
+                const gl = g.goals.at(-1); return gl && { by: g.P[gl.by].name.toUpperCase(), score: g.score, said: m.caption?.text, banner: m.banner?.text, sub: m.banner?.sub, lamp: m.lamp[gl.team], cheer: m.cheer[gl.team], tick: g.tick, done: g.done,
+                    credited: g.P[gl.by].st.g, saved: JSON.parse(localStorage.getItem('wp:pocket-hockey:game')) }; })()`);
+            if (!goal) return record('nobody scored');
+            if (!goal.said?.includes(goal.by) || !/GOAL!/.test(goal.banner || '') || !goal.sub?.includes(goal.by) || !(goal.lamp > 0) || goal.cheer !== 1 || goal.credited < 1) record(`the goal: ${JSON.stringify({ ...goal, saved: undefined })}`);
+            if (!goal.done && (goal.saved?.tick !== goal.tick || goal.saved.score.join() !== goal.score.join())) record('the goal was not saved');
+            await sleep(700);
+            await shoot('pocket-hockey-goal');
+            // A new tab: the same league, the same game, a little further on.
+            await cdp.send('Page.navigate', { url: `${WEB}/stage.html?w=pocket-hockey` });
+            if (!await waitFor(() => evaluate('WP.stage?.ready'))) return record('not ready on reload');
+            const again = await counts('({ show: m.show, tick: m.game.tick, total: m.game.score[0] + m.game.score[1], goals: m.game.goals.length, seed: m.world.seed, league: m.game.league })');
+            if (again.show !== 'game' || again.tick < goal.tick || again.tick > goal.tick + 1500 || again.total < goal.score[0] + goal.score[1] || again.goals !== again.total || again.seed !== again.league) record(`after a reload (the goal at ${goal.tick}): ${JSON.stringify(again)}`);
+            return true;
+        }],
+        ['N to the end of the period: the card, the resurfacer and its clean stripe, a score from elsewhere; G to the horn: three stars, the table, the next game', async () => {
+            if (!await stageWith('pocket-hockey', null, '&seed=7')) return record('not ready');
+            await counts('m.skip()');
+            const rest = await counts('({ phase: m.game.phase, period: m.game.period })');
+            if (rest.phase !== 'break' || rest.period !== 1) record(`after N: ${JSON.stringify(rest)}`);
+            if (!await waitFor(() => counts('m.world.out.length >= 1 && !m.bg'), 30000)) record('no score came in from the other games');
+            if (!await waitFor(() => counts('m.game.P.every(p => !p.on)'), 8000)) record('the players did not leave the ice');
+            await counts('m.game.phaseT = Math.max(m.game.phaseT, 330)');
+            await sleep(700);
+            await shoot('pocket-hockey-break');
+            await counts('m.game.phaseT = 830');
+            await sleep(700);
+            const ice = await counts(`(() => { const at = m.machineAt(), v = m.view; if (!at) return null; const x = Math.round(v.X(at.x, at.y)), y = Math.round(v.Y(at.x, at.y));
+                const d = m.iceCtx.getImageData(x + 3, y + 3, 1, 1).data, b = m.arena.base.getContext('2d').getImageData(x + 3, y + 3, 1, 1).data;
+                return { wet: Math.abs(d[0] - b[0]) + Math.abs(d[1] - b[1]) + Math.abs(d[2] - b[2]), on: m.game.P.filter(p => p.on).length, inside: HockeyLogic.inside(at.x, at.y, 2) }; })()`);
+            if (!ice || !(ice.wet > 8) || ice.on !== 0 || !ice.inside) record(`the resurfacer: ${JSON.stringify(ice)}`);
+            await shoot('pocket-hockey-resurfacer');
+            await counts('m.toFinal()');
+            const end = await counts(`({ show: m.show, done: m.game.done, score: m.game.score, won: m.world.teams[m.game.T[m.game.winner].ti].w, saved: JSON.parse(localStorage.getItem('wp:pocket-hockey:league')).teams[m.game.T[m.game.winner].ti].w,
+                game: localStorage.getItem('wp:pocket-hockey:game'), stars: m.stars(m.game).length })`);
+            if (end.show !== 'postgame' || !end.done || end.score[0] === end.score[1] || end.won !== 1 || end.saved !== 1 || (end.game !== null && end.game !== 'null') || end.stars !== 3) record(`the final horn: ${JSON.stringify(end)}`);
+            if (!await waitFor(() => counts('m.round !== m.roundKey()'), 40000)) return record('the round’s other games never finished');
+            await counts('m.showT = 3');
+            await sleep(500);
+            await shoot('pocket-hockey-final');
+            await counts('m.showT = 99');
+            if (!await waitFor(() => counts("m.show === 'standings'"), 3000)) return record('no table after the game');
+            const table = await counts('({ round: m.world.round, wins: m.world.teams.reduce((n, t) => n + t.w, 0), out: m.world.out.length })');
+            if (table.round !== 1 || table.wins !== 4 || table.out !== 4) record(`the table: ${JSON.stringify(table)}`);
+            await sleep(300);
+            await shoot('pocket-hockey-table');
+            await counts('m.showT = 99');
+            if (!await waitFor(() => counts("m.show === 'pregame'"), 3000)) return record('no next game');
+            const next = await counts('({ key: m.game.key, wait: m.game.wait, tick: m.game.tick, saved: JSON.parse(localStorage.getItem("wp:pocket-hockey:league")).round })');
+            if (!next.key.startsWith('1:regular:1:') || !next.wait || next.tick > 600 || next.saved !== 1) record(`the next game: ${JSON.stringify(next)}`);
+            await sleep(600);
+            await shoot('pocket-hockey-pregame');
+            await counts('m.skip()');
+            await counts('(m.showBoard(), m.showBoard())');
+            await sleep(600);
+            if (await counts('m.show + m.board + m.game.wait') !== 'game2false') record('N did not start the game, or B did not show the scorers');
+            await shoot('pocket-hockey-scorers');
+            return true;
+        }],
+        ['the final: the champions skate the tin round, the summer brings rookies, and season two begins', async () => {
+            if (!await stageWith('pocket-hockey', null, '&seed=7')) return record('not ready');
+            // The season and the semi-finals in the logic, with short periods; then watch the final.
+            const start = await counts(`(() => { const L = HockeyLogic, w = m.world; let n = 0; m.queue = []; m.bg = null; while (w.stage !== 'final' && n++ < 40) L.playRound(w, 900); m.begin(false);
+                return { stage: w.stage, show: m.show, beard: m.game.beard, playoff: m.game.playoff, played: w.teams.map(t => t.w + t.l + t.otl).join() }; })()`);
+            if (start.stage !== 'final' || start.show !== 'pregame' || !(start.beard >= 3) || !start.playoff || start.played !== '14,14,14,14,14,14,14,14') record(`the final: ${JSON.stringify(start)}`);
+            let show = '';
+            for (let n = 0; n < 16 && show !== 'ceremony'; n++) {
+                show = await counts("(() => { if (m.show === 'pregame' || m.show === 'game') m.toFinal(); else if (m.show !== 'ceremony') m.showT = 99; return m.show; })()");
+                await sleep(300);
+            }
+            if (show !== 'ceremony') return record(`no ceremony: ${show}`);
+            await sleep(3200);
+            const cup = await counts(`({ stage: m.world.stage, nick: HockeyLogic.TEAMS[m.world.champion].nick.toUpperCase(), said: m.caption?.text, winner: m.game.T[m.game.winner].ti === m.world.champion,
+                out: m.game.P.filter(p => p.on && p.team === m.game.winner).length, losers: m.game.P.filter(p => p.on && p.team !== m.game.winner).length, paper: m.particles.filter(p => p.life > 0).length })`);
+            if (cup.stage !== 'champion' || !cup.said?.includes(cup.nick) || !cup.said.includes('BIG BISCUIT TIN') || !cup.winner || cup.out !== 7 || cup.paper < 40) record(`the ceremony: ${JSON.stringify(cup)}`);
+            await shoot('pocket-hockey-cup');
+            await counts('m.showT = 99');
+            if (!await waitFor(() => counts("m.show === 'offseason'"), 3000)) return record('no summer');
+            const summer = await counts(`({ season: m.world.season, stage: m.world.stage, news: m.news.map(n => n.type), banners: m.world.champions.length, saved: JSON.parse(localStorage.getItem('wp:pocket-hockey:league')).season })`);
+            const count = type => summer.news.filter(t => t === type).length;
+            if (summer.season !== 2 || summer.stage !== 'regular' || summer.news[0] !== 'champion' || count('rookie') !== count('retired') || !summer.news.includes('mvp') || summer.banners !== 1 || summer.saved !== 2) record(`the summer: ${JSON.stringify(summer)}`);
+            await sleep(400);
+            await shoot('pocket-hockey-summer');
+            await counts('m.showT = 99');
+            if (!await waitFor(() => counts("m.show === 'pregame' && m.game.key.startsWith('2:regular:0:')"), 3000)) record('season two did not begin');
+            return true;
+        }],
+        ['a goalie with the puck and an empty net at the far end: the improbable goal, and the hats', async () => {
+            if (!await stageWith('pocket-hockey', null, '&seed=7')) return record('not ready');
+            // The visitors have pulled their goalie and lost the puck to the home one; everyone else is sent off, so nobody is in the way.
+            const heave = await counts(`(() => { const L = HockeyLogic, g = m.game, k = g.P[g.T[0].goalie], had = g.goals.length; let tries = 0;
+                Object.assign(g, { phase: 'play', period: 3, clock: 4000, score: [2, 1] }); for (const p of g.P) p.on = p === k; g.T[1].pulled = true;
+                while (g.goals.length === had && tries++ < 8) { Object.assign(g.puck, { x: k.x + 2, y: k.y, vx: 0, vy: 0, owner: -1 }); L.gain(g, k); for (let n = 0; n < 300 && g.goals.length === had; n++) { L.step(g); m.afterStep(g, false); } }
+                const gl = g.goals.at(-1); return { scored: g.goals.length > had, tries, keeper: gl?.keeper, by: gl && g.P[gl.by].name === k.name, banner: m.banner?.text, said: m.caption?.text, hats: m.thrown.length, lamp: m.lamp[0] }; })()`);
+            if (!heave.scored || !heave.keeper || !heave.by || heave.banner !== 'GOALIE GOAL!' || !heave.said?.includes('THE GOALIE HAS SCORED') || heave.hats < 20 || !(heave.lamp > 4)) record(`the goalie's goal: ${JSON.stringify(heave)}`);
+            await sleep(1500);
+            await shoot('pocket-hockey-goalie-goal');
+            return true;
+        }],
+        ['a phone held upright: the rink stands on end above the gesture bar; a tap on the ice throws something, a tap in the seats starts a wave', async () => {
+            const viewport = { width: 412, height: 915, deviceScaleFactor: 2.625 };
+            try {
+                if (!await bootStage('w=pocket-hockey&host=android&seed=7', viewport)) return record('not ready on a phone');
+                const v = await counts(`(() => { const L = HockeyLogic, v = m.view; return { upright: v.upright, px: v.px, bw: v.bw, low: v.low, inset: WP.host.insets.bottom, left: v.X(0, -L.HW), right: v.X(0, L.HW), top: v.Y(L.HL, 0), bottom: v.Y(-L.HL, 0),
+                    from: v.top, to: v.bottom, k: v.k, spot: [v.X(10, 12) * v.px, v.Y(10, 12) * v.px], seats: [v.bw * v.px / 2, (v.bottom + 12) * v.px] }; })()`);
+                if (!v.upright || v.left < 10 || v.right > v.bw - 2 || v.top < v.from || v.bottom > v.to || v.low * v.px < v.inset || v.inset !== 48 || v.k < 1.5) record(`the layout: ${JSON.stringify(v)}`);
+                const tap = async ([x, y]) => {
+                    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: Math.round(x), y: Math.round(y) }] });
+                    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+                    await sleep(150);
+                };
+                await tap(v.spot);
+                const thrown = await counts('({ air: m.thrown.length, thrown: m.stats.thrown, waves: m.stats.waves })');
+                if (thrown.air !== 1 || thrown.thrown !== 1 || thrown.waves !== 0) record(`a tap on the ice: ${JSON.stringify(thrown)}`);
+                await sleep(900);
+                const landed = await counts("({ air: m.thrown.length, down: m.game.items.length + m.hats.length + m.game.events.filter(e => e.type === 'slip').length })");
+                if (landed.air !== 0 || landed.down < 1) record(`it never landed: ${JSON.stringify(landed)}`);
+                await tap(v.seats);
+                const wave = await counts('({ wave: !!m.wave, waves: m.stats.waves, thrown: m.stats.thrown })');
+                if (!wave.wave || wave.waves !== 1 || wave.thrown !== 1) record(`a tap in the seats: ${JSON.stringify(wave)}`);
+                await shoot('pocket-hockey-phone');
+                await counts('m.applySettings({ ...m.config, touch: false })');
+                await tap(v.spot);
+                if (await counts('m.stats.taps') !== 2) record('a tap counted with touch switched off');
+            } finally {
+                await cdp.send('Emulation.clearDeviceMetricsOverride');
+            }
+            return true;
+        }],
+    ],
     // Ice Patrol (§10.34): in the air on frame one with the instruments
     // reading the world; the same flight without WebGL; night, weather, the
     // views and a phone. Headless Chrome draws its WebGL in software, far too

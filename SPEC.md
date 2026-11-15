@@ -37,7 +37,9 @@ wallpapers' only home. They run in three hosts:
 > Patrol (§10.34, 2026-11-14), a flight over an ice world from the pilot's
 > seat and the first wallpaper drawn with WebGL, makes 43. Sumo
 > Championship (§10.35, 2026-11-15), a never-ending tournament as a moving
-> woodblock print, makes 44.
+> woodblock print, makes 44. Pocket Hockey
+> (§10.36, 2026-11-15), an invented league of three-on-three in top-down
+> pixel art, makes 45.
 > Phase 10, the clock overlay (§4.9), was built 2026-10-28; §10 holds the
 > other ideas.
 > Windows (§10.25): the W0 spikes passed, and W1 (the desktop core: behind
@@ -152,6 +154,7 @@ Added for Christmas, drawn in code (designs in §10.27–§10.30):
 | `sky-island` | sky-island-logic.js, sky-island-art.js, sky-island-land.js, sky-island-actors.js, sky-island.js (and Harvest's harvest-sky.js) | ~3.5k lines | Interactive (tap a cat, a person, the lake, a house at night, the sky); 16-bit pixel art at its own resolution (a pixel is 2 CSS px on a laptop or 1080p), scaled up pixelated; a terraced island seen from above and in front, its underside, the sea of cloud and the ground far below all baked; the calendar (seasons, holidays, Easter, the owner's dates), the names and the island's three-tier layout from a seed (`SkyIslandLogic`), unit-tested over 240 layouts; follows `host.now()` (the hour, the season, every holiday); keys N, P, V, O, B, W, S, H |
 | `ice-patrol` | ice-logic.js, ice-gl.js, ice-cockpit.js, ice-patrol.js | ~2.5k lines | The first on WebGL (§10.34): an endless snowfield from two baked noise fields, the same height formula in JavaScript and in the shaders (`IceLogic`), unit-tested; a 2D cockpit whose radar sweeps the real terrain; a 2D ridgeline fallback without WebGL; its own watch on the GPU; interactive (fly it by hand: keys and a drag; the autopilot takes it back after 5 s); keys W A S D, arrows, Q, E, X, T, V, R |
 | `sumo` | sumo-logic.js, sumo-art.js, sumo.js | ~1.3k lines | No network; a league of invented wrestlers kept in `host.storage`, written in Japanese with an English gloss (§10.35); bouts and tournaments pure and seeded (`SumoLogic`), unit-tested; interactive (a tap throws a cushion); evening by `host.now()`; keys N, B |
+| `pocket-hockey` | hockey-logic.js, hockey-art.js, pocket-hockey.js | ~2.4k lines | No network; an invented league of eight clubs and the game in progress kept in `host.storage` (§10.35); the league, the 60 Hz game (physics, steering, signature moves) and the seasons pure and seeded (`HockeyLogic`), unit-tested; top-down pixel art at its own resolution, scaled up pixelated, with its own 5×7 font; interactive (a tap throws something on the ice, or starts a wave); keys N, G, B, X, W |
 
 About 1.7 MB of JavaScript in total. **Not imported:** links, weather, clocks,
 search/omniprompt, custom links, status bar, Docker/nginx, the homepage's
@@ -843,6 +846,7 @@ and the commits.
 | sky-island | — | The canvas is the picture's own pixels (2 CSS px each on a laptop or 1080p, 3 at 1440p, 4 at 4K, 1 on a phone), scaled up pixelated; the terrain (three tiers, their cliffs, the underside, the water) is one bake per season, the roots three sway frames, the sea of cloud two tileable strips and the ground one, rebaked with the light; everything that stands still (houses, trees, lamps, props, trimmings) is baked into one layer per street band, drawn in turn with whoever moves (trees are drawn live, swaying, only on High); the sky is a dithered bake redone as the light changes, the stars four baked twinkle frames; the night is one `source-atop` wash over the island's scratch, with the lit windows and lamps one glow layer redone only when the lit set changes; a passing island is one bake with a few live bits; 20 fps by default (a setting), 12 on Low, paced on a steady timeline through idleUntil; folk × (0.4 + 0.6 density), strays, wildlife, rain, snow, leaves, fireflies × density. Bench 2026-11-11 (v2): Low 21%, Medium 38%, High 46% |
 | ice-patrol | `shadows`, `sparkle` (medium) | WebGL: one grid drawn nine times (96, 64 or 48 cells a side by density), heights and slopes from two noise textures; shadows ten marched steps on High, six on Medium, compiled out when shed (after fading); flakes × density, wrapped in the vertex shader; the cockpit frame painted per light step, the gauges at 15 Hz on a strip of their own; a few dozen height lookups a frame on the main thread. The GPU is watched by the wallpaper itself (late frames give up shadows, then render scale to 0.4), since the governor only times callbacks; software renderers start there. No WebGL: 34 ridgelines a frame in 2D |
 | sumo | — | The hall is one cached canvas (rebuilt on resize, tier and at dusk); a frame draws it, three jointed figures and a few marks. The crowd's rows and the cushions thrown follow density |
+| pocket-hockey | — | The canvas is the picture's own pixels (about 427 × 267 on a laptop, 206 × 458 on an upright phone; a pixel is 3 CSS px at 1280 × 800, in half steps below that), scaled up pixelated. The arena (ice, lines, boards, benches, a crowd of some thousands) is one bake a game; a working copy of it takes the skate marks and the resurfacer's stripes, so a frame is one blit of that, a dozen kept sprites, and lettering set once a line and kept. The round's other games are stepped 4 ms a frame. Hats, paper, spray, camera flashes and skate marks × density. Bench 2026-11-15 on a loaded machine (Snow beside it for scale: 20%, 24%, 60%): Low 14%, Medium 21%, High 44% |
 
 #### In the panel
 
@@ -4304,6 +4308,107 @@ English instead: headless Chrome in CI is such a device.
   tournament; a phone's layout and a tap.
 - **Not built:** sound; the lower divisions (only two names a tournament
   cross the line); special prizes.
+### 10.36 Pocket Hockey (`pocket-hockey`, owner pick, 2026-11-15)
+
+From an idea list the owner shared ("three-on-three hockey with
+exaggerated skating physics, ricocheting pucks, and tiny goalies ...
+players develop signature moves, and teams build statistics across a
+season; occasionally a goalie scores an improbable goal"). One of three
+sports wallpapers; the owner chose a different look for each (this one
+top-down pixel art), a league that persists, and seasons that only advance
+while watched. Nothing real is named: the towns are on no map, and the
+ice resurfacer is "Old Smoothie".
+
+- **The league (`HockeyLogic`, pure, seeded, unit-tested).** A league and a
+  game are plain data that carry their own dice (`rng`), so a seed plays
+  the same game and a stored one carries on exactly.
+  - *Clubs:* eight, fixed (Mount Mitten Yetis, Port Pickle Walruses,
+    Biscuit Falls Gravy Boats, Snowglobe City Narwhals, Cocoa Springs
+    Marshmallows, Fort Flannel Lumberjacks, Noodle Harbour Honkers, Tin
+    Whistle Teakettles), each with colours, a rink and a mascot. Seven
+    players each: two lines of centre, wing and defender, and a goalie.
+    Speed, shot, hands, checking and wits (0 to 1), an age and a peak; no
+    surname twice in the league, so a caption can use it alone.
+  - *A season:* fourteen rounds of four games (everyone twice, home and
+    away); two points a win, one for losing after regulation; the top four
+    play best-of-three semi-finals and a final for the Big Biscuit Tin.
+    One game a round is watched (`featured`: the followed club's, or the
+    best-placed pair's); the others are played unwatched by the same
+    simulation, seeded from the league and the fixture.
+  - *The summer (`nextSeason`):* best player, best goalie, most hits;
+    ratings drift up to a player's peak and down after; up to two a club
+    retire and a rookie takes each place (the low finishers get the better
+    ones); now and then a trade; a new schedule.
+- **A game.** The rink is 200 × 100 with rounded corners; nets behind goal
+  lines at ±82. Stepped at 60 Hz.
+  - *Physics:* a skater pushes toward a target with limited force, so he
+    arcs and overshoots; bodies push apart, and a meant check (or a hard
+    enough accident) knocks one down, as does charging a goalie. The puck
+    slides, bounces off boards, posts, the outside of a net and bodies, is
+    carried on a stick, and scores by crossing the line between the posts.
+    A goalie is a small body who shuffles along the line from puck to net
+    and, a few steps after seeing a shot, lunges to where it will cross:
+    saves are geometry and reaction time, not a dice roll.
+  - *Steering:* the side without the puck sends its nearest at the
+    carrier, keeps one between him and the net and marks the rest in their
+    passing lanes; the side with it has a trailer and men looking for the
+    most open spot; a loose puck goes to whoever can meet it first (by
+    where it will be). A carrier thinks a few times a second: shoot (by
+    range, angle and lane), pass (by lane, room and what the receiver
+    could do), or clear it off the boards.
+  - *Signature moves:* eleven kinds by position (slapshot with a wind-up,
+    wrist shot, spin, stickhandle, burst of speed, one-timer, saucer pass,
+    body check, poke check, glove save, kick save), each changing what the
+    player can do and each given its own name ("the Turbo Teacup"). About
+    half the founders have one; the rest, and every rookie, grow one from
+    goals, assists, hits and saves, by what they are good at, and it is
+    polished with use (three levels).
+  - *The clock:* three periods (45 s, 75 s or 2 min); lines change on the
+    fly and at stoppages; a side one or two down late in the third pulls
+    its goalie for a fourth skater; level after three is two-on-two
+    overtime, then both nets empty until a goal (on shots after 90 s more,
+    which the tests have not seen happen). A goalie holding the puck with
+    the far net empty heaves it there, and it goes in about one game
+    in a hundred.
+  - Measured over 400 unwatched games at the normal length: 5.5 goals a
+    game (1 to 15), 24 shots on goal, 13 knockdowns, one game in seven
+    past regulation, the home side winning 54%, and the better-rated side
+    seven in ten.
+- **The show (`PocketHockeyAnimationManager`).** A card before the game,
+  the game, a card between periods while the resurfacer does three laps
+  and a pass up the middle, three stars after it, the table (or the
+  series), and on. The other games' scores arrive in a corner and on the
+  cards. A goal: a band across the ice, the lamp, the scorer's end of the
+  crowd on its feet, flashes. A hat trick or a goalie's goal: hats. The
+  final: the winners empty their bench and skate rings round the captain
+  and the tin, the mascot beside him, paper falling; then the summer's
+  news, and banners for past champions hang in the corner. Playoff beards
+  grow by the game. The announcer has one over-excited line at a time.
+- **The look (`HockeyArt`).** Everything is drawn in code at the picture's
+  own resolution: a 5×7 font; the arena baked per game pixel by pixel from
+  the rink's geometry (so an upright phone simply stands it on end, the
+  benches down the left); figures rasterised from above into a small grid
+  in sixteen directions and a few poses, outlined, and kept; the home side
+  in its colours and the visitors in white.
+- **State:** `host.storage` keys `league` (saved when founded and after
+  every game) and `game` (the game in progress, every five seconds of
+  play, at each goal and period, and on pause). A new league opens in the
+  middle of a first period; a returning one resumes at the step it left.
+  Never in thumb mode. The panel's "Found a new league" starts again, and
+  a status line says where the season is.
+- **Tests.** Unit (`tools/pocket-hockey.test.mjs`, 12): the league and
+  schedule; 72 games that end, plausibly, with every body and the puck
+  inside the boards at every step; a strong side beating a weak one most
+  times, not all; the same seed, and a game put through JSON mid-shift,
+  ending identically; a stored league finishing its season identically;
+  seven seasons rolling over whole; moves grown and polished; the goalie's
+  goal; litter; the resurfacer's path. Smoke: mid-game on frame one, a
+  goal called and saved and resumed by a new tab; the break, the
+  resurfacer's stripe, the scores from elsewhere, the final horn, the
+  table and the next game; the final, the tin and season two; the
+  goalie's goal; a phone, and its taps.
+- **Not built:** sound; penalties, icing and offside; ends swapped between
+  periods; a coach; more than the one arena look; trading by merit.
 
 ## Open questions
 
