@@ -43,6 +43,8 @@ wallpapers' only home. They run in three hosts:
 > 2026-11-15), a pixel-art league played a pitch at a time, makes 46.
 > Wayfarer (§10.38, 2026-11-15), an endless walk through a cosy fantasy
 > world, makes 47.
+> Fresh Tracks (§10.39, 2026-11-15), a ski run that never ends and the
+> third wallpaper drawn with WebGL, makes 48.
 > Phase 10, the clock overlay (§4.9), was built 2026-10-28; §10 holds the
 > other ideas.
 > Windows (§10.25): the W0 spikes passed, and W1 (the desktop core: behind
@@ -160,6 +162,7 @@ Added for Christmas, drawn in code (designs in §10.27–§10.30):
 | `pocket-hockey` | hockey-logic.js, hockey-art.js, pocket-hockey.js | ~2.4k lines | No network; an invented league of eight clubs and the game in progress kept in `host.storage` (§10.35); the league, the 60 Hz game (physics, steering, signature moves) and the seasons pure and seeded (`HockeyLogic`), unit-tested; top-down pixel art at its own resolution, scaled up pixelated, with its own 5×7 font; interactive (a tap throws something on the ice, or starts a wave); keys N, G, B, X, W |
 | `baseball` | baseball-logic.js, baseball-league.js, baseball-talk.js, baseball-art.js, baseball.js | ~2.4k lines | No network; a league of eight invented clubs kept in `host.storage` (§10.37); every pitch, ball in play and box score pure and seeded (`BaseballLogic`, `BaseballLeague`), unit-tested; 16-bit pixel art at its own resolution with its own lettering, scaled up pixelated; interactive (a tap starts a wave); day, dusk and night by `host.now()`; keys N, S |
 | `wayfarer` | way-logic.js, way-models.js, way-actors.js, way-gl.js, wayfarer.js | ~3.6k lines | The second on WebGL (§10.38): an endless road through eight kinds of country with villages, walled cities and landmarks along it, all a pure function of a seed (`WayLogic`), unit-tested; every shape modelled in code as triangles (`WayModels`, `WayActors`); built a 64 m square at a time as the walk reaches it; three cameras; day, night, weather and seasons; a flat 2D fallback without WebGL; its own watch on the GPU; interactive (drag to look around); keys V, T, X, N |
+| `ski-run` | ski-logic.js, ski-models.js, ski-gl.js, ski-run.js | ~3.7k lines | The third on WebGL (§10.39), with instancing: an endless ski run stitched from eleven kinds of section, one `height(x, z)` for the riders and the mesh (`SkiLogic`), riders, tricks, wipeouts, cameras and a ski school all pure and unit-tested; trees, figures and props modelled in code (`SkiModels`); a flat 2D fallback without WebGL; its own watch on the GPU; interactive (carve by keys or a drag, tap to jump; the riders take it back after 4 s); keys A, D, arrows, J, V, T, X, G |
 
 About 1.7 MB of JavaScript in total. **Not imported:** links, weather, clocks,
 search/omniprompt, custom links, status bar, Docker/nginx, the homepage's
@@ -854,6 +857,7 @@ and the commits.
 | pocket-hockey | — | The canvas is the picture's own pixels (about 427 × 267 on a laptop, 206 × 458 on an upright phone; a pixel is 3 CSS px at 1280 × 800, in half steps below that), scaled up pixelated. The arena (ice, lines, boards, benches, a crowd of some thousands) is one bake a game; a working copy of it takes the skate marks and the resurfacer's stripes, so a frame is one blit of that, a dozen kept sprites, and lettering set once a line and kept. The round's other games are stepped 4 ms a frame. Hats, paper, spray, camera flashes and skate marks × density. Bench 2026-11-15 on a loaded machine (Snow beside it for scale: 20%, 24%, 60%): Low 14%, Medium 21%, High 44% |
 | baseball | — | The canvas is the picture's own pixels (about 3 CSS px each on a laptop), scaled up pixelated; the park (sky, stands, crowd, turf, fence) is one bake per game, size and light, with the crowd on its feet a second; the scoreboard and all the captions are two more canvases redrawn only when their words change; a frame blits those and draws about thirty men of a dozen rectangles each. The crowd, fireworks, confetti and rain follow density |
 | wayfarer | `shadows`, `mirror` (medium) | WebGL: the land as squares of triangles built on the main thread as the walk reaches them (in steps of a few things at a time, 3 ms of building a frame at most, so even a city's square never holds a frame up) and drawn in one call each. High: 7×7 near squares of 64 m inside 9×9 coarse 256 m squares, land drawn to 1040 m, shadows from a 2048² picture 110 m across. Medium: 5×5 inside 7×7, to 790 m, a fifth of the trees and a third of the small plants gone, shadows 1024² over 70 m. Low: 5×5 inside 5×5, to 530 m, half the trees and two thirds of the plants gone, the near ground 4 m to a cell instead of 2, a third fewer townsfolk, no shadows, no clouds in the water. Far squares carry houses with their trimmings left off and a third of the trees as four or ten triangles each. Everyone who moves and is in front of the camera is posed on the main thread into one buffer (2,000 to 12,000 triangles) and drawn in one call. The shadow picture holds only what stands on the ground in the squares its box touches, depth in three bytes, compiled out when shed (after fading). Triangles a frame, shadow pass included, at 1280×800 (forest at night / city by day / lake): High 307k / 278k / 204k, Medium 143k / 198k / 115k, Low 103k / 101k / 57k (on a software renderer; before the second pass it was 436k / 444k / 358k, 293k / 299k / 262k and 214k / 198k / 130k). The GPU is watched by the wallpaper itself (late frames give up shadows, then render scale to 0.4, then the outer rings of squares); software renderers start there. No WebGL: 30 slices of ground, the road and the nearest trees and houses as cut-outs, in 2D |
+| ski-run | `shadows`, `sparkle` (medium) | WebGL with instancing: 61 chunks of ground mesh at four levels of detail, built one or two a frame as the run goes by; trees as instances of 15 models, sorted into batches and culled on the main thread each frame (a few thousand), their detail distances and far thinning × density; riders and the lift stamped into one soup; one shadow map (2048 High, 1024 Medium), compiled out when shed (after fading); spray and flakes × density. The ground's grid thins by tier (113, 69 or 49 columns); far riders are stamped from plainer parts; trees are re-batched every 2 to 4 frames. About 75, 230 and 420 thousand triangles a frame on Low, Medium and High in some 100 draw calls (§10.39). The GPU is watched by the wallpaper itself, as Ice Patrol's. No WebGL: some 550 strips of slope, the trees and the riders a frame in 2D |
 
 #### In the panel
 
@@ -4763,6 +4767,157 @@ timing are as written, not as watched.
 people going indoors at dusk (fewer are simply about after dark); houses
 you can see into; rivers that run to the lake; sound.
 
+### 10.39 Fresh Tracks (`ski-run`, owner request, 2026-11-15)
+
+The owner's brief: "the never ending downhill ski. front on, or follow
+behind. never ending skiing/boarding downhill. Lots of fresh snow. lots of
+realistic'ish trees. Small stunts, half pipes, those kind of things", in the
+mood of a calm, cosy downhill game. Answers to our questions: every camera
+(behind by default, in front, a high diorama, and a director that cuts at
+jumps), a lead and one to three friends with gender and skis-or-board
+selectable, other people on the mountain (strangers, a ski school, a
+chairlift), smooth like Ice Patrol rather than faceted, denser trees, and
+wipeouts now and then, harmless and comic, with a setting.
+
+**It is our own mountain.** No resort, place, brand or person, and nothing
+from any game but the mood. Everything is modelled in code.
+
+**The third wallpaper on WebGL** (§10.34 was the first, §10.38 the second), hand-written WebGL
+1 that runs unchanged on WebGL 2. It needs one extension, instancing
+(`ANGLE_instanced_arrays`, or WebGL 2's own), which is what keeps trees in
+their thousands cheap; without WebGL or without that, the 2D fallback runs.
+
+- **The course (`SkiLogic.course`, pure, unit-tested).** z runs down the
+  mountain, x across it. The run's centre is a function of z, so it winds
+  but never doubles back, and `u = x - centre(z)` is how far across the run
+  a thing is. It is stitched from sections picked by a seeded draw (never
+  two alike in a row, never two narrow ones, never off the wide lake
+  straight into a narrow place): groomed piste, powder, glade, half-pipe,
+  park, rollers, frozen lake, cliff, gully, cat track, hut. Each has a
+  length, a half-width, a grade, a drift and a wind; the grade, the drift
+  and the width blend from the last section's over the first 40 to 110 m
+  (in closed form, so elevation and centre are exact anywhere), and what a
+  section builds (a pipe's walls, kickers, rollers, a cliff, pillows, a cat
+  track's bank) is windowed to nothing at its ends. `height(x, z)` is the
+  one ground: riders ski it and the mesh is sampled from it. The valley's
+  sides rise to a crest and sink again before the land runs out (or fall
+  away), so the mesh's far edge is never seen. Sections far behind are
+  forgotten. Nothing depends on being near zero: a test starts a mountain
+  3 × 10⁹ m out.
+- **Trees** stand on a jittered 4.5 m grid, thick by the piste and thinning
+  up the sides, in clumps and clearings from a noise field, never within
+  2.6 m of anywhere a rider may go: the piste, a glade's four lanes, the
+  way off a groomer through the woods and back, a lift's line, the hut.
+  Beside a run they are small and grow with the gap they stand in, so no
+  bough reaches a lane. Spruce, fir, pine, small ones plastered white,
+  snags, boulders.
+- **Riders (`worldStep`, pure).** Four lines abreast down the piste; the
+  lead and each friend have one, and change now and then when well apart.
+  A line is a middle and a swing: carved turns no harder than about a g, so
+  wide ones are long. In a glade the line is the slot's lane between the
+  trees; in the pipe it is wall to wall, off the lip, a turn in the air and
+  back down; in the gully up one bank and the other; on a cat track
+  straight, in a tuck. Vertically they follow the snow until it falls away
+  faster than a fall, then fly (real gravity) and land: kickers, rollers,
+  pillows, the cliff and rails all come out of that. At take-off the air
+  time is worked out and a trick that fits is picked (grab, spread eagle,
+  shifty, 360, 360 grab, backflip, front flip, 720, cork 720); now and then,
+  and only over open snow, it is marked to go wrong, and the landing is a
+  tumble, a moment lying there, sitting up, shaking it off and getting up.
+  Friends range ahead and behind on a rubber band, wait when the lead is
+  down, and all pull up abreast at a hut for five seconds.
+- **Room for each other.** Everything a rider must give way to (other
+  riders' swings, a stopped stranger, the ski school as one, a creature) is
+  a stretch across the piste; a rider threads the free stretch it is in or
+  the nearest that will do, and holds back behind what is dead ahead. Coming
+  up to a narrow place they go in line by the gaps between them. Nobody
+  flies off the piste (the air only carries them down it), and no step ends
+  with one rider inside another. A rider held up for 2.5 s by something
+  that will not move slips by it; the tests require that never to happen.
+- **Others.** Strangers ski the open pistes more slowly and stop at the
+  side rather than ski what is not for them; a ski school is an instructor
+  and five children on the instructor's own tracks; chairs go round each
+  lift (people on most of those going up); folk stand on the hut's terrace;
+  a hare or a fox crosses well ahead; an eagle turns over the valley.
+- **By hand.** `A`/`D`, the arrows or a drag move the lead's line across
+  (within the piste, or 0.9 m within a lane), eased back four seconds after
+  letting go. `J`, up or a tap pops a jump where they stand (not in a lane
+  or a narrow place); Shift+`J` marks it to end in a heap. Nothing is saved.
+  Held keys work as Ice Patrol's do (§10.34).
+- **Cameras (`cameraStep`, pure):** behind (6.3 m back, 2.5 up), in front
+  (9.5 m down the lead's own line, looking back), on high (15 m to the side
+  that falls away, 17 up), and the director: follows, cuts to a camera by
+  the landing of any jump the lead is about to take, and every 8 to 26 s to
+  the front, on high, or a camera left at the piste's edge. Reduced motion:
+  no cuts, 0.6× speed, less sway.
+- **The view (`SkiRenderer`).** The ground is 61 chunks of 32 m, each a grid
+  of 113 columns (1 m apart on the piste, wider up the sides to 700 m; 69
+  on Medium and 49 on Low, each a subset of the finest's, so the land is
+  the same land) by 32, 16, 8 or 4 rows by distance (16, 8, 4, 4 on Low); every level shares its first and last
+  rows, so there are no cracks. Per vertex: normal, how groomed, lake ice,
+  how steep, how wooded; the shader adds drifts, ripples and grain from one
+  noise texture, corduroy while a pixel is finer than its ridges, rock where
+  it is steep, ice, sparkle, and a broad noise for spurs on the far sides.
+  Trees are instances of 15 models (six kinds, three levels of detail)
+  sorted into batches each frame on the CPU, culled to the view; snow lies
+  on each bough by a per-vertex amount the shader breaks into clumps. Riders
+  and the lift are posed from parts on a matrix stack and stamped into one
+  soup a frame. Shadows are one map (2048 on High, 1024 on Medium) of 130 to
+  170 m about the lead. Tracks are ribbons that multiply what is under
+  them; spray, smoke, mist and lamp glows are sprites; falling snow is Ice
+  Patrol's wrapped box. The sky has the sun, a moon, stars, cloud, two far
+  ranges read from the noise and lit by where the sun is, and the valley's
+  cloud below the horizon, which is also what distance fades to.
+- **Night** is floodlit: the lead wears a head torch; masts every 48 m by groomed runs, the five nearest
+  the lead lighting the snow, all of them glowing; the hut's windows too.
+- **Cost, and its own watch on the GPU** as §10.34: late frames give up
+  shadows, then render scale (0.75, 0.55, 0.4) and far trees; software
+  renderers start at the last step. Tiers: tree detail distances and far
+  thinning × density, spray and flakes × density, `shadows` and `sparkle`
+  (medium). Counted in headless Chrome at 1280×800 (thumb mode, so no GPU
+  watch) on a groomer, a glade and a park: Low 60 to 87 thousand triangles
+  a frame, Medium 216 to 241, High 383 to 448, in 90 to 110 draw calls on
+  every tier. Trees are sorted into their batches every second, third or
+  fourth frame (High, Medium, Low), from where the camera was then, and
+  drawn from an offset in between; riders more than 30 m off (18 below
+  High) are stamped from plainer parts, a quarter of the triangles: posing
+  them was most of a frame's main-thread time. `node tools/bench.mjs
+  ski-run` on this machine (software GL, 4× throttle, phone viewport,
+  2026-11-15): Low 20 fps, 4.8 ms a callback, 45% busy; Medium 27 fps,
+  5.1 ms, 99%; High 10.5 fps, 7.9 ms, 99%. Busy there probably includes the software
+  rasteriser (not measured apart): both budgets are missed, and the
+  numbers mean little until it is run on a GPU, so `bench/results.json` was left alone.
+- **No WebGL:** the same world as strips of the real slope from far to
+  near in flat colour, trees as triangles, riders as blocks of their kit.
+  It is what the smoke test times.
+
+**Tests.** Unit (`tools/ski-run.test.mjs`, 15): the course always descends,
+is continuous along and across, has every section kind, repeats from a
+seed; sections, lifts, the section mix and steepness; 3 × 10⁹ m from home;
+trees keep their distance; twenty minutes on each of three mountains with
+nobody under the snow, off the piste, within 0.2 m of a trunk or 0.9 m of
+anybody else, nobody stuck; jumps land, a sent jump and a botched one; the
+same distance at 10, 30, 60 and 120 fps; friends, strangers, the school,
+huts; by hand; every camera keeps the lead in the lens; the mesh is the
+ground (to 2 cm at its vertices, 30 cm between them on the piste); models;
+sky and weather; settings; a cheap-and-clean source check. Smoke: the
+first frame; the 2D fallback in real time on Low and High, carved by hand,
+a jump sent and one botched, friends 1 to 3, each camera; night, snow, fog
+and the keys; a phone.
+
+**Not verified.** It has only ever run on a software renderer (headless
+Chrome's SwiftShader), a third of a second to a second a frame: smoothness,
+frame rate, the GPU watch's thresholds, the tiers' real cost on a phone,
+the Mac saver and the Windows host are all unmeasured, and `make bench`
+means nothing for it here. A lost context is handled in code and not
+exercised. The look was judged from still frames only.
+
+**Not built:** signposts with run names (the signs carry a grade colour
+only); slalom gates; a groomer at work at night (one is parked by the hut);
+a far-off avalanche; ski-school and stranger tricks; sound; a place in
+Seasonal. (Old tracks from earlier skiers are in: three faint lines of
+linked turns in ungroomed snow, drawn by the ground's shader.)
+
 ## Open questions
 
 New questions go here, each with a recommendation.
@@ -4781,6 +4936,10 @@ New questions go here, each with a recommendation.
   in the catalog) or another default traveller or companion (two defaults).
 - **Ice Patrol in Seasonal?** It would suit January to April beside Snow.
   *Recommendation:* the owner's call; it isn't in `WP.SEASONS` yet.
+- **Fresh Tracks on real devices.** As Ice Patrol below, and heavier: a
+  few hundred thousand triangles a frame on High (§10.39). *Recommendation:* try it
+  on the owner's GPU first, then Medium on the phone; if Low is too dear
+  there, thin the ground's far columns by tier.
 - **Ice Patrol on real devices.** Built and tested on a software renderer
   only (headless Chrome), where a frame takes a second. *Recommendation:*
   check Medium on the phone and the Mac screen saver before a release, and

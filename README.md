@@ -39,7 +39,7 @@ Click one to see it live.
 | [<img src="web/wallpapers/harvest/thumb.webp" width="200" alt="Harvest Valley">](https://nealhardesty.github.io/wallpapers/?w=harvest)<br>🌾 Harvest Valley | [<img src="web/wallpapers/weather/thumb.webp" width="200" alt="Weather">](https://nealhardesty.github.io/wallpapers/?w=weather)<br>🌦️ Weather | [<img src="web/wallpapers/world-clock/thumb.webp" width="200" alt="World Clock">](https://nealhardesty.github.io/wallpapers/?w=world-clock)<br>🌍 World Clock | [<img src="web/wallpapers/orrery/thumb.webp" width="200" alt="Orrery">](https://nealhardesty.github.io/wallpapers/?w=orrery)<br>🪐 Orrery |
 | [<img src="web/wallpapers/cat-ornament/thumb.webp" width="200" alt="The Cat vs. the Ornament">](https://nealhardesty.github.io/wallpapers/?w=cat-ornament)<br>🐾 The Cat vs. the Ornament | [<img src="web/wallpapers/last-bulb/thumb.webp" width="200" alt="The Last Bulb on the Strand">](https://nealhardesty.github.io/wallpapers/?w=last-bulb)<br>💡 The Last Bulb on the Strand | [<img src="web/wallpapers/frost/thumb.webp" width="200" alt="Frost on the Glass">](https://nealhardesty.github.io/wallpapers/?w=frost)<br>🧊 Frost on the Glass | [<img src="web/wallpapers/small-christmas/thumb.webp" width="200" alt="A Very Small Christmas">](https://nealhardesty.github.io/wallpapers/?w=small-christmas)<br>🎄 A Very Small Christmas |
 | [<img src="web/wallpapers/sky-island/thumb.webp" width="200" alt="Sky Island">](https://nealhardesty.github.io/wallpapers/?w=sky-island)<br>🏝️ Sky Island | [<img src="web/wallpapers/ice-patrol/thumb.webp" width="200" alt="Ice Patrol">](https://nealhardesty.github.io/wallpapers/?w=ice-patrol)<br>🛩️ Ice Patrol | [<img src="web/wallpapers/sumo/thumb.webp" width="200" alt="Sumo Championship">](https://nealhardesty.github.io/wallpapers/?w=sumo)<br>🤼 Sumo Championship | [<img src="web/wallpapers/pocket-hockey/thumb.webp" width="200" alt="Pocket Hockey">](https://nealhardesty.github.io/wallpapers/?w=pocket-hockey)<br>🏒 Pocket Hockey |
-| [<img src="web/wallpapers/baseball/thumb.webp" width="200" alt="The Never-Ending Baseball Season">](https://nealhardesty.github.io/wallpapers/?w=baseball)<br>⚾ The Never-Ending Baseball Season | [<img src="web/wallpapers/wayfarer/thumb.webp" width="200" alt="Wayfarer">](https://nealhardesty.github.io/wallpapers/?w=wayfarer)<br>🥾 Wayfarer | | |
+| [<img src="web/wallpapers/baseball/thumb.webp" width="200" alt="The Never-Ending Baseball Season">](https://nealhardesty.github.io/wallpapers/?w=baseball)<br>⚾ The Never-Ending Baseball Season | [<img src="web/wallpapers/wayfarer/thumb.webp" width="200" alt="Wayfarer">](https://nealhardesty.github.io/wallpapers/?w=wayfarer)<br>🥾 Wayfarer | [<img src="web/wallpapers/ski-run/thumb.webp" width="200" alt="Fresh Tracks">](https://nealhardesty.github.io/wallpapers/?w=ski-run)<br>⛷️ Fresh Tracks | |
 
 The **Fireplace** 🔥 burns wood you'd recognise: furrowed oak, papery birch,
 scaly pine or bleached driftwood (following its Wood Type), round or split,
@@ -177,7 +177,7 @@ You can fly it yourself: `W` `A` `S` `D` or the arrows turn, climb and dive,
 You can't hit anything (the autopilot keeps the height, and turns away from
 a wall you couldn't climb), and five seconds after you let go it takes over
 again. `X` changes the weather, `T` the time of day, `V` the view (canopy,
-panel only, or none), `R` the radar's range. It is drawn with
+panel only, or none), `R` the radar's range. It is one of the three wallpapers drawn with
 WebGL, so it wants a GPU; without one it carries on as paper-cut ridgelines.
 
 **Wayfarer** 🥾 is a walk that never ends, through a cosy fantasy world of
@@ -281,6 +281,31 @@ The league is remembered between visits and only moves on while you watch.
 A tap starts a wave and a beach ball (tap the hot-dog seller for a hot
 dog). `N` goes to the next half-inning (with Shift, the end of the game),
 `S` holds up the standings and the leaders.
+
+**Fresh Tracks** ⛷️ is a ski run that never ends. A lead rider and one to
+three friends, on skis or boards, go down a mountain that is made as they
+go: wide groomed corduroy, deep powder with pillows to pop off, glades with
+lanes between snow-laden trees, a half-pipe ridden wall to wall, a terrain
+park with three kickers and a line of rails, rollers, a frozen lake, a cliff
+to drop (or ski round), a narrow gully, a cat track under a chairlift, and a
+hut with smoke in its chimney where everyone pulls up for a moment. Each
+takes their own line, leaves tracks that stay on the slope, throws spray in
+the turns, and does what the ground offers: grabs, spread eagles, spins,
+a backflip off the big kicker. Now and then a landing goes wrong: a
+tumble in a cloud of powder, a moment sitting in the snow, a shake of the
+head, and off again (a setting turns that off; nobody is ever hurt).
+Strangers are passed, a ski school snakes down behind its instructor,
+chairs go up overhead with skis dangling, a hare or a fox crosses well
+ahead, an eagle turns over a valley full of cloud with far ranges standing
+out of it. The day goes round, with long shadows, alpenglow at dusk and a
+floodlit run under the stars; snow and fog come and go. Watch from behind,
+from in front, from on high, or let the director cut between them (`V`).
+`A` and `D` or the arrows carve the lead across the piste and a drag does
+too (they take their own line again four seconds after you let go); `J`,
+the up arrow or a tap sends a jump there and then, and Shift+`J` botches
+it; `T` changes the time of day, `X` the weather, `G` swaps skis for a
+board. Like Ice Patrol it is drawn with WebGL and wants a GPU; without one
+the same run carries on as flat paper-cut slopes.
 
 **Weather** 🌦️ is the forecast for your place from Open-Meteo (no key),
 over a sky that is the weather outside: drifting clouds, rain or snow,
@@ -637,7 +662,7 @@ you tick it, then seven, with the rest folded away:
   this one (or let it go), `V` another island passes, `O` a small one comes to orbit, `B` a balloon, `W` weather, `S` season, `H` holiday · Weather `V` next view (days, hours, now), `U` °C or °F,
   `R` refresh now · World Clock `V` next view (map, faces, board), `M` centre
   the map on the next place, `L` next map look · Orrery `=`/`+` faster, `-` slower,
-  `0` back to now, `L` look, `S` scale, `V` from above or tilted · Matrix `R` the code comes down again, `L` next look (the 1999 film, the sequels, Resurrections), `H` next colour · Cherry Blossoms `G` a gust, `B` shake the bough, `N` a new tree, `S` next sky, `W` next ground · Sumo Championship `N` to the finish or the next bout, `B` the ranking sheet · The Never-Ending Baseball Season `N` the next half-inning (Shift: the end of the game), `S` the standings and the leaders · Pocket Hockey `N` to the end of the period (or past whatever is showing), `G` to the final horn, `B` the table, then the scorers, `X` throw something on the ice, `W` a wave · Ice Patrol `W` `A` `S` `D` or arrows fly it, `Q`/`E` throttle, `X` weather, `T` time of day, `V` view, `R` radar range · Wayfarer `V` camera, `T` time of day, `X` weather, `N` on to the next place · Fireplace `L` a log burns through and a fresh one lands, `W` the wood laid again.
+  `0` back to now, `L` look, `S` scale, `V` from above or tilted · Matrix `R` the code comes down again, `L` next look (the 1999 film, the sequels, Resurrections), `H` next colour · Cherry Blossoms `G` a gust, `B` shake the bough, `N` a new tree, `S` next sky, `W` next ground · Sumo Championship `N` to the finish or the next bout, `B` the ranking sheet · The Never-Ending Baseball Season `N` the next half-inning (Shift: the end of the game), `S` the standings and the leaders · Pocket Hockey `N` to the end of the period (or past whatever is showing), `G` to the final horn, `B` the table, then the scorers, `X` throw something on the ice, `W` a wave · Ice Patrol `W` `A` `S` `D` or arrows fly it, `Q`/`E` throttle, `X` weather, `T` time of day, `V` view, `R` radar range · Wayfarer `V` camera, `T` time of day, `X` weather, `N` on to the next place · Fresh Tracks `A` `D` or arrows carve, `J` or up sends a jump (Shift+`J` botches it), `V` camera, `T` time of day, `X` weather, `G` skis or a board · Fireplace `L` a log burns through and a fresh one lands, `W` the wood laid again.
 
 **Touch and drag:** tap or drag on Zen Garden (rake), Koi Pond (ripples;
 feed them in settings), Murmuration (you're the falcon), Lantern Festival,
@@ -648,7 +673,7 @@ Strand (jiggle a bulb), Frost on the Glass (draw in it; tap to breathe), A Very 
 jingles, the train goes round, the floor is where it moves to), Sky Island (a cat comes, a person
 waves, the lake jumps a fish, a house at night switches its lights, the sky sends a bird), Wayfarer (drag to look around),
 Satellites (what's that one?), Matrix (a splash of code), Cherry Blossoms (tap the bough to shake it, the air for a puff of wind; drag to push the air along), Weather (a day's hours; tap outside to go back),
-Pocket Hockey (the ice: something is thrown onto it; the seats: a wave),
+Pocket Hockey (the ice: something is thrown onto it; the seats: a wave), Fresh Tracks (drag to carve, tap to jump),
 World Clock (a city becomes home, and the map turns to it; tap it again to go back), Sumo Championship (a cushion), The Never-Ending Baseball Season (a wave, a beach ball, a hot dog) and
 the Orrery (tap a planet for its card; drag the tilted view). Each has a setting to ignore touch. On
 Android, a quick sideways swipe changes home screens and never counts.

@@ -46,6 +46,8 @@ const OVERRIDES = {
     'ice-patrol': { configVersion: 1, time: 'dawn', weather: 'clear', clearance: 40 },
     // An autumn evening, the village's chimneys smoking ahead.
     wayfarer: { configVersion: 1, time: 'dusk', weather: 'fair', season: 'autumn' },
+    // A clear morning, a little closer in, so the rider and the trees read in a tile.
+    'ski-run': { configVersion: 1, time: 'day', weather: 'clear', zoom: 1.2 },
 };
 // URL parameters for a better picture: satellites as its sample station
 // passes overhead before dawn, weather's sample at a golden dusk (thumb mode never fetches, so it's the sample),
@@ -57,6 +59,7 @@ SETTLE_MS['sky-island'] = 3000;
 SETTLE_MS.sumo = 2600;            // out of the crouch and into the bout
 SETTLE_MS['ice-patrol'] = 9000;    // headless Chrome draws its WebGL in software: a frame takes a second or two
 SETTLE_MS.wayfarer = 9000;         // the same: a few frames, so the smoke is up and the camera has settled
+SETTLE_MS['ski-run'] = 12000;      // the same, with a few hundred thousand triangles of trees
 
 const { chrome, profile, cdp } = await launch({ width: 1280, height: 800 });
 try {
