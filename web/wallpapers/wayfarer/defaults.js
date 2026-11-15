@@ -2,10 +2,18 @@
 // differs from these (SPEC §4.1).
 WP.defaults('wayfarer', {
     configVersion: 1,
-    camera: 'follow',      // follow, first, drift
+    camera: 'follow',      // follow, orbit, first, drift
+    orbitMode: 'fixed',    // orbit: fixed (holds where you leave it) or turning (circles by itself)
+    orbitAzimuth: 35,      // degrees round the traveller: 0 behind, 90 at their right hand, 180 in front
+    orbitElevation: 18,    // degrees up: 2 in the grass, 90 straight overhead
+    orbitDistance: 8,      // metres from the traveller
     pace: 1,               // × a stroll (1.75 m/s)
-    traveller: 'ranger',   // ranger, wizard, bard, knight
-    companion: 'fox',      // fox, dog, pony, cat, wisp, none
+    traveller: 'ranger',   // ranger, wizard, bard, knight, barbarian, northman, druid, archer, rogue
+    warpaint: true,        // the barbarians' blue bars across the cheeks
+    craft: 'sometimes',    // never, sometimes, often: how often the druid changes shape and the rogue goes unseen
+    companions: 3,         // how many walk with the traveller (0 to 6)
+    companionPick: 'surprise',     // surprise (a named cat and one from each kind, by the world's seed), cats, dogs, farm, wild, fantastic, or choose
+    companionChoice: ['moofy', 'hound', 'raven'],      // who, when it is 'choose'
     rests: true,           // stops to look at a view
     campfire: true,        // sits by a fire a while at night
     time: 'cycle',         // cycle, clock, dawn, day, dusk, night

@@ -161,7 +161,7 @@ Added for Christmas, drawn in code (designs in §10.27–§10.30):
 | `sumo` | sumo-logic.js, sumo-art.js, sumo.js | ~1.3k lines | No network; a league of invented wrestlers kept in `host.storage`, written in Japanese with an English gloss (§10.35); bouts and tournaments pure and seeded (`SumoLogic`), unit-tested; interactive (a tap throws a cushion); evening by `host.now()`; keys N, B |
 | `pocket-hockey` | hockey-logic.js, hockey-art.js, pocket-hockey.js | ~2.4k lines | No network; an invented league of eight clubs and the game in progress kept in `host.storage` (§10.35); the league, the 60 Hz game (physics, steering, signature moves) and the seasons pure and seeded (`HockeyLogic`), unit-tested; top-down pixel art at its own resolution, scaled up pixelated, with its own 5×7 font; interactive (a tap throws something on the ice, or starts a wave); keys N, G, B, X, W |
 | `baseball` | baseball-logic.js, baseball-league.js, baseball-talk.js, baseball-art.js, baseball.js | ~2.4k lines | No network; a league of eight invented clubs kept in `host.storage` (§10.37); every pitch, ball in play and box score pure and seeded (`BaseballLogic`, `BaseballLeague`), unit-tested; 16-bit pixel art at its own resolution with its own lettering, scaled up pixelated; interactive (a tap starts a wave); day, dusk and night by `host.now()`; keys N, S |
-| `wayfarer` | way-logic.js, way-models.js, way-actors.js, way-gl.js, wayfarer.js | ~3.6k lines | The second on WebGL (§10.38): an endless road through eight kinds of country with villages, walled cities and landmarks along it, all a pure function of a seed (`WayLogic`), unit-tested; every shape modelled in code as triangles (`WayModels`, `WayActors`); built a 64 m square at a time as the walk reaches it; three cameras; day, night, weather and seasons; a flat 2D fallback without WebGL; its own watch on the GPU; interactive (drag to look around); keys V, T, X, N |
+| `wayfarer` | way-logic.js, way-models.js, way-detail.js, way-actors.js, way-people.js, way-companions.js, way-gl.js, wayfarer.js | ~6.1k lines | The second on WebGL (§10.38): an endless road through eight kinds of country with villages, walled cities, grand cities under a castle and landmarks along it, all a pure function of a seed (`WayLogic`), unit-tested; every shape modelled in code as triangles (`WayModels`, `WayActors`); built a 64 m square at a time as the walk reaches it, finer near the traveller; four cameras, one of them an orbit a drag turns; nine travellers (one changes shape, one goes unseen) and 46 companions, six at once, the named cats among them; day, night, weather and seasons; a flat 2D fallback without WebGL; its own watch on the GPU; interactive (drag to look around, or to turn the orbit); keys V, T, X, N, G |
 | `ski-run` | ski-logic.js, ski-models.js, ski-gl.js, ski-run.js | ~3.7k lines | The third on WebGL (§10.39), with instancing: an endless ski run stitched from eleven kinds of section, one `height(x, z)` for the riders and the mesh (`SkiLogic`), riders, tricks, wipeouts, cameras and a ski school all pure and unit-tested; trees, figures and props modelled in code (`SkiModels`); a flat 2D fallback without WebGL; its own watch on the GPU; interactive (carve by keys or a drag, tap to jump; the riders take it back after 4 s); keys A, D, arrows, J, V, T, X, G |
 
 About 1.7 MB of JavaScript in total. **Not imported:** links, weather, clocks,
@@ -856,7 +856,7 @@ and the commits.
 | sumo | — | The hall is one cached canvas (rebuilt on resize, tier and at dusk); a frame draws it, three jointed figures and a few marks. The crowd's rows and the cushions thrown follow density |
 | pocket-hockey | — | The canvas is the picture's own pixels (about 427 × 267 on a laptop, 206 × 458 on an upright phone; a pixel is 3 CSS px at 1280 × 800, in half steps below that), scaled up pixelated. The arena (ice, lines, boards, benches, a crowd of some thousands) is one bake a game; a working copy of it takes the skate marks and the resurfacer's stripes, so a frame is one blit of that, a dozen kept sprites, and lettering set once a line and kept. The round's other games are stepped 4 ms a frame. Hats, paper, spray, camera flashes and skate marks × density. Bench 2026-11-15 on a loaded machine (Snow beside it for scale: 20%, 24%, 60%): Low 14%, Medium 21%, High 44% |
 | baseball | — | The canvas is the picture's own pixels (about 3 CSS px each on a laptop), scaled up pixelated; the park (sky, stands, crowd, turf, fence) is one bake per game, size and light, with the crowd on its feet a second; the scoreboard and all the captions are two more canvases redrawn only when their words change; a frame blits those and draws about thirty men of a dozen rectangles each. The crowd, fireworks, confetti and rain follow density |
-| wayfarer | `shadows`, `mirror` (medium) | WebGL: the land as squares of triangles built on the main thread as the walk reaches them (in steps of a few things at a time, 3 ms of building a frame at most, so even a city's square never holds a frame up) and drawn in one call each. High: 7×7 near squares of 64 m inside 9×9 coarse 256 m squares, land drawn to 1040 m, shadows from a 2048² picture 110 m across. Medium: 5×5 inside 7×7, to 790 m, a fifth of the trees and a third of the small plants gone, shadows 1024² over 70 m. Low: 5×5 inside 5×5, to 530 m, half the trees and two thirds of the plants gone, the near ground 4 m to a cell instead of 2, a third fewer townsfolk, no shadows, no clouds in the water. Far squares carry houses with their trimmings left off and a third of the trees as four or ten triangles each. Everyone who moves and is in front of the camera is posed on the main thread into one buffer (2,000 to 12,000 triangles) and drawn in one call. The shadow picture holds only what stands on the ground in the squares its box touches, depth in three bytes, compiled out when shed (after fading). Triangles a frame, shadow pass included, at 1280×800 (forest at night / city by day / lake): High 307k / 278k / 204k, Medium 143k / 198k / 115k, Low 103k / 101k / 57k (on a software renderer; before the second pass it was 436k / 444k / 358k, 293k / 299k / 262k and 214k / 198k / 130k). The GPU is watched by the wallpaper itself (late frames give up shadows, then render scale to 0.4, then the outer rings of squares); software renderers start there. No WebGL: 30 slices of ground, the road and the nearest trees and houses as cut-outs, in 2D |
+| wayfarer | `shadows`, `mirror` (medium) | *(Upgraded 2026-11-15, §10.38: fine models within 26 m of the road in the 3×3 squares about the traveller on High, 13 m on Medium, none on Low; finer figures within 10 m of the eye, 7 m on Medium, none but the traveller and company on Low; townsfolk drawn to 160, 80 and 60 m; measured 378k/196k/74k triangles a frame on an open road and 426k/272k/104k in a grand city's square.)* WebGL: the land as squares of triangles built on the main thread as the walk reaches them (in steps of a few things at a time, 3 ms of building a frame at most, so even a city's square never holds a frame up) and drawn in one call each. High: 7×7 near squares of 64 m inside 9×9 coarse 256 m squares, land drawn to 1040 m, shadows from a 2048² picture 110 m across. Medium: 5×5 inside 7×7, to 790 m, a fifth of the trees and a third of the small plants gone, shadows 1024² over 70 m. Low: 5×5 inside 5×5, to 530 m, half the trees and two thirds of the plants gone, the near ground 4 m to a cell instead of 2, a third fewer townsfolk, no shadows, no clouds in the water. Far squares carry houses with their trimmings left off and a third of the trees as four or ten triangles each. Everyone who moves and is in front of the camera is posed on the main thread into one buffer (2,000 to 12,000 triangles) and drawn in one call. The shadow picture holds only what stands on the ground in the squares its box touches, depth in three bytes, compiled out when shed (after fading). Triangles a frame, shadow pass included, at 1280×800 (forest at night / city by day / lake): High 307k / 278k / 204k, Medium 143k / 198k / 115k, Low 103k / 101k / 57k (on a software renderer; before the second pass it was 436k / 444k / 358k, 293k / 299k / 262k and 214k / 198k / 130k). The GPU is watched by the wallpaper itself (late frames give up shadows, then render scale to 0.4, then the outer rings of squares); software renderers start there. No WebGL: 30 slices of ground, the road and the nearest trees and houses as cut-outs, in 2D |
 | ski-run | `shadows`, `sparkle` (medium) | WebGL with instancing: 61 chunks of ground mesh at four levels of detail, built one or two a frame as the run goes by; trees as instances of 15 models, sorted into batches and culled on the main thread each frame (a few thousand), their detail distances and far thinning × density; riders and the lift stamped into one soup; one shadow map (2048 High, 1024 Medium), compiled out when shed (after fading); spray and flakes × density. The ground's grid thins by tier (113, 69 or 49 columns); far riders are stamped from plainer parts; trees are re-batched every 2 to 4 frames. About 75, 230 and 420 thousand triangles a frame on Low, Medium and High in some 100 draw calls (§10.39). The GPU is watched by the wallpaper itself, as Ice Patrol's. No WebGL: some 550 strips of slope, the trees and the riders a frame in 2D |
 
 #### In the panel
@@ -4799,7 +4799,196 @@ each start. A software renderer starts at the lightest step.
   (windows lit at night), and the traveller. It is what the smoke test
   times.
 
-**Tests.** Unit (`tools/wayfarer.test.mjs`, 16): the road never jumps or
+**The upgrades (owner request, 2026-11-15).** "Make this happen smartly. Be
+extra creative." Five asks, then three more travellers; nothing was to be
+dropped. Still our own world: no game is named anywhere, and no name, people,
+creature, marking or design is taken from one.
+
+- **The orbiting camera** (`orbit`, a fourth camera; `V` steps through all
+  four). It looks at the traveller from any bearing (0° behind them, 90° at
+  their right hand, 180° in front, measured from the way the road is going,
+  so it keeps its side of them as the road turns) and any height from 2° in
+  the grass to 90° straight overhead, 2.5 to 60 m out. A drag sets bearing
+  and height directly (60% of a turn across the screen, 0.62π down it) and
+  it **stays**; the wheel moves it in and out (`host.gestures` has no pinch,
+  so on a phone the distance is the slider). *The orbit* is `fixed` (holds)
+  or `turning` (a turn every 75 s with the height swaying ±9°; a hand on it
+  takes over, and it carries on from there after 4 s; reduced motion holds).
+  Where it is left goes into the settings on the sliders' steps
+  (`orbitAzimuth`, `orbitElevation`, `orbitDistance`, saved 0.6 s after the
+  hand is off it), so it survives a reload and can be set from the panel.
+  Android's pages turn it about the traveller.
+  - *It is the one camera that leaves the road*, so it is the one that knows
+    what it might be inside. `WayLogic.sightline` sweeps from the traveller
+    out toward the camera against the ground, the water and `world.solids`
+    (per 64 m square, cached: every tree as a drum for its trunk and one for
+    its crown, every house as a box to its ridge, walls, towers, gates with
+    the arch left open, keeps, the castle's rock, stalls, wells); the camera
+    comes in at once to just short of the first thing met and goes out again
+    at 7 m/s when it has gone; the place itself is then checked (`inOpen`)
+    and lifted clear of the ground. The near-lens fade still thins whatever
+    comes within two paces.
+  - The squares were always built all round the traveller, not ahead, and
+    the sky, the ranges and the fog are functions of direction, so looking
+    back and down needed no new land. Nothing is back-face culled. The
+    cloak got an inside. Who is posed no longer depends on being in front
+    of the eye when the eye looks steeply down.
+  - Without WebGL, orbit is the follow camera.
+- **Fidelity.** A new primitive, `WaySoup.tube` (rings along a path, smooth
+  round, swelling and narrowing, with painted folds, ragged hems and caps),
+  `mark` (a colour painted by where a vertex is: stripes, patches, socks),
+  `gloss` (metal, glass and eyes catch the light; it rides in the colour's
+  fourth byte) and `course` (the shaders lay coursed stone, flags or lapped
+  tiles; it rides in the sign of the occlusion byte). In the shaders: whoever
+  moves is lit across the whole of a limb instead of in steps, with a rim of
+  the sun's own light; a specular term; masonry and roof tiles.
+  - *People* (`way-people.js`): the same skeleton, hung with limbs on real
+    joints, hands with a thumb, a face (brow, nose, jaw, ears, eyes that
+    shine, a mouth), hair with weight (short, long, a bun, braids, a mane, a
+    high tail, loose to the waist), tunics with folds and a skirt, belts
+    with a buckle, a pouch and a knife, a pack with a flap, pockets, a
+    bedroll, a pan and a coil of rope, a cloak that is one sheet with a
+    lining. About 3,000 to 3,500 triangles a traveller. The traveller is
+    always this; townsfolk and walkers within 10 m of the eye (7 m on
+    Medium) are; further off and on Low they are `WayActors`' figures.
+  - *Animals* (`way-companions.js`): one four-legged rig (a body that swells
+    from rump to chest, legs on two joints with paws or hooves, a neck, a
+    head with a muzzle, a nose, ears of five kinds and eyes, tails of nine
+    kinds, seven gaits, and sitting, lying, curling, belly-up and tucked)
+    and one bird rig (a neck and head, a beak, two-length feathered wings
+    that fold, legs with toes, a walk, a perch and a tuck). The roadside's
+    sheep, cows, goats, deer, rabbits, cats, hens, ducks, crows and horses
+    are these within 24 m.
+  - *Scenery* (`way-detail.js`): trees with roots, boughs and foliage in
+    clumps (firs in ragged tiers, willows with a curtain of withies, birches
+    with marked bark), boulders in facets with moss, a well with its bucket
+    and windlass, fences of round posts, signposts, spoked wheels; houses
+    near the road get window frames with crossbars and lintels, doors in
+    planks with strap hinges and a ring, corner posts in the round; stone
+    is coursed and roofs are tiled everywhere.
+  - *Level of detail* is where a thing stands, so nothing pops as the eye
+    moves: the fine models are built only in the 3×3 squares about the
+    traveller and only within 26 m of the road (13 m on Medium, never on
+    Low); a square is rebuilt finer as the walk reaches it and kept until it
+    is left behind. In a grand city the back rows of houses are the far
+    squares' plain shapes.
+- **Companions**: 46 kinds, any six at once. *Companions* is Surprise me (by
+  the world's seed: always one of the named cats, then one from each other
+  group), Cats, Dogs, From the farm, Wild things, Stranger things, or
+  "I will choose them", which shows chips for all 46 (the panel's `multi`
+  type; a count slider would have hidden who, and three selects would have
+  capped it at three). *How many* is 0 to 6, 3 by default.
+  - **The named cats** are the owner's own, from The Cat vs. the Ornament
+    (§10.27) and Sky Island (§10.31), by the roster's names and coats (a
+    unit test reads `CatOrnamentLogic.ROSTER` and checks each): **Moofy**
+    (black and fluffy, with the white grin; lags and lurks), **Butters**
+    (chunky buff tabby; at the heel, belly-up by the fire), **Waffles**
+    (white with black patches; scouts ahead), **Ras The Destroyer** (a
+    tuxedo; chases butterflies), **Ibbie** (grey tabby; asleep on the
+    pack), **Maus** (tortie, half her face brown; the zoomies), **Turkey**
+    (big mottled grey; plods, belly-up at rest), **Harry** (orange and
+    white; chases), **Kitty Toes** (a fluffy blue Persian with orange
+    eyes; walks a little apart). And a stray tabby.
+  - Dogs: a brown dog, a long-eared hound (nose down, then a run to catch
+    up), a sheepdog (weaves about behind, herding), a terrier pup. Farm: a
+    pack pony and a donkey with panniers (led), a goat with a bell, a pig, a
+    lamb, a goose, a hen (rides the pack), a duck with three ducklings in a
+    line. Wild: a fox, a badger, an otter, a hedgehog (rides), a snow hare,
+    a spotted fawn, a bear cub, a red squirrel (rides), a moss-backed
+    tortoise with a toadstool on its shell, a frog, a raven and a hawk
+    (circling overhead), an owl (asleep on a shoulder by day, flying at
+    night). Stranger: a wisp, a paper-lantern spirit with a face, a dragon
+    whelp (flies low, then walks; breathes a little smoke at rest), a
+    clockwork beetle whose key turns, a brass automaton with a stovepipe, a
+    mushroom-folk child, a small cloud that rains on nobody, a spellbook
+    that flaps, a moon moth, a great snail with a lit window in its shell,
+    a boulderling.
+  - `WayLogic.companionStep` (pure): each has a place about the traveller
+    in the road's own terms, on the road's width and out of the middle of
+    the picture; later ones step round earlier ones and everyone round the
+    traveller; they keep right while a cart passes; scouts run ahead and
+    sit to wait; laggers sniff and catch up; chasers go after a butterfly
+    that is drawn; fliers circle and come down when the walk stops; by the
+    fire each has its own place round it, settled its own way (the big ones
+    graze a little way off); a deer near the road makes the dogs point and
+    the timid hide behind the traveller's legs.
+- **Travellers**: nine. The hooded ranger (default, as before), wizard, bard
+  and knight; and
+  - **the barbarian woman**: athletic, in a fur top tied at the neck, a
+    ragged fur kilt over fur trunks, fur boots bound with thongs, bracers,
+    gold arm rings, a necklace of teeth, a baldric, a braid down her back
+    and two in front, blue warpaint (a toggle), a bearded axe on her back
+    and a spear to walk with. No cloak, hood or staff: after dark she holds
+    up a burning brand (and puts it by when she sits at the fire). Clothed
+    as a swimmer is; nothing more.
+  - **the barbarian man**, in a pelt and kilt with a sword and a long axe.
+  - **The Evenfolk** are our own tall, long-eared people of the twilight
+    woods: lilac-skinned, with eyes that hold a light and three pale stars
+    along each cheekbone. **The druid** (full-figured, in a laced bodice
+    and two lengths of leaf skirts, a feather mantle, teal hair to the
+    waist, a helm of bark and bronze with a stag's antlers, a staff of two
+    twisted stems round a glowing bud) **changes shape**: a bear, an
+    owl-beast (our own: round, barred, upright, with tufts, lamp eyes and
+    stubby wings) or a great black cat, each keeping her antlers, a collar
+    of leaves and her glowing marks. `WayLogic.shiftStep` (pure, by the
+    seed and elapsed time): Now and then is 80 to 230 s herself and 35 to
+    120 s changed, Often about a third of that, Never only at the key; the
+    bear is likelier in forest and pass, the owl-beast in the grove, the
+    cat at night; a change takes 1.7 s (one shape fades as the other comes,
+    in a swirl of leaves and green-gold motes; reduced motion gets the fade
+    without the swirl) and never begins at a rest (it waits for the road),
+    though she may sit by the fire in the shape she has. The cats in the
+    company bristle and drop back when the bear appears. **The ranger**
+    (id `archer`: lean, silver hair tied high, leathers, a short cape, a
+    quiver, a longbow in her hand) sights along an arrow at a view stop;
+    nothing is ever shot.
+  - **the rogue**: dark leathers, a cowl and a scarf over the nose, belts
+    and pouches, a dagger strapped to each thigh. `WayLogic.stealthStep`
+    (pure): she goes unseen past the guards at a city's gate, into a town
+    after dark and while somebody is coming up the road (and, on Often, for
+    a stretch now and then), walking low; never at a rest, where she tosses
+    a knife instead. Unseen she is drawn apart, see-through: an outline of
+    the sky's light, with no flicker. `G` does either craft now.
+  - The archer and the rogue carry a horn lantern at the belt after dark.
+- **Grand cities.** In meadow and farm country about one place in sixteen is
+  a grand city (never two running): a curtain wall 284 m by 224 m with a
+  tower at every joint, round and square by turns, a moat all round it, and
+  at each end a gatehouse (two drums under cones, a gallery on corbels, the
+  portcullis half up, banners) with a drawbridge on chains. Inside: the high
+  street between four-storey houses, three streets across and two lanes
+  each side, a market square 46 m across with a fountain, a pillar, a ring
+  of stalls and a roofed market hall, a guild quarter with a belfried hall,
+  a cathedral (two west towers under spires, a round window, buttresses, a
+  spire over the crossing), and on a 16 m rock against the wall the castle:
+  an inner wall of eight towers, a gate at the head of a ramp on arches, a
+  great keep with four turrets, a great tower 40 m high under a 13 m spire,
+  a watch tower, a hall and a chapel. Outside each gate: shacks, a barn,
+  stalls, carts, a windmill, and three times the traffic. It lies level
+  from gate to gate (its height is halfway between its neighbours', and the
+  road does its climbing outside), and the woods stand back from the road
+  for 400 m so the towers are seen coming. The far squares carry all of it
+  in plainer builds with the windows lit, and keep a handful of lights
+  (`beacons`) that are drawn as glows from as far as the land is. The
+  traveller stops 34 m short of the gate to look, turned toward the castle.
+- **Measured** (triangles a frame, shadow pass included, software renderer,
+  `dist` scripts; the worst of the follow camera and an orbit from 40 m):
+  open forest road High 378k, Medium 196k, Low 74k; a village 257k, 143k,
+  64k; before a grand city's gate 340k, 193k, 103k; in its market square
+  426k, 272k, 104k (another grand city: 376k, 253k, 112k). The targets were
+  450k, 220k and 100k: Medium is over
+  in a grand city's square, and Low is at the line or a little over it there.
+  Draw calls are the squares in view: 45 to 130.
+- **Settings added:** `orbitMode`, `orbitAzimuth`, `orbitElevation`,
+  `orbitDistance`, `companions`, `companionPick`, `companionChoice`,
+  `warpaint`, `craft`. `companion` is gone (a saved single companion is not
+  carried over; nothing else is lost, and `configVersion` stays 1 since no
+  setting changed its meaning).
+- **Not built:** pinch to zoom (no multi-touch in `host.gestures`); the
+  rogue vaulting a fence or stroking the cat; people on the castle's ramp.
+  The 2D fallback draws every traveller as the same cut-out in their own
+  colours, and none of the company.
+
+**Tests.** Unit (`tools/wayfarer.test.mjs`, 22; the six added: the orbit in clear air at 48 bearings and heights for an hour, its drag, fixed and turning at 10 and 120 fps; every companion posed, the count, the named cats against the roster, the seed; the company on the road, by the fire and at any frame rate; every traveller, the druid's changes and the rogue's hiding; grand cities; fine models and budgets). Smoke adds: the orbit's drag, wheel, overhead, grass and a village at four bearings; six companions, none, the barbarian's brand, the druid there and back, the rogue unseen and back; a grand city before its gate, in its square at five bearings, on its drawbridge and from down the road at night. The original sixteen: the road never jumps or
 doubles back, is level across and no steeper than a third along; the
 ground is continuous and the road is never awash; every round has all
 eight countries, never two the same running, and every kind of place
@@ -4997,9 +5186,19 @@ New questions go here, each with a recommendation.
   ring (5×5 to 3×3 squares) and the second is thinner trees.
 - **Wayfarer in Seasonal?** It has every season in it and no month of its
   own. *Recommendation:* the owner's call; it isn't in `WP.SEASONS`.
-- **Wayfarer's name and looks.** "Wayfarer", the ranger and the fox are my
-  choices. *Recommendation:* the owner may prefer another name (one string
-  in the catalog) or another default traveller or companion (two defaults).
+- **Wayfarer's name and looks.** "Wayfarer", the ranger and a company of
+  three by the seed are my choices. *Recommendation:* the owner may prefer
+  another name (one string in the catalog) or another default traveller or
+  company (three defaults).
+- **Wayfarer's upgrades, unwatched.** The orbit's feel under a hand, every
+  gait, the druid's change and the rogue's shimmer were judged from stills
+  on a software renderer. Medium runs over its triangle target in a grand
+  city's square. *Recommendation:* watch each traveller and a party of six
+  for a minute on a real GPU; if Medium struggles in a grand city, the
+  lever is `sight` (how far off townsfolk are drawn) in `drawLife`.
+- **The Evenfolk and the owl-beast** are names and designs of mine, as are
+  the ids `archer` (the elf ranger; `ranger` was taken) and the key `G`
+  (`F` is fullscreen). *Recommendation:* the owner's call.
 - **Ice Patrol in Seasonal?** It would suit January to April beside Snow.
   *Recommendation:* the owner's call; it isn't in `WP.SEASONS` yet.
 - **Fresh Tracks on real devices.** As Ice Patrol below, and heavier: a

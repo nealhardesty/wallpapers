@@ -30,7 +30,8 @@ vec3 atmosphere(vec3 d) {
     return c + uGlow * (pow(1.0 - h, 5.0) * (0.2 + 0.8 * toward * toward * toward) * 0.7 + pow(sd, 20.0) * 0.35);
 }
 // Soft cel light: a wrapped terminator pulled part of the way into three steps.
-vec3 lit(vec3 albedo, vec3 n, float ao, float sun) {
+vec3 lit(vec3 albedo, vec3 n, float aoSigned, float sun) {
+    float ao = abs(aoSigned);
     float k = smoothstep(-0.14, 0.44, dot(n, uLightDir));
     k = mix(k, floor(k * 3.0 + 0.5) / 3.0, 0.4);
     // Where things meet (the foot of a wall, under the eaves, under a tree) the sky does not reach.
@@ -116,8 +117,10 @@ uniform vec4 uWind;        // x, z of the gust, time, how much things sway
 varying vec3 vRel, vNormal;
 varying vec4 vColour, vExtra;
 varying vec3 vAt;
+varying float vGloss;
 void main() {
     vec3 p = aPos;
+    vGloss = 1.0 - aColour.a;
 #ifdef PROPS
     float ph = aExtra.w * 6.2831853, t = uWind.z;
     p.xz += uWind.xy * uWind.w * aExtra.x * (sin(t * 1.3 + ph + p.y * 0.3) * 0.6 + sin(t * 2.9 + ph * 1.7 + p.x * 0.7) * 0.25);
@@ -178,8 +181,10 @@ void main() {
 ${WAY_GLSL.head}
 varying vec3 vRel, vNormal, vAt;
 varying vec4 vColour, vExtra;
+varying float vGloss;
 uniform vec4 uHole;
-uniform float uLit, uWet, uTime;
+uniform float uLit, uWet, uTime, uRound;
+uniform vec2 uGhost;       // drawn half there: how solid, and how much of a shimmer (the rest of the time 0, 0)
 ${WAY_GLSL.common}
 ${WAY_GLSL.lamps}
 ${WAY_GLSL.shadow(shadows)}
@@ -196,15 +201,41 @@ void main() {
     vec3 albedo = vColour.rgb * (1.0 + ((dab - 0.5) * 0.26 + (wash - 0.5) * 0.2) * fade);
     albedo *= mix(vec3(1.0), mix(vec3(0.72, 0.8, 0.9), vec3(1.24, 1.18, 0.92), smoothstep(0.4, 0.6, dab * 0.6 + wash * 0.4)), 0.6 * leafy * (0.3 + 0.7 * fade));
     albedo = mix(albedo, albedo * vec3(0.72, 0.74, 0.8), uWet);
-    vec3 col = lit(albedo, n, vColour.a, shadowed(vRel, n)) + albedo * lamps(vRel, n);
-    // A rim of sky along the edges that face away.
+    if (vColour.a < 0.0) {
+        // Coursed work: stone in staggered blocks on a wall, flags where it lies flat, tiles lapping down a roof.
+        float flatness = abs(n.y), roof = step(0.25, flatness) * step(flatness, 0.93), seen = exp(-dist / 75.0);
+        vec2 q = flatness > 0.93 ? vAt.xz / vec2(0.9, 0.6) : vec2((abs(n.x) > abs(n.z) ? vAt.z : vAt.x) / mix(0.78, 0.36, roof), vAt.y / mix(0.4, 0.3, roof));
+        q.x += 0.5 * mod(floor(q.y), 2.0);
+        vec2 cell = floor(q), f = fract(q);
+        float tone = fract(sin(dot(cell, vec2(127.1, 311.7))) * 43758.5453);
+        float joint = smoothstep(0.0, 0.07, min(f.x, 1.0 - f.x)) * smoothstep(0.0, 0.1, min(f.y, 1.0 - f.y));
+        float lap = mix(1.0, 0.62 + 0.5 * smoothstep(0.0, 0.55, f.y), roof);
+        albedo *= mix(1.0, (0.84 + 0.3 * tone) * mix(0.6, 1.0, joint) * lap, seen);
+    }
+    float sun = shadowed(vRel, n);
+    vec3 col = lit(albedo, n, vColour.a, sun) + albedo * lamps(vRel, n);
+    // Whoever walks is rounder than the scenery: the light falls off all the way across a limb, not in steps.
+    float ndl = dot(n, uLightDir), soft = smoothstep(-0.3, 0.95, ndl);
+    float occ = abs(vColour.a);
+    col = mix(col, albedo * (uLight * (soft * sun * (0.4 + 0.6 * occ) + 0.05) + mix(uBounce, uFill, n.y * 0.5 + 0.5) * (0.5 + 0.34 * soft) * (0.2 + 0.8 * occ * occ)) + albedo * lamps(vRel, n), uRound);
+    // A rim of sky along the edges that face away; and the sun's own along an edge it is behind.
     vec3 eye = normalize(-vRel);
-    col += uFill * albedo * pow(1.0 - max(dot(n, eye), 0.0), 3.0) * 0.5;
+    float edge = pow(1.0 - max(dot(n, eye), 0.0), 3.0);
+    col += uFill * albedo * edge * 0.5 + uLight * albedo * edge * sun * max(-dot(eye, uLightDir) + 0.2, 0.0) * 0.6 * uRound;
+    // Metal, glass and wet eyes catch the light.
+    col += (uLight * sun + uFill * 0.25) * pow(max(dot(n, normalize(uLightDir + eye)), 0.0), 36.0) * vGloss * 1.6;
     // What glows after dark: windows warm, everything else its own colour.
     float glow = vExtra.y * uLit * (0.9 + 0.1 * sin(uTime * 6.0 + vExtra.w * 40.0));
     vec3 own = mix(vec3(1.0, 0.66, 0.28), vColour.rgb, smoothstep(0.12, 0.4, dot(vColour.rgb, vec3(0.33))));
     col = mix(col, own * 2.3, glow);
-    gl_FragColor = vec4(tone(fogged(col, vRel), gl_FragCoord.xy), 1.0);
+    col = fogged(col, vRel);
+    float alpha = 1.0;
+    if (uGhost.x > 0.0) {
+        // Somebody unseen is an outline of the sky's own light, with what is behind showing through.
+        col = mix(col, uFill * 0.9 + uHorizon * 0.3, uGhost.y * 0.8);
+        alpha = uGhost.x * mix(1.0, 0.07 + 0.8 * edge * edge, uGhost.y);
+    }
+    gl_FragColor = vec4(tone(col, gl_FragCoord.xy), alpha);
 }`,
 
     // The picture from the sun: only depth, packed.
@@ -614,6 +645,8 @@ class WayRenderer {
         gl.uniform4fv(p.u('uWind'), scene.wind);
         gl.uniform1f(p.u('uWet'), scene.wet);
         gl.uniform1f(p.u('uLit'), lit);
+        gl.uniform1f(p.u('uRound'), 0);
+        gl.uniform2f(p.u('uGhost'), 0, 0);
         gl.uniform1f(p.u('uTime'), scene.time);
         gl.uniform4fv(p.u('uLampAt[0]'), this.lampAt);
         gl.uniform4fv(p.u('uLampCol[0]'), this.lampCol);
@@ -718,6 +751,7 @@ class WayRenderer {
         if (dynamicCount) {
             gl.uniform4fv(p.u('uHole'), NONE);
             gl.uniform1f(p.u('uLit'), 1);
+            gl.uniform1f(p.u('uRound'), 1);
             gl.uniform3f(p.u('uOffset'), 0, 0, 0);
             gl.bindBuffer(gl.ARRAY_BUFFER, this.dynamic);
             this.pointers(p);
@@ -759,6 +793,22 @@ class WayRenderer {
         each(near, 'water', p, soup);
         gl.uniform4fv(p.u('uHole'), hole);
         each(far, 'water', p, soup);
+
+        // ---- Whoever is only half there: the rogue in the shadows, the druid between two shapes.
+        for (const ghost of scene.ghosts || []) {
+            if (!ghost.soup.n || ghost.alpha <= 0.01) continue;
+            p = this.props;
+            this.solid(p, scene, 1);
+            gl.uniform1f(p.u('uRound'), 1);
+            gl.uniform2f(p.u('uGhost'), ghost.alpha, ghost.shimmer || 0);
+            gl.uniform4fv(p.u('uHole'), NONE);
+            gl.uniform3f(p.u('uOffset'), 0, 0, 0);
+            gl.bindBuffer(gl.ARRAY_BUFFER, this.dynamic);
+            gl.bufferData(gl.ARRAY_BUFFER, ghost.soup.B.subarray(0, ghost.soup.n * 24), gl.DYNAMIC_DRAW);
+            this.pointers(p);
+            gl.drawArrays(gl.TRIANGLES, 0, ghost.soup.n);
+            this.drawn.triangles += ghost.soup.n / 3;
+        }
         gl.depthMask(false);
 
         // ---- Sprites: smoke and mist over what is behind them, then light added on top.

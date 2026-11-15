@@ -21,7 +21,18 @@ class WaySoup {
         this.slot = 0;
         this.e = [0, 0, 0, 0];
         this.m = null;
+        this.dye = null;
+        this.shine = 0;
+        this.coursed = false;
     }
+    // Coursed: the shaders lay what follows in blocks of stone (flags where it lies flat, tiles on a roof's slope).
+    // It rides in the sign of the occlusion.
+    course(on = true) { this.coursed = !!on; return this; }
+    // How much the next shapes catch the light: 0 cloth and stone, 1 polished metal. (It rides in the colour's fourth byte.)
+    gloss(shine = 0) { this.shine = shine; return this; }
+    // Painted detail: a function of where a vertex is (in its shape's own metres) giving its colour, or nothing to leave it.
+    // Stripes, patches, socks and bibs are all this. null switches it off.
+    mark(dye) { this.dye = dye; return this; }
 
     // Shapes added from here on go through this 3×4 matrix (null: none).
     at(m) { this.m = m; return this; }
@@ -40,20 +51,22 @@ class WaySoup {
 
     clear() { this.n = 0; return this; }
     // What the next shapes are painted with: a colour, which of the stamp's tints recolours it, and the shader's extras.
-    paint(col, slot = 0) { this.col = col; this.slot = slot; return this; }
+    paint(col, slot = 0) { this.col = col; this.slot = slot; this.shine = col.shine || 0; return this; }
     fx(sway = 0, glow = 0, flutter = 0) { this.e = [sway, glow, flutter, 0]; return this; }
 
     v(x, y, z, nx, ny, nz, ao = 1, k = 1) {
         this.need(1);
-        const o = this.n * 6, b = this.n * 24, F = this.F, B = this.B, c = this.col, e = this.e, m = this.m;
+        const o = this.n * 6, b = this.n * 24, F = this.F, B = this.B, e = this.e, m = this.m;
+        let c = this.col;
+        if (this.dye) c = this.dye(x, y, z) || c;
         if (m) {
             const px = x, py = y, pz = z, qx = nx, qy = ny, qz = nz;
             x = m[0] * px + m[1] * py + m[2] * pz + m[3]; y = m[4] * px + m[5] * py + m[6] * pz + m[7]; z = m[8] * px + m[9] * py + m[10] * pz + m[11];
             nx = m[0] * qx + m[1] * qy + m[2] * qz; ny = m[4] * qx + m[5] * qy + m[6] * qz; nz = m[8] * qx + m[9] * qy + m[10] * qz;
         }
         F[o] = x; F[o + 1] = y; F[o + 2] = z;
-        B[b + 12] = nx * 127; B[b + 13] = ny * 127; B[b + 14] = nz * 127; B[b + 15] = ao * 127;
-        B[b + 16] = c[0] * k; B[b + 17] = c[1] * k; B[b + 18] = c[2] * k; B[b + 19] = 255;
+        B[b + 12] = nx * 127; B[b + 13] = ny * 127; B[b + 14] = nz * 127; B[b + 15] = this.coursed ? -Math.max(ao, 0.04) * 127 : ao * 127;
+        B[b + 16] = Math.min(255, c[0] * k); B[b + 17] = Math.min(255, c[1] * k); B[b + 18] = Math.min(255, c[2] * k); B[b + 19] = 255 - 255 * this.shine;
         B[b + 20] = e[0]; B[b + 21] = e[1]; B[b + 22] = e[2]; B[b + 23] = e[3];
         this.slots[this.n++] = this.slot;
     }
@@ -104,6 +117,48 @@ class WaySoup {
         }
         return this;
     }
+    // A round limb, trunk, tail or body along a path of rings, each [x, y, z, radius, squash]: smooth all round,
+    // swelling and narrowing as the radii say. Rings stand square to the path; squash flattens them (front to back
+    // on an upright tube, top to bottom on one lying along z). o: { cap: 1 the start, 2 the end, 3 both;
+    // k(ring, side): a shade for painted folds; rag(ring, side): a ragged edge; ao(ring); turn; ref: the rings' "up" }.
+    tube(path, sides = 8, o = {}) {
+        const n = path.length, last = path[n - 1], first = path[0], TAU = 6.2831853;
+        const ref = o.ref || (Math.abs(last[2] - first[2]) > 1.2 * Math.hypot(last[0] - first[0], last[1] - first[1]) ? [0, 1, 0] : [0, 0, 1]);
+        const rings = [];
+        for (let i = 0; i < n; i++) {
+            const p = path[i], a = path[Math.max(i - 1, 0)], b = path[Math.min(i + 1, n - 1)];
+            let tx = b[0] - a[0], ty = b[1] - a[1], tz = b[2] - a[2];
+            const tl = Math.hypot(tx, ty, tz) || 1;
+            tx /= tl; ty /= tl; tz /= tl;
+            let ux = ty * ref[2] - tz * ref[1], uy = tz * ref[0] - tx * ref[2], uz = tx * ref[1] - ty * ref[0];
+            const ul = Math.hypot(ux, uy, uz) || 1;
+            ux /= ul; uy /= ul; uz /= ul;
+            const vx = uy * tz - uz * ty, vy = uz * tx - ux * tz, vz = ux * ty - uy * tx, sq = p[4] ?? 1, slope = (b[3] - a[3]) / tl, ring = [];
+            for (let k = 0; k <= sides; k++) {
+                const ang = (o.turn || 0) + k / sides * TAU, c = Math.cos(ang), s = Math.sin(ang), r = p[3] * (o.rag ? o.rag(i, k % sides) : 1);
+                let nx = ux * c * sq + vx * s - tx * slope, ny = uy * c * sq + vy * s - ty * slope, nz = uz * c * sq + vz * s - tz * slope;
+                const nl = Math.hypot(nx, ny, nz) || 1;
+                ring.push([p[0] + (ux * c + vx * s * sq) * r, p[1] + (uy * c + vy * s * sq) * r, p[2] + (uz * c + vz * s * sq) * r, nx / nl, ny / nl, nz / nl, o.k ? o.k(i, k % sides) : 1]);
+            }
+            ring.t = [tx, ty, tz];
+            ring.ao = o.ao ? o.ao(i) : 1;
+            rings.push(ring);
+        }
+        const put = (q, ao) => this.v(q[0], q[1], q[2], q[3], q[4], q[5], ao, q[6]);
+        for (let i = 0; i < n - 1; i++) {
+            const A = rings[i], B = rings[i + 1];
+            for (let k = 0; k < sides; k++) {
+                if (path[i][3] > 0) { put(A[k], A.ao); put(A[k + 1], A.ao); put(B[k + 1], B.ao); }
+                if (path[i + 1][3] > 0) { put(A[k], A.ao); put(B[k + 1], B.ao); put(B[k], B.ao); }
+            }
+        }
+        for (const [bit, i, sign] of [[1, 0, -1], [2, n - 1, 1]]) {
+            if (!((o.cap || 0) & bit) || !(path[i][3] > 0)) continue;
+            const R = rings[i], t = R.t, p = path[i];
+            for (let k = 0; k < sides; k++) { this.v(R[k][0], R[k][1], R[k][2], t[0] * sign, t[1] * sign, t[2] * sign, R.ao, R[k][6]); this.v(R[k + 1][0], R[k + 1][1], R[k + 1][2], t[0] * sign, t[1] * sign, t[2] * sign, R.ao, R[k + 1][6]); this.v(p[0], p[1], p[2], t[0] * sign, t[1] * sign, t[2] * sign, R.ao, 1); }
+        }
+        return this;
+    }
     // A lumpy ball: treetops, bushes, heads, bodies. Lit from above by its
     // own colour (top to bottom), smooth all round.
     blob(cx, cy, cz, rx, ry, rz, o = {}) {
@@ -147,7 +202,7 @@ class WaySoup {
             const slot = ts[i], tint = tints && tints[slot];
             if (tint) { r = r * tint[0] / 255; g = g * tint[1] / 255; b = b * tint[2] / 255; }
             if (snow > 0 && slot && wy > 30) { const s = Math.min(1, snow * (wy - 30) / 50); r += (242 - r) * s; g += (246 - g) * s; b += (252 - b) * s; }
-            B[ob + 16] = r; B[ob + 17] = g; B[ob + 18] = b; B[ob + 19] = 255;
+            B[ob + 16] = r; B[ob + 17] = g; B[ob + 18] = b; B[ob + 19] = tb[kb + 19];
             B[ob + 20] = tb[kb + 20]; B[ob + 21] = tb[kb + 21] * lit; B[ob + 22] = tb[kb + 22]; B[ob + 23] = phase;
             this.slots[this.n + i] = slot;
         }
@@ -178,6 +233,8 @@ const WayModels = (() => {
         dirt: [178, 142, 98], cobble: [150, 146, 142], sand: [228, 208, 152], rock: [124, 112, 100], cliff: [100, 94, 98], snow: [242, 246, 252],
         rope: [150, 128, 96], flame: [255, 190, 90], gold: [236, 196, 84], water: [70, 130, 160], skin: [232, 184, 150], cloth: [200, 196, 188], straw: [222, 190, 110],
     };
+    // Metal and glass catch the light.
+    for (const [name, shine] of [['gold', 0.85], ['iron', 0.45], ['glass', 0.7], ['water', 0.6]]) C[name].shine = shine;
     const PLASTER = [[238, 226, 198], [246, 240, 226], [234, 206, 166], [226, 196, 178], [214, 222, 204]];
     const ROOFS = [C.thatch, C.tile, C.slate, [150, 120, 96]];
     const BRIGHT = [[196, 64, 56], [64, 110, 176], [232, 184, 70], [84, 150, 96], [150, 90, 160], [226, 130, 60]];
@@ -287,12 +344,14 @@ const WayModels = (() => {
     // lite (far squares) keeps the shape and the lit windows and drops the rest.
     // Returns where its chimney smokes, its windows glow and its lantern hangs, in its own metres.
     function house(s, o) {
-        const lite = !!o.lite, w = o.w, dp = o.dp, hw = w / 2, hd = dp / 2, r = k => rnd(o.v + 0.1, k), stone = !!o.stone, barn = !!o.barn;
+        const lite = !!o.lite, w = o.w, dp = o.dp, hw = w / 2, hd = dp / 2, r = k => rnd(o.v + 0.1, k), stone = !!o.stone, barn = !!o.barn, fine = !!o.fine && !lite;
+        // (Built as part of something bigger, it stands where that says: o.at.)
+        const base = o.at || null, AT = m => s.at(base ? (m ? mul(base, m) : base) : m);
         const FL = 2.6 + 0.4 * r(50), floors = o.floors, wallTop = 0.45 + floors * FL, jut = o.jetty ? 0.5 : 0, stoneBase = !!o.stoneBase && !stone && !barn;
         const out = { smoke: null, glow: [], lamp: null };
         // An old house leans: everything above the ground floor goes through this.
         const lean = floors > 1 && o.crooked && !lite ? mul(move(0, 0.45 + FL, 0), mul(rotZ((r(51) - 0.5) * 0.09), move(0, -0.45 - FL, 0))) : null;
-        s.at(null).fx(0).paint(C.stone, 0).box(0, 0.0, 0, hw + 0.06, 0.5, hd + 0.06, 0.6);
+        AT(null).fx(0).course(true).paint(C.stone, 0).box(0, o.deep ? -1.2 : 0, 0, hw + 0.06, o.deep ? 1.7 : 0.5, hd + 0.06, 0.6).course(false);
         const beam = (x0, y0, x1, y1, z, t = 0.11) => {             // on the front (z > 0) or back face
             const n = [0, 0, Math.sign(z)], dx = x1 - x0, dy = y1 - y0, l = Math.hypot(dx, dy), px = -dy / l * t, py = dx / l * t, e = z + Math.sign(z) * 0.03;
             s.paint(C.white, 2).quad([x0 - px, y0 - py, e], [x1 - px, y1 - py, e], [x1 + px, y1 + py, e], [x0 + px, y0 + py, e], n);
@@ -305,6 +364,12 @@ const WayModels = (() => {
             if (lit) out.glow.push([x, y, z]);
             if (lite) return;
             s.paint(C.white, 2).quad([x - 0.035, y - wh, e + sz * 0.03], [x + 0.035, y - wh, e + sz * 0.03], [x + 0.035, y + wh, e + sz * 0.03], [x - 0.035, y + wh, e + sz * 0.03], n);
+            if (fine && dress) {
+                // Close to, on the street's side: a frame that stands proud of the wall, a crossbar, and a lintel over it.
+                s.box(x, y + wh * 0.14, e + sz * 0.035, ww, 0.028, 0.03, 1).box(x, y, e + sz * 0.036, 0.03, wh, 0.034, 1);
+                for (const sx of [-1, 1]) s.box(x + sx * (ww + 0.05), y, e + sz * 0.05, 0.05, wh + 0.1, 0.05, 1);
+                s.box(x, y + wh + 0.07, e + sz * 0.06, ww + 0.14, 0.06, 0.06, 1);
+            }
             // A sill that catches the light.
             const sy = y - wh - 0.1, so = e + sz * 0.14;
             s.paint([226, 220, 206], 0).quad([x - ww - 0.14, sy, e], [x + ww + 0.14, sy, e], [x + ww + 0.14, sy, so], [x - ww - 0.14, sy, so], [0, 1, 0]).quad([x - ww - 0.14, sy - 0.07, so], [x + ww + 0.14, sy - 0.07, so], [x + ww + 0.14, sy, so], [x - ww - 0.14, sy, so], n, [0.7, 0.7, 1, 1]);
@@ -321,8 +386,9 @@ const WayModels = (() => {
         };
         for (let f = 0; f < floors; f++) {
             const y0 = 0.45 + f * FL, j = f > 0 ? jut : 0, x1 = hw + j * 0.5, z1 = hd + j, rough = stone || (f === 0 && stoneBase);
-            if (f === 1) s.at(lean);
-            s.paint(rough ? [196, 190, 180] : C.white, rough ? 0 : 1).box(0, y0 + FL / 2, j / 2, x1, FL / 2, hd + j / 2, f ? 1 : 0.55);
+            if (f === 1) AT(lean);
+            s.course(rough).paint(rough ? [196, 190, 180] : C.white, rough ? 0 : 1).box(0, y0 + FL / 2, j / 2, x1, FL / 2, hd + j / 2, f ? 1 : 0.55).course(false);
+            if (fine && !rough && !barn) for (const px of [-x1, x1]) for (const pz of [z1, -hd]) s.paint(C.white, 2).tube([[px, y0, pz, 0.14, 1], [px, y0 + FL, pz, 0.14, 1]], 6);          // corner posts, in the round
             if (f === 1 && jut && !lite) s.paint(C.white, 2).box(0, y0 - 0.07, hd + jut / 2, x1, 0.08, jut / 2 + 0.03, 0.6);       // the beam the upper floor rides out on
             if (!rough && !barn && !lite) {
                 for (const z of [z1, -hd]) {
@@ -332,11 +398,11 @@ const WayModels = (() => {
                     if (f > 0 || r(f + 3) < 0.5) { beam(-x1 + 0.1, y0 + 0.1, -x1 + 0.1 + (2 * x1 - 0.2) / n, y0 + FL * 0.55, z, 0.09); beam(x1 - 0.1, y0 + 0.1, x1 - 0.1 - (2 * x1 - 0.2) / n, y0 + FL * 0.55, z, 0.09); }
                 }
                 for (const side of [-1, 1]) {
-                    s.at(lean && f ? mul(lean, rotY(side * Math.PI / 2)) : rotY(side * Math.PI / 2));
+                    AT(lean && f ? mul(lean, rotY(side * Math.PI / 2)) : rotY(side * Math.PI / 2));
                     const zs = hd + j / 2, off = -side * j / 2;
                     beam(-zs + off, y0 + 0.08, zs + off, y0 + 0.08, x1); beam(-zs + off, y0 + FL - 0.08, zs + off, y0 + FL - 0.08, x1);
                     for (const z of [-zs + 0.1, 0, zs - 0.1]) beam(z + off, y0, z + off, y0 + FL, x1);
-                    s.at(f ? lean : null);
+                    AT(f ? lean : null);
                 }
             }
             // Windows: across the front, one at the back, one in each end wall.
@@ -348,22 +414,29 @@ const WayModels = (() => {
             }
             if (!barn && !lite) {
                 windowAt((r(f + 20) - 0.5) * w * 0.5, y0 + FL * 0.56, -hd, 0.4, 0.5, r(f + 30) < 0.6);
-                for (const side of [-1, 1]) { s.at(lean && f ? mul(lean, rotY(side * Math.PI / 2)) : rotY(side * Math.PI / 2)); windowAt(-side * j / 2, y0 + FL * 0.56, x1, 0.4, 0.5, r(f * 5 + side + 60) < 0.6); s.at(f ? lean : null); }
+                for (const side of [-1, 1]) { AT(lean && f ? mul(lean, rotY(side * Math.PI / 2)) : rotY(side * Math.PI / 2)); windowAt(-side * j / 2, y0 + FL * 0.56, x1, 0.4, 0.5, r(f * 5 + side + 60) < 0.6); AT(f ? lean : null); }
             }
             // The eaves' shadow lies along the top of the wall.
             if (f === floors - 1 && !lite) for (const z of [z1, -hd]) s.paint([150, 142, 150], rough ? 0 : 1).quad([-x1, y0 + FL - 0.5, z + Math.sign(z) * 0.02], [x1, y0 + FL - 0.5, z + Math.sign(z) * 0.02], [x1, y0 + FL, z + Math.sign(z) * 0.02], [-x1, y0 + FL, z + Math.sign(z) * 0.02], [0, 0, Math.sign(z)], [1, 1, 0.7, 0.7]);
         }
         // The door, under a lintel, up a step; a barn's is a pair.
-        s.at(null);
+        AT(null);
         const dx = barn || w < 6.5 ? 0 : (r(52) < 0.5 ? -1 : 1) * w * 0.22, dw = barn ? 1.3 : 0.52, dh = barn ? 2.4 : 1.95, e = hd + 0.05;
         if (!lite) {
             s.fx(0).paint(C.white, 2).quad([dx - dw - 0.1, 0.4, e], [dx + dw + 0.1, 0.4, e], [dx + dw + 0.1, 0.5 + dh + 0.1, e], [dx - dw - 0.1, 0.5 + dh + 0.1, e], [0, 0, 1]);
             s.paint(C.white, 3).quad([dx - dw, 0.45, e + 0.02], [dx + dw, 0.45, e + 0.02], [dx + dw, 0.5 + dh, e + 0.02], [dx - dw, 0.5 + dh, e + 0.02], [0, 0, 1], [0.6, 0.6, 1, 1]);
             s.paint(C.white, 2).box(dx, 0.62 + dh, hd + 0.1, dw + 0.22, 0.09, 0.1, 1);
             s.paint(C.gold, 0).box(dx + dw - 0.12, 1.4, e + 0.05, 0.03, 0.03, 0.03, 1);
-            s.paint(C.stone, 0).box(dx, 0.2, hd + 0.4, dw + 0.25, 0.22, 0.35, 0.7);
+            if (fine) {
+                // Planks, strap hinges, and a ring to knock with.
+                const n = barn ? 6 : 3;
+                for (let i = 1; i < n; i++) s.paint([60, 44, 36], 0).box(dx - dw + i * 2 * dw / n, 0.5 + dh / 2, e + 0.024, 0.012, dh / 2 - 0.04, 0.004, 1);
+                for (const y of [0.85, 0.3 + dh]) s.paint(C.iron, 0).box(dx - dw * 0.3, y, e + 0.035, dw * 0.66, 0.035, 0.012, 1);
+                s.tube([[dx + dw - 0.2, 1.39, e + 0.05, 0.012, 1], [dx + dw - 0.14, 1.3, e + 0.07, 0.012, 1], [dx + dw - 0.2, 1.21, e + 0.07, 0.012, 1], [dx + dw - 0.26, 1.3, e + 0.07, 0.012, 1], [dx + dw - 0.2, 1.39, e + 0.05, 0.012, 1]], 4, { ref: [0, 0, 1] });
+            }
+            s.course(true).paint(C.stone, 0).box(dx, 0.2, hd + 0.4, dw + 0.25, 0.22, 0.35, 0.7).course(false);
         }
-        s.at(lean);
+        AT(lean);
         // The roof: a steep gable in lapping courses, flared at the eaves, its ridge along the street or (a narrow town house) end-on.
         const endOn = o.endOn ?? (floors > 1 && w < dp + 1.2), span = (endOn ? hw : hd + jut / 2) + 0.55, len = (endOn ? hd + jut / 2 : hw + jut / 2) + 0.5, rise = span * (barn ? 0.85 : 0.95 + 0.4 * r(53)), zc = endOn ? 0 : jut / 2;
         const pt = (a, y, b) => endOn ? [a, y, b + jut / 2] : [b, y, a + zc];           // a across the gable, b along the ridge
@@ -371,15 +444,16 @@ const WayModels = (() => {
         for (const sgn of [-1, 1]) {
             for (let c = 0; c < COURSES; c++) {
                 const t0 = Math.max(0, c / COURSES - 0.05), t1 = (c + 1) / COURSES, k = (c % 2 ? 0.9 : 1) * (0.8 + 0.2 * t1), l0 = len - sag * t0, l1 = len - sag * t1;
-                s.paint([255 * k, 255 * k, 255 * k], 5);
+                s.course(true).paint([255 * k, 255 * k, 255 * k], 5);
                 s.quad(pt(sgn * span * (1 - t0), curve(t0) + (lite ? 0 : 0.07), -l0), pt(sgn * span * (1 - t0), curve(t0) + (lite ? 0 : 0.07), l0), pt(sgn * span * (1 - t1), curve(t1), l1), pt(sgn * span * (1 - t1), curve(t1), -l1));
             }
-            s.paint(stone ? [200, 196, 190] : C.white, stone ? 0 : 1);
+            s.course(stone).paint(stone ? [200, 196, 190] : C.white, stone ? 0 : 1);
             for (let c = 0; c < COURSES; c++) for (const side of [-1, 1]) {
                 const t0 = c / COURSES, t1 = (c + 1) / COURSES, at = t => pt(side * (span - 0.55) * (1 - t), curve(t) - 0.2 * (1 - t) - 0.5 * t, sgn * (len - 0.5));
                 s.tri(pt(0, wallTop - 0.1, sgn * (len - 0.5)), at(t0), at(t1), endOn ? [0, 0, sgn] : [sgn, 0, 0]);
             }
         }
+        s.course(false);
         const front = hd + jut;
         if (endOn && !stone && !lite) { beam(-span + 0.65, wallTop + 0.05, span - 0.65, wallTop + 0.05, front); beam(0, wallTop, 0, wallTop + rise - 0.7, front); windowAt(0, wallTop + rise * 0.36, front, 0.3, 0.36, r(40) < 0.6); }
         if (!lite) {
@@ -398,11 +472,11 @@ const WayModels = (() => {
         // A chimney, off the ridge, with a pot.
         if (!barn) {
             const cx = endOn ? (r(41) < 0.5 ? -1 : 1) * span * 0.45 : (r(41) - 0.5) * w * 0.6, cz = endOn ? (r(42) - 0.5) * dp * 0.5 : -span * 0.35 + zc, top = y1 + 0.55, foot = y1 - rise * 0.62;
-            s.paint(C.stone, 0).box(cx, (foot + top) / 2, cz, 0.36, (top - foot) / 2, 0.36, 0.8, [[70, 62, 60], 0]);
+            s.course(true).paint(C.stone, 0).box(cx, (foot + top) / 2, cz, 0.36, (top - foot) / 2, 0.36, 0.8, [[70, 62, 60], 0]).course(false);
             if (!lite) s.paint([170, 96, 70], 0).box(cx, top + 0.16, cz, 0.16, 0.16, 0.16, 1, [[50, 44, 44], 0]);
             out.smoke = [cx, top + 1.0, cz];
         }
-        s.at(null);
+        AT(null);
         if (lite) return out;
         if (o.inn || o.shop) {
             // A sign on a bracket.
@@ -461,7 +535,7 @@ const WayModels = (() => {
             }
         }
         else if (kind === 'well') {
-            s.paint(C.stone, 0).fx(0).prism(8, 0, 0, 0, 1.0, 0.85, 1.0, { flat: true }).paint([40, 60, 80], 0).prism(8, 0, 0.7, 0, 0.82, 0.71, 0.82, { cap: true });
+            s.course(true).paint(C.stone, 0).fx(0).prism(8, 0, 0, 0, 1.0, 0.85, 1.0, { flat: true }).course(false).paint([40, 60, 80], 0).prism(8, 0, 0.7, 0, 0.82, 0.71, 0.82, { cap: true });
             s.paint(C.plank, 0).box(-0.9, 1.4, 0, 0.07, 0.75, 0.07).box(0.9, 1.4, 0, 0.07, 0.75, 0.07).box(0, 1.9, 0, 0.9, 0.05, 0.05, 1);
             s.paint(C.white, 5).prism(4, 0, 2.1, 0, 1.5, 2.9, 0, { turn: 0.785, flat: true, squash: 0.75 });
         } else if (kind === 'fountain') {
@@ -541,6 +615,7 @@ const WayModels = (() => {
         } else if (kind === 'bridge') {
             // A stone arch, 22 m long, the road 4.6 m wide between parapets; its deck humps a little.
             const hump = z => 0.45 * Math.cos(z / 11 * Math.PI / 2), arch = z => -0.5 - 2.4 * (1 - Math.sqrt(Math.max(0, 1 - (z / 6.6) ** 2)));
+            s.course(true);
             for (let i = 0; i < 12; i++) {
                 const z0 = -11 + i * 22 / 12, z1 = z0 + 22 / 12, y0 = hump(z0), y1 = hump(z1);
                 s.paint(C.cobble, 0).fx(0).quad([-2.3, y0, z0], [-2.3, y1, z1], [2.3, y1, z1], [2.3, y0, z0], [0, 1, 0]);
@@ -554,9 +629,14 @@ const WayModels = (() => {
                 if (Math.abs(z0 + 11 / 12) < 6.6) s.paint(C.darkStone, 0).quad([-2.3, u0, z0], [2.3, u0, z0], [2.3, u1, z1], [-2.3, u1, z1], null, [0.5, 0.5, 0.5, 0.5]);
             }
             for (const z of [-11, 11]) for (const x of [-2.3, 2.3]) s.paint(C.stone, 0).box(x - Math.sign(x) * 0.17, 0.6, z, 0.3, 0.7, 0.3, 0.8, [[176, 172, 164], 0]);
+            s.course(false);
         } else if (kind === 'wheel') {
-            s.paint(C.timber, 0).fx(0).prism(10, 0, -0.06, 0, 0.6, 0.06, 0.6, { flat: true });
-            for (const y of [-0.06, 0.06]) for (let i = 0; i < 10; i++) { const a = i / 10 * TAU, b = (i + 1) / 10 * TAU; s.paint(i % 2 ? C.plank : [130, 96, 66], 0).tri([0, y, 0], y > 0 ? [Math.sin(a) * 0.6, y, Math.cos(a) * 0.6] : [Math.sin(b) * 0.6, y, Math.cos(b) * 0.6], y > 0 ? [Math.sin(b) * 0.6, y, Math.cos(b) * 0.6] : [Math.sin(a) * 0.6, y, Math.cos(a) * 0.6], [0, Math.sign(y), 0]); }
+            // A felloe in an iron tyre, eight spokes and a hub. Its axle is y.
+            const rim = [];
+            for (let i = 0; i <= 12; i++) { const a = i / 12 * TAU; rim.push([Math.sin(a) * 0.55, 0, Math.cos(a) * 0.55, 0.055, 1.25]); }
+            s.paint(C.timber, 0).fx(0).tube(rim, 5, { ref: [0, 1, 0], k: i => i % 2 ? 0.86 : 1 });
+            for (let i = 0; i < 8; i++) { const a = (i + 0.5) / 8 * TAU; s.paint(i % 2 ? C.plank : [130, 96, 66], 0).tube([[Math.sin(a) * 0.08, 0, Math.cos(a) * 0.08, 0.035, 1], [Math.sin(a) * 0.52, 0, Math.cos(a) * 0.52, 0.026, 1]], 4, { ref: [0, 1, 0] }); }
+            s.paint(C.timber, 0).prism(8, 0, -0.1, 0, 0.11, 0.1, 0.09, { cap: true }).paint(C.iron, 0).prism(6, 0, 0.1, 0, 0.05, 0.13, 0.04, { cap: true });
         } else if (kind === 'sails') {
             // A windmill's four sails, turning about z.
             for (let i = 0; i < 4; i++) {
@@ -571,16 +651,26 @@ const WayModels = (() => {
     });
 
     // Big buildings, each built to its own measure.
+    // A tower: round, or (square) four-sided; ruined, or under a roof. grand: its parapet stands out on corbels;
+    // tall or spire: a longer roof; skirt: metres more of it below the ground it is given; lite: for a long way off.
     function tower(s, o) {
-        const h = o.h, r = o.r, top = o.ruined ? h * 0.8 : h;
-        s.paint(C.stone, 0).fx(0).prism(8, 0, -1.5, 0, r * 1.08, top, r, { foot: 0.6 });
-        if (o.ruined) { for (let i = 0; i < 4; i++) s.paint(C.darkStone, 0).box(Math.sin(i * 2.3) * r * 0.8, top + 0.4, Math.cos(i * 2.3) * r * 0.8, 0.5, 0.7 + 0.5 * rnd(o.v, i), 0.5, 1); return; }
-        s.paint([176, 172, 164], 0).prism(8, 0, top, 0, r * 1.22, top + 1.1, r * 1.22, { flat: true, foot: 0.8 });
-        for (let i = 0; i < 8; i++) { const a = (i + 0.5) / 8 * TAU; s.paint(C.stone, 0).box(Math.sin(a) * r * 1.15, top + 1.5, Math.cos(a) * r * 1.15, 0.36, 0.4, 0.36, 1); }
-        s.paint(C.white, 5).prism(8, 0, top + 1.0, 0, r * 1.02, top + 1.0 + r * (o.roof === 3 ? 0.9 : 2.1), 0, { foot: 0.75 });
-        for (let k = 0; k < 3; k++) { const a = o.v * 6 + k * 2.1, y = h * (0.35 + 0.22 * k); s.paint(C.glass, 0).fx(0, k === 1 ? 255 : 0).quad([Math.sin(a - 0.09) * r * 1.03, y, Math.cos(a - 0.09) * r * 1.03], [Math.sin(a + 0.09) * r * 1.03, y, Math.cos(a + 0.09) * r * 1.03], [Math.sin(a + 0.09) * r * 1.02, y + 1.2, Math.cos(a + 0.09) * r * 1.02], [Math.sin(a - 0.09) * r * 1.02, y + 1.2, Math.cos(a - 0.09) * r * 1.02]); }
+        const h = o.h, r = o.r, top = o.ruined ? h * 0.8 : h, sq = !!o.square, lite = !!o.lite, sides = sq ? 4 : lite ? 6 : 8, turn = sq ? 0.7854 : 0, R = sq ? r * 1.3 : r;
+        s.course(true).paint(C.stone, 0).fx(0).prism(sides, 0, -1.5 - (o.skirt || 0), 0, R * 1.08, top, R, { foot: 0.6, turn, flat: sq });
+        if (o.ruined) { for (let i = 0; i < 4; i++) s.paint(C.darkStone, 0).box(Math.sin(i * 2.3) * r * 0.8, top + 0.4, Math.cos(i * 2.3) * r * 0.8, 0.5, 0.7 + 0.5 * rnd(o.v, i), 0.5, 1); s.course(false); return; }
+        if (o.grand) s.paint(C.darkStone, 0).prism(sides, 0, top - 1.4, 0, R, top, R * 1.24, { flat: sq, turn, foot: 0.7 });
+        s.paint([176, 172, 164], 0).prism(sides, 0, top, 0, R * 1.22, top + 1.1, R * 1.22, { flat: true, foot: 0.8, turn });
+        const rim = R * 1.15 * (sq ? 0.7071 : 1), out = a => sq ? 1 / Math.max(Math.abs(Math.sin(a)), Math.abs(Math.cos(a))) : 1;
+        if (!lite) for (let i = 0; i < 8; i++) { const a = (i + 0.5) / 8 * TAU; s.paint(C.stone, 0).box(Math.sin(a) * rim * out(a), top + 1.5, Math.cos(a) * rim * out(a), 0.36, 0.4, 0.36, 1); }
+        const roof = o.spire || r * (o.roof === 3 ? 0.9 : o.tall ? 2.9 : 2.1);
+        s.paint(C.white, 5).prism(sides, 0, top + 1.0, 0, R * 1.02, top + 1.0 + roof, 0, { foot: 0.75, turn, flat: sq });
+        s.course(false);
+        for (let k = 0; k < 3; k++) {
+            if (lite && k !== 1) continue;
+            const a = sq ? Math.round((o.v * 6 + k * 2.1) / (Math.PI / 2)) * Math.PI / 2 : o.v * 6 + k * 2.1, y = h * (0.35 + 0.22 * k), m = sq ? R * 0.7071 * 1.03 : r * 1.03, w = sq ? 0.4 / m : 0.09, far = 1 / Math.cos(w);
+            s.paint(C.glass, 0).fx(0, k === 1 ? 255 : 0).quad([Math.sin(a - w) * m * far, y, Math.cos(a - w) * m * far], [Math.sin(a + w) * m * far, y, Math.cos(a + w) * m * far], [Math.sin(a + w) * m * far, y + 1.2, Math.cos(a + w) * m * far], [Math.sin(a - w) * m * far, y + 1.2, Math.cos(a - w) * m * far], [Math.sin(a), 0, Math.cos(a)]);
+        }
         s.fx(0);
-        if (o.flag) flag(s, 0, top + 1.0 + r * 2.1, 0, 3.2, bright(o.v));
+        if (o.flag) flag(s, 0, top + 1.0 + roof, 0, 3.2, bright(o.v));
     }
     function flag(s, x, y, z, h, col) {
         s.paint(C.iron, 0).fx(0).prism(4, x, y - 0.2, z, 0.05, y + h, 0.04);
@@ -593,19 +683,27 @@ const WayModels = (() => {
         s.fx(0);
     }
     // A length of city wall from (0,0,0) to (0,0,len), 11 m high, with a walk and merlons.
-    function wall(s, len, drop0, drop1) {
-        const H = 10.6, T = 1.1;
-        s.paint(C.stone, 0).fx(0);
+    // (A grand city's is higher and thicker, with a string course and arrow loops on its outer face, +x.)
+    function wall(s, len, drop0, drop1, grand = false, lite = false) {
+        const H = grand ? 13.4 : 10.6, T = grand ? 1.5 : 1.1;
+        s.course(true).paint(C.stone, 0).fx(0);
         s.quad([T, -3 + drop0, 0], [T, -3 + drop1, len], [T, H + drop1, len], [T, H + drop0, 0], [1, 0, 0], [0.6, 0.6, 1, 1]);
         s.quad([-T, -3 + drop1, len], [-T, -3 + drop0, 0], [-T, H + drop0, 0], [-T, H + drop1, len], [-1, 0, 0], [0.6, 0.6, 1, 1]);
         s.paint([176, 172, 164], 0).quad([-T, H + drop0, 0], [T, H + drop0, 0], [T, H + drop1, len], [-T, H + drop1, len], [0, 1, 0]);
         const n = Math.max(2, Math.round(len / 2.4));
         for (let i = 0; i < n; i += 2) { const z = (i + 0.5) / n * len, d = drop0 + (drop1 - drop0) * z / len; for (const x of [T - 0.2, -T + 0.2]) s.paint(C.stone, 0).box(x, H + d + 0.5, z, 0.22, 0.5, len / n * 0.5, 1); }
+        if (grand && !lite) {
+            const d = (drop0 + drop1) / 2;
+            s.paint([176, 172, 164], 0).box(T + 0.1, H - 1.3 + d, len / 2, 0.16, 0.18, len / 2, 1);
+            s.course(false);
+            for (let z = 2.2; z < len - 1; z += 4.4) s.paint([40, 36, 40], 0).quad([T + 0.02, H - 5.2 + d, z - 0.1], [T + 0.02, H - 5.2 + d, z + 0.1], [T + 0.02, H - 3.5 + d, z + 0.1], [T + 0.02, H - 3.5 + d, z - 0.1], [1, 0, 0]);
+        }
+        s.course(false);
     }
     function gate(s, o) {
         // Two drum towers and the arch between them; the road runs through along z.
         for (const x of [-1, 1]) (tower(s.at(move(x * 6.4, 0, 0)), { h: 17.5, r: 3.3, roof: 1, v: o.v + x, flag: true }), s.at(null));
-        s.paint(C.stone, 0).fx(0);
+        s.course(true).paint(C.stone, 0).fx(0);
         s.box(0, 10.4, 0, 3.6, 3.4, 1.5, 1, [[176, 172, 164], 0]);
         for (let i = 0; i < 6; i++) {                              // the arch's underside, in steps
             const a0 = i / 6 * Math.PI, a1 = (i + 1) / 6 * Math.PI, p = a => [-Math.cos(a) * 3.3, 4.2 + Math.sin(a) * 2.9];
@@ -616,11 +714,15 @@ const WayModels = (() => {
         for (const x of [-3.45, 3.45]) s.paint(C.stone, 0).box(x, 2.1, 0, 0.16, 2.2, 1.5, 0.7);
         for (let i = 0; i < 5; i++) s.box(-2.9 + i * 1.45, 14.2, 1.2, 0.36, 0.45, 0.3, 1).box(-2.9 + i * 1.45, 14.2, -1.2, 0.36, 0.45, 0.3, 1);
         // Banners hang either side of the arch.
+        s.course(false);
         for (const x of [-2.4, 2.4]) for (const z of [-1.56, 1.56]) s.paint(bright(o.v), 0).fx(0, 0, 26).quad([x - 0.55, 7.6, z], [x + 0.55, 7.6, z], [x + 0.55, 12.6, z], [x - 0.55, 12.6, z], [0, 0, Math.sign(z)], [0.8, 0.8, 1, 1]);
         s.fx(0);
     }
     function big(s, item) {
         const v = item.v || 0, out = { smoke: null, glow: [] };
+        // A grand city's own pieces are WayDetail's.
+        if (item.k !== 'gate' || item.grand) { const got = WayDetail.big(s, item); if (got) return got; }
+        s.course(item.k === 'keep' || item.k === 'castle' || item.k === 'ruin' || item.k === 'abbey');
         if (item.k === 'tower') tower(s, item);
         else if (item.k === 'gate') gate(s, item);
         else if (item.k === 'chapel') {
@@ -685,6 +787,7 @@ const WayModels = (() => {
             out.glow.push([1.3, 3, 3]);
             out.smoke = [0.8, 9.5, -0.6];
         }
+        s.course(false);
         return out;
     }
 
@@ -735,12 +838,14 @@ const WayModels = (() => {
     // Build the square at (cx, cz) × size metres, `cells` to a side. Far
     // squares are coarse and carry only the big things.
     // Returns { ground, props, water (soups), lights, smokes, spawns, low, high }.
-    function square(w, cx, cz, size, cells, far, density = 1) {
-        const steps = squareSteps(w, cx, cz, size, cells, far, density);
+    // detail: 0 the plain models; 1 the fine ones for what stands right by the road; 2 for a wider band.
+    const BIGS = new Set(['tower', 'gate', 'chapel', 'keep', 'spire', 'castle', 'mill', 'lighthouse', 'ruin', 'abbey', 'elder', 'citadel', 'ramp', 'cathedral', 'hall', 'markethall', 'cross', 'drawbridge']);
+    function square(w, cx, cz, size, cells, far, density = 1, detail = 0) {
+        const steps = squareSteps(w, cx, cz, size, cells, far, density, detail);
         for (;;) { const step = steps.next(); if (step.done) return step.value; }
     }
     // The same, a few items at a time: each next() does a little, and the last returns the square.
-    function* squareSteps(w, cx, cz, size, cells, far, density = 1) {
+    function* squareSteps(w, cx, cz, size, cells, far, density = 1, detail = 0) {
         const x0 = cx * size, z0 = cz * size, step = size / cells, G = cells + 3, heights = new Float32Array(G * G), shade = new Float32Array(G * G).fill(1);
         let low = Infinity, high = -Infinity;
         for (let j = 0; j < G; j++) {
@@ -749,7 +854,8 @@ const WayModels = (() => {
             for (let i = 0; i < G; i++) { const h = w.ground(x0 + (i - 1) * step, z); heights[j * G + i] = h; if (h < low) low = h; if (h > high) high = h; }
         }
         // What stands here.
-        const props = new WaySoup(far ? 2048 : 8192), lights = [], smokes = [], spawns = [];
+        const props = new WaySoup(far ? 2048 : 8192), lights = [], smokes = [], spawns = [], beacons = [];
+        const band = detail > 1 ? 26 : 13;
         const items = [];
         const per = L.CHUNK, across = size / per;
         for (let b = 0; b < across; b++) for (let a = 0; a < across; a++) for (const item of w.scatter(cx * across + a, cz * across + b, far)) items.push(item);
@@ -771,7 +877,8 @@ const WayModels = (() => {
                 TINT[3] = (BLOOM[item.kind] || BLOOM.apple)[season.t > 0.5 ? season.next : season.index];
                 const bare = item.kind === 'snag' || (season.snow > 0.5 && !cone && item.kind !== 'pine' && item.kind !== 'shroom' && item.kind !== 'glade');
                 if (far && bare) continue;          // a bare tree is nothing at a distance
-                const m = far ? farTree(cone || item.kind === 'poplar') : tree(bare ? 'snag' : item.kind, Math.floor(v * 3));
+                const close = !far && detail > 0 && Math.abs(w.lateral(item.x, item.z)) < band;
+                const m = far ? farTree(cone || item.kind === 'poplar') : (close ? WayDetail.tree : tree)(bare ? 'snag' : item.kind, Math.floor(v * 3));
                 props.stamp(m, place(lx, item.y - 0.1, lz, item.yaw, far ? sc * 1.3 : sc, far ? sc * 1.2 : sc * (0.9 + 0.3 * rnd(v, 5))), TINT, Math.max(season.snow, w.cold(item.z)) * 0.6, phase);
                 if (!far) { darken(item.x, item.z, 3.4 * sc, 0.34); if (item.kind === 'glade' || item.kind === 'shroom') lights.push([item.x, item.y + 3.5 * sc, item.z, 5, 0.3, 0.9, 0.8, 1]); }
                 continue;
@@ -779,7 +886,9 @@ const WayModels = (() => {
             const snow = Math.max(season.snow, w.cold(item.z)) * 0.9;
             if (item.k === 'house' || item.k === 'hut' || item.k === 'barn') {
                 temp.clear();
-                const got = house(temp, far ? { ...item, lite: true } : item), m = place(lx, item.y - 0.25, lz, item.yaw);
+                // Far off, and in the back rows of a grand city, a house is its shape, its roof and its lit windows; by the road it is trimmed.
+                const lite = far || (item.row >= 2 && !(detail > 1 && item.row < 4)) || (item.row === 1 && detail === 0);
+                const got = house(temp, lite ? { ...item, lite: true } : detail > 0 && Math.abs(item.d) < band + 4 ? { ...item, fine: true } : item), m = place(lx, item.y - 0.25, lz, item.yaw);
                 TINT[1] = PLASTER[Math.floor(v * 4.99)]; TINT[2] = lerp3(C.timber, [120, 80, 56], rnd(v, 2)); TINT[3] = BRIGHT[Math.floor(rnd(v, 3) * 5.99)]; TINT[5] = lerp3(ROOFS[item.roof], [255, 255, 255], 0.1 * rnd(v, 4));
                 props.stamp(temp, m, TINT, snow, phase, 1);
                 
@@ -796,16 +905,18 @@ const WayModels = (() => {
             if (item.k === 'wall') {
                 temp.clear();
                 const len = Math.hypot(item.x1 - item.x, item.z1 - item.z), y1 = w.ground(item.x1, item.z1);
-                wall(temp, len, 0, y1 - item.y);
+                wall(temp, len, 0, y1 - item.y, item.grand, far);
                 props.stamp(temp, place(lx, item.y, lz, Math.atan2(item.x1 - item.x, item.z1 - item.z)), null, snow);
                 continue;
             }
-            if (item.k === 'tower' || item.k === 'gate' || item.k === 'chapel' || item.k === 'keep' || item.k === 'spire' || item.k === 'castle' || item.k === 'mill' || item.k === 'lighthouse' || item.k === 'ruin' || item.k === 'abbey' || item.k === 'elder') {
+            if (BIGS.has(item.k)) {
                 temp.clear();
-                const got = big(temp, item), m = place(lx, item.y - 0.2, lz, item.yaw);
+                const got = big(temp, far ? { ...item, lite: true } : item), m = place(lx, item.k === 'drawbridge' ? w.bridge(item.z) ?? item.y : item.y - 0.2, lz, item.yaw);
                 TINT[1] = item.k === 'elder' ? leafTint('oak', season, v) : PLASTER[1]; TINT[2] = null; TINT[3] = BRIGHT[Math.floor(v * 5.99)]; TINT[5] = lerp3(ROOFS[item.roof ?? 2], [255, 255, 255], 0.08);
                 props.stamp(temp, m, TINT, snow, phase);
                 const to = p => [m[0] * p[0] + m[2] * p[2] + item.x, p[1] + item.y - 0.2, m[8] * p[0] + m[10] * p[2] + item.z];
+                // What a far square keeps of it after dark: a few lights to be seen a long way down the road.
+                for (const b of got.beacons || []) beacons.push([...to(b), b[3], b[4], b[5], b[6]]);
                 if (far) continue;
                 darken(item.x, item.z, 7, 0.3);
                 for (const g of got.glow) lights.push([...to(g), 3.4, 1, 0.68, 0.32, item.k === 'elder' ? 1 : 0]);
@@ -826,7 +937,7 @@ const WayModels = (() => {
                 TINT[3] = item.k === 'heather' ? [150 + 30 * v, 92, 150] : BRIGHT[Math.floor(v * 5.99)];
                 model3 = small(item.k, Math.floor(v * 3));
                 m = place(lx, item.y, lz, item.yaw, item.s * (item.k === 'reed' ? 1.5 : 1.05));
-            } else if (item.k === 'rock') { model3 = small('rock', Math.floor(v * 3)); m = place(lx, item.y, lz, item.yaw, item.s * 1.2); }
+            } else if (item.k === 'rock') { model3 = detail > 0 ? WayDetail.rock(Math.floor(v * 3)) : small('rock', Math.floor(v * 3)); m = place(lx, item.y, lz, item.yaw, item.s * 1.2); }
             else if (item.k === 'lily') { model3 = small('lily', Math.floor(v * 3)); m = place(lx, item.y, lz, v * 6, 0.7 + 0.5 * v); }
             else if (item.k === 'shroom') {
                 TINT[1] = leafTint('shroom', season, v); TINT[3] = BLOOM.shroom[0];
@@ -838,7 +949,7 @@ const WayModels = (() => {
                 lights.push([item.x + Math.sin(item.yaw) * 0.5, item.y + 2.45, item.z + Math.cos(item.yaw) * 0.5, 2.4, 1, 0.72, 0.36, 2]);
             } else if (item.k === 'bunting') { model3 = fixed('bunting'); const h = w.heading(item.z); m = mul(place(lx, item.y, lz, h), [item.span / 2, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0]); }
             else if (item.k === 'stall') { TINT[3] = BRIGHT[Math.floor(v * 5.99)]; model3 = fixed('stall', Math.floor(v * 4.99)); m = place(lx, item.y, lz, item.yaw); darken(item.x, item.z, 2.4, 0.35); }
-            else if (item.k === 'well' || item.k === 'fountain') { TINT[5] = ROOFS[1]; model3 = fixed(item.k); m = place(lx, item.y, lz, item.yaw); }
+            else if (item.k === 'well' || item.k === 'fountain') { TINT[5] = ROOFS[1]; model3 = (detail > 0 && WayDetail.fixed(item.k)) || fixed(item.k); m = place(lx, item.y, lz, item.yaw); }
             else if (item.k === 'boat') {
                 const level = w.water(item.x, item.z);
                 if (level < -1e8 || w.ground(item.x, item.z) > level - 0.3) continue;
@@ -851,7 +962,7 @@ const WayModels = (() => {
             else if (item.k === 'washing') { model3 = fixed('washing', Math.floor(v * 3)); m = mul(place(lx, item.y + (item.up || 0), lz, item.yaw), [item.span / 2, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0]); }
             else if (item.k === 'clutter' || item.k === 'planter' || item.k === 'board') { TINT[3] = BRIGHT[Math.floor(v * 5.99)]; TINT[5] = ROOFS[1]; model3 = fixed(item.k, Math.floor(v * 3)); m = place(lx, item.y, lz, item.yaw + (item.k === 'clutter' ? v * 0.6 - 0.3 : 0)); darken(item.x, item.z, 1.3, 0.35); }
             else if (item.k === 'fence' || item.k === 'drywall' || item.k === 'sign' || item.k === 'milestone' || item.k === 'shrine' || item.k === 'logs' || item.k === 'bench' || item.k === 'cart' || item.k === 'cairn') {
-                model3 = fixed(item.k, Math.floor(v * 3)); m = place(lx, item.y, lz, item.yaw, item.k === 'cairn' ? 1.5 : 1);
+                model3 = (detail > 0 && WayDetail.fixed(item.k)) || fixed(item.k, Math.floor(v * 3)); m = place(lx, item.y, lz, item.yaw, item.k === 'cairn' ? 1.5 : 1);
                 if (item.k === 'shrine') lights.push([item.x, item.y + 0.7, item.z, 1.5, 1, 0.7, 0.34, 1]);
             }
             // Small plants keep their colour in the pass; only winter whitens them.
@@ -899,7 +1010,7 @@ const WayModels = (() => {
                 corner(k[0], 0, 0); corner(k[3], 0, 1); corner(k[2], 1, 1); corner(k[0], 0, 0); corner(k[2], 1, 1); corner(k[1], 1, 0);
             }
         }
-        return { cx, cz, x0, z0, size, cells, far, density, ground, props, water, lights, smokes, spawns, low: low - skirt, high: high + (far ? 30 : 45) };
+        return { cx, cz, x0, z0, size, cells, far, density, detail, ground, props, water, lights, smokes, spawns, beacons, low: low - skirt, high: high + (far ? 70 : 75) };
     }
 
     // The ground's triangles for a grid of `cells`, skirt included: shared by every square of that size.
@@ -910,5 +1021,5 @@ const WayModels = (() => {
         return out;
     }
 
-    return { C, BRIGHT, PLASTER, GRASS, mul, rotX, rotZ, move, rnd, fixed, house, square, squareSteps, gridIndices, leafTint, model };
+    return { C, BRIGHT, PLASTER, GRASS, mul, rotX, rotY, rotZ, move, rnd, lerp3, fixed, house, tower, wall, flag, square, squareSteps, gridIndices, leafTint, model };
 })();

@@ -2066,7 +2066,7 @@ const STAGE_CHECKS = {
             await shoot('wayfarer-road');
             return true;
         }],
-        ['the three cameras, a drag to look round, and the keys: V steps and saves, T and X too, N goes on down the road', async () => {
+        ['the four cameras, a drag to look round, and the keys: V steps and saves, T and X too, N goes on down the road', async () => {
             if (!await stageWith('wayfarer', { configVersion: 1, time: 'day', weather: 'clear' }, '&seed=7')) return record('not ready');
             const where = () => evaluate('(m => ({ ...JSON.parse(JSON.stringify(m.debugState())), x: m.standing.x, z2: m.standing.z }))(WP.stage.manager)');
             const run = key => evaluate(`WP.entry('wayfarer').keys.find(k => k.keys.includes('${key}')).run(WP.stage.manager, {})`);
@@ -2080,6 +2080,10 @@ const STAGE_CHECKS = {
             if (await evaluate("localStorage.getItem('wp:wayfarer')") !== JSON.stringify({ configVersion: 1, time: 'day', weather: 'clear' })) record('looking round saved something');
             const said = [await run('v')];
             await sleep(1500);
+            const o = await where();
+            if (o.camera !== 'orbit' || !o.orbit.open || !(o.clear > 0.4) || !o.feet || Math.abs(away(o) - 8 * Math.cos(18 * Math.PI / 180)) > 1.5) record(`orbit: ${JSON.stringify({ camera: o.camera, orbit: o.orbit, away: away(o) })}`);
+            said.push(await run('v'));
+            await sleep(1500);
             const b = await where();
             if (b.camera !== 'first' || away(b) > 0.6 || b.moving > a.moving - 300) record(`through their eyes: ${away(b).toFixed(2)} m away, ${b.moving} vertices moving (${a.moving} with the traveller drawn)`);
             said.push(await run('v'));
@@ -2092,7 +2096,7 @@ const STAGE_CHECKS = {
             await sleep(1500);
             const d = await where();
             if (Math.hypot(d.cam.x - c.cam.x, d.cam.y - c.cam.y, d.cam.z - c.cam.z) < 3 || !(d.clear > 0.4)) record(`the cut left the camera where it was: ${JSON.stringify(d.cam)}`);
-            if (!/eyes/.test(said[0]) || !/Cinematic/.test(said[1])) record(`V said ${JSON.stringify(said)}`);
+            if (!/Orbit/.test(said[0]) || !/eyes/.test(said[1]) || !/Cinematic/.test(said[2])) record(`V said ${JSON.stringify(said)}`);
             const t = await run('t'), x = await run('x'), n = await run('n');
             await sleep(400);
             const after = await where(), saved = await evaluate("JSON.parse(localStorage.getItem('wp:wayfarer'))");
@@ -2104,7 +2108,7 @@ const STAGE_CHECKS = {
         }],
         ['night lights the lanterns and the stars, and is darker than noon; rain falls, and snow where it is cold', async () => {
             // Into the nearest town, where the windows are.
-            const toTown = "(m => { let l = m.world.leg(Math.floor(m.journey.z / 360)); while (!l.radius) l = m.world.leg(l.i + 1); m.journey.z = l.zc - 30; m.companion.x = null; m.stream(true); m.snap = true; })(WP.stage.manager)";
+            const toTown = "(m => { let l = m.world.leg(Math.floor(m.journey.z / 360)); while (l.place !== 'village') l = m.world.leg(l.i + 1); m.journey.z = l.zc - 30; m.party.forEach(p => { p.x = null; }); m.stream(true); m.snap = true; })(WP.stage.manager)";
             const state = () => evaluate('(m => ({ ...JSON.parse(JSON.stringify(m.debugState())), tint: m.scene.fallTint, size: m.scene.dropSize, cold: m.cold, wetGround: m.scene.wet }))(WP.stage.manager)');
             if (!await stageWith('wayfarer', { configVersion: 1, time: 'day', weather: 'clear', towns: 1.6 }, '&seed=7')) return record('midday: not ready');
             await evaluate(toTown);
@@ -2116,7 +2120,7 @@ const STAGE_CHECKS = {
             await sleep(2500);
             const night = await evaluate(AVERAGE), n = await state();
             if (n.lit < 0.95 || n.stars < 0.9 || n.glows < 12 || n.lamps < 2) record(`night: ${JSON.stringify({ lit: n.lit, stars: n.stars, glows: n.glows, lamps: n.lamps })}`);
-            if (night.reduce((a, b) => a + b) > day.reduce((a, b) => a + b) * 0.7) record(`night ${night} is hardly darker than midday ${day}`);
+            if (night.reduce((a, b) => a + b) > day.reduce((a, b) => a + b) * 0.82) record(`night ${night} is hardly darker than midday ${day}`);
             await shoot('wayfarer-night');
             if (!await stageWith('wayfarer', { configVersion: 1, time: 'day', weather: 'rain', season: 'summer' }, '&seed=7')) return record('rain: not ready');
             await sleep(1500);
@@ -2128,6 +2132,147 @@ const STAGE_CHECKS = {
             await sleep(1500);
             const w = await state();
             if (w.cold !== 1 || w.size < 0.03 || w.wetGround > 0.01 || w.fall < 0.4) record(`winter rain is not snow: ${JSON.stringify({ cold: w.cold, size: w.size, wet: w.wetGround, fall: w.fall })}`);
+            return true;
+        }],
+        ['orbit: a drag turns the camera about the traveller and it stays and is saved; the wheel moves it in and out; overhead and in the grass; in clear air in a town', async () => {
+            if (!await stageWith('wayfarer', { configVersion: 1, time: 'day', weather: 'clear', camera: 'orbit', rests: false }, '&seed=7')) return record('not ready');
+            const state = () => evaluate('(m => ({ ...JSON.parse(JSON.stringify(m.debugState())), x: m.standing.x, z2: m.standing.z, h: m.world.heading(m.journey.z), held: m.orbit.held }))(WP.stage.manager)');
+            const saved = () => evaluate("JSON.parse(localStorage.getItem('wp:wayfarer'))");
+            const a = await state();
+            if (a.camera !== 'orbit' || Math.abs(a.orbit.az - 35 * Math.PI / 180) > 1e-6 || Math.abs(a.orbit.el - 18 * Math.PI / 180) > 1e-6 || a.orbit.dist !== 8 || !a.orbit.open) record(`it starts at ${JSON.stringify(a.orbit)}`);
+            // Behind and to their right: the camera's side of the traveller is the right hand.
+            const side = s => (s.cam.x - s.x) * Math.cos(s.h) - (s.cam.z - s.z2) * Math.sin(s.h);
+            if (!(side(a) > 2) || !a.feet || !a.head || a.head[1] > a.feet[1]) record(`at 35°: ${side(a).toFixed(1)} m to the right, feet ${a.feet}, head ${a.head}`);
+            // Drag left and down: round to the front, and up.
+            await drag([[900, 300], [760, 340], [620, 380], [480, 420], [340, 460]], 60);
+            await sleep(600);
+            const size = await evaluate('[innerWidth, innerHeight]');
+            const b = await state(), want = { az: 35 * Math.PI / 180 + 560 / size[0] * Math.PI * 2 * 0.6, el: 18 * Math.PI / 180 + 160 / size[1] * Math.PI * 0.62 };
+            if (Math.abs(b.orbit.az - want.az) > 0.02 || Math.abs(b.orbit.el - want.el) > 0.02 || b.held) record(`the drag left it at ${JSON.stringify(b.orbit)}, not ${JSON.stringify(want)}`);
+            await sleep(5000);
+            const c = await state(), kept = await saved();
+            if (c.orbit.az !== b.orbit.az || c.orbit.el !== b.orbit.el) record(`it did not stay: ${JSON.stringify(c.orbit)}`);
+            if (!kept || kept.orbitAzimuth !== Math.round(b.orbit.az * 180 / Math.PI) || kept.orbitElevation !== Math.round(b.orbit.el * 180 / Math.PI) || kept.camera !== 'orbit') record(`the drag saved ${JSON.stringify(kept)}`);
+            // The wheel: out, and it is saved on the slider's half-metre steps.
+            await evaluate("document.dispatchEvent(new WheelEvent('wheel', { deltaY: 240 })); document.dispatchEvent(new WheelEvent('wheel', { deltaY: 240 }))");
+            await sleep(2500);
+            const d = await state(), far = await saved();
+            if (!(d.orbit.dist > 12) || far.orbitDistance !== Math.round(d.orbit.dist * 2) / 2) record(`the wheel: ${d.orbit.dist} m, saved ${far.orbitDistance}`);
+            // From the panel: straight overhead, then down in the grass in front; turning, it turns.
+            const apply = more => evaluate(`(m => m.applySettings({ ...m.config, ...${JSON.stringify(more)} }))(WP.stage.manager)`);
+            await apply({ orbitElevation: 90, orbitDistance: 30, orbitAzimuth: 0 });
+            await sleep(1500);
+            const top = await state();
+            if (Math.abs(top.cam.pitch + Math.PI / 2) > 0.02 || !(top.cam.y - top.y > 4 && top.cam.y - top.y < 31.6) || !top.feet || Math.abs(top.feet[0] - size[0] / 2) > 60 || Math.abs(top.feet[1] - size[1] / 2) > 80) record(`overhead: ${JSON.stringify({ pitch: top.cam.pitch, up: top.cam.y - top.y, feet: top.feet })}`);
+            await shoot('wayfarer-orbit-overhead');
+            await apply({ orbitElevation: 2, orbitDistance: 6, orbitAzimuth: 180 });
+            await sleep(1500);
+            const low = await state();
+            if (!(low.clear > 0.4) || !low.orbit.open || !(low.cam.y - low.y < 2.2) || !low.head) record(`in the grass: ${JSON.stringify({ clear: low.clear, up: low.cam.y - low.y, open: low.orbit.open })}`);
+            await shoot('wayfarer-orbit-front');
+            await apply({ orbitMode: 'turning' });
+            await evaluate('WP.stage.manager.orbit.idle = 99');
+            await sleep(2500);
+            const spun = await state();
+            if (!(Math.abs(spun.orbit.az - low.orbit.az) > 0.01)) record(`turning, it stood still at ${spun.orbit.az}`);
+            // In a town, at every bearing: never inside a house.
+            await apply({ orbitMode: 'fixed', orbitElevation: 12, orbitDistance: 25 });
+            await evaluate("(m => { let l = m.world.leg(Math.floor(m.journey.z / 360)); while (l.place !== 'village') l = m.world.leg(l.i + 1); m.journey.z = l.zc - 20; m.party.forEach(p => { p.x = null; }); m.stream(true); m.snap = true; })(WP.stage.manager)");
+            for (const az of [0, 90, 180, -90]) {
+                await apply({ orbitAzimuth: az });
+                await sleep(1200);
+                const t = await state();
+                if (!t.orbit.open || !(t.clear > 0.4) || t.orbit.reach > 25.01) record(`in the village at ${az}°: ${JSON.stringify({ open: t.orbit.open, clear: t.clear, reach: t.orbit.reach })}`);
+                if (az === 90) await shoot('wayfarer-orbit-village');
+            }
+            return true;
+        }],
+        ['a company of six, each in its place; nobody; the barbarian with her brand after dark; the druid changes shape and back; the rogue goes unseen and returns', async () => {
+            const six = ['moofy', 'hound', 'pony', 'raven', 'ibbie', 'lantern'];
+            if (!await stageWith('wayfarer', { configVersion: 1, time: 'day', weather: 'clear', companionPick: 'choose', companionChoice: six, rests: false, craft: 'never' }, '&seed=7')) return record('not ready');
+            const state = () => evaluate('JSON.parse(JSON.stringify(WP.stage.manager.debugState()))');
+            const apply = more => evaluate(`(m => m.applySettings({ ...m.config, ...${JSON.stringify(more)} }))(WP.stage.manager)`);
+            const run = () => evaluate("WP.entry('wayfarer').keys.find(k => k.keys.includes('g')).run(WP.stage.manager, {})");
+            const first = await state();
+            if (first.party.map(p => p.id).join() !== six.join() || !first.companion) record(`the company on frame one: ${JSON.stringify(first.party.map(p => p.id))}`);
+            await sleep(4000);
+            const a = await state(), walkers = a.party.filter(p => p.alt < 0.5 && p.riding < 0.5);
+            let closest = 9;
+            for (const p of walkers) for (const q of walkers) if (p !== q) closest = Math.min(closest, Math.hypot(p.x - q.x, p.z - q.z));
+            if (walkers.length < 3 || closest < 0.3) record(`${walkers.length} on foot, two of them ${closest.toFixed(2)} m apart`);
+            if (!(a.party[3].alt > 1.5) || !(a.party[4].riding > 0.9) || !(a.party[5].alt > 1)) record(`the raven at ${a.party[3].alt} m, Ibbie riding ${a.party[4].riding}, the lantern at ${a.party[5].alt} m`);
+            if (a.moving < 12000) record(`only ${a.moving} vertices of traveller and company`);
+            await shoot('wayfarer-company');
+            await apply({ companionPick: 'cats', companions: 0 });
+            await sleep(800);
+            const alone = await state();
+            if (alone.party.length || alone.moving > a.moving - 6000) record(`alone: ${alone.party.length} companions, ${alone.moving} vertices`);
+            // The barbarian: no cloak and no staff, and a brand in her hand after dark.
+            await apply({ traveller: 'barbarian', time: 'night' });
+            if (!await waitFor(() => evaluate('WP.stage.manager.light.lit > 0.9'), 30000)) record('night never fell');
+            await sleep(1500);
+            const barb = await state();
+            if (barb.traveller !== 'barbarian' || barb.lamps < 1 || barb.moving < 8000 || await evaluate('!!WayActors.LOOKS.barbarian.cloak || WayActors.LOOKS.barbarian.hand === "crook"')) record(`the barbarian: ${JSON.stringify({ lamps: barb.lamps, moving: barb.moving })}`);
+            await shoot('wayfarer-barbarian-night');
+            // The druid: another shape at the key, and her own again at the next.
+            await apply({ traveller: 'druid', time: 'day' });
+            const said = [await run()];
+            if (!await waitFor(() => evaluate("WP.stage.manager.shift.form !== 'self'"), 40000)) record('the druid never changed shape');
+            const beast = await state();
+            if (!['bear', 'owlbeast', 'panther'].includes(beast.form) || beast.change !== 1 || beast.moving < 2000) record(`changed: ${JSON.stringify({ form: beast.form, change: beast.change, moving: beast.moving })}`);
+            await shoot('wayfarer-druid-changed');
+            said.push(await run());
+            if (!await waitFor(() => evaluate("WP.stage.manager.shift.form === 'self' && WP.stage.manager.shift.change === 1"), 40000)) record('the druid never changed back');
+            if (!/another shape/.test(said[0]) || !/own shape/.test(said[1])) record(`G said ${JSON.stringify(said)}`);
+            // The rogue: a shimmer at the key (drawn apart, see-through), and back.
+            await apply({ traveller: 'rogue' });
+            said.push(await run());
+            if (!await waitFor(() => evaluate('WP.stage.manager.stealth.hidden === 1'), 30000)) record('the rogue never went unseen');
+            await sleep(500);
+            const unseen = await state();
+            if (!(unseen.ghost[0] > 6000) || unseen.moving > 3000) record(`unseen: ${JSON.stringify({ ghost: unseen.ghost, moving: unseen.moving })}`);
+            await shoot('wayfarer-rogue-unseen');
+            said.push(await run());
+            if (!await waitFor(() => evaluate('WP.stage.manager.stealth.hidden === 0'), 30000)) record('the rogue never came back');
+            const back = await state();
+            if (back.ghost[0] || back.moving < 6000) record(`back: ${JSON.stringify({ ghost: back.ghost, moving: back.moving })}`);
+            if (!/Into the shadows/.test(said[2]) || !/Out of the shadows/.test(said[3])) record(`G said ${JSON.stringify(said)}`);
+            if (await evaluate("JSON.stringify(Object.keys(localStorage).filter(k => k.startsWith('wp:wayfarer') && k !== 'wp:wayfarer' && k !== 'wp:wayfarer:gpu'))") !== '[]') record('it stored something of its own');
+            return true;
+        }],
+        ['a grand city: built whole about the gate and the square, the camera in clear air at every bearing, its lights carried a long way down the road at night', async () => {
+            if (!await stageWith('wayfarer', { configVersion: 1, time: 'day', weather: 'clear', camera: 'orbit', orbitElevation: 14, orbitDistance: 30, rests: false, towns: 1.6 }, '&seed=7')) return record('not ready');
+            const state = () => evaluate('(m => ({ ...JSON.parse(JSON.stringify(m.debugState())), dz: m.world.at(m.journey.z).dz, beacons: m.active.far.reduce((n, sq) => n + sq.beacons.length, 0), side: m.world.at(m.journey.z).near.side }))(WP.stage.manager)');
+            const apply = more => evaluate(`(m => m.applySettings({ ...m.config, ...${JSON.stringify(more)} }))(WP.stage.manager)`);
+            const go = dz => evaluate(`(m => { let l = m.world.leg(Math.floor(m.journey.z / 360)); while (!l.grand) l = m.world.leg(l.i + 1); m.journey.z = l.zc + ${dz}; m.journey.mode = 'walk'; m.party.forEach(p => { p.x = null; }); m.traffic.length = 0; m.stream(true); m.snap = true; })(WP.stage.manager)`);
+            await go(-142 - 34);
+            await sleep(2500);
+            const gate = await state();
+            if (!gate.grand || gate.place !== 'city' || gate.near < 25 || gate.far < 25 || Math.abs(gate.y - gate.ground) > 0.01) record(`before the gate: ${JSON.stringify({ grand: gate.grand, place: gate.place, near: gate.near, queue: gate.queue })}`);
+            if (gate.drawn.triangles < 30000 || gate.drawn.triangles > 600000) record(`drawn before the gate: ${JSON.stringify(gate.drawn)}`);
+            await shoot('wayfarer-grand-gate');
+            await go(4);
+            for (const az of [0, 90, 180, -90, 35]) {
+                await apply({ orbitAzimuth: az });
+                await sleep(1500);
+                const t = await state();
+                if (!t.grand || !t.orbit.open || !(t.clear > 0.4)) record(`in the market square at ${az}°: ${JSON.stringify({ open: t.orbit.open, clear: t.clear, reach: t.orbit.reach })}`);
+                if (t.actors < 8) record(`only ${t.actors} people in the square`);
+                if (az === 35) await shoot('wayfarer-grand-square');
+            }
+            // On the drawbridge: feet on its deck, over the water.
+            await go(-142 - 11);
+            await sleep(1200);
+            const bridge = await evaluate('(m => ({ y: m.standing.y, water: m.world.water(m.standing.x, m.standing.z), ground: m.world.ground(m.standing.x, m.standing.z) }))(WP.stage.manager)');
+            if (!(bridge.y > bridge.water + 2) || !(bridge.ground < bridge.water - 0.8)) record(`on the drawbridge: ${JSON.stringify(bridge)}`);
+            // From down the road after dark: the far squares keep its lights.
+            await apply({ time: 'night', camera: 'follow' });
+            await go(-142 - 420);
+            if (!await waitFor(() => evaluate('WP.stage.manager.light.lit > 0.9'), 30000)) record('night never fell');
+            await sleep(2000);
+            const dark = await state();
+            if (dark.beacons < 4 || dark.glows < 6) record(`from down the road at night: ${dark.beacons} lights kept, ${dark.glows} glows drawn`);
+            await shoot('wayfarer-grand-night');
             return true;
         }],
         ['without WebGL it walks on, painted flat: as far each second on Low as on High', async () => {

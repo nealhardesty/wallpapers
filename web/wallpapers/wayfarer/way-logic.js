@@ -53,6 +53,12 @@ const WayLogic = (() => {
     };
     const SEASONS = ['spring', 'summer', 'autumn', 'winter'];
     const ROAD = { half: 1.9, village: 2.7, city: 3.3 };
+    // A grand city: its wall's oval (A along the road, B across), the ground levelled for it, the moat outside the wall,
+    // the market square, and the rock the castle stands on (d to the city's own side, dz along the road from its middle).
+    const GRAND = { A: 142, B: 112, radius: 150, plaza: 23, moat: [5, 17], rock: { d: 66, dz: 20, r0: 27, r1: 39, h: 16 }, cross: [-74, 0, 74], lanes: [25.4, 50.6] };
+    // How far outside a grand city's wall a point is (metres along the line from the city's middle; negative inside).
+    const beyondWall = (d, dz) => { const away = Math.hypot(d, dz), rho = Math.hypot(d / GRAND.B, dz / GRAND.A); return rho > 1e-6 ? away * (1 - 1 / rho) : -GRAND.B; };
+    const moatQ = out => (GRAND.moat[1] - GRAND.moat[0]) / 2 - Math.abs(out - (GRAND.moat[0] + GRAND.moat[1]) / 2);
 
     // ---- The world ---------------------------------------------------------------
     // options: { towns: 0 to 2 (how many of the places are settled), season: 'journey' or one of SEASONS }
@@ -83,6 +89,12 @@ const WayLogic = (() => {
             return order[at];
         }
 
+        // A grand city wants gentle, open country, and never stands next to another. It lies level from gate to
+        // gate, halfway in height between its neighbours, so the road does its climbing outside the walls.
+        const height = i => 40 + 12 * hash(i, 0, s(2)) + LAND[BIOMES[biomeIndex(i)]].lift;
+        const couldBeGrand = i => { const b = BIOMES[biomeIndex(i)]; return (b === 'meadow' || b === 'farm') && hash(i, 7, s(2)) < 0.26 * towns; };
+        const isGrand = i => couldBeGrand(i) && !couldBeGrand(i - 1);
+
         // A leg: its country, how high its middle lies, and the place there.
         const legs = new Map();
         function leg(i) {
@@ -96,14 +108,17 @@ const WayLogic = (() => {
             if (roll < 0.2 * towns && open) l.place = 'city';
             else if (roll < 0.56 * towns) l.place = biome === 'pass' ? 'hamlet' : 'village';
             else l.place = { meadow: r(3) < 0.5 ? 'stones' : 'castle', forest: r(3) < 0.5 ? 'elder' : 'ruin', lake: 'jetty', pass: 'cairn', farm: 'mill', moor: r(3) < 0.5 ? 'abbey' : 'castle', coast: 'lighthouse', grove: 'ring' }[biome];
-            l.radius = { city: 118, village: 62, hamlet: 34 }[l.place] || 0;
-            if (l.radius) l.plaza = { d: l.side * (l.place === 'city' ? 0 : 7.5), r: l.place === 'city' ? 17 : l.place === 'village' ? 9.5 : 0 };
+            // In open, gentle country some of the cities are grand: a wider wall with a moat, and a castle on a rock inside it.
+            if (isGrand(i)) { l.place = 'city'; l.grand = GRAND; l.e = (height(i - 1) + height(i + 1)) / 2; }
+            l.radius = l.grand ? GRAND.radius : { city: 118, village: 62, hamlet: 34 }[l.place] || 0;
+            if (l.radius) l.plaza = { d: l.side * (l.place === 'city' ? 0 : 7.5), r: l.grand ? GRAND.plaza : l.place === 'city' ? 17 : l.place === 'village' ? 9.5 : 0 };
+            if (l.grand) { l.rock = { d: l.side * GRAND.rock.d, dz: GRAND.rock.dz, r0: GRAND.rock.r0, r1: GRAND.rock.r1, h: GRAND.rock.h }; l.moat = l.e - 2.4; }
             if (biome === 'lake') l.lake = { side: l.side, r: 95 + 40 * r(4), gap: 17, level: l.e - 1.1 };
             if (biome === 'coast') l.sea = { side: l.side, gap: 24, level: l.e - 1.6 };
             if (l.place === 'castle') l.mound = { d: -l.side * (150 + 40 * r(5)), r: 78, h: 34 + 14 * r(6) };
             // A stream crosses the road where this leg begins, if the country on both sides allows.
             const before = BIOMES[biomeIndex(i - 1)], wet = b => b === 'pass' || b === 'lake' || b === 'coast';
-            if (!wet(biome) && !wet(before) && hash(i, 9, s(2)) < 0.6) l.stream = { z: i * SLOT, flip: hash(i, 10, s(2)) < 0.5 ? -1 : 1 };
+            if (!wet(biome) && !wet(before) && !l.grand && !isGrand(i - 1) && hash(i, 9, s(2)) < 0.6) l.stream = { z: i * SLOT, flip: hash(i, 10, s(2)) < 0.5 ? -1 : 1 };
             if (legs.size > 96) legs.clear();
             legs.set(i, l);
             return l;
@@ -123,7 +138,7 @@ const WayLogic = (() => {
             const u = z / SLOT - 0.5, j = Math.floor(u), g = u - j, a = leg(j), b = leg(j + 1), t = smooth(0.28, 0.72, g);
             row.a = a; row.b = b; row.t = t;
             // The road climbs from one leg's middle to the next; where a stream crosses between, it levels for the bridge.
-            row.y = mix(a.e, b.e, !b.stream ? quintic(g) : g < 0.5 ? 0.5 * quintic(2 * g) : 0.5 + 0.5 * quintic(2 * g - 1));
+            row.y = mix(a.e, b.e, a.grand ? quintic(clamp((g - 0.47) / 0.53, 0, 1)) : b.grand ? quintic(clamp(g / 0.53, 0, 1)) : !b.stream ? quintic(g) : g < 0.5 ? 0.5 * quintic(2 * g) : 0.5 + 0.5 * quintic(2 * g - 1));
             row.relief = mix(a.land.relief, b.land.relief, t);
             row.wall = mix(a.land.wall, b.land.wall, t);
             row.near = g < 0.5 ? a : b;                 // the leg whose middle is nearest
@@ -163,7 +178,7 @@ const WayLogic = (() => {
                 if (ad > 60) h += basin * 34 * (noise2(x / 520, z / 520, s(10)) - 0.35) * smooth(60, 500, ad);
             }
             // A settlement stands on levelled ground.
-            if (p.radius) h *= smooth(p.radius * 0.8, p.radius * 1.5, Math.hypot(d, r.dz));
+            if (p.radius) h *= p.grand ? smooth(p.radius, 178, Math.hypot(d, r.dz)) : smooth(p.radius * 0.8, p.radius * 1.5, Math.hypot(d, r.dz));
             // A stream has a valley: the hills stand back from it all the way out, so it runs level to the edge of the land.
             const sq = r.gate ? streamQ(r.gate, d, z) : -1e9;
             if (sq > -70) h *= smooth(-8, -70, sq);
@@ -171,7 +186,12 @@ const WayLogic = (() => {
                 const m = p.mound, away = Math.hypot(d - m.d, r.dz);
                 if (away < m.r * 1.4) h = mix(h, m.h, smooth(m.r * 1.4, m.r * 0.38, away));
             }
+            if (p.rock) {
+                const k = p.rock, away = Math.hypot(d - k.d, r.dz - k.dz);
+                if (away < k.r1) h += k.h * smooth(k.r1, k.r0, away) * (1 + 0.1 * (noise2(x / 9, z / 9, s(12)) - 0.5) * smooth(k.r0 - 2, k.r0 + 6, away));
+            }
             h += r.y;
+            if (p.grand) { const mq = moatQ(beyondWall(d, r.dz)); if (mq > -5) h = mix(h, shore(mq, p.moat, 2.2), smooth(-5, -1, mq)); }
             if (q > -9) h = mix(h, shore(q, (p.lake || p.sea).level, p.sea ? 9 : 4.5), smooth(-9, -2, q));
             if (sq > -7) h = mix(h, shore(sq, r.streamY, 1.4), smooth(-7, -1, sq));
             return h;
@@ -182,12 +202,15 @@ const WayLogic = (() => {
             const r = z === row.z ? row : at(z), p = r.near, d = (x - r.x) * r.cos;
             if (p.lake || p.sea) { if (lakeQ(p, d, r.dz, x, z) > -12) return (p.lake || p.sea).level; }
             if (r.gate && Math.abs(z - r.gate.z) < 40) return r.streamY;
+            if (p.grand) { const out = beyondWall(d, r.dz); if (out > 1.5 && out < GRAND.moat[1] + 5) return p.moat; }
             return -1e9;
         }
 
         // A bridge carries the road over a stream: its deck, or null.
         function bridge(z) {
             const r = at(z);
+            // A grand city's drawbridges lie level across its moat.
+            if (r.near.grand) { const out = Math.abs(r.dz) - GRAND.A; if (out > GRAND.moat[0] - 6 && out < GRAND.moat[1] + 6) return r.y + 0.12; }
             if (!r.gate || Math.abs(z - r.gate.z) > 11) return null;
             return r.y + 0.45 * Math.cos((z - r.gate.z) / 11 * Math.PI / 2);
         }
@@ -211,7 +234,13 @@ const WayLogic = (() => {
             }
             let margin = half - Math.abs(d);
             if (p.plaza && p.plaza.r) margin = Math.max(margin, p.plaza.r - Math.hypot(d - p.plaza.d, r.dz));
-            if (p.place === 'city') {
+            if (p.grand) {
+                // Three streets across and two lanes along each side, as far as the wall; and the way to the castle's ramp.
+                const out = beyondWall(d, r.dz);
+                for (const cz of GRAND.cross) margin = Math.max(margin, Math.min(2.2 - Math.abs(r.dz - cz), -out - 9));
+                for (const ld of GRAND.lanes) margin = Math.max(margin, Math.min(1.7 - Math.abs(Math.abs(d) - ld), -out - 9));
+                if (Math.hypot(d - p.rock.d, r.dz - p.rock.dz) < p.rock.r1 + 1) margin = Math.min(margin, half - Math.abs(d));
+            } else if (p.place === 'city') {
                 // Side streets: one across the square, lanes behind the first row of houses.
                 margin = Math.max(margin, Math.min(2.2 - Math.abs(r.dz), 66 - Math.abs(d)), Math.min(1.7 - Math.abs(Math.abs(d) - 26), 78 - Math.abs(r.dz)));
             }
@@ -243,12 +272,14 @@ const WayLogic = (() => {
 
         const w = {
             seed, towns, leg, at, roadX, ground, water, surface, bridge, pave, place, lateral, heading, season, biome, cold,
+            moatQ: (x, z) => { const r = at(z); return r.near.grand ? moatQ(beyondWall((x - r.x) * r.cos, r.dz)) : -1e9; },
             lakeQ: (x, z) => { const r = at(z); return lakeQ(r.near, (x - r.x) * r.cos, r.dz, x, z); },
             streamQ: (x, z) => { const r = at(z); return r.gate ? streamQ(r.gate, (x - r.x) * r.cos, z) : -1e9; },
             hash: (i, j, k) => hash(i, j, s(k)),
         };
         w.layout = layouts(w);
         w.scatter = scatters(w);
+        w.solids = solidsOf(w);
         return w;
     }
 
@@ -317,6 +348,111 @@ const WayLogic = (() => {
                     put('spawn', zc + 20, -l.side * 5, { kind: 'cat', n: 1 });
                 }
                 put('sign', zc - span - 14, 2.9);
+            } else if (l.grand) {
+                // A grand city: a curtain wall with a tower at every joint (round, then square), a moat, two gatehouses
+                // with drawbridges; a market square the road crosses; a cathedral and the guilds on one side; and on the
+                // other a rock with the castle on it, reached by a ramp on arches.
+                const G = l.grand, A = G.A, B = G.B, N = 44, sd = l.side, rock = l.rock;
+                const outside = (dz, d) => beyondWall(d, dz);
+                for (let k = 0; k < N; k++) {
+                    const a0 = (k + 0.5) / N * TAU, a1 = (k + 1.5) / N * TAU;
+                    if (k === N - 1 || k === N / 2 - 1) continue;
+                    const [x0, z0] = w.place(zc - Math.cos(a0) * A, Math.sin(a0) * B), [x1, z1] = w.place(zc - Math.cos(a1) * A, Math.sin(a1) * B);
+                    out.push({ k: 'wall', x: x0, z: z0, x1, z1, grand: true });
+                    if (k !== N - 2 && k !== N / 2 - 2) out.push({ k: 'tower', x: x1, z: z1, yaw: a1, h: k % 2 ? 19 : 23, r: k % 2 ? 3.6 : 4.3, square: k % 2 === 1, roof: k % 4 === 0 ? 2 : 1, v: rnd(k, 20), flag: k % 4 === 0, grand: true });
+                }
+                for (const [g, gz] of [zc - A, zc + A].entries()) {
+                    const half = B * Math.sin(Math.PI / N), [x] = w.place(gz, 0), o = g ? 1 : -1;          // o: the way out of this gate
+                    out.push({ k: 'gate', x, z: gz, yaw: w.heading(gz) + (g ? 0 : Math.PI), half, v: rnd(g, 21), grand: true });
+                    out.push({ k: 'drawbridge', x: w.place(gz + o * 11, 0)[0], z: gz + o * 11, yaw: w.heading(gz) + (g ? 0 : Math.PI), d: 0, level: l.moat });
+                    for (const side of [-1, 1]) {
+                        folk(gz - o * 4.5, side * 4.1, 'guard', { faceTo: side * o * Math.PI / 2 });
+                        folk(gz + o * 21, side * 3.4, 'guard', { faceTo: side * o * Math.PI / 2 });
+                        lamp(gz - o * 8, side * 4.2);
+                        lamp(gz + o * 21.5, side * 4.6);
+                    }
+                    // Outside the gate: the last of the country, come to market. Shacks, a stall or two, carts waiting, plots behind fences.
+                    for (let k = 0; k < 6; k++) {
+                        const side = k % 2 ? 1 : -1, z = gz + o * (30 + k * 10.5 + 4 * rnd(g * 9 + k, 60)), d = side * (9.5 + 5 * rnd(g * 9 + k, 61));
+                        put(k === 3 ? 'barn' : 'hut', z, d, { w: 5.2 + 2.6 * rnd(g * 9 + k, 62), dp: 4.6 + 1.2 * rnd(g * 9 + k, 63), floors: 1, roof: 0, v: rnd(g * 9 + k, 64), barn: k === 3, deep: true, crooked: true, outskirts: true }, (rnd(g * 9 + k, 65) - 0.5) * 0.5);
+                        if (k % 3 === 0) put('fence', z + o * 5, side * 5.2, { len: 4 }, Math.PI / 2);
+                    }
+                    put('stall', gz + o * 26, 5.6, { v: rnd(g, 66) }, Math.PI);
+                    put('stall', gz + o * 33, -5.8, { v: rnd(g, 67) }, Math.PI);
+                    folk(gz + o * 26, 4.2, 'stand', { faceTo: Math.PI });
+                    folk(gz + o * 33, -4.4, 'stand', { faceTo: Math.PI });
+                    put('cart', gz + o * 41, o * 4.6, { v: rnd(g, 68) }, o > 0 ? 1.45 : -1.45);
+                    put('cart', gz + o * 55, -o * 5, { v: rnd(g, 69) }, o > 0 ? -1.5 : 1.5);
+                    folk(gz + o * 42.5, o * 3.4, 'chat');
+                    put('clutter', gz + o * 24, -4.7, { v: rnd(g, 70) });
+                    put('spawn', gz + o * 62, -sd * 13, { kind: g ? 'hen' : 'goat', n: 3 });
+                    folk(gz + o * 70, sd * 14, 'hoe');
+                    lamp(gz + o * 38, 3.4);
+                    lamp(gz + o * 58, -3.4);
+                    put('sign', gz + o * 86, 3.1);
+                }
+                put('mill', zc - A - 66, -sd * 36, { v: rnd(71), deep: true });
+                // What stands inside, before the houses: they keep clear of all of it.
+                put('citadel', zc + rock.dz, rock.d, { v: rnd(72), far: true, r0: rock.r0 });
+                put('ramp', zc + rock.dz, sd * 8.5, { v: rnd(73), len: Math.abs(rock.d) - rock.r0 - 8.5, rise: rock.h, far: true }, Math.PI);
+                put('cathedral', zc + 60, -sd * 66, { v: rnd(74), far: true });
+                put('hall', zc - 38, -sd * 39, { v: rnd(75), far: true });
+                put('markethall', zc + 30, -sd * 33, { v: rnd(76) });
+                put('fountain', zc, -sd * 11.5);
+                put('cross', zc - 1, sd * 12, { v: rnd(77) });
+                const clearOf = (dz, d, pad) => Math.hypot(dz, d) > G.plaza + pad && Math.hypot(d - rock.d, dz - rock.dz) > rock.r1 + pad
+                    && !(Math.abs(dz - rock.dz) < 4.5 + pad && d * sd > 3 && d * sd < Math.abs(rock.d))
+                    && !(Math.abs(dz - 60) < 12 + pad && -d * sd > 38 - pad && -d * sd < 94 + pad) && !(Math.abs(dz + 38) < 12.5 + pad && -d * sd > 30 - pad && -d * sd < 48 + pad)
+                    && !(Math.abs(dz - 30) < 7.5 + pad && -d * sd > 26 - pad && -d * sd < 40 + pad);
+                // Streets of tall houses: two rows fronting the high street and each lane.
+                let n = 0;
+                for (const side of [-1, 1]) {
+                    for (const [row, base] of [[0, 4.6], [1, 13], [2, 28.4], [3, 36.8], [4, 53.6], [5, 62]]) {
+                        for (let z = zc - A + 13 + 5 * rnd(row, side + 3); z < zc + A - 13; n++) {
+                            const guild = side === -sd && row < 4 && z - zc < -8 && z - zc > -70;
+                            const wd = (guild ? 7.4 : 5.4) + 3 * rnd(n, 22), dp = 6.6 + 1.2 * rnd(n, 23), zm = z + wd / 2, back = row % 2 === 1, set = row === 0 ? base + 1.0 * rnd(n, 30) : base, d = side * (set + dp / 2), dz = zm - zc;
+                            const onStreet = G.cross.some(c => Math.abs(dz - c) < wd / 2 + 2.6);
+                            if (!onStreet && clearOf(dz, d, Math.max(wd, dp) / 2 + 2.4) && outside(dz + wd / 2, d + side * dp / 2) < -10 && outside(dz - wd / 2, d + side * dp / 2) < -10) {
+                                const floors = row === 0 ? 3 + (rnd(n, 24) < 0.4 ? 1 : 0) : row < 4 ? 2 + (rnd(n, 24) < 0.5 ? 1 : 0) : 1 + (rnd(n, 24) < 0.6 ? 1 : 0);
+                                put('house', zm, d, { w: wd, dp, floors: guild ? Math.max(floors, 3) : floors, roof: guild ? 2 : rnd(n, 25) < 0.7 ? 1 : 2, v: rnd(n, 26), jetty: rnd(n, 27) < 0.75, shop: guild || (row === 0 && rnd(n, 28) < 0.45), guild, stoneBase: guild || rnd(n, 31) < 0.4, crooked: !guild && rnd(n, 32) < 0.4, row }, (back ? Math.PI : 0) + (rnd(n, 33) - 0.5) * 0.08);
+                                if (row === 0 && rnd(n, 34) < 0.5) put('clutter', zm + (rnd(n, 35) < 0.5 ? -0.32 : 0.32) * wd, side * (set - 0.55), { v: rnd(n, 36) });
+                                else if (row === 0 && rnd(n, 34) < 0.75) put('planter', zm + 0.3 * wd, side * (set - 0.5), { v: rnd(n, 37) });
+                            }
+                            z += wd + 0.5 + (rnd(n, 29) < 0.15 ? 2.6 : 0);
+                        }
+                    }
+                }
+                // The market: stalls in two arcs either side of the road, under awnings.
+                for (let k = 0; k < 12; k++) {
+                    const a = (k + 0.5) / 12 * TAU, ring = k % 2 ? 18.5 : 13, dz = Math.cos(a) * ring, d = Math.sin(a) * ring;
+                    if (Math.abs(d) < 6.2 || Math.hypot(dz, d + sd * 11.5) < 5.4 || Math.hypot(dz + 1, d - sd * 12) < 3.4) continue;
+                    put('stall', zc + dz, d, { v: rnd(k, 31) }, Math.PI);
+                    folk(zc + dz, d - Math.sign(d) * 1.9, 'stand', { faceTo: Math.PI });
+                }
+                put('board', zc - 19, -sd * 5.8);
+                put('bench', zc + 17.5, sd * 5.4);
+                put('bench', zc - 8, -sd * 17, {}, 0.6);
+                put('cart', zc + 12, sd * 17, { v: rnd(35) }, 0.6);
+                put('cart', zc - 15, -sd * 15, { v: rnd(36) }, -0.9);
+                for (const side of [-1, 1]) for (let z = zc - 118; z < zc + 120; z += 24) { const dz = z - zc + 6; if (clearOf(dz, side * 24.3, 5) && outside(dz, side * 30) < -12) put('washing', zc + dz, side * 24.3, { span: 8.2, v: rnd(z, 39) }); }
+                for (let z = zc - A + 12; z < zc + A - 8; z += 14) {
+                    if (Math.abs(z - zc) < G.plaza - 2) continue;
+                    lamp(z, (Math.round(z / 14) % 2 ? 1 : -1) * 4);
+                    if (Math.round(z / 14) % 2 && Math.abs(z - zc) > G.plaza + 6) put('bunting', z + 4, 0, { span: 9.8 });
+                }
+                for (let k = 0; k < 8; k++) { const a = (k + 0.5) / 8 * TAU; lamp(zc + Math.cos(a) * (G.plaza - 1.5), Math.sin(a) * (G.plaza - 1.5)); }
+                for (let k = 0; k < 16; k++) folk(zc - 120 + 240 * rnd(40 + k), (k % 2 ? 1 : -1) * (1.5 + 1.5 * rnd(50 + k)), 'stroll', { range: 14 + 26 * rnd(60 + k) });
+                for (let k = 0; k < 7; k++) { const a = k / 7 * TAU + 0.5; folk(zc + Math.cos(a) * 8.5, Math.sin(a) * 8.5 + (Math.sin(a) > 0 ? 3.2 : -3.2), k % 2 ? 'chat' : 'stand', { faceTo: a + 2 }); }
+                folk(zc + rock.dz + 2.6, sd * 7.2, 'guard', { faceTo: -sd * Math.PI / 2 });
+                folk(zc + rock.dz - 2.6, sd * 7.2, 'guard', { faceTo: -sd * Math.PI / 2 });
+                folk(zc + 17.5, sd * 5.1, 'sit');
+                put('spawn', zc + 6, sd * 7, { kind: 'child', n: 3 });
+                put('spawn', zc - 9, -sd * 7.5, { kind: 'pigeon', n: 8 });
+                put('spawn', zc + 52, -sd * 30, { kind: 'pigeon', n: 5 });
+                put('drywall', zc - 52, 4.2, { v: rnd(37) }, -Math.PI / 2);
+                put('spawn', zc - 52, 4.2, { kind: 'cat', n: 1, perch: 0.78 });
+                put('spawn', zc + 84, -4.6, { kind: 'cat', n: 1 });
+                put('sign', zc - A - 104, 3.1);
             } else if (l.place === 'city') {
                 // Walls on an oval the road runs through, gate to gate.
                 const A = 104, B = 76, gateZ = [zc - A, zc + A];
@@ -466,6 +602,10 @@ const WayLogic = (() => {
                     const kinds = TREES[b.biome], roll = w.hash(gi, gj, 35), kind = kinds.find(k => roll < k[1])[0];
                     if (ad < (kind === 'willow' ? 9.5 : kind === 'fir' || kind === 'elder' ? 6.6 : 5.6)) continue;        // the wide ones stand further back
                     if (p.radius && Math.hypot(d, r.dz) < p.radius * 1.12) continue;
+                    const town = r.a.grand ? r.a : r.b.grand ? r.b : null;
+                    if (town && Math.abs(z - town.zc) < GRAND.A + 112 && ad < 48) continue;          // the fields and shacks outside its gates
+                    // And further out the woods stand back from the road, so the towers are seen from a long way off.
+                    if (town && Math.abs(z - town.zc) < GRAND.A + 420 && ad < 70 && w.hash(gi, gj, 38) < 0.9 * smooth(GRAND.A + 420, GRAND.A + 300, Math.abs(z - town.zc))) continue;
                     if (p.mound && Math.hypot(d - p.mound.d, r.dz) < 34) continue;
                     if (p.place !== 'none' && !p.radius && Math.hypot(d - p.side * 16, r.dz) < 15) continue;
                     const y = w.ground(x, z);
@@ -477,7 +617,7 @@ const WayLogic = (() => {
             const li = Math.floor((z0 + CHUNK / 2) / SLOT);
             for (const i of [li - 1, li, li + 1]) {
                 for (const item of w.layout(i)) {
-                    if (!inside(item.x, item.z) || (far && !(item.far || item.k === 'house' || item.k === 'tower' || item.k === 'wall' || item.k === 'gate' || item.k === 'keep' || item.k === 'spire' || item.k === 'mill' || item.k === 'chapel' || item.k === 'barn'))) continue;
+                    if (!inside(item.x, item.z) || (far && !(item.far || item.k === 'cathedral' || item.k === 'hall' || item.k === 'citadel' || item.k === 'ramp' || item.k === 'house' || item.k === 'tower' || item.k === 'wall' || item.k === 'gate' || item.k === 'keep' || item.k === 'spire' || item.k === 'mill' || item.k === 'chapel' || item.k === 'barn'))) continue;
                     out.push({ ...item, y: w.ground(item.x, item.z) });
                 }
             }
@@ -492,7 +632,9 @@ const WayLogic = (() => {
                     const x = (gi + w.hash(gi, gj, 41)) * FINE, z = (gj + w.hash(gi, gj, 42)) * FINE;
                     const r = w.at(z), d = (x - r.x) * r.cos, ad = Math.abs(d), b = w.hash(gi, gj, 43) < r.t ? r.b : r.a;
                     if (ad < 2.5 || pick > 0.5 * (1 - smooth(14, 60, ad)) + 0.05) continue;
-                    if ((r.near.radius && Math.hypot(d, r.dz) < r.near.radius) || onCamp(x, z, 4.6)) continue;
+                    if ((r.near.radius && Math.hypot(d, r.dz) < r.near.radius && !(r.near.grand && beyondWall(d, r.dz) > 2)) || onCamp(x, z, 4.6)) continue;
+                    const town = r.a.grand ? r.a : r.b.grand ? r.b : null;
+                    if (town && Math.abs(z - town.zc) < GRAND.A + 100 && ad < 22 && Math.abs(z - town.zc) > GRAND.A) continue;
                     const y = w.ground(x, z), level = w.water(x, z), roll = w.hash(gi, gj, 44), v = w.hash(gi, gj, 45);
                     if (y < level - 0.05) { if (y > level - 0.9 && roll < 0.5) out.push({ k: 'reed', x, z, y: level, v, s: 0.8 + 0.6 * roll }); else if (roll > 0.8 && y > level - 2.5 && r.near.lake) out.push({ k: 'lily', x, z, y: level, v, s: 1 }); continue; }
                     if (y < level + 0.5) { if (roll < 0.6) out.push({ k: 'reed', x, z, y, v, s: 0.7 + 0.5 * roll }); continue; }
@@ -554,6 +696,84 @@ const WayLogic = (() => {
         };
     }
 
+    // ---- What a camera could be inside ---------------------------------------------------------
+    // The solid things rooted in a square, as upright drums { x, z, r, y0, y1 } and boxes { x, z, yaw, hw, hd, y0, y1 }
+    // (hw across, hd along the way the thing faces). Generous: a roof is its whole block.
+    function solidsOf(w) {
+        const cache = new Map();
+        const drum = (out, x, z, r, y0, y1) => out.push({ x, z, r, y0, y1 });
+        const box = (out, item, hw, hd, y0, y1, along = 0, across = 0) => { const s = Math.sin(item.yaw || 0), c = Math.cos(item.yaw || 0); out.push({ x: item.x + c * across + s * along, z: item.z - s * across + c * along, yaw: item.yaw || 0, hw, hd, y0, y1 }); };
+        return function solids(cx, cz) {
+            const key = cx + ',' + cz;
+            let out = cache.get(key);
+            if (out) return out;
+            out = [];
+            for (const it of w.scatter(cx, cz)) {
+                const y = it.y, k = it.k;
+                if (k === 'tree') {
+                    const sc = it.s * 1.25, slim = it.kind === 'fir' || it.kind === 'poplar' || it.kind === 'birch';
+                    drum(out, it.x, it.z, 0.6 * sc, y - 1, y + 3.2 * sc);
+                    if (it.kind !== 'snag') drum(out, it.x, it.z, (slim ? 2.1 : 3.3) * sc, y + (it.kind === 'fir' ? 1.6 : 2.4) * sc, y + (it.kind === 'poplar' ? 11.6 : 8.6) * sc);
+                } else if (k === 'house' || k === 'hut' || k === 'barn') box(out, it, it.w / 2 + 0.9, it.dp / 2 + 1.2, y - 1, y + 1.2 + it.floors * 3 + (Math.min(it.w, it.dp) / 2 + 0.6) * 1.4);
+                else if (k === 'wall') { const dx = it.x1 - it.x, dz = it.z1 - it.z; out.push({ x: it.x + dx / 2, z: it.z + dz / 2, yaw: Math.atan2(dx, dz), hw: 1.7, hd: Math.hypot(dx, dz) / 2 + 0.5, y0: y - 4, y1: y + (it.grand ? 16 : 12.4) }); }
+                else if (k === 'tower') drum(out, it.x, it.z, it.r * (it.square ? 1.5 : 1.3) + 0.4, y - 2, y + it.h + 2 + it.r * 2.3);
+                else if (k === 'gate') { const far = it.grand ? 8.6 : 6.4; for (const side of [-1, 1]) drum(out, it.x + Math.cos(it.yaw) * side * far, it.z - Math.sin(it.yaw) * side * far, it.grand ? 5.6 : 4.4, y - 2, y + (it.grand ? 36 : 27)); box(out, it, it.grand ? 4.4 : 3.8, it.grand ? 4.2 : 2, y + (it.grand ? 7.2 : 6.6), y + (it.grand ? 22 : 15.2)); }
+                else if (k === 'keep') box(out, it, 11, 11, y - 1, y + 40);
+                else if (k === 'spire') box(out, it, 6.6, 17.5, y - 1, y + 49, -3);
+                else if (k === 'chapel') box(out, it, 4.6, 10.5, y - 1, y + 17, -2);
+                else if (k === 'castle') box(out, it, 16.5, 13.5, y - 2, y + 36);
+                else if (k === 'citadel') drum(out, it.x, it.z, it.r0 + 2.5, y - 16, y + 62);
+                else if (k === 'ramp') box(out, it, 3.2, it.len / 2 + 1, y - 1, y + it.rise + 2.4, it.len / 2);
+                else if (k === 'cathedral') box(out, it, 11.5, 29, y - 1, y + 62, -22);
+                else if (k === 'hall') box(out, it, 12.5, 8.5, y - 1, y + 34);
+                else if (k === 'markethall') box(out, it, 7.4, 5.4, y - 1, y + 9.5);
+                else if (k === 'mill') drum(out, it.x, it.z, 8.4, y - 1, y + 19);
+                else if (k === 'lighthouse') drum(out, it.x, it.z, 3.9, y - 2, y + 23);
+                else if (k === 'elder') { drum(out, it.x, it.z, 3.6, y - 1, y + 10); drum(out, it.x, it.z, 9.6, y + 6.5, y + 19.5); }
+                else if (k === 'ruin' || k === 'abbey') box(out, it, 10.5, 3.4, y - 1, y + (k === 'ruin' ? 13 : 7.5));
+                else if (k === 'stone') drum(out, it.x, it.z, 1.4, y - 1, y + 1.2 + (it.flat ? 0.6 : 1.7 * it.h));
+                else if (k === 'shroom' && it.tree) { drum(out, it.x, it.z, 3.2, y - 1, y + 21); drum(out, it.x, it.z, 14.5, y + 17, y + 27); }
+                else if (k === 'fountain' || k === 'cross') drum(out, it.x, it.z, 3, y - 1, y + (k === 'cross' ? 7 : 3.6));
+                else if (k === 'stall' || k === 'well' || k === 'cart' || k === 'board') drum(out, it.x, it.z, 1.9, y - 1, y + 3.3);
+                else if (k === 'cairn' || k === 'shrine' || k === 'clutter' || k === 'rock' || k === 'bush' || k === 'logs') drum(out, it.x, it.z, 1.1, y - 1, y + (k === 'cairn' ? 3 : 1.5));
+            }
+            if (cache.size > 80) cache.clear();
+            cache.set(key, out);
+            return out;
+        };
+    }
+    const within = (o, x, y, z, pad) => {
+        if (y < o.y0 - pad || y > o.y1 + pad) return false;
+        const dx = x - o.x, dz = z - o.z;
+        if (o.r !== undefined) return dx * dx + dz * dz < (o.r + pad) * (o.r + pad);
+        const s = Math.sin(o.yaw), c = Math.cos(o.yaw);
+        return Math.abs(c * dx - s * dz) < o.hw + pad && Math.abs(s * dx + c * dz) < o.hd + pad;
+    };
+    // Whether a point is in the open: above the ground and the water and inside nothing (pad metres to spare).
+    function inOpen(w, x, y, z, pad = 0.3) {
+        if (y < Math.max(w.surface(x, z), w.water(x, z)) + pad) return false;
+        const cx = Math.floor(x / CHUNK), cz = Math.floor(z / CHUNK);
+        for (let j = -1; j <= 1; j++) for (let i = -1; i <= 1; i++) for (const o of w.solids(cx + i, cz + j)) if (within(o, x, y, z, pad)) return false;
+        return true;
+    }
+    // How far the air is clear from a point along a direction, up to `far` metres: a swept test against the
+    // ground, the water and whatever stands near.
+    const near = [];
+    function sightline(w, from, dir, far) {
+        const x1 = from[0] + dir[0] * far, z1 = from[2] + dir[2] * far, R = 31;
+        const i0 = Math.floor((Math.min(from[0], x1) - R) / CHUNK), i1 = Math.floor((Math.max(from[0], x1) + R) / CHUNK), j0 = Math.floor((Math.min(from[2], z1) - R) / CHUNK), j1 = Math.floor((Math.max(from[2], z1) + R) / CHUNK);
+        const mx = (from[0] + x1) / 2, mz = (from[2] + z1) / 2, reach = far / 2 + 1;
+        near.length = 0;
+        for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) for (const o of w.solids(i, j)) if (Math.hypot(o.x - mx, o.z - mz) < reach + (o.r !== undefined ? o.r : Math.hypot(o.hw, o.hd))) near.push(o);
+        for (let t = 0.7; t < far + 0.6; t += 0.3 + t * 0.012) {
+            const x = from[0] + dir[0] * t, y = from[1] + dir[1] * t, z = from[2] + dir[2] * t;
+            let hit = t > 1.4 && y < Math.max(w.surface(x, z), w.water(x, z)) + 0.3;
+            for (let k = 0; !hit && k < near.length; k++) hit = within(near[k], x, y, z, 0.45);
+            if (hit) return Math.max(0.9, t - 0.75);
+        }
+        return far;
+    }
+
     // A place to rest every 120 m or so, off the road: where, or null when
     // the ground there won't do (a town, water, a bridge).
     function camp(w, k) {
@@ -562,6 +782,7 @@ const WayLogic = (() => {
         if (r.near.radius && Math.abs(r.dz) < r.near.radius + 24) return null;
         if (r.gate && Math.abs(z - r.gate.z) < 30) return null;
         if (r.near.place !== 'none' && Math.abs(r.dz) < 40) return null;
+        for (const l of [r.a, r.b]) if (l.grand && Math.abs(z - l.zc) < GRAND.A + 125) return null;
         const [x] = w.place(z, d), y = w.ground(x, z);
         if (y < w.water(x, z) + 0.6 || Math.abs(y - r.y) > 1.2) return null;
         return { z, d, x, y, side, v: w.hash(k, 3, 53), slot: k, tended: w.hash(k, 4, 53) < 0.3 };
@@ -649,7 +870,9 @@ const WayLogic = (() => {
     function sight(w, z) {
         const r = w.at(z), p = r.near, dz = r.dz;
         if ((p.lake || p.sea) && Math.abs(dz + 30) < 3) return { id: p.i * 4, look: (p.lake || p.sea).side };
-        if (p.place === 'city' && Math.abs(dz + 150) < 3) return { id: p.i * 4 + 1, look: 0 };
+        // Before a grand city's gate: the whole of it, and the castle above the wall.
+        if (p.grand && Math.abs(dz + GRAND.A + 34) < 3) return { id: p.i * 4 + 1, look: p.side * 0.3, long: 5 };
+        if (p.place === 'city' && !p.grand && Math.abs(dz + 150) < 3) return { id: p.i * 4 + 1, look: 0 };
         if (p.mound && Math.abs(dz + 60) < 3) return { id: p.i * 4 + 2, look: Math.sign(p.mound.d) * 0.7 };
         if (!p.radius && p.place !== 'none' && !p.mound && Math.abs(dz + 8) < 3) return { id: p.i * 4 + 3, look: p.side };
         return null;
@@ -663,7 +886,7 @@ const WayLogic = (() => {
         j.sinceGaze += dt;
         if (j.mode === 'walk') {
             const s = options.rests && j.sinceGaze > 40 ? sight(w, j.z) : null;
-            if (s && s.id !== j.gazed) { j.mode = 'gaze'; j.gazed = s.id; j.timer = 5 + 3 * w.hash(s.id, 0, 70); j.gaze = s.look; }
+            if (s && s.id !== j.gazed) { j.mode = 'gaze'; j.gazed = s.id; j.timer = 5 + 3 * w.hash(s.id, 0, 70) + (s.long || 0); j.gaze = s.look; }
             else if (options.camps && options.night > 0.75 && j.sinceRest > 200) {
                 const c = nextCamp(w, j.z - 6);
                 if (c && c.z - j.z < 9) { j.mode = 'toCamp'; j.camp = c; }
@@ -702,6 +925,272 @@ const WayLogic = (() => {
         return { x, y, z: j.z, heading: w.heading(j.z) + j.look * 1.2 };
     }
 
+    // ---- Companions --------------------------------------------------------------------------
+    // Who can walk with the traveller. group: how the panel sorts them. role: what they do on the road (heel: keep
+    // their place; scout: run ahead and wait; lag: stop to sniff, then catch up; chase: go after butterflies; herd:
+    // weave about behind; zoom: sudden mad dashes; led: on a rope; plod: steady, a little behind; fly and soar:
+    // circle overhead; flit: fly low, and walk; hover: float at the shoulder; ride: on the pack). top: m/s flat out.
+    // big: metres of room it wants. rest: what it does when the traveller stops (sit, curl, lie, belly, graze, perch,
+    // tuck, hover, stand). nerve: brave ones point at a deer, shy ones hide behind the traveller.
+    // The named cats are the owner's own, by the names and coats they have in The Cat vs. the Ornament (SPEC §10.27)
+    // and on Sky Island (§10.31): `from` says where, `coat` is that roster's.
+    const pal = (id, label, group, role, top, big, rest, more = {}) => ({ id, label, group, role, top, big, rest, ...more });
+    const COMPANIONS = [
+        pal('moofy', '🐈‍⬛ Moofy', 'cats', 'lag', 4.5, 0.4, 'curl', { cat: true, coat: 'black-fluffy', from: ['cat-ornament', 'sky-island'] }),
+        pal('butters', '🐈 Butters', 'cats', 'heel', 4, 0.4, 'belly', { cat: true, coat: 'buff-tabby', from: ['cat-ornament', 'sky-island'], close: true }),
+        pal('waffles', '🐄 Waffles', 'cats', 'scout', 5, 0.35, 'sit', { cat: true, coat: 'holstein', from: ['cat-ornament', 'sky-island'] }),
+        pal('ras', '🤵 Ras The Destroyer', 'cats', 'chase', 5.5, 0.35, 'sit', { cat: true, coat: 'tuxedo', from: ['cat-ornament', 'sky-island'] }),
+        pal('ibbie', '😴 Ibbie', 'cats', 'ride', 4, 0.3, 'curl', { cat: true, coat: 'grey-tabby', from: ['cat-ornament', 'sky-island'] }),
+        pal('maus', '🦇 Maus', 'cats', 'zoom', 7, 0.3, 'sit', { cat: true, coat: 'tortie', from: ['cat-ornament', 'sky-island'] }),
+        pal('turkey', '🦃 Turkey', 'cats', 'plod', 4, 0.45, 'belly', { cat: true, coat: 'grey-mottled', from: ['cat-ornament', 'sky-island'] }),
+        pal('harry', '🧡 Harry', 'cats', 'chase', 5.5, 0.35, 'sit', { cat: true, coat: 'orange-white', from: ['cat-ornament', 'sky-island'] }),
+        pal('kittytoes', '👑 Kitty Toes', 'cats', 'heel', 4, 0.4, 'sit', { cat: true, coat: 'blue-persian', from: ['cat-ornament', 'sky-island'], aloof: true }),
+        pal('cat', '🐈 A stray tabby', 'cats', 'scout', 5, 0.35, 'curl'),
+        pal('dog', '🐕 A good brown dog', 'dogs', 'heel', 6, 0.5, 'sit', { nerve: 1 }),
+        pal('hound', '🐕‍🦺 A long-eared hound', 'dogs', 'lag', 6.5, 0.55, 'lie', { nerve: 1 }),
+        pal('sheepdog', '🐑 A sheepdog', 'dogs', 'herd', 7, 0.5, 'lie', { nerve: 1 }),
+        pal('pup', '🐶 A terrier pup', 'dogs', 'chase', 5.5, 0.35, 'sit', { nerve: 1 }),
+        pal('pony', '🐴 A pack pony', 'farm', 'led', 5, 1.1, 'graze'),
+        pal('donkey', '🫏 A donkey with panniers', 'farm', 'led', 4.5, 1.0, 'graze'),
+        pal('goat', '🐐 A goat with a bell', 'farm', 'lag', 5, 0.6, 'graze'),
+        pal('pig', '🐖 A pig', 'farm', 'lag', 4, 0.6, 'lie'),
+        pal('lamb', '🐑 A lamb', 'farm', 'heel', 5, 0.45, 'lie', { nerve: -1, gambol: true }),
+        pal('goose', '🪿 A goose', 'farm', 'heel', 3.5, 0.45, 'tuck', { bird: true, grounded: true }),
+        pal('hen', '🐔 A hen', 'farm', 'ride', 3, 0.3, 'tuck', { bird: true, grounded: true, nerve: -1 }),
+        pal('duck', '🦆 A duck and her ducklings', 'farm', 'heel', 3, 0.5, 'tuck', { bird: true, grounded: true, brood: 3 }),
+        pal('fox', '🦊 A fox', 'wild', 'scout', 6.5, 0.4, 'curl'),
+        pal('badger', '🦡 A badger', 'wild', 'heel', 4, 0.5, 'lie'),
+        pal('otter', '🦦 An otter', 'wild', 'scout', 5.5, 0.45, 'lie'),
+        pal('hedgehog', '🦔 A hedgehog', 'wild', 'ride', 2.5, 0.25, 'curl'),
+        pal('hare', '🐇 A snow hare', 'wild', 'scout', 7, 0.35, 'sit', { nerve: -1 }),
+        pal('fawn', '🦌 A spotted fawn', 'wild', 'heel', 7, 0.5, 'lie', { nerve: -1, gambol: true }),
+        pal('cub', '🐻 A bear cub', 'wild', 'lag', 5, 0.6, 'sit'),
+        pal('squirrel', '🐿️ A red squirrel', 'wild', 'ride', 5, 0.25, 'sit'),
+        pal('tortoise', '🐢 A moss-backed tortoise', 'wild', 'plod', 3.4, 0.6, 'tuck'),
+        pal('frog', '🐸 A big green frog', 'wild', 'heel', 4.5, 0.3, 'sit'),
+        pal('raven', '🐦‍⬛ A raven', 'wild', 'fly', 9, 0.3, 'perch', { bird: true }),
+        pal('owl', '🦉 An owl', 'wild', 'fly', 8, 0.35, 'perch', { bird: true, nocturnal: true }),
+        pal('hawk', '🦅 A hawk', 'wild', 'soar', 12, 0.35, 'perch', { bird: true }),
+        pal('wisp', '✨ A wisp of light', 'fantastic', 'hover', 6, 0.3, 'hover', { light: [0.5, 0.9, 0.8] }),
+        pal('lantern', '🏮 A paper-lantern spirit', 'fantastic', 'hover', 5, 0.35, 'hover', { light: [1, 0.6, 0.28] }),
+        pal('whelp', '🐉 A dragon whelp', 'fantastic', 'flit', 7, 0.5, 'curl'),
+        pal('beetle', '🪲 A clockwork beetle', 'fantastic', 'heel', 4, 0.35, 'tuck', { light: [1, 0.75, 0.3] }),
+        pal('tinker', '🤖 A little brass automaton', 'fantastic', 'heel', 3.6, 0.4, 'sit', { light: [1, 0.7, 0.3] }),
+        pal('mushling', '🍄 A mushroom-folk child', 'fantastic', 'lag', 3.6, 0.4, 'tuck', { nerve: -1 }),
+        pal('cloudlet', '🌧️ A small cloud of your own', 'fantastic', 'hover', 5, 0.5, 'hover', { high: 2.75 }),
+        pal('tome', '📖 A spellbook that flaps along', 'fantastic', 'hover', 6, 0.35, 'perch'),
+        pal('moth', '🦋 A moon moth', 'fantastic', 'hover', 6, 0.3, 'perch', { light: [0.6, 1, 0.7] }),
+        pal('snail', '🐌 A great snail with a lit window', 'fantastic', 'plod', 3.2, 0.7, 'tuck', { light: [1, 0.7, 0.3] }),
+        pal('pebble', '🪨 A boulderling', 'fantastic', 'heel', 3.8, 0.4, 'tuck'),
+    ];
+    const COMPANION = Object.fromEntries(COMPANIONS.map(c => [c.id, c]));
+    const GROUPS = ['cats', 'dogs', 'farm', 'wild', 'fantastic'];
+    // Who comes along. options: { count (0 to 6), pick: 'surprise', one of GROUPS, or 'choose', choice: [ids] }.
+    // The same seed is the same party. Surprise always brings one of the named cats, then one from each other
+    // group in turn; a group smaller than the count doubles up (two hounds), but never the named cats.
+    function party(seed, options = {}) {
+        const count = clamp(Math.round(options.count ?? 3), 0, 6), pick = options.pick || 'surprise';
+        if (pick === 'choose') return (options.choice || []).filter(id => COMPANION[id]).slice(0, 6);
+        const shuffled = (list, salt) => list.map((c, i) => [hash(seed, i * 31 + salt, 9173), c]).sort((a, b) => a[0] - b[0]).map(e => e[1]);
+        const out = [], has = fn => out.some(id => fn(COMPANION[id]));
+        // Not two on a rope, nor two on the pack, when it is left to chance.
+        const fits = c => !(c.role === 'led' && has(o => o.role === 'led')) && !(c.role === 'ride' && has(o => o.role === 'ride'));
+        if (GROUPS.includes(pick)) {
+            const pool = shuffled(COMPANIONS.filter(c => c.group === pick), 1);
+            for (const c of pool) if (out.length < count && fits(c)) out.push(c.id);
+            for (let lap = 0; out.length < count && lap < 6; lap++) for (const c of pool) if (out.length < count && !c.cat) out.push(c.id);
+            return out;
+        }
+        const order = [COMPANIONS.filter(c => c.group === 'cats'), ...shuffled(GROUPS.slice(1), 2).map(g => COMPANIONS.filter(c => c.group === g))];
+        for (let k = 0; out.length < count; k++) { const pool = shuffled(order[k % order.length], 3 + k).filter(c => !out.includes(c.id) && fits(c) && (k || c.cat)); if (pool.length) out.push(pool[0].id); }
+        return out;
+    }
+
+    // Each has a place about the traveller, in the road's own terms: metres ahead and metres to their right. Kept
+    // on the road's own width (the verge is full of fences, lamps and bushes) and out of the middle of the picture.
+    const STATIONS = [[2.5, -1.5], [1.2, 1.7], [-1.7, -1.6], [3.9, 1.0], [-3.0, -0.8], [0.3, -2.3]];
+    // And a place by the fire: metres along the road from it, and metres beyond it (away from the road, where the traveller looks).
+    const HEARTH = [[1.6, 0.5], [0.3, 1.8], [-1.3, 1.3], [2.1, -1.0], [-2.4, -0.4], [1.2, -2.3]];
+    const turnTo = (yaw, to, k) => { let turn = (to - yaw) % TAU; if (turn > Math.PI) turn -= TAU; if (turn < -Math.PI) turn += TAU; return yaw + turn * Math.min(1, k); };
+    function companionStart(id, slot) {
+        const kind = COMPANION[id];
+        return { id, kind, slot, role: kind.role, x: null, z: 0, y: 0, yaw: 0, speed: 0, gait: 0, rest: 0, down: 0, alt: 0, wing: 0, riding: 0, alarm: 0, bank: 0, mode: 'go', timer: 4 + 3 * slot, since: 0, prey: null, turn: slot * 2.1, cool: 0, still: 0 };
+    }
+    // A whole party, in order: later ones give way to earlier ones. Two who would ride: the second walks.
+    function partyStart(ids) {
+        const out = ids.map((id, slot) => companionStart(id, slot));
+        let riders = 0, led = 0;
+        for (const c of out) { if (c.role === 'ride' && riders++) c.role = 'heel'; if (c.role === 'led' && led++) c.led2 = true; }
+        return out;
+    }
+    // One step of one companion's own small life. ctx: { t (seconds), night (0 to 1), passing (somebody is coming the
+    // other way), others (the party), scare ({ x, z } of a deer or a rabbit near by, or null), random }.
+    function companionStep(c, dt, w, j, ctx) {
+        const kind = c.kind, r = w.at(j.z), me = standing(j, w), random = ctx.random, others = ctx.others || [];
+        const ease = (v, to, secs) => v + (to - v) * (1 - Math.exp(-dt / secs));
+        const camping = (j.mode === 'camp' || j.mode === 'toCamp') && j.camp, stopped = j.speed < 0.25;
+        c.still = stopped ? c.still + dt : 0;
+        c.timer -= dt; c.cool -= dt; c.since += dt;
+        c.alarm = Math.max(0, c.alarm - dt / 2.5);
+        // Where it would like to be, in the road's terms (ahead, to the right), and what it is doing there.
+        const st = STATIONS[c.slot % STATIONS.length];
+        let ahead = st[0] + 0.5 * Math.sin(ctx.t / (7 + c.slot) + c.slot * 2), side = st[1] + 0.35 * Math.sin(ctx.t / (9.3 + c.slot) + c.slot), rest = 0, down = 0, role = c.role, fly = 0, high = 0, haste = 1;
+        if (kind.nocturnal) role = ctx.night > 0.5 ? 'fly' : 'ride';                         // an owl sleeps the day away on a shoulder
+        if (kind.close) { ahead = -0.2 + 0.2 * Math.sin(ctx.t / 5); side = 0.75; }                // at the heel
+        if (kind.aloof) side += Math.sign(side) * 0.5;
+        if (role === 'led') { ahead = c.led2 ? -2.9 : 2.7; side = c.led2 ? -1.1 : -1.5; }
+        if (role === 'plod') { ahead = -1.8 - 0.4 * c.slot; side = c.slot % 2 ? 1.9 : -1.7; }
+        if (role === 'herd') { ahead = -2.6 + 0.5 * Math.sin(ctx.t / 3.1); side = 2.3 * Math.sin(ctx.t / 2.3); haste = 1.6; }
+        if (role === 'scout') {
+            // Out ahead; then it sits and waits to be caught up.
+            if (c.mode === 'go' && c.timer < 0) { c.mode = 'wait'; c.timer = 30; }
+            if (c.mode === 'wait') { rest = stopped || c.still > 0 ? 1 : 0.85; if (c.z - j.z < 2.6 || c.timer < 0) { c.mode = 'go'; c.timer = 5 + 6 * random(); } }
+            ahead = c.mode === 'go' ? 7.5 + 2 * Math.sin(c.slot) : (c.z - j.z) / r.cos;
+            if (c.mode === 'wait') side = lateralOf(w, c) - j.d;
+            haste = 1.5;
+        }
+        if (role === 'lag') {
+            // Something by the road wants looking into: nose down a while, then a run to catch up.
+            if (c.mode === 'go' && c.timer < 0 && !stopped) { c.mode = 'sniff'; c.timer = 3 + 3 * random(); }
+            if (c.mode === 'sniff') { down = 1; ahead = (c.z - j.z) / r.cos; side = lateralOf(w, c) - j.d; if (c.timer < 0 || ahead < -7.5) { c.mode = 'go'; c.timer = 11 + 14 * random(); } }
+            else if ((c.z - j.z) / r.cos < st[0] - 2) haste = 1.9;
+        }
+        if (role === 'chase' || role === 'zoom') {
+            // A butterfly over the road (or nothing at all, for a cat with the wind in her tail).
+            if (c.mode === 'go' && c.timer < 0 && !stopped) { c.mode = 'dart'; c.timer = role === 'zoom' ? 3.2 : 5; c.prey = { a: 3 + 3 * random(), s: (random() < 0.5 ? -1 : 1) * (0.6 + 1.5 * random()), turn: random() * TAU }; }
+            if (c.mode === 'dart') {
+                const p = c.prey;
+                p.turn += dt * (role === 'zoom' ? 5.5 : 2.2);
+                ahead = role === 'zoom' ? 3.5 + 3.4 * Math.cos(p.turn) : p.a + 1.1 * Math.sin(p.turn * 0.7); side = role === 'zoom' ? 2.0 * Math.sin(p.turn * 1.3) : p.s + 0.8 * Math.cos(p.turn);
+                haste = role === 'zoom' ? 3 : 1.8;
+                if (c.timer < 0) { c.mode = 'go'; c.timer = (role === 'zoom' ? 14 : 9) + 14 * random(); c.prey = null; }
+            }
+        }
+        // Somebody wild near the road: the dogs point, the timid get behind the traveller's legs.
+        if (ctx.scare && kind.nerve && c.cool < 0 && Math.hypot(ctx.scare.x - me.x, ctx.scare.z - me.z) < 17) { c.cool = 24; c.alarm = 1; c.startle = { x: ctx.scare.x, z: ctx.scare.z }; }
+        if (c.alarm > 0.05 && c.startle) {
+            const toward = Math.sign(w.lateral(c.startle.x, c.startle.z) - j.d) || 1;
+            if (kind.nerve > 0) { ahead = clamp((c.startle.z - j.z) / r.cos, -3, 5); side = toward * 2.3; haste = 2.2; } else { ahead = -0.7; side = -toward * 0.8; haste = 2.4; }
+        } else c.startle = null;
+        if (c.bristle) { if (c.alarm > 0.05) { ahead = -3.2 - 0.3 * c.slot; haste = 2.2; } else c.bristle = false; }
+        // Keep right while a cart goes by; and always on the road.
+        if (ctx.passing) side = Math.abs(side) * 0.55 + 0.5;
+        let d = clamp(j.d + side, -2.3, 2.45), tz = j.z + ahead * r.cos, tx = w.place(tz, d)[0], spot = null;
+        if (c.prey) { c.prey.x = tx; c.prey.z = tz; }
+        if (stopped && c.still > 1.2 && role !== 'scout') rest = 1;
+        if (camping) {
+            // By the fire: each to its own place round it; the big ones graze a little way off, the fliers come down.
+            const cp = j.camp, big = kind.big > 0.9, h = HEARTH[c.slot % HEARTH.length], along = big ? (c.slot % 2 ? 4.4 : -4.6) : h[0], beyond = big ? -2.2 : h[1] * (kind.big > 0.55 ? 1.25 : 1);
+            tz = cp.z + along * r.cos; d = cp.d + cp.side * beyond; tx = w.place(tz, d)[0];
+            spot = { x: tx, z: tz, face: Math.atan2(cp.x - tx, cp.z - tz) };
+            rest = j.mode === 'camp' ? 1 : 0;
+            haste = 1.2; down = 0;
+            if (c.mode !== 'go') { c.mode = 'go'; c.prey = null; c.timer = 6 + 8 * random(); }
+        }
+        const air = role === 'fly' || role === 'soar' || role === 'hover' || role === 'flit';
+        if (c.x === null || Math.hypot(c.x - me.x, c.z - me.z) > 45) { c.x = tx; c.z = tz; c.yaw = me.heading; c.y = w.surface(tx, tz); c.mode = 'go'; c.prey = null; }
+        if (role === 'ride') {
+            // On the pack; down by the fire, and up again when the walk goes on.
+            const offDuty = camping && j.mode === 'camp';
+            if (!offDuty) { tx = me.x; tz = me.z; haste = 2.5; }
+            const close = Math.hypot(c.x - me.x, c.z - me.z) < 0.9;
+            c.riding = ease(c.riding, !offDuty && (close || c.riding > 0.5) ? 1 : 0, 0.3);
+            if (c.riding > 0.5) { c.x = me.x; c.z = me.z; c.yaw = turnTo(c.yaw, me.heading, dt * 6); c.speed = 0; rest = 1; }
+        } else c.riding = 0;
+        if (air) {
+            // Fliers go round a point that moves with the traveller; they come down when the walk stops.
+            const landed = (rest > 0.5 && kind.rest !== 'hover') || (role === 'flit' && Math.floor((ctx.t + c.slot * 5) / 11) % 2 === 1);
+            const wide = role === 'soar' ? 15 : role === 'fly' ? 6 + c.slot : role === 'flit' ? 2.6 : kind.high ? 0.5 : 1.15, rate = role === 'soar' ? 0.35 : role === 'fly' ? 0.75 : role === 'flit' ? 1.3 : 0.6;
+            c.turn += dt * rate * (c.slot % 2 ? -1 : 1);
+            high = landed ? 0 : role === 'soar' ? 19 + 3 * Math.sin(ctx.t / 13) : role === 'fly' ? 5 + 1.6 * Math.sin(ctx.t / 5 + c.slot) : role === 'flit' ? 1.5 + 0.5 * Math.sin(ctx.t / 2) : (kind.high || 1.75) + 0.16 * Math.sin(ctx.t * 1.3 + c.slot);
+            const ox = landed ? tx : me.x + Math.sin(me.heading) * (role === 'hover' ? 0.2 : 3) + Math.sin(c.turn) * wide, oz = landed ? tz : me.z + Math.cos(me.heading) * (role === 'hover' ? 0.2 : 3) + Math.cos(c.turn) * wide;
+            const k = 1 - Math.exp(-dt / (role === 'hover' ? 0.45 : 0.9)), nx = c.x + (ox - c.x) * k, nz = c.z + (oz - c.z) * k, moved = Math.hypot(nx - c.x, nz - c.z);
+            if (moved > 1e-4) { const to = Math.atan2(nx - c.x, nz - c.z); c.bank = ease(c.bank, clamp((((to - c.yaw) % TAU) + TAU + Math.PI) % TAU - Math.PI, -1, 1) * (landed ? 0 : 0.9), 0.4); c.yaw = turnTo(c.yaw, role === 'hover' && moved / Math.max(dt, 1e-3) < 0.6 ? me.heading : to, dt * 5); }
+            c.speed = moved / Math.max(dt, 1e-3);
+            c.x = nx; c.z = nz;
+            c.alt = ease(c.alt, high, landed ? 0.7 : 1.1);
+            c.wing = ease(c.wing, c.alt > 0.25 || role === 'hover' ? 1 : 0, 0.3);
+            c.gait += dt * (1.2 + c.speed * 0.25);
+            fly = 1;
+        }
+        if (!fly && c.riding < 0.5) {
+            const dx = tx - c.x, dz = tz - c.z, gap = Math.hypot(dx, dz), want = (stopped || camping) && gap < 0.45 ? 0 : Math.min(gap * 1.6 * haste, kind.top);
+            c.speed += (want - c.speed) * Math.min(1, dt * 4);
+            if (gap > 0.05 && c.speed > 0.05) {
+                c.yaw = turnTo(c.yaw, Math.atan2(dx, dz), dt * 6);
+                const step = Math.min(c.speed * dt, gap);
+                c.x += Math.sin(c.yaw) * step; c.z += Math.cos(c.yaw) * step;
+            } else if (spot && rest > 0.5) c.yaw = turnTo(c.yaw, spot.face, dt * 3);
+            // Nobody walks through anybody: later ones step round earlier ones, and everyone round the traveller.
+            const apart = (ox, oz, room) => { const ax = c.x - ox, az = c.z - oz, a = Math.hypot(ax, az); if (a < room && a > 1e-4) { const push = Math.min(room - a, dt * 3) / a; c.x += ax * push; c.z += az * push; } };
+            apart(me.x, me.z, 0.42 + kind.big * 0.6);
+            for (const o of others) { if (o === c) break; if (o.x !== null && o.alt < 0.8 && o.riding < 0.5) apart(o.x, o.z, (kind.big + o.kind.big) * 0.62 + 0.12); }
+            c.gait += c.speed * dt;
+            c.alt = ease(c.alt, 0, 0.3); c.wing = ease(c.wing, 0, 0.3);
+            if (c.speed > 0.3) rest = 0;
+        }
+        c.rest = ease(c.rest, rest, rest ? 0.5 : 0.25);
+        c.down = ease(c.down, down, 0.35);
+        c.y = w.surface(c.x, c.z);
+        return c;
+    }
+    const lateralOf = (w, c) => w.lateral(c.x, c.z);
+
+    // ---- A traveller's craft ------------------------------------------------------------------
+    // The druid changes her shape now and then, and back: a bear, an owl-beast or a great black cat, by the
+    // country and the hour. often: 'never', 'sometimes' or 'often'. All of it by the seed and by elapsed time, so
+    // the same walk changes at the same places at any frame rate; and never while she rests (a change that falls
+    // due then waits for the road).
+    const FORMS = ['bear', 'owlbeast', 'panther'];
+    const SHIFT = { secs: 1.7, first: [22, 50], self: { sometimes: [80, 150], often: [22, 36] }, beast: { sometimes: [35, 85], often: [30, 60] } };
+    function shiftStart(seed) { return { seed, form: 'self', from: 'self', to: 'self', change: 1, n: 0, timer: SHIFT.first[0] + SHIFT.first[1] * hash(seed, 0, 4421), want: false }; }
+    // options: { often, night (0 to 1), biome }
+    function shiftStep(s, dt, j, options) {
+        const often = options.often || 'sometimes';
+        if (s.change < 1) {
+            s.change = Math.min(1, s.change + dt / SHIFT.secs);
+            if (s.change >= 1) s.form = s.to;
+            return s;
+        }
+        if (often !== 'never' || s.form !== 'self') s.timer -= dt;
+        if ((s.timer <= 0 || s.want) && j.mode === 'walk' && j.sit < 0.05) {
+            const r = k => hash(s.seed, s.n * 7 + k, 4421);
+            let to = 'self';
+            if (s.form === 'self') {
+                // The bear for the forest and the pass, the owl-beast for the enchanted grove, the cat for the night.
+                const weight = { bear: options.biome === 'forest' || options.biome === 'pass' ? 4 : 1, owlbeast: options.biome === 'grove' ? 5 : 1, panther: options.night > 0.5 ? 5 : 1 };
+                let roll = r(1) * (weight.bear + weight.owlbeast + weight.panther);
+                to = FORMS.find(f => (roll -= weight[f]) < 0) || 'bear';
+            }
+            const span = (to === 'self' ? SHIFT.self : SHIFT.beast)[often === 'often' ? 'often' : 'sometimes'];
+            Object.assign(s, { from: s.form, to, change: 0, n: s.n + 1, want: false, timer: span[0] + span[1] * r(2) });
+        }
+        return s;
+    }
+    // The rogue goes unseen for a while: past the guards at a city's gate, into a town after dark, when somebody
+    // is coming up the road; and, set to 'often', for a stretch now and then for no reason but practice. Never at a rest.
+    function stealthStart(seed) { return { seed, hide: false, hidden: 0, left: 0, want: false }; }
+    // options: { often, night, traffic: metres to whoever is coming the other way (Infinity if nobody) }
+    function stealthStep(s, dt, j, w, options) {
+        const r = w.at(j.z), p = r.near, often = options.often || 'sometimes', walking = j.mode === 'walk' && j.sit < 0.05;
+        let cause = false;
+        if (often !== 'never') {
+            if (p.place === 'city' && Math.abs(Math.abs(r.dz) - (p.grand ? GRAND.A : 104)) < (p.grand ? 38 : 28)) cause = true;
+            if (p.radius && options.night > 0.6 && Math.abs(Math.abs(r.dz) - p.radius * 0.85) < 20) cause = true;
+            if (options.traffic < 24) cause = true;
+            if (often === 'often' && hash(s.seed, Math.floor(j.distance / 80), 4423) < 0.3) cause = true;
+        }
+        if (s.want) { s.want = false; s.hide = !s.hide; s.left = s.hide ? 20 : 0; s.held = !s.hide ? 6 : 0; }
+        s.held = Math.max(0, (s.held || 0) - dt);                  // shown by hand: she stays shown a little while
+        if (cause && walking && !s.held) { s.hide = true; s.left = Math.max(s.left, 2.5); }
+        else if ((s.left -= dt) <= 0) s.hide = false;
+        if (!walking) { s.hide = false; s.left = 0; }
+        s.hidden = clamp(s.hidden + (s.hide ? 1 : -1) * dt / 0.9, 0, 1);
+        return s;
+    }
+    // Something startling at the traveller's own heels (a bear, where she was): the cats in the company bristle and drop back.
+    function spook(party) { for (const c of party) if (c.kind.cat) { c.alarm = 1; c.bristle = true; } }
+
     // ---- Cameras ---------------------------------------------------------------------------
     // Each is a pure function of the journey and the seconds since the shot
     // began, and each keeps to places that are known to be clear: the road
@@ -718,8 +1207,49 @@ const WayLogic = (() => {
         const dx = to[0] - from[0], dy = to[1] - from[1], dz = to[2] - from[2];
         return { x: from[0], y: from[1], z: from[2], heading: Math.atan2(dx, dz), pitch: Math.atan2(dy, Math.hypot(dx, dz)) };
     }
-    // mode: 'follow', 'first' or 'drift'. shot: { index, t, z0 (where the traveller was when it began) }.
-    function camera(mode, j, w, seconds, shot) {
+    // The orbiting camera: round the traveller at any bearing (az, radians: 0 behind them, a quarter turn at
+    // their right hand, a half in front, measured from the way the road is going, so it keeps its side of them as
+    // the road turns) and any height from the grass to straight overhead (el). It is the one camera that leaves
+    // the road, so it is the one that has to know what it might be inside: it comes in toward the traveller when
+    // the ground, a wall, a house or a tree is in the way.
+    const ORBIT = { elMin: 0.035, elMax: Math.PI / 2, distMin: 2.5, distMax: 60, rate: TAU / 75, swing: 0.16, swingSecs: 47, resume: 4, ease: 7, dragAz: TAU * 0.6, dragEl: Math.PI * 0.62 };
+    const wrapPi = a => a - TAU * Math.round(a / TAU);
+    function orbitStart(az = 0.5, el = 0.3, dist = 8) { return { az: wrapPi(az), el: clamp(el, ORBIT.elMin, ORBIT.elMax), dist: clamp(dist, ORBIT.distMin, ORBIT.distMax), reach: dist, held: false, idle: 1e9, sway: 0, shown: null, cam: null }; }
+    const orbitEl = (o, turning) => clamp(o.el + (turning ? ORBIT.swing * Math.sin(o.sway * TAU / ORBIT.swingSecs) : 0), ORBIT.elMin, ORBIT.elMax);
+    // A hand on it: it stays wherever it is left. from: the angles when the drag began; dx, dy in pixels of a width × height screen.
+    function orbitGrab(o, turning) { o.el = orbitEl(o, turning); o.sway = 0; o.held = true; o.idle = 0; return { az: o.az, el: o.el }; }
+    function orbitDrag(o, from, dx, dy, width, height) {
+        o.az = wrapPi(from.az - dx / width * ORBIT.dragAz);
+        o.el = clamp(from.el + dy / height * ORBIT.dragEl, ORBIT.elMin, ORBIT.elMax);
+        o.idle = 0;
+        return o;
+    }
+    // Where the camera is for these angles, `reach` metres out (already known to be clear).
+    function orbitCamera(j, w, az, el, reach) {
+        const me = standing(j, w), h = w.heading(j.z), b = h + Math.PI - az, ce = Math.cos(el), at = [me.x, me.y + 1.3 - 0.5 * j.sit, me.z];
+        const x = at[0] + Math.sin(b) * ce * reach, z = at[2] + Math.cos(b) * ce * reach, y = Math.max(at[1] + Math.sin(el) * reach, Math.max(w.surface(x, z), w.water(x, z)) + 0.5);
+        const flat = Math.hypot(x - at[0], z - at[2]);
+        return { x, y, z, heading: b + Math.PI, pitch: flat < 1e-3 ? -Math.PI / 2 : Math.atan2(at[1] - y, flat), reach, at, dir: [Math.sin(b) * ce, Math.sin(el), Math.cos(b) * ce] };
+    }
+    // options: { turning (it circles by itself; else it holds), still (reduced motion: it holds), pan (Android's pages, radians) }
+    function orbitStep(o, dt, j, w, options = {}) {
+        o.idle += dt;
+        if (o.held) o.idle = 0;
+        if (options.turning && !options.still && o.idle > ORBIT.resume) { o.az = wrapPi(o.az + ORBIT.rate * dt); o.sway += dt; }
+        const az = o.az + (options.pan || 0), el = orbitEl(o, options.turning);
+        const aim0 = orbitCamera(j, w, az, el, 0), clear = sightline(w, aim0.at, aim0.dir, o.dist);
+        // In at once when something comes between; out again gently when it has gone.
+        o.reach = clear < o.reach ? clear : Math.min(clear, o.reach + ORBIT.ease * dt);
+        o.shown = { az, el };
+        // The sweep steps, and the camera is lifted clear of the ground where it ends: be sure of the place itself.
+        let cam = orbitCamera(j, w, az, el, o.reach);
+        for (let tries = 0; tries < 24 && o.reach > 0.9 && !inOpen(w, cam.x, cam.y, cam.z, 0.25); tries++) { o.reach = Math.max(0.9, o.reach * 0.88 - 0.25); cam = orbitCamera(j, w, az, el, o.reach); }
+        return o.cam = cam;
+    }
+
+    // mode: 'follow', 'first', 'orbit' or 'drift'. shot: { index, t, z0 (where the traveller was when it began) }. orbit: an orbitStart().
+    function camera(mode, j, w, seconds, shot, orbit) {
+        if (mode === 'orbit') return orbit.cam || orbitStep(orbit, 0, j, w);
         const me = standing(j, w), head = [me.x, me.y + 1.55, me.z];
         if (mode === 'first') {
             const eye = [me.x, me.y + 1.66 * (1 - 0.42 * j.sit) + 0.03 * Math.sin(j.stride * TAU * 2) * j.moving, me.z];
@@ -748,9 +1278,10 @@ const WayLogic = (() => {
     }
 
     return {
-        RAD, TAU, SLOT, CHUNK, BIOMES, LAND, SEASONS, ROAD, WEATHER, WALK, SHOTS,
+        RAD, TAU, SLOT, CHUNK, BIOMES, LAND, SEASONS, ROAD, GRAND, WEATHER, WALK, SHOTS, beyondWall,
         clamp, mix, mix3, smooth, hash, noise1, noise2,
         world, camp, nextCamp, bodies, light, weatherStart, weatherStep,
-        journeyStart, journeyStep, standing, sight, camera,
+        COMPANIONS, COMPANION, GROUPS, party, partyStart, companionStart, companionStep, FORMS, SHIFT, shiftStart, shiftStep, stealthStart, stealthStep, spook,
+        journeyStart, journeyStep, standing, sight, camera, ORBIT, orbitStart, orbitGrab, orbitDrag, orbitStep, orbitCamera, sightline, inOpen, wrapPi,
     };
 })();
