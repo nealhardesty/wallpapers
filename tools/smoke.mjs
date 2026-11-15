@@ -1765,6 +1765,165 @@ const STAGE_CHECKS = {
             return true;
         }],
     ],
+    // The Never-Ending Baseball Season (SPEC §10.37): in the middle of a game
+    // on the first frame; a pitch, a ball in play and a turn at bat written
+    // down and saved; a game's end, a season's end, the trophy and the
+    // winter; a phone; the keys and a tap.
+    baseball: [
+        ['mid-game on the first frame; a pitch is thrown; a turn at bat is written down and saved; a new tab carries on', async () => {
+            if (!await stageWith('baseball', null, '&seed=7&date=2026-06-20T14:00')) return record('not ready');
+            const first = await counts(`({ phase: m.phase, inning: m.game.inning, day: m.world.day, played: m.world.teams.map(t => t.w + t.l), nine: m.fielders.length, pitches: m.game.pitches, light: m.light, line: m.line,
+                batter: !!m.man(m.view.batter), others: m.world.others.length, buffer: [m.canvas.width, m.canvas.height], px: m.px })`);
+            if (first.phase !== 'set' || first.inning < 2 || first.day < 4 || first.nine !== 9 || first.pitches < 30 || !first.batter || first.others !== 3 || first.light !== 'day' || !/OF THE/.test(first.line)) record(`the first frame: ${JSON.stringify(first)}`);
+            if (first.played.some(n => n !== first.day)) record(`a league founded with ${first.played} games played on day ${first.day}`);
+            if (first.px < 2 || first.buffer[0] * first.px < 1280 || first.buffer[0] > 700) record(`the picture is ${first.buffer} at ${first.px} to the pixel`);
+            if (await evaluate("localStorage.getItem('wp:baseball:world')") !== null) record('the league was saved before anything happened');
+            // A real pitch, in real time: the ball leaves the mound and comes to the plate.
+            if (!await waitFor(() => counts("m.phase === 'pitch' && m.pt > 0.1"), 8000)) return record('no pitch was thrown');
+            const ball = await counts('m.ballNow()');
+            if (!ball || !(ball.y > -2 && ball.y < 60) || !(ball.z > 0)) record(`the pitch: ${JSON.stringify(ball)}`);
+            // On to a ball in play, and through it.
+            const drive = until => counts(`(() => { let n = 0; while (!(${until}) && n++ < 300000) m.update(0.016); return n; })()`);
+            await drive("m.phase === 'play' && m.play.field && m.tl > m.play.field.t * 0.6");
+            const chase = await counts(`(() => { m.place(); const f = m.fielders[m.play.field.who], b = m.ballNow(); return { who: m.play.field.who, moved: Math.hypot(f.x - f.hx, f.y - f.hy), pose: f.pose, ball: b, code: m.play.result.code }; })()`);
+            if (!chase.ball || !(chase.moved > 0.5 || chase.who < 2) || !['run', 'catch', 'ready', 'dive'].includes(chase.pose)) record(`a ball in play: ${JSON.stringify(chase)}`);
+            await shoot('baseball-play');
+            await drive("m.phase === 'result' && m.play.result && m.said");
+            const turn = await counts(`({ code: m.play.result.code, line: m.line, pop: m.pop?.text, box: m.game.box[m.play.batter], pitches: m.game.pitches })`);
+            const came = (turn.box?.ab || 0) + (turn.box?.bb || 0) + (turn.box?.hbp || 0) + (turn.box?.sf || 0);
+            if (!turn.code || came < 1 || !(turn.line.length > 8) || !turn.pop) record(`a turn at bat: ${JSON.stringify(turn)}`);
+            await drive("m.phase === 'set'");
+            const saved = await evaluate("JSON.parse(localStorage.getItem('wp:baseball:world'))");
+            const now = await counts('({ pitches: m.game.pitches, spot: m.game.spot, R: m.game.R, names: m.world.teams.map(t => t.name).join() })');
+            if (!saved?.game || saved.game.pitches !== now.pitches || saved.teams.length !== 8) record(`saved after the turn: ${saved?.game?.pitches} pitches of ${now.pitches}`);
+            // A new tab is at the same pitch of the same game.
+            await cdp.send('Page.navigate', { url: `${WEB}/stage.html?w=baseball` });
+            if (!await waitFor(() => evaluate('WP.stage?.ready'))) return record('not ready on reload');
+            const again = await counts('({ pitches: m.game.pitches, spot: m.game.spot, R: m.game.R, names: m.world.teams.map(t => t.name).join(), phase: m.phase })');
+            if (again.pitches !== now.pitches || again.names !== now.names || String(again.R) !== String(now.R) || String(again.spot) !== String(now.spot) || again.phase !== 'set') record(`after a reload: ${JSON.stringify(again)} for ${JSON.stringify(now)}`);
+            return true;
+        }],
+        ['the last out, the standings and the next game; the end of a season, the series, the trophy and the winter', async () => {
+            if (!await stageWith('baseball', null, '&seed=7&date=2026-06-20T21:30')) return record('not ready');
+            const hurry = (...phases) => counts(`(() => { let n = 0; while (!${JSON.stringify(phases)}.includes(m.phase) && n++ < 600000) m.update(0.05); return m.phase; })()`);
+            const day = await counts('m.world.day');
+            // Shift+N plays the game out; the box score on the board adds up.
+            const said = await counts('m.skip(true)');
+            const end = await counts(`({ phase: m.phase, over: m.game.over, R: m.game.R, line: m.game.line.map(l => l.reduce((a, b) => a + b, 0)), view: m.view.R, inning: m.game.inning, wp: !!m.man(m.game.wp), lp: !!m.man(m.game.lp), light: m.light, lit: m.lit })`);
+            if (end.phase !== 'final' || !end.over || end.R[0] === end.R[1] || String(end.line) !== String(end.R) || String(end.view) !== String(end.R) || end.inning < 9 || !end.wp || !end.lp || !/final/.test(said)) record(`the final: ${JSON.stringify(end)} "${said}"`);
+            if (end.light !== 'night' || !(end.lit > 0)) record(`a night game: ${end.light}, lamps ${end.lit}`);
+            await sleep(1600);
+            await shoot('baseball-final');
+            if (await hurry('table') !== 'table') return record('no standings after the game');
+            const table = await counts("({ day: m.world.day, played: m.world.teams.map(t => t.w + t.l), game: m.world.game, saved: JSON.parse(localStorage.getItem('wp:baseball:world')).day })");
+            if (table.day !== day + 1 || table.played.some(n => n !== day + 1) || table.game || table.saved !== day + 1) record(`after the game: ${JSON.stringify(table)}`);
+            await sleep(300);
+            await shoot('baseball-standings');
+            if (await hurry('pregame') !== 'pregame') return record('no next game');
+            const next = await counts('({ pitches: m.game.pitches, others: m.world.others.length, running: m.fielders.filter(f => f.from).length })');
+            if (next.pitches !== 0 || next.others !== 3 || next.running !== 9) record(`the next game: ${JSON.stringify(next)}`);
+            // Play the rest of the season and all but the end of the series in the rules alone, then watch the last game.
+            await counts(`(() => { const G = BaseballLeague, w = m.world; while (w.stage !== 'series' || Math.max(...w.series.wins) < G.SERIES - 1) { while (G.pitch(w, Math.random)); if (G.closeGame(w) === 'champion') break; G.openDay(w, Math.random, {}); } m.enter(); m.go('pregame'); })()`);
+            const series = await counts('({ stage: m.world.stage, kind: m.game.kind, top: BaseballLeague.standings(m.world).slice(0, 2).map(t => t.id).sort(), pair: [m.world.series.a, m.world.series.b].sort(), wins: m.world.series.wins })');
+            if (series.stage !== 'series' || series.kind !== 'series' || String(series.top) !== String(series.pair)) record(`the series: ${JSON.stringify(series)}`);
+            await sleep(300);
+            await shoot('baseball-series');
+            // The series may need another game or two; each ends in a final and a sheet.
+            for (let i = 0; i < 4 && await counts("m.world.stage === 'series'"); i++) { await counts('m.skip(true)'); if (await hurry('table', 'trophy') === 'table') await hurry('pregame'); }
+            const cup = await counts("({ phase: m.phase, champion: m.world.champion, wins: m.world.series.wins, winner: m.sides[m.winner]?.id, line: m.line, rockets: m.rockets })");
+            if (cup.phase !== 'trophy' || cup.champion == null || Math.max(...cup.wins) !== 3 || cup.winner !== cup.champion || !/CHAMPIONS/.test(cup.line)) record(`the trophy: ${JSON.stringify(cup)}`);
+            await counts('(() => { for (let i = 0; i < 80; i++) m.update(0.05); })()');
+            await sleep(300);
+            if (!(await counts('m.sparks.length') > 20)) record('no confetti or fireworks for the champions');
+            await shoot('baseball-trophy');
+            if (await hurry('news') !== 'news') return record('no winter');
+            const winter = await counts("({ season: m.world.season, day: m.world.day, stage: m.world.stage, news: m.news.map(n => n.type), saved: JSON.parse(localStorage.getItem('wp:baseball:world')).season, played: m.world.teams.reduce((n, t) => n + t.w + t.l, 0) })");
+            if (winter.season !== 2 || winter.day !== 0 || winter.stage !== 'season' || winter.news[0] !== 'champion' || winter.saved !== 2 || winter.played !== 0) record(`the winter: ${JSON.stringify(winter)}`);
+            await sleep(300);
+            await shoot('baseball-winter');
+            if (await hurry('pregame') !== 'pregame') record('the next season did not begin');
+            return true;
+        }],
+        ['a phone held upright: everything fits above the gesture bar; the picture follows the ball; a tap starts a wave and a hot dog', async () => {
+            const viewport = { width: 412, height: 915, deviceScaleFactor: 2.625 };
+            try {
+                if (!await bootStage('w=baseball&host=android&seed=7&date=2026-06-20T19:00', viewport)) return record('not ready on a phone');
+                const g = await counts('({ ...m.G, px: m.px, inset: WP.host.insets.bottom, light: m.light })');
+                if (!g.portrait || g.inset !== 48 || (g.tickerY + g.ticker) * g.px > 915 - 48 + g.px) record(`the captions end at ${(g.tickerY + g.ticker) * g.px} of ${915 - 48}`);
+                if (!(g.pan > 20) || g.top < 80 || g.homeY > g.cardsY - 8 || g.s < 0.6) record(`the layout: ${JSON.stringify(g)}`);
+                if (g.light !== 'dusk') record(`at seven in the evening the light is ${g.light}`);
+                // The scoreboard is a fixed panel here: it, the corner captions, the two cards and the announcer are
+                // all wholly on screen above the gesture bar, and none lies over another, in every park.
+                const boxes = () => counts('({ rects: m.rects, bw: m.G.bw, floor: m.G.bh - m.G.inset, fixed: !!m.G.board.fixed, park: m.sides[1].park.cf })');
+                const laid = b => {
+                    if (!b.fixed || !['board', 'ticker', 'batter', 'pitcher', 'league', 'around'].every(name => b.rects.some(r => r[0] === name))) record(`the panels on a phone: ${b.rects.map(r => r[0])}, fixed ${b.fixed}`);
+                    for (const [name, x, y, w, h] of b.rects) if (x < 0 || y < 0 || x + w > b.bw || y + h > b.floor) record(`${name} is off the screen: ${[x, y, w, h]} in ${b.bw} x ${b.floor} (centre field ${b.park})`);
+                    b.rects.forEach((p, i) => b.rects.slice(i + 1).forEach(q => { if (p[1] < q[1] + q[3] && q[1] < p[1] + p[3] && p[2] < q[2] + q[4] && q[2] < p[2] + p[4]) record(`${p[0]} lies over ${q[0]} (centre field ${b.park})`); }));
+                };
+                laid(await boxes());
+                const parks = await counts(`(() => { const home = m.sides[1], own = home.park, out = [];
+                    for (const team of m.world.teams) { home.park = team.park; m.resize(); m.dirty = true; m.draw(); out.push({ rects: m.rects, bw: m.G.bw, floor: m.G.bh - m.G.inset, fixed: !!m.G.board.fixed, park: team.park.cf }); }
+                    home.park = own; m.resize(); m.dirty = true; m.draw(); return out; })()`);
+                if (parks.length !== 8) record('could not lay out every park');
+                parks.forEach(laid);
+                // The whole line score is in the picture: the board's own canvas is drawn unpanned at its place.
+                const board = await counts('({ x: m.G.board.x, y: m.G.board.y, w: m.board.width, h: m.board.height, bw: m.G.bw })');
+                if (board.x < 2 || board.x + board.w > board.bw - 2 || board.y < 2) record(`the scoreboard: ${JSON.stringify(board)}`);
+                // A ball hit to the corner: the picture pans after it, and comes back.
+                await counts(`(() => { let n = 0; while (!(m.phase === 'play' && m.play.field && Math.abs(m.play.field.at[0]) > 110 && m.tl > m.play.field.t - 0.2) && n++ < 900000) m.update(0.016); })()`);
+                const pan = await counts('({ cam: m.cam, x: m.play.field.at[0], pan: m.G.pan })');
+                if (!(Math.abs(pan.cam) > 12) || Math.sign(pan.cam) !== Math.sign(pan.x) || Math.abs(pan.cam) > pan.pan + 0.01) record(`the picture did not follow the ball: ${JSON.stringify(pan)}`);
+                await sleep(200);
+                await shoot('baseball-phone');
+                const tap = async (x, y) => { await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y }] }); await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] }); await sleep(150); };
+                await tap(100, 300);
+                const wave = await counts('({ balls: m.balls.length, wave: !!m.wave, dogs: m.dogs.length })');
+                if (wave.balls !== 1 || !wave.wave || wave.dogs) record(`a tap: ${JSON.stringify(wave)}`);
+                const [vx, vy] = await counts('[(m.vendor.x - m.G.pan - m.cam) * m.px, (m.baked.rim - 4) * m.px]');
+                if (vx > 4 && vx < 408) { await tap(Math.round(vx), Math.round(vy)); const dogs = await counts('m.dogs.length'); if (dogs !== 1) record(`a tap on the hot-dog seller threw ${dogs}`); }
+            } finally {
+                await cdp.send('Emulation.clearDeviceMetricsOverride');
+            }
+            return true;
+        }],
+        ['S holds the game for the standings; N goes to the next half; rain brings the tarp; settings apply live; a new league', async () => {
+            if (!await stageWith('baseball', null, '&seed=7&date=2026-06-20T14:00')) return record('not ready');
+            const before = await counts('({ pitches: m.game.pitches, inning: m.game.inning, half: m.game.half, name: m.world.name, towns: m.world.teams.map(t => t.town).join() })');
+            if (await counts('m.sheet()') !== 'The standings') record('S did not hold up the standings');
+            await sleep(1500);
+            if (await counts('m.game.pitches') !== before.pitches) record('the game went on behind the standings');
+            await shoot('baseball-sheet');
+            await counts('(() => { m.sheet(); m.sheet(); m.sheet(); })()');
+            if (await counts('m.peek') !== 0) record('S did not put the sheets away');
+            const said = await counts('m.skip(false)');
+            const half = await counts('({ phase: m.phase, inning: m.game.inning, half: m.game.half, outs: m.game.outs, nine: m.fielders.map(f => f.side), game: m.game.half })');
+            if (half.phase !== 'half' || (half.inning === before.inning && half.half === before.half) || half.outs !== 0 || half.nine.some(s => s !== 1 - half.game) || !/On to the/.test(said)) record(`N: ${JSON.stringify(half)} "${said}"`);
+            // Left to itself, a sheet comes up between the halves (the words are redrawn when one is due, not every frame).
+            await sleep(1900);
+            const sheet = await counts(`(() => { const G = m.G, d = m.hud.getContext('2d', { willReadFrequently: true }).getImageData(Math.round(G.bw / 2), Math.round((G.top + G.homeY) / 2) - 6, 1, 1).data; return { alpha: d[3], pt: m.pt, phase: m.phase }; })()`);
+            if (sheet.phase === 'half' && sheet.pt > 1.2 && sheet.pt < 4.5 && !sheet.alpha) record(`no sheet between the halves: ${JSON.stringify(sheet)}`);
+            // Rain: drops, a tarp, nobody on the field; then it stops and they come back.
+            await counts("(() => { m.go('rain'); for (let i = 0; i < 100; i++) m.update(0.05); m.place(); })()");
+            const rain = await counts('({ drops: m.drops.length, raining: m.raining, hidden: m.fielders.filter(f => f.hidden).length, line: m.line })');
+            if (!(rain.drops > 10) || !rain.raining || rain.hidden !== 9 || !/RAIN|TARP/.test(rain.line)) record(`a rain delay: ${JSON.stringify(rain)}`);
+            await sleep(300);
+            await shoot('baseball-rain');
+            await counts("(() => { let n = 0; while (m.phase !== 'set' && n++ < 4000) m.update(0.05); for (let i = 0; i < 40; i++) m.update(0.05); m.place(); })()");
+            const dry = await counts('({ drops: m.drops.length, raining: !!m.raining, hidden: m.fielders.filter(f => f.hidden).length })');
+            if (dry.drops || dry.raining || dry.hidden) record(`after the rain: ${JSON.stringify(dry)}`);
+            // Captions off leaves the park and its scoreboard; the light can be pinned.
+            await counts("m.applySettings({ ...m.config, captions: false, time: 'night' })");
+            await sleep(300);
+            const plain = await counts(`(() => { const d = m.hud.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, m.hud.width, m.hud.height).data; let n = 0; for (let i = 3; i < d.length; i += 4) if (d[i]) n++; return { n, light: m.light }; })()`);
+            if (plain.n !== 0 || plain.light !== 'night') record(`captions off, at night: ${JSON.stringify(plain)}`);
+            await shoot('baseball-plain');
+            // The panel's button founds another league, and that one is saved.
+            await counts("m.onAction('reset')");
+            const league = await counts("({ towns: m.world.teams.map(t => t.town).join(), phase: m.phase, inning: m.game.inning, saved: JSON.parse(localStorage.getItem('wp:baseball:world')).teams.map(t => t.town).join() })");
+            if (league.towns === before.towns || league.saved !== league.towns || league.phase !== 'set' || league.inning < 2) record(`a new league: ${JSON.stringify(league)}`);
+            return true;
+        }],
+    ],
     'ice-patrol': [
         ['in the air on the first frame: wingmen, lights, a radar picture, live gauges', async () => {
             if (!await stageWith('ice-patrol', null, '&seed=7')) return record('not ready');

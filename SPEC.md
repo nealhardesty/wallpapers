@@ -39,7 +39,8 @@ wallpapers' only home. They run in three hosts:
 > Championship (§10.35, 2026-11-15), a never-ending tournament as a moving
 > woodblock print, makes 44. Pocket Hockey
 > (§10.36, 2026-11-15), an invented league of three-on-three in top-down
-> pixel art, makes 45.
+> pixel art, makes 45. The Never-Ending Baseball Season (§10.37,
+> 2026-11-15), a pixel-art league played a pitch at a time, makes 46.
 > Phase 10, the clock overlay (§4.9), was built 2026-10-28; §10 holds the
 > other ideas.
 > Windows (§10.25): the W0 spikes passed, and W1 (the desktop core: behind
@@ -155,6 +156,7 @@ Added for Christmas, drawn in code (designs in §10.27–§10.30):
 | `ice-patrol` | ice-logic.js, ice-gl.js, ice-cockpit.js, ice-patrol.js | ~2.5k lines | The first on WebGL (§10.34): an endless snowfield from two baked noise fields, the same height formula in JavaScript and in the shaders (`IceLogic`), unit-tested; a 2D cockpit whose radar sweeps the real terrain; a 2D ridgeline fallback without WebGL; its own watch on the GPU; interactive (fly it by hand: keys and a drag; the autopilot takes it back after 5 s); keys W A S D, arrows, Q, E, X, T, V, R |
 | `sumo` | sumo-logic.js, sumo-art.js, sumo.js | ~1.3k lines | No network; a league of invented wrestlers kept in `host.storage`, written in Japanese with an English gloss (§10.35); bouts and tournaments pure and seeded (`SumoLogic`), unit-tested; interactive (a tap throws a cushion); evening by `host.now()`; keys N, B |
 | `pocket-hockey` | hockey-logic.js, hockey-art.js, pocket-hockey.js | ~2.4k lines | No network; an invented league of eight clubs and the game in progress kept in `host.storage` (§10.35); the league, the 60 Hz game (physics, steering, signature moves) and the seasons pure and seeded (`HockeyLogic`), unit-tested; top-down pixel art at its own resolution, scaled up pixelated, with its own 5×7 font; interactive (a tap throws something on the ice, or starts a wave); keys N, G, B, X, W |
+| `baseball` | baseball-logic.js, baseball-league.js, baseball-talk.js, baseball-art.js, baseball.js | ~2.4k lines | No network; a league of eight invented clubs kept in `host.storage` (§10.37); every pitch, ball in play and box score pure and seeded (`BaseballLogic`, `BaseballLeague`), unit-tested; 16-bit pixel art at its own resolution with its own lettering, scaled up pixelated; interactive (a tap starts a wave); day, dusk and night by `host.now()`; keys N, S |
 
 About 1.7 MB of JavaScript in total. **Not imported:** links, weather, clocks,
 search/omniprompt, custom links, status bar, Docker/nginx, the homepage's
@@ -847,6 +849,7 @@ and the commits.
 | ice-patrol | `shadows`, `sparkle` (medium) | WebGL: one grid drawn nine times (96, 64 or 48 cells a side by density), heights and slopes from two noise textures; shadows ten marched steps on High, six on Medium, compiled out when shed (after fading); flakes × density, wrapped in the vertex shader; the cockpit frame painted per light step, the gauges at 15 Hz on a strip of their own; a few dozen height lookups a frame on the main thread. The GPU is watched by the wallpaper itself (late frames give up shadows, then render scale to 0.4), since the governor only times callbacks; software renderers start there. No WebGL: 34 ridgelines a frame in 2D |
 | sumo | — | The hall is one cached canvas (rebuilt on resize, tier and at dusk); a frame draws it, three jointed figures and a few marks. The crowd's rows and the cushions thrown follow density |
 | pocket-hockey | — | The canvas is the picture's own pixels (about 427 × 267 on a laptop, 206 × 458 on an upright phone; a pixel is 3 CSS px at 1280 × 800, in half steps below that), scaled up pixelated. The arena (ice, lines, boards, benches, a crowd of some thousands) is one bake a game; a working copy of it takes the skate marks and the resurfacer's stripes, so a frame is one blit of that, a dozen kept sprites, and lettering set once a line and kept. The round's other games are stepped 4 ms a frame. Hats, paper, spray, camera flashes and skate marks × density. Bench 2026-11-15 on a loaded machine (Snow beside it for scale: 20%, 24%, 60%): Low 14%, Medium 21%, High 44% |
+| baseball | — | The canvas is the picture's own pixels (about 3 CSS px each on a laptop), scaled up pixelated; the park (sky, stands, crowd, turf, fence) is one bake per game, size and light, with the crowd on its feet a second; the scoreboard and all the captions are two more canvases redrawn only when their words change; a frame blits those and draws about thirty men of a dozen rectangles each. The crowd, fireworks, confetti and rain follow density |
 
 #### In the panel
 
@@ -4409,6 +4412,139 @@ ice resurfacer is "Old Smoothie".
   goalie's goal; a phone, and its taps.
 - **Not built:** sound; penalties, icing and offside; ends swapped between
   periods; a coach; more than the one arena look; trading by merit.
+
+### 10.37 The Never-Ending Baseball Season (`baseball`, owner pick, 2026-11-15)
+
+From the same idea list as Sumo ("tiny teams play simplified baseball games
+complete with pitchers, batters, base runners, and fielders ... players
+accumulate batting averages, home runs, and ridiculous nicknames ...
+probabilistic pitch selection, swing decisions, and fielding routes"). The
+owner's decisions: 16-bit pixel art from above or a high broadcast angle;
+the league kept in `host.storage`, advancing only while on screen; nothing
+real anywhere. Towns, clubs, parks and people are invented (Port Biscuit,
+the Thunder Geese, Barnaby Bellweather); no list of real names is
+consulted, so a clash cannot be ruled out, only made unlikely.
+
+- **The game (`BaseballLogic`, pure, seeded, unit-tested).** In feet, home
+  plate at (0, 0). `pitch(game, [away, home], random)` advances one event
+  and returns it as a `play`: all the wallpaper needs to act it out, on one
+  clock that starts at the bat.
+  - *A pitch:* chosen from the pitcher's own two to four (nine kinds, from
+    fastball to eephus) by the count: his first pitch when behind,
+    something bent when ahead, not the same thing three times. Aimed at a
+    corner or wasted off the plate, and missed by his control, his
+    tiredness and the pitch's own wildness. The batter sees its distance
+    from the zone through noise that grows as his eye is poor and the pitch
+    deceptive, and swings or not by the count. Contact from his bat against
+    the pitcher's stuff. About two in five contacts go foul; a few fouls go
+    straight up over foul ground, where somebody may get under one.
+  - *A ball in play:* exit speed, launch angle, spray. `flight` gives its
+    carry, hang time and height (a drag fudge on the vacuum formulas), or
+    its roll, slowing on the turf; `edgeAt(park, bearing)` is the fence,
+    fair or foul, and decides a home run by the ball's height against the
+    wall's. `chase` asks all nine when each could reach each point of its
+    path (a reaction, a few steps to get going, his speed): the first there
+    plays it, in the air if he can; a late arrival dives and gets half of
+    them.
+  - *Then two clocks.* A throw takes time (`throwTime`), a runner takes
+    time, and the earlier wins. Grounders: the force at second and the
+    relay, or the sure out at first, or an infield hit; a man on third
+    scores if the infield is back. Flies: a man on third tags if he thinks
+    he can beat the throw. Hits: each runner takes what he is sure of, and
+    one may try for a base more and be thrown out. Also steals, wild
+    pitches, a batter hit by a pitch, errors, a home run taken back at the
+    wall, one inside the park.
+  - *The book:* every event is credited at once to the game's box score
+    and the player's season, and a run is charged to the pitcher who put
+    the runner on. Pitchers bat ninth. A tired or battered arm comes out;
+    the best reliever is kept for a lead of three or fewer in the last
+    inning. Win, loss and save are decided as the lead changes.
+  - *Simplified:* no bunts, pinch hitters, balks, intentional walks,
+    dropped third strikes or infield fly rule; a run is unearned only if
+    the runner reached on an error or scored on the error itself; a
+    walk-off counts every run of its play.
+- **The league (`BaseballLeague`).** Eight clubs of thirteen (eight in the
+  field, three starters in turn, two relievers), each with six ratings (and
+  three more for a pitcher), an age, a hand and a park. Ten kinds of park:
+  a short porch, a 32-foot wall, thin air, a bog, a billiard-table infield,
+  acres of foul ground.
+  - *A season:* 21 days, everyone meets everyone three times, ten or
+    eleven at home. One game a day is watched (the club you `follow`, or
+    the best pairing by the standings); the other three are played out by
+    the same rules when the day begins, shown as out-of-town scores that
+    keep pace with the watched game's inning, and booked with it.
+  - *The series:* the top two, first to three, for the Golden Gravy Boat.
+  - *The winter (`newSeason`):* career totals, a year older, ratings
+    drifting up before 27 and down after 31, up to two retirements a club
+    from 35, rookies in their places, five prizes, and the news of it.
+    Against dynasties: every rating is pulled a tenth of the way back to
+    the middle each winter, and the lowest clubs get the better rookies.
+    Measured 2026-11-15 over 30 seasons on each of four seeds: the champion
+    repeated 20 times in 116 (17%; chance is 12.5%), the longest run was
+    three titles, and the most for one club in 30 was 7 to 9. Before
+    that it was 40%, with one club taking 20 of 30.
+  - *Nicknames (`NICKS`, `christen`):* 28 deeds, each with its own names:
+    habits (strikes out in 36% of at-bats: the Ceiling Fan), feats (six
+    home runs: Moonshot) and moments (a walk-off home run: Mr. Bedtime).
+    A name belongs to one man; a habit names two men at most; a better
+    story replaces a lesser.
+  - A league is founded four to eight days into its first season, and
+    first seen in the middle of a game.
+- **The show (`BaseballAnimationManager`).** Set, wind-up, the pitch, the
+  call; a ball in play acted out from the play's own times (the fielder's
+  run, the catch or the dive, each throw, each runner, a slide where a
+  throw is coming); the result; between halves the sides trot off and on
+  under a sheet (standings, leading bats, leading arms, "know your
+  league"). After the last out: the final with its decisions and star, the
+  standings, tomorrow's matchup. After the series: the trophy, confetti,
+  and the winter's news. `pace` scales the pauses; a nine-inning game is
+  about 290 pitches and about sixteen minutes at Normal (measured).
+  - *Charm:* day, dusk or night by `host.now()` (or pinned), the lamps
+    coming on one after another; a rain delay now and then with the tarp
+    and nobody on the field; the seventh-inning stretch; a mascot on the
+    home dugout; a hot-dog seller on the rim; fireworks for a home run at
+    night; the crowd on its feet in patches by how excited it is.
+  - *Words:* the scoreboard behind centre (line score, count, outs, HOME
+    RUN!); cards for the batter and pitcher with a pitch tracker; an
+    announcer's line (`BaseballTalk`: several ways of saying everything);
+    the league and the out-of-town scores in the top corners. `captions`
+    off leaves only the park and its scoreboard.
+- **The look (`BaseballArt`).** The picture is its own pixels (about three
+  CSS px each on a laptop, `pixelSize` scales it), scaled up pixelated. The
+  park is one bake per game, size and light: every pixel is asked where on
+  the field it is, by the same `edgeAt` the rules use, so the fence the
+  ball clears is the fence drawn. Mowing patterns, seat colours, the wall
+  and what lies beyond it differ by club. Lettering is two faces of its
+  own (5×7 and 3×5, capitals), so no font is needed. The men are a dozen
+  rectangles each. An upright phone stacks the cards under the field and
+  pans the picture after the ball; there (and wherever the picture is under
+  400 pixels wide) the scoreboard is a panel fixed at the top with the two
+  corner captions under it, so the line score is never panned off screen.
+  An inning of ten runs or more is written in full, spilling into the gap.
+- **State:** `host.storage` key `world` (plain data, about 65 KB), saved
+  after every turn at bat and every turn of the calendar; never in thumb
+  mode. **Keys:** `N` the next half-inning, with Shift the end of the game;
+  `S` the standings, the leading bats, the leading arms. A tap starts a
+  wave and a beach ball; on the hot-dog seller, a hot dog (`touch`). The
+  panel's "Found a new league" starts again, and its Follow list takes the
+  clubs' names from `host.panel`.
+- **Tests.** Unit (`tools/baseball.test.mjs`): leagues whole and plain;
+  the calendar; 417 games refereed pitch by pitch, each box score proved
+  (line score, batters' and pitchers' lines, the putout proof, decisions);
+  every play sane on its own; a season's numbers (measured 2026-11-15 over
+  252 games: 4.9 runs a side, .273, 0.99 home runs, 8.8 strikeouts and 3.4
+  walks a side, 294 pitches a game, steals 78%); the better club winning
+  more but not always, and parks mattering; the same dice, the same game;
+  a league saved mid-count carrying on exactly; twelve seasons with their
+  series and winters; nicknames; the announcer; a cheap-and-clean source
+  check. Smoke: mid-game on frame one, a pitch, a ball in play, a turn
+  recorded and saved and resumed by a new tab; a final, the standings, the
+  series, the trophy, the winter; a phone; the keys, rain, captions off, a
+  new league. On the phone, the scoreboard, both corner captions, both
+  cards and the announcer are checked to be wholly on screen above the
+  gesture bar and clear of each other, in all eight parks.
+- **Not built:** sound; substitutions other than pitchers; trades; a
+  record book across seasons; umbrellas in the rain.
 
 ## Open questions
 

@@ -330,6 +330,13 @@
               { keys: ['x'], label: 'Throw something on the ice', run: hockey => hockey.throwSomething() },
               { keys: ['w'], label: 'Start a wave', run: hockey => hockey.startWave() },
           ] },
+        { id: 'baseball', name: 'The Never-Ending Baseball Season', icon: '⚾', accent: '#3f9b4b', background: '#2c6e3a',
+          scripts: ['baseball/baseball-logic.js', 'baseball/baseball-league.js', 'baseball/baseball-talk.js', 'baseball/baseball-art.js', 'baseball/baseball.js'],
+          make: host => new BaseballAnimationManager(host), cost: 'low', interactive: true,
+          keys: [
+              { keys: ['n'], label: 'On to the next half-inning (with Shift, to the end of the game)', run: (baseball, { shift }) => baseball.skip(shift) },
+              { keys: ['s'], label: 'Hold up the standings, the leading bats, the leading arms', run: baseball => baseball.sheet() },
+          ] },
         { id: 'bing', name: 'Bing Image of the Day', icon: '🖼️', accent: '#8ab4ff', scripts: ['bing/bing.js'],
           make: host => new BingWallpaperManager(host), cost: 'none', network: ['www.bing.com'] },
     ];
