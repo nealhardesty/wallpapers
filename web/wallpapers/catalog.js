@@ -312,6 +312,13 @@
               { keys: ['v'], label: 'Next view (canopy and panel, panel only, no cockpit)', run: patrol => patrol.nextView() },
               { keys: ['r'], label: 'Radar range (2, 4, 8 km)', run: patrol => patrol.nextRange() },
           ] },
+        { id: 'sumo', name: 'Sumo Championship', icon: '🤼', accent: '#c2892a', background: '#eadcbd',
+          scripts: ['sumo/sumo-logic.js', 'sumo/sumo-art.js', 'sumo/sumo.js'],
+          make: host => new SumoAnimationManager(host), cost: 'low', interactive: true,
+          keys: [
+              { keys: ['n'], label: 'On to the finish, or the next bout', run: sumo => sumo.skip() },
+              { keys: ['b'], label: 'Hold up the ranking sheet', run: sumo => { sumo.showSheet(); } },
+          ] },
         { id: 'bing', name: 'Bing Image of the Day', icon: '🖼️', accent: '#8ab4ff', scripts: ['bing/bing.js'],
           make: host => new BingWallpaperManager(host), cost: 'none', network: ['www.bing.com'] },
     ];

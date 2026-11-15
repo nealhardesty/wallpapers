@@ -1550,6 +1550,75 @@ const STAGE_CHECKS = {
     // reading the world; the same flight without WebGL; night, weather, the
     // views and a phone. Headless Chrome draws its WebGL in software, far too
     // slowly to time, so the speed is measured on the 2D fallback.
+    sumo: [
+        ['in the ring on the first frame; a bout is decided, written down and saved; N goes to the finish', async () => {
+            if (!await stageWith('sumo', null, '&seed=7')) return record('not ready');
+            const first = await counts('({ phase: m.phase, east: m.east?.w.name, west: m.west?.w.name, day: m.world.day, size: m.world.roster.length, squat: m.east?.pose.squat })');
+            if (first.phase !== 'crouch' || !first.east || !first.west || first.day !== 1 || first.size !== 16 || !(first.squat > 0.3)) record(`the first frame: ${JSON.stringify(first)}`);
+            if (await evaluate("localStorage.getItem('wp:sumo:world')") !== null) record('the league was saved before anything happened');
+            if (!await waitFor(() => counts("m.phase === 'fight' && m.bout.t > 0.5"), 6000)) return record('no bout began');
+            const mid = await counts('({ gap: Math.abs(m.east.x - m.west.x), east: m.east.x, west: m.west.x })');
+            if (!(mid.gap > 0.4 && mid.gap < 0.9) || Math.abs(mid.east) > 1.2 || Math.abs(mid.west) > 1.2) record(`mid-bout: ${JSON.stringify(mid)}`);
+            await shoot('sumo-bout');
+            await counts('m.skip()');
+            if (!await waitFor(() => counts("m.phase === 'result'"), 3000)) return record('N did not finish the bout');
+            const done = await counts(`({ kanji: m.kanji, winner: m.bout.winner.name, loser: m.bout.loser.name, romaji: m.bout.winner.romaji, kimarite: m.bout.kimarite, written: SumoLogic.KIMARITE[m.bout.kimarite][0], said: m.said.map(line => line[0]).join(' / '), bout: m.world.bout, marks: [m.world.marks[m.bout.winner.id], m.world.marks[m.bout.loser.id]], point: m.point,
+                saved: JSON.parse(localStorage.getItem('wp:sumo:world')) })`);
+            if (done.bout !== 1 || done.marks[0] !== 'W' || done.marks[1] !== 'L' || !done.point) record(`the result: ${JSON.stringify({ ...done, saved: undefined })}`);
+            // In Japanese where the machine has the letters (CI's has not), with the English under it by default.
+            if (!done.said.includes(done.romaji) || !done.said.includes(done.kimarite) || (done.kanji && !(done.said.includes(done.winner) && done.said.includes(done.written)))) record(`the caption: ${JSON.stringify(done.said)} for ${done.winner}`);
+            if (done.saved?.bout !== 1 || done.saved.roster.length !== 16) record('the league was not saved after the bout');
+            await sleep(900);
+            await shoot('sumo-result');
+            // A new tab carries on with the second bout of the same day.
+            await cdp.send('Page.navigate', { url: `${WEB}/stage.html?w=sumo` });
+            if (!await waitFor(() => evaluate('WP.stage?.ready'))) return record('not ready on reload');
+            const again = await counts('({ bout: m.world.bout, day: m.world.day, east: m.east.w.name, names: m.world.roster.map(w => w.name).join() })');
+            if (again.bout !== 1 || again.day !== 1 || again.names !== done.saved.roster.map(w => w.name).join() || [done.winner, done.loser].includes(again.east)) record(`after a reload: ${JSON.stringify(again)}`);
+            return true;
+        }],
+        ['the last day: the standings, the cup, the new ranking sheet, and the next tournament', async () => {
+            if (!await stageWith('sumo', null, '&seed=7')) return record('not ready');
+            // Play fourteen days and seven bouts in the logic, then watch the last one.
+            await counts(`(() => { const L = SumoLogic, w = m.world; let card; while ((card = L.nextBout(w)) && !(w.day === 15 && w.bout === 7)) { const b = L.boutRun(card.east, card.west, Math.random); L.result(w, b.winner, b.loser); } m.card = null; m.stage('crouch'); })()`);
+            await counts('m.showSheet()');
+            await sleep(400);
+            await shoot('sumo-sheet');
+            await counts('m.showSheet()');
+            // Hurry every phase along until the cup is given (through a playoff, if the lead is shared).
+            const hurry = phase => counts(`(() => { let n = 0; while (m.phase !== '${phase}' && n++ < 4000) { if (m.phase === 'fight') m.skip(); else m.phaseTime = 1e9; m.update(0.016); } return m.phase; })()`);
+            if (await hurry('ceremony') !== 'ceremony') return record('no cup was given');
+            const cup = await counts('({ champion: m.east.w.romaji, arms: m.east.pose.arms, said: m.said.map(line => line[0]).join(" / "), most: SumoLogic.standings(m.world)[0].wins, his: SumoLogic.record(m.world, m.east.w.id).w })');
+            if (cup.arms !== 'cup' || !cup.said.includes(cup.champion) || cup.his !== cup.most) record(`the ceremony: ${JSON.stringify(cup)}`);
+            await sleep(600);
+            await shoot('sumo-cup');
+            if (await hurry('news') !== 'news') return record('no new ranking sheet');
+            const next = await counts("({ basho: m.world.basho, day: m.world.day, size: m.world.roster.length, news: m.news.map(n => n.type), saved: JSON.parse(localStorage.getItem('wp:sumo:world')).basho })");
+            if (next.basho !== 1 || next.day !== 1 || next.size !== 16 || next.news[0] !== 'champion' || next.news.filter(t => t === 'rookie').length !== 2 || next.saved !== 1) record(`the next tournament: ${JSON.stringify(next)}`);
+            await sleep(400);
+            await shoot('sumo-news');
+            if (await hurry('enter') !== 'enter') record('the next tournament did not begin');
+            return true;
+        }],
+        ['a phone held upright: the ring and the nameplates fit, above the gesture bar; a tap throws a cushion', async () => {
+            const viewport = { width: 412, height: 915, deviceScaleFactor: 2.625 };
+            try {
+                if (!await bootStage('w=sumo&host=android&seed=7', viewport)) return record('not ready on a phone');
+                const g = await counts('({ ...m.G, inset: WP.host.insets.bottom })');
+                if (g.safe !== 915 - 48) record(`the safe height is ${g.safe}`);
+                if (g.cx - g.platform.rx * 1.1 < 0 || g.cy + g.platform.drop + g.platform.ry * 1.5 > g.safe - g.font * 4) record(`the ring: ${JSON.stringify(g)}`);
+                if (g.roof.y < 0) record(`the roof starts at ${g.roof.y}`);
+                await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: 100, y: 300 }] });
+                await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+                await sleep(150);
+                if (await counts('m.cushions.length') !== 1) record(`a tap threw ${await counts('m.cushions.length')} cushions`);
+                await shoot('sumo-phone');
+            } finally {
+                await cdp.send('Emulation.clearDeviceMetricsOverride');
+            }
+            return true;
+        }],
+    ],
     'ice-patrol': [
         ['in the air on the first frame: wingmen, lights, a radar picture, live gauges', async () => {
             if (!await stageWith('ice-patrol', null, '&seed=7')) return record('not ready');
