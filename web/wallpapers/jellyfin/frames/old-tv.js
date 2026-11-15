@@ -265,7 +265,87 @@
         ctx.restore();
     }
 
-    let transition = null;   // { kind, at }
+    // The tube's behaviour, shared with Big Old TV (frames/big-tv.js): snow
+    // between items while turn(ctx, L, angle) clicks the channel dial round,
+    // the collapse to a dot on pause, the picture opening again, a rolling bar.
+    function tube(turn) {
+        let transition = null;   // { kind, at }
+        return {
+            transition(kind, env) {
+                transition = { kind, at: performance.now(), from: env.channel - 1 };
+                env.busy(kind === 'change' ? SNOW_MS : kind === 'pause' ? OFF_MS : ON_MS);
+            },
+
+            tick(ctx, t, L, env) {
+                const s = L.screen;
+                const age = transition ? t - transition.at : Infinity;
+                if (transition?.kind === 'change' && age < SNOW_MS) {
+                    JellyfinFrames.drawSnow(ctx, s, 0.92);
+                    const from = channelAngle(transition.from), to = channelAngle(env.channel);
+                    turn(ctx, L, from + (((to - from + Math.PI * 3) % (Math.PI * 2)) - Math.PI) * Math.min(1, age / 250));
+                    glass(ctx, s);
+                    return 66;
+                }
+                if (transition?.kind === 'pause' || env.paused) {
+                    // The tube going off: a white line, then a dot that fades.
+                    const k = transition?.kind === 'pause' ? Math.min(1, age / OFF_MS) : 1;
+                    ctx.save();
+                    JellyfinFrames.roundRect(ctx, s.x, s.y, s.w, s.h, s.radius);
+                    ctx.fillStyle = '#050505';
+                    ctx.fill();
+                    const cx = s.x + s.w / 2, cy = s.y + s.h / 2;
+                    if (k < 0.3) {
+                        const q = k / 0.3;
+                        ctx.fillStyle = `rgba(235, 240, 255, ${1 - q * 0.2})`;
+                        ctx.fillRect(cx - (s.w / 2) * (1 - q * 0.98), cy - Math.max(1, (s.h / 2) * (1 - q) ** 4), s.w * (1 - q * 0.98), Math.max(2, s.h * (1 - q) ** 4));
+                    } else {
+                        const q = (k - 0.3) / 0.7;
+                        const dot = ctx.createRadialGradient(cx, cy, 0, cx, cy, s.w * 0.03);
+                        dot.addColorStop(0, `rgba(255, 255, 255, ${0.95 * (1 - q) + 0.08})`);
+                        dot.addColorStop(1, 'rgba(255, 255, 255, 0)');
+                        ctx.fillStyle = dot;
+                        ctx.fillRect(cx - s.w * 0.03, cy - s.w * 0.03, s.w * 0.06, s.w * 0.06);
+                    }
+                    ctx.restore();
+                    glass(ctx, s);
+                    return k < 1 ? 33 : Infinity;
+                }
+                if (transition?.kind === 'play' && age < ON_MS) {
+                    const q = age / ON_MS;
+                    ctx.save();
+                    JellyfinFrames.roundRect(ctx, s.x, s.y, s.w, s.h, s.radius);
+                    ctx.clip();
+                    ctx.fillStyle = `rgba(5, 5, 5, ${1 - q})`;
+                    ctx.fillRect(s.x, s.y, s.w, s.h);
+                    const open = s.h * q ** 0.5;
+                    ctx.fillStyle = `rgba(240, 245, 255, ${0.5 * (1 - q)})`;
+                    ctx.fillRect(s.x, s.y + (s.h - open) / 2, s.w, open);
+                    ctx.restore();
+                    return 33;
+                }
+                transition = null;
+                if (!env.motion || !env.playing) return Infinity;
+                // A faint bar rolling down the tube, now and then.
+                const period = 9000, phase = (t % period) / period;
+                if (phase < 0.35) {
+                    const y = s.y + (phase / 0.35) * (s.h + 60) - 30;
+                    ctx.save();
+                    JellyfinFrames.roundRect(ctx, s.x, s.y, s.w, s.h, s.radius);
+                    ctx.clip();
+                    const bar = ctx.createLinearGradient(0, y - 30, 0, y + 30);
+                    bar.addColorStop(0, 'rgba(255, 255, 255, 0)');
+                    bar.addColorStop(0.5, 'rgba(255, 255, 255, 0.045)');
+                    bar.addColorStop(1, 'rgba(255, 255, 255, 0)');
+                    ctx.fillStyle = bar;
+                    ctx.fillRect(s.x, y - 30, s.w, 60);
+                    ctx.restore();
+                    return 66;
+                }
+                return period - (t % period);
+            },
+        };
+    }
+    JellyfinFrames.crt = { wall, glass, tube, channelAngle };
 
     JellyfinFrames.add({
         id: 'old-tv',
@@ -274,80 +354,7 @@
         videoFilter: 'saturate(0.85) contrast(1.08) sepia(0.12)',
         layout,
         paint,
-
-        transition(kind, env) {
-            transition = { kind, at: performance.now(), from: env.channel - 1 };
-            env.busy(kind === 'change' ? SNOW_MS : kind === 'pause' ? OFF_MS : ON_MS);
-        },
-
-        tick(ctx, t, L, env) {
-            const s = L.screen;
-            const age = transition ? t - transition.at : Infinity;
-            if (transition?.kind === 'change' && age < SNOW_MS) {
-                JellyfinFrames.drawSnow(ctx, s, 0.92);
-                const turn = Math.min(1, age / 250);
-                const from = channelAngle(transition.from), to = channelAngle(env.channel);
-                dial(ctx, L.dials[0], from + (((to - from + Math.PI * 3) % (Math.PI * 2)) - Math.PI) * turn, true);
-                glass(ctx, s);
-                return 66;
-            }
-            if (transition?.kind === 'pause' || env.paused) {
-                // The tube going off: a white line, then a dot that fades.
-                const k = transition?.kind === 'pause' ? Math.min(1, age / OFF_MS) : 1;
-                ctx.save();
-                JellyfinFrames.roundRect(ctx, s.x, s.y, s.w, s.h, s.radius);
-                ctx.fillStyle = '#050505';
-                ctx.fill();
-                const cx = s.x + s.w / 2, cy = s.y + s.h / 2;
-                if (k < 0.3) {
-                    const q = k / 0.3;
-                    ctx.fillStyle = `rgba(235, 240, 255, ${1 - q * 0.2})`;
-                    ctx.fillRect(cx - (s.w / 2) * (1 - q * 0.98), cy - Math.max(1, (s.h / 2) * (1 - q) ** 4), s.w * (1 - q * 0.98), Math.max(2, s.h * (1 - q) ** 4));
-                } else {
-                    const q = (k - 0.3) / 0.7;
-                    const dot = ctx.createRadialGradient(cx, cy, 0, cx, cy, s.w * 0.03);
-                    dot.addColorStop(0, `rgba(255, 255, 255, ${0.95 * (1 - q) + 0.08})`);
-                    dot.addColorStop(1, 'rgba(255, 255, 255, 0)');
-                    ctx.fillStyle = dot;
-                    ctx.fillRect(cx - s.w * 0.03, cy - s.w * 0.03, s.w * 0.06, s.w * 0.06);
-                }
-                ctx.restore();
-                glass(ctx, s);
-                return k < 1 ? 33 : Infinity;
-            }
-            if (transition?.kind === 'play' && age < ON_MS) {
-                const q = age / ON_MS;
-                ctx.save();
-                JellyfinFrames.roundRect(ctx, s.x, s.y, s.w, s.h, s.radius);
-                ctx.clip();
-                ctx.fillStyle = `rgba(5, 5, 5, ${1 - q})`;
-                ctx.fillRect(s.x, s.y, s.w, s.h);
-                const open = s.h * q ** 0.5;
-                ctx.fillStyle = `rgba(240, 245, 255, ${0.5 * (1 - q)})`;
-                ctx.fillRect(s.x, s.y + (s.h - open) / 2, s.w, open);
-                ctx.restore();
-                return 33;
-            }
-            transition = null;
-            if (!env.motion || !env.playing) return Infinity;
-            // A faint bar rolling down the tube, now and then.
-            const period = 9000, phase = (t % period) / period;
-            if (phase < 0.35) {
-                const y = s.y + (phase / 0.35) * (s.h + 60) - 30;
-                ctx.save();
-                JellyfinFrames.roundRect(ctx, s.x, s.y, s.w, s.h, s.radius);
-                ctx.clip();
-                const bar = ctx.createLinearGradient(0, y - 30, 0, y + 30);
-                bar.addColorStop(0, 'rgba(255, 255, 255, 0)');
-                bar.addColorStop(0.5, 'rgba(255, 255, 255, 0.045)');
-                bar.addColorStop(1, 'rgba(255, 255, 255, 0)');
-                ctx.fillStyle = bar;
-                ctx.fillRect(s.x, y - 30, s.w, 60);
-                ctx.restore();
-                return 66;
-            }
-            return period - (t % period);
-        },
+        ...tube((ctx, L, angle) => dial(ctx, L.dials[0], angle, true)),
 
         idle(ctx, L, env, kind) {
             const [title, detail] = JellyfinFrames.IDLE[kind] || JellyfinFrames.IDLE.setup;

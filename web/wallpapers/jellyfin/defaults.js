@@ -19,6 +19,11 @@ WP.defaults('jellyfin', {
     burnInImageSubs: true,     // image subtitles need the server to burn them in (a transcode)
     frame: 'old-tv',
     fit: 'contain',            // with no frame: contain or cover
+    // The Big Old TV's own options (frames/big-tv.js).
+    bigTvWood: 'walnut',       // walnut, oak, mahogany, maple, ebony, or enamel: avocado, tangerine, turquoise, cream
+    bigTvStyle: 'seventies',   // seventies (squared, framed) or fifties (rounded, brass trim)
+    bigTvControls: 'side',     // the strip of controls: side or below (upright it's always below)
+    bigTvOrnament: 'plant',    // on top, on a doily: plant, cat, none
     // The Christmas frames' own options (frames/christmas-kit.js).
     xmasColors: 'multi',       // the lights: multi, warm, cool, candy
     xmasPattern: 'twinkle',    // twinkle, chase, fade, steady

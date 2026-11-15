@@ -2778,6 +2778,72 @@ const STAGE_CHECKS = {
             if (await counts('m.paints') !== steady) record('the volume repainted the room');
             return true;
         }],
+        ['Big Old TV: mostly screen in every wood and style, tiny controls, an option repaints once, the volume doesn\'t', async () => {
+            jellyfinServer();
+            const woods = ['oak', 'mahogany', 'maple', 'ebony', 'avocado', 'tangerine', 'turquoise', 'cream', 'walnut'];
+            for (const [name, width, height, mobile, least] of [['landscape', 1280, 800, false, 0.85], ['portrait', 412, 915, true, 0.88]]) {
+                await cdp.send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile });
+                await stageAt(`${WEB}/stage.html?w=jellyfin&thumb=1&host=${mobile ? 'android' : 'standalone'}`, { 'wp:jellyfin': { configVersion: 1, frame: 'big-tv' } });
+                await sleep(300);
+                let n = 0;
+                // Every step changes something, so every step is one repaint.
+                for (const [style, controls] of [['fifties', 'side'], ['fifties', 'below'], ['seventies', 'below'], ['seventies', 'side']]) {
+                    for (const ornament of ['cat', 'none', 'plant']) {
+                        const wood = woods[n++ % woods.length], where = `${name} ${style} ${controls} ${wood}`;
+                        const before = await counts('m.paints');
+                        await counts(`m.applySettings({ ...m.config, bigTvStyle: '${style}', bigTvControls: '${controls}', bigTvWood: '${wood}', bigTvOrnament: '${ornament}' })`);
+                        const L = await counts(`(({ screen, cabinet, panel, dials, pilot, below }) => ({ screen, cabinet, panel, dials, pilot, below, paints: m.paints, vw: innerWidth, bottom: innerHeight - WP.host.insets.bottom }))(m.layout)`);
+                        const { screen: s, cabinet: c, panel: p } = L;
+                        if (L.paints - before !== 1) record(`${where}: ${L.paints - before} repaints`);
+                        if (s.w / L.vw < least) record(`${where}: the screen is ${(100 * s.w / L.vw).toFixed(1)}% of the width`);
+                        if (Math.abs(s.w / s.h - 16 / 9) > 0.01) record(`${where}: the screen is ${(s.w / s.h).toFixed(3)}`);
+                        if (c.x < 0 || c.y < 0 || c.x + c.w > L.vw || c.y + c.h > L.bottom) record(`${where}: the cabinet leaves the view`);
+                        if (s.x < c.x || s.y < c.y || s.x + s.w > c.x + c.w || s.y + s.h > c.y + c.h) record(`${where}: the screen leaves the cabinet`);
+                        if (L.below !== (mobile || controls === 'below')) record(`${where}: the controls are ${L.below ? 'below' : 'at the side'}`);
+                        if (L.below ? p.y < s.y + s.h : p.x < s.x + s.w) record(`${where}: the controls overlap the screen`);
+                        for (const d of [...L.dials, L.pilot]) {
+                            if (d.x - d.r < p.x || d.x + d.r > p.x + p.w || d.y - d.r < p.y || d.y + d.r > p.y + p.h) record(`${where}: a control is off its strip`);
+                            if (d.r > s.w * 0.03) record(`${where}: a knob ${d.r.toFixed(0)} px across a ${s.w.toFixed(0)} px screen isn't small`);
+                        }
+                        if (await evaluate(DRAWN) < 12) record(`${where}: barely drawn`);
+                    }
+                }
+                const steady = await counts('m.paints');
+                await counts(`m.applySettings({ ...m.config, volume: 0.5 })`);
+                if (await counts('m.paints') !== steady) record(`${name}: the volume repainted the set`);
+                await counts(`m.applySettings({ ...m.config, bigTvStyle: 'fifties', bigTvWood: 'turquoise', bigTvOrnament: 'cat' })`);
+                await sleep(200);
+                await shoot(`jellyfin-big-tv-fifties-${name}`);
+            }
+            await cdp.send('Emulation.clearDeviceMetricsOverride');
+            return true;
+        }],
+        ['Big Old TV: the knob follows the channel, snow between items, a dot on pause, and still on Low', async () => {
+            const mock = jellyfinServer();
+            await fresh(`${WEB}/stage.html?w=jellyfin&tier=low`, jellyfinSignedIn(mock, { order: 'inOrder', subtitles: 'off', showTitle: false, frame: 'big-tv' }));
+            if (!await waitFor(() => counts(`m.state === 'playing' && m.video.currentTime > 0.2`), 10000)) return record('never played');
+            // The overlay's pixel in the middle of the screen: opaque while snow or the dark tube covers the video.
+            const covered = () => counts(`(s => m.ctx.getImageData(Math.round((s.x + s.w / 2) * devicePixelRatio), Math.round((s.y + s.h * 0.3) * devicePixelRatio), 1, 1).data[3] > 200)(m.layout.screen)`);
+            // Note the channel each overlay frame draws its knob at.
+            await counts(`(f => { const tick = f.tick; window.knobs = []; f.tick = (ctx, t, L, env) => { window.knobs.push(env.channel); return tick(ctx, t, L, env); }; })(m.frameDef)`);
+            if (await covered()) record('the screen is covered while playing');
+            const paints = await counts('m.paints'), channel = await counts('m.channel');
+            await counts('m.skip(1)');
+            if (!await waitFor(covered, 3000)) record('no snow between items');
+            if (!await waitFor(async () => !await covered() && await counts(`m.state === 'playing' && m.video.currentTime > 0.2`), 8000)) record('the snow never cleared');
+            if (await counts('m.channel') !== channel + 1 || (await evaluate('window.knobs')).at(-1) !== channel + 1) record('the knob didn\'t follow the channel');
+            if (await counts('m.paints') !== paints) record('a new item repainted the set');
+            await sleep(4600);   // past the 🔇 badge's fade
+            const drawn = await framesIn(2000);
+            if (drawn > 1) record(`${drawn} overlay frames in 2 s on Low`);
+            await counts('m.togglePause()');
+            await sleep(1300);
+            if (!await covered()) record('pause left the picture up');
+            await shoot('jellyfin-big-tv-off');
+            await counts('m.togglePause()');
+            if (!await waitFor(async () => !await covered(), 3000)) record('play didn\'t bring the picture back');
+            return true;
+        }],
         ['mantel: the fire flickers at about 12 fps, and holds still on Low', async () => {
             const mock = jellyfinServer();
             for (const [tier, low, high] of [['medium', 10, 30], ['low', 0, 1]]) {

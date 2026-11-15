@@ -284,7 +284,7 @@
           ] },
         { id: 'jellyfin', name: 'Jellyfin', icon: '📺', accent: '#b07cf0', background: '#000',
           scripts: ['jellyfin/jellyfin-logic.js', 'jellyfin/jellyfin-api.js', 'jellyfin/jellyfin-frames.js',
-              'jellyfin/frames/none.js', 'jellyfin/frames/old-tv.js', 'jellyfin/frames/mantel.js', 'jellyfin/frames/cinema.js',
+              'jellyfin/frames/none.js', 'jellyfin/frames/old-tv.js', 'jellyfin/frames/big-tv.js', 'jellyfin/frames/mantel.js', 'jellyfin/frames/cinema.js',
               'jellyfin/frames/drive-in.js', 'jellyfin/frames/porthole.js', 'jellyfin/frames/gallery.js', 'jellyfin/frames/arcade.js',
               'jellyfin/frames/ambilight.js', 'jellyfin/frames/camcorder.js',
               'jellyfin/frames/christmas-kit.js', 'jellyfin/frames/christmas-lights.js', 'jellyfin/frames/snowed-in.js', 'jellyfin/frames/christmas-tree.js',
