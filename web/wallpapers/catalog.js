@@ -320,6 +320,16 @@
               { keys: ['n'], label: 'On to the finish, or the next bout', run: sumo => sumo.skip() },
               { keys: ['b'], label: 'Hold up the ranking sheet', run: sumo => { sumo.showSheet(); } },
           ] },
+        { id: 'pocket-hockey', name: 'Pocket Hockey', icon: '🏒', accent: '#6cb6ee', background: '#1a1f2b',
+          scripts: ['pocket-hockey/hockey-logic.js', 'pocket-hockey/hockey-art.js', 'pocket-hockey/pocket-hockey.js'],
+          make: host => new PocketHockeyAnimationManager(host), cost: 'low', interactive: true,
+          keys: [
+              { keys: ['n'], label: 'Skip ahead: to the end of the period, or past whatever is showing', run: hockey => hockey.skip() },
+              { keys: ['g'], label: 'Straight to the final horn', run: hockey => hockey.toFinal() },
+              { keys: ['b'], label: 'The table, then the scorers', run: hockey => { hockey.showBoard(); } },
+              { keys: ['x'], label: 'Throw something on the ice', run: hockey => hockey.throwSomething() },
+              { keys: ['w'], label: 'Start a wave', run: hockey => hockey.startWave() },
+          ] },
         { id: 'bing', name: 'Bing Image of the Day', icon: '🖼️', accent: '#8ab4ff', scripts: ['bing/bing.js'],
           make: host => new BingWallpaperManager(host), cost: 'none', network: ['www.bing.com'] },
     ];
