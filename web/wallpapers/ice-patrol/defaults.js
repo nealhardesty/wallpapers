@@ -5,6 +5,7 @@ WP.defaults('ice-patrol', {
     speed: 1,              // × the cruise (80 m/s)
     clearance: 22,         // metres it holds above the snow
     bank: 0.75,             // how far the horizon tips in a turn, × the real bank
+    turbulence: 1,         // × the bob and buffet of the air; 0 is dead level flight
     fov: 62,               // degrees, top to bottom on a wide screen
     time: 'cycle',         // cycle, clock, dawn, day, dusk, night
     dayMinutes: 16,        // a full day and night, in 'cycle'

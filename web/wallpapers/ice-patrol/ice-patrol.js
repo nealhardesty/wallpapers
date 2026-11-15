@@ -3,14 +3,15 @@
 // low sun, two moons and an aurora; snow that comes and goes; wingmen
 // ahead; and a cockpit whose instruments read the world outside.
 //
-//   ice-logic.js    the world: terrain, autopilot, sky, weather, radar (pure)
+//   ice-logic.js    the world: terrain, autopilot, sky, weather, the scan, the bob (pure)
 //   ice-gl.js       the view outside, in WebGL
 //   ice-cockpit.js  the canopy, the panel and its instruments, in 2D
 //   ice-patrol.js   this: the manager that flies it
 //
 // Cheap by construction (SPEC §4.8): the GPU draws the world, and the main
-// thread only steers (a few dozen height lookups a frame), sweeps the radar
-// and repaints a handful of small instruments about fifteen times a second.
+// thread only steers (a few dozen height lookups a frame), rescans a few
+// rows of the terrain scope and repaints the instruments that have changed,
+// about fifteen times a second.
 
 const ICE_TIMES = { dawn: 0.262, day: 0.5, dusk: 0.741, night: 0.0 };
 const ICE_TIME_ORDER = ['cycle', 'clock', 'dawn', 'day', 'dusk', 'night'];
@@ -56,6 +57,7 @@ class IcePatrolAnimationManager {
         this.held = new Map();   // what the keys are pushing: until when, in this.seconds
         this.drag = null;        // a finger or the mouse as a stick: { turn, climb }
         this.input = { turn: 0, climb: 0, throttle: 0 };
+        this.bob = { pitch: 0, roll: 0, x: 0, y: 0 };    // what the air is doing to the craft (IceLogic.bob)
         this.onResize = () => this.resize();
         // A key held while this page has focus: down until it comes up. (A press
         // the player forwards arrives through the catalog instead: nudge().)
@@ -87,7 +89,7 @@ class IcePatrolAnimationManager {
         if (this.flat) this.ctx = canvas.getContext('2d');
         canvas.addEventListener('webglcontextlost', this.onLost);
         canvas.addEventListener('webglcontextrestored', this.onRestored);
-        this.cockpit = new IceCockpit(this.host, this.terrain);
+        this.cockpit = new IceCockpit(this.host, this.terrain, Math.random() * 1000);
         this.cockpit.mount();
         window.addEventListener('resize', this.onResize);
         if (!this.host.params.thumb) {
@@ -379,13 +381,15 @@ class IcePatrolAnimationManager {
         const night = 1 - light.day, level = this.weather.level;
         const still = this.host.reducedMotion;
 
-        // The head: with the craft, a touch nose-down to keep the ground in view, and shaken by the weather.
-        const shake = still ? 0 : (0.004 + 0.012 * level) * c.bank;
+        // The head: with the craft, a touch nose-down to keep the ground in
+        // view, and moved by the air: a float when it is still, buffets in
+        // the wind, nothing at all with Turbulence at 0.
+        const bob = IceLogic.bob(this.seconds, level, still ? 0 : c.turbulence, this.bob);
         const cam = scene.cam;
         cam.x = flight.x; cam.y = flight.y; cam.z = flight.z;
         cam.heading = flight.heading + this.pan;
-        cam.pitch = flight.pitch * 0.6 - 0.045 + shake * Math.sin(this.seconds * 7.3) * Math.sin(this.seconds * 1.9);
-        cam.roll = still ? 0 : flight.roll * c.bank + shake * Math.sin(this.seconds * 5.1 + 1) * Math.sin(this.seconds * 1.3);
+        cam.pitch = flight.pitch * 0.6 - 0.045 + bob.pitch;
+        cam.roll = (still ? 0 : flight.roll * c.bank) + bob.roll;
         const aspect = this.width / this.height;
         let tanY = Math.tan(c.fov / 2 * IceLogic.RAD);
         if (aspect < 1) tanY = Math.min(1.25, Math.max(tanY, Math.tan(27 * IceLogic.RAD) / aspect));   // a phone held upright still sees 54° across
@@ -468,6 +472,10 @@ class IcePatrolAnimationManager {
         this.cockpit.update({
             config: c, seconds: this.seconds, flight, speed: v, light, night, lamps, level, flakes: air.flakes,
             manual: this.pilot.active, contacts: this.contacts, sway: still ? 0 : 1, pan: this.pan, horizon: light.horizon,
+            bob, pilot: this.pilot, throttle: this.pilot.throttle, climb: flight.climb, pull: flight.pull, roll: flight.roll, day: this.day,
+            // A sun low enough to rake the glass; and whether the panel's small life should hold still.
+            lowSun: IceLogic.smooth(-3, 3, sky.sunEl) * (1 - IceLogic.smooth(9, 20, sky.sunEl)) * (1 - air.overcast),
+            calm: still || this.host.quality.tier === 'low',
         });
     }
 

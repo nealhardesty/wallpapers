@@ -8,8 +8,9 @@
 //   flight    the autopilot: follows the low ground, climbs over what it must
 //   sky       where the sun and the two moons are, and the light they give
 //   weather   snow that comes and goes
-//   radar     one ray of a ground-mapping radar: slopes facing the dish
-//             shine, and whatever hides behind a ridge stays dark
+//   bob       what the air does to the craft: a float in still air, buffets in wind
+//   scan      one cell of the scope's terrain map: height, relief, contour
+//   greebles  the cockpit's small life: switches thrown, lamps that blink
 
 const IceLogic = (() => {
     const clamp = (x, lo, hi) => Math.min(hi, Math.max(lo, x));
@@ -445,24 +446,81 @@ const IceLogic = (() => {
         };
     }
 
-    // ---- Radar ------------------------------------------------------------------
-    // One ray of a ground-mapping radar from (x, y, z) along bearing `az`
-    // (radians from north): the strength of the return from each of `bins`
-    // range cells out to `range` metres, written to `out`. A cell echoes if
-    // it rises above everything nearer (the steeper it faces the dish, the
-    // brighter); behind a ridge there is only shadow.
-    function radarRay(ground, x, y, z, az, range, bins, out) {
-        const sin = Math.sin(az), cos = Math.cos(az), step = range / bins;
-        let horizon = -Infinity;
-        for (let i = 0; i < bins; i++) {
-            const r = (i + 0.5) * step;
-            const slope = (ground(x + sin * r, z + cos * r) - y) / r;   // tangent of the angle up to this cell
-            if (slope > horizon) {
-                // The ground right below meets the beam squarely: the strongest return of all.
-                out[i] = horizon === -Infinity ? 1 : clamp(0.16 + (slope - horizon) * r / step * 0.9, 0, 1);
-                horizon = slope;
-            } else out[i] = 0;
+    // ---- Rough air ---------------------------------------------------------------
+    // What the air does to the craft at `t` seconds: `pitch` and `roll` for
+    // the view (radians), `x` and `y` for the airframe about the pilot's
+    // head (px). Still air is a slow float you would have to look for; wind
+    // (0 calm to 1 a blizzard) buffets, in gusts. All of it scales with
+    // `turbulence` (the setting): at 0 the flight is dead level. A function
+    // of the time alone, so it is the same ride at any frame rate.
+    function bob(t, wind, turbulence, out = {}) {
+        const k = turbulence, w = clamp(wind, 0, 1) * (0.78 + 0.22 * Math.sin(t / 6.3));
+        out.pitch = k * (0.0007 * Math.sin(t * 0.71) + 0.0004 * Math.sin(t * 0.33 + 1)
+            + w * (0.014 * Math.sin(t * 7.3) * Math.sin(t * 1.9) + 0.004 * Math.sin(t * 3.1 + 0.5)));
+        out.roll = k * (0.0006 * Math.sin(t * 0.53 + 2) + w * 0.015 * Math.sin(t * 5.1 + 1) * Math.sin(t * 1.3));
+        out.x = k * (0.1 * Math.sin(t * 0.47 + 4) + w * 2.6 * Math.sin(t * 6.1) * Math.sin(t * 1.7));
+        out.y = k * (0.16 * Math.sin(t * 0.71 + 0.6) + w * (2.6 * Math.sin(t * 7.7 + 2) * Math.sin(t * 2.3) + 1.2 * Math.sin(t * 2.9)));
+        return out;
+    }
+
+    // ---- The terrain scan -----------------------------------------------------------
+    // One cell of the scope's map, `cell` metres across with its corner at
+    // (x, z): out[0] its height, out[1] its relief (0 to 1, lit from the
+    // north-west as a map is, 0.42 on the flat), out[2] 1 where a contour
+    // line (every `interval` metres) crosses it.
+    function scanCell(ground, x, z, cell, interval, out) {
+        const h = ground(x, z), east = ground(x + cell, z), north = ground(x, z + cell);
+        const band = Math.floor(h / interval);
+        out[0] = h;
+        out[1] = clamp(0.42 + 0.9 * ((east - h) - (north - h)) / cell, 0, 1);
+        out[2] = Math.floor(east / interval) !== band || Math.floor(north / interval) !== band ? 1 : 0;
+        return out;
+    }
+
+    // ---- The cockpit's small life ----------------------------------------------------
+    // Switches, lamps and needles that drive nothing, but keep house as a
+    // crew would. Everything is a function of the time, a seed and the
+    // flight's state, so it needs no memory and no clock of its own.
+    //   switches  the first GREEBLE.wired.length follow the craft (the names
+    //             in `wired`); the rest are thrown now and then, each on its
+    //             own long period (one somewhere every twenty seconds or so)
+    //   lamps     each steady, dark, blinking slowly or flickering like data
+    //   load      the engine's, 0 to 1: throttle, climb and a little wander
+    //   creep     three levels that drift over minutes (the first is the
+    //             cells' heat, and rises with the load)
+    //   warn      rough air or a steep bank; `blink` is its lamp's phase
+    // `calm` (Low tier, reduced motion): lamps hold, needles don't wander,
+    // and a switch is thrown eight times less often.
+    const GREEBLE = { wired: ['auto', 'lamps', 'deice', 'panel', 'heat', 'boost'], switches: 17, lamps: 12, period: 110, calm: 8, storm: 0.8, bank: 0.5 };
+    const hash = (seed, i, k) => { const s = Math.sin(seed * 12.9898 + i * 78.233 + k * 37.719) * 43758.5453; return s - Math.floor(s); };
+
+    function greebles(t, seed, state = {}, out = {}) {
+        const { throttle = 1, climb = 0, pull = 0, level = 0, night = 0, manual = false, roll = 0, lamps = 0, calm = false } = state;
+        const sw = out.switches || (out.switches = new Uint8Array(GREEBLE.switches)), lm = out.lamps || (out.lamps = new Uint8Array(GREEBLE.lamps));
+        const wired = [!manual, lamps > 0.3, level > 0.5, night > 0.5, level > 0.15 || night > 0.5, throttle > 1.25];
+        for (let i = 0; i < sw.length; i++) {
+            if (i < wired.length) { sw[i] = wired[i] ? 1 : 0; continue; }
+            const period = GREEBLE.period * (0.6 + 0.8 * hash(seed, i, 1)) * (calm ? GREEBLE.calm : 1);
+            sw[i] = hash(seed, i, 3 + Math.floor(t / period + hash(seed, i, 2))) < 0.62 ? 1 : 0;
         }
+        for (let i = 0; i < lm.length; i++) {
+            const kind = hash(seed, i, 101), a = hash(seed, i, 102), b = hash(seed, i, 103);
+            if (kind < 0.3) lm[i] = 1;
+            else if (kind < 0.45) lm[i] = 0;
+            else if (calm) lm[i] = a < 0.6 ? 1 : 0;
+            else if (kind < 0.78) lm[i] = (t / (1.6 + 3.4 * a) + b) % 1 < 0.5 ? 1 : 0;
+            else lm[i] = hash(seed, i, 200 + Math.floor(t / (0.3 + 0.6 * a) + b)) < 0.55 ? 1 : 0;
+        }
+        const thrust = clamp((throttle - PILOT.slow) / (PILOT.fast - PILOT.slow), 0, 1), p = hash(seed, 0, 300) * 6.283;
+        const wander = calm ? 0 : 0.025 * Math.sin(t * 0.9 + p) + 0.015 * Math.sin(t * 2.3 + p * 2);
+        out.load = clamp(0.18 + 0.6 * thrust + 0.2 * clamp(climb / 40, 0, 1) + 0.12 * pull + wander, 0, 1);
+        const creep = out.creep || (out.creep = [0, 0, 0]);
+        for (let i = 0; i < 3; i++) {
+            const q = hash(seed, i, 400) * 6.283;
+            creep[i] = clamp(0.5 + 0.22 * Math.sin(t / (170 + 60 * i) + q) + 0.08 * Math.sin(t / (41 + 9 * i) + q * 3) + (i ? 0 : 0.3 * (thrust - 0.3)), 0, 1);
+        }
+        out.warn = level > GREEBLE.storm || Math.abs(roll) > GREEBLE.bank;
+        out.blink = calm || t % 0.9 < 0.55;
         return out;
     }
 
@@ -473,6 +531,6 @@ const IceLogic = (() => {
         FLIGHT, flightStart, flightStep, flightAdvance, PILOT, pilotStart, pilotStep,
         SUN_MAX, bodies, light, LIGHT,
         WEATHER, weatherStart, weatherStep, air,
-        radarRay,
+        bob, scanCell, GREEBLE, greebles,
     };
 })();

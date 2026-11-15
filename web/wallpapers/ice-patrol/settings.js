@@ -5,6 +5,7 @@ WP.schema('ice-patrol', [
     { key: 'speed', label: 'Speed', type: 'range', min: 0.4, max: 2.5, step: 0.05, unit: '×', digits: 2, help: '1× is about 290 km/h' },
     { key: 'clearance', label: 'Height above the snow', type: 'range', min: 10, max: 160, step: 2, unit: ' m', help: 'Low skims the drifts; high looks out over the ranges' },
     { key: 'bank', label: 'Banking', type: 'range', min: 0, max: 1.5, step: 0.05, unit: '×', digits: 2, help: 'How far the horizon tips in a turn. 0 keeps it level' },
+    { key: 'turbulence', label: 'Turbulence', type: 'range', min: 0, max: 2, step: 0.1, unit: '×', digits: 1, help: 'How much the air moves the craft: a slow float in still air, buffets when the wind gets up. 0 flies dead level in any weather' },
     { key: 'wingmen', label: 'Wingmen', type: 'range', min: 0, max: 3, step: 1, help: 'Other speeders flying ahead in formation' },
     { key: 'touch', label: 'Drag to steer', type: 'toggle', help: 'Drag like a stick: sideways turns, up climbs. W A S D or the arrows fly it too, Q and E are the throttle, and the autopilot takes it back after 5 seconds' },
     { group: '🌗 Sky and Weather' },

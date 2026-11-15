@@ -1925,17 +1925,22 @@ const STAGE_CHECKS = {
         }],
     ],
     'ice-patrol': [
-        ['in the air on the first frame: wingmen, lights, a radar picture, live gauges', async () => {
+        ['in the air on the first frame: wingmen, lights, the terrain scan whole and under the craft, live gauges', async () => {
             if (!await stageWith('ice-patrol', null, '&seed=7')) return record('not ready');
             await sleep(2500);
             const paint = "c => { const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data; let n = 0; for (let i = 3; i < d.length; i += 4) n += d[i] > 40; return n / (d.length / 4); }";
             const s = await evaluate(`(m => ({ flat: m.flat, agl: m.flight.agl, wingmen: m.wingmen.length, craft: m.scene.craft.length, lights: m.scene.lights.length,
-                radar: (${paint})(m.cockpit.radar), gauges: (${paint})(m.cockpit.gauges), frame: (${paint})(m.cockpit.frame),
+                radar: (${paint})(m.cockpit.radar), gauges: (${paint})(m.cockpit.gauges), frame: (${paint})(m.cockpit.frame), grips: (${paint})(m.cockpit.grips),
+                off: (sc => Math.max(Math.abs(m.flight.x / sc.cell - sc.i - m.cockpit.radar.width / 2), Math.abs(m.flight.z / sc.cell - sc.j - m.cockpit.radar.width / 2)))(m.cockpit.scan),
+                switches: m.cockpit.life.switches.length, drawn: Object.keys(m.cockpit.sigs).length,
                 shown: m.cockpit.wrap.style.display !== 'none' }))(WP.stage.manager)`);
             if (!(s.agl >= 4)) record(`it is ${s.agl} m above the snow`);
             if (s.wingmen !== 2 || s.craft !== 2 || s.lights < 4) record(`the formation: ${JSON.stringify(s)}`);
-            if (s.radar < 0.01) record(`the radar has painted ${(s.radar * 100).toFixed(1)}% of its tube`);
-            if (s.gauges < 0.03 || s.frame < 0.2 || !s.shown) record(`the cockpit: ${JSON.stringify(s)}`);
+            // The scan is a whole picture from the first frame (no sweep to wait for), and its map stays centred on the craft to within a cell.
+            if (s.radar < 0.99) record(`the scan has painted ${(s.radar * 100).toFixed(1)}% of its map`);
+            if (!(s.off <= 1)) record(`the scan's map is ${s.off} cells off the craft`);
+            if (s.gauges < 0.03 || s.frame < 0.2 || s.grips < 0.02 || !s.shown) record(`the cockpit: ${JSON.stringify(s)}`);
+            if (s.switches !== 17 || s.drawn < 10) record(`the panel's small life: ${s.switches} switches, ${s.drawn} instruments drawn`);
             if (await evaluate(DRAWN) < 30) record('barely drawn');
             await shoot('ice-patrol-cockpit');
             return s.agl >= 4;
@@ -1988,7 +1993,7 @@ const STAGE_CHECKS = {
             }
             return true;
         }],
-        ['night lights the lamps and the stars; a blizzard closes in; the keys step and save', async () => {
+        ['night lights the lamps and the stars; a blizzard closes in and buffets, unless Turbulence is 0; the keys step and save', async () => {
             if (!await stageWith('ice-patrol', { configVersion: 1, time: 'day', weather: 'clear' }, '&seed=7')) return record('midday: not ready');
             await sleep(1500);
             const day = await evaluate(AVERAGE);
@@ -2004,6 +2009,15 @@ const STAGE_CHECKS = {
             const b = await evaluate('(m => ({ level: m.weather.level, see: m.air.visibility, flakes: m.scene.flakes, lamps: m.lamps, sun: m.scene.lightCol[0] }))(WP.stage.manager)');
             if (b.level < 0.99 || b.see > 600 || b.flakes < 0.95 || b.lamps !== 0 || b.sun > 0.4) record(`blizzard: ${JSON.stringify(b)}`);
             await shoot('ice-patrol-blizzard');
+            // The air: in a blizzard the view and the airframe are buffeted; with Turbulence at 0 (taken live) the flight is dead level.
+            const air = "(m => { let most = 0; for (let i = 0; i < 40; i++) { m.seconds += 0.11; m.draw(); most = Math.max(most, Math.abs(m.scene.cam.pitch - (m.flight.pitch * 0.6 - 0.045)), Math.abs(m.scene.cam.roll - m.flight.roll * m.config.bank)); } return { most, bob: { ...m.bob }, at: m.cockpit.wrap.style.transform }; })(WP.stage.manager)";
+            await evaluate('(m => { m.update = () => {}; m.renderer.render = () => {}; })(WP.stage.manager)');    // (software WebGL: seconds a frame)
+            const rough = await evaluate(air);
+            if (!(rough.most > 0.004)) record(`a blizzard moves the view ${rough.most} rad at most`);
+            await evaluate('(m => m.applySettings({ ...m.config, turbulence: 0 }))(WP.stage.manager)');
+            const level = await evaluate(air);
+            if (level.most !== 0 || level.bob.x !== 0 || level.bob.y !== 0 || level.bob.pitch !== 0 || level.bob.roll !== 0) record(`Turbulence 0 still moves: ${JSON.stringify(level)}`);
+            if (!await stageWith('ice-patrol', { configVersion: 1, time: 'day', weather: 'blizzard', lamps: false }, '&seed=7')) return record('blizzard again: not ready');
             // X, T, V and R, as the catalog binds them.
             const keys = await evaluate(`(m => { const run = key => WP.entry('ice-patrol').keys.find(k => k.keys.includes(key)).run(m, {}); return { w: run('x'), t: run('t'), v: [run('v'), run('v')], r: run('r'), config: m.config, saved: JSON.parse(localStorage.getItem('wp:ice-patrol')) }; })(WP.stage.manager)`);
             if (keys.config.weather !== 'auto' || keys.config.time !== 'dusk' || keys.config.cockpit !== 'none' || keys.config.radarRange !== 8000) record(`the keys left ${JSON.stringify(keys.config)}`);

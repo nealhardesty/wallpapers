@@ -157,7 +157,7 @@ Added for Christmas, drawn in code (designs in §10.27–§10.30):
 | `frost` | frost-logic.js, frost-art.js, frost.js | ~1k lines | Interactive (drag to draw in the frost, tap to breathe on it); fern frost grown tip by tip on an occupancy grid, the window and the doodles (`FrostLogic`), unit-tested; follows `host.now()` (Christmas Eve and Day); keys B, D, T |
 | `small-christmas` | small-christmas-logic.js, small-christmas-art.js, small-christmas.js | ~800 lines | Interactive (tap the tree, the train, the floor); pixel art at its own resolution, scaled up pixelated; palettes, blink patterns, the train's oval and the hops (`SmallXmasLogic`), unit-tested; follows `host.now()` (the sleigh on Christmas Eve, presents on Christmas Day); keys T, M, L, S |
 | `sky-island` | sky-island-logic.js, sky-island-art.js, sky-island-land.js, sky-island-actors.js, sky-island.js (and Harvest's harvest-sky.js) | ~3.5k lines | Interactive (tap a cat, a person, the lake, a house at night, the sky); 16-bit pixel art at its own resolution (a pixel is 2 CSS px on a laptop or 1080p), scaled up pixelated; a terraced island seen from above and in front, its underside, the sea of cloud and the ground far below all baked; the calendar (seasons, holidays, Easter, the owner's dates), the names and the island's three-tier layout from a seed (`SkyIslandLogic`), unit-tested over 240 layouts; follows `host.now()` (the hour, the season, every holiday); keys N, P, V, O, B, W, S, H |
-| `ice-patrol` | ice-logic.js, ice-gl.js, ice-cockpit.js, ice-patrol.js | ~2.5k lines | The first on WebGL (§10.34): an endless snowfield from two baked noise fields, the same height formula in JavaScript and in the shaders (`IceLogic`), unit-tested; a 2D cockpit whose radar sweeps the real terrain; a 2D ridgeline fallback without WebGL; its own watch on the GPU; interactive (fly it by hand: keys and a drag; the autopilot takes it back after 5 s); keys W A S D, arrows, Q, E, X, T, V, R |
+| `ice-patrol` | ice-logic.js, ice-gl.js, ice-cockpit.js, ice-patrol.js | ~3k lines | The first on WebGL (§10.34): an endless snowfield from two baked noise fields, the same height formula in JavaScript and in the shaders (`IceLogic`), unit-tested; a 2D cockpit (struts, a winged console, switches that keep house) whose centre screen is a live scan of the real terrain; a 2D ridgeline fallback without WebGL; its own watch on the GPU; interactive (fly it by hand: keys and a drag; the autopilot takes it back after 5 s); keys W A S D, arrows, Q, E, X, T, V, R |
 | `sumo` | sumo-logic.js, sumo-art.js, sumo.js | ~1.3k lines | No network; a league of invented wrestlers kept in `host.storage`, written in Japanese with an English gloss (§10.35); bouts and tournaments pure and seeded (`SumoLogic`), unit-tested; interactive (a tap throws a cushion); evening by `host.now()`; keys N, B |
 | `pocket-hockey` | hockey-logic.js, hockey-art.js, pocket-hockey.js | ~2.4k lines | No network; an invented league of eight clubs and the game in progress kept in `host.storage` (§10.35); the league, the 60 Hz game (physics, steering, signature moves) and the seasons pure and seeded (`HockeyLogic`), unit-tested; top-down pixel art at its own resolution, scaled up pixelated, with its own 5×7 font; interactive (a tap throws something on the ice, or starts a wave); keys N, G, B, X, W |
 | `baseball` | baseball-logic.js, baseball-league.js, baseball-talk.js, baseball-art.js, baseball.js | ~2.4k lines | No network; a league of eight invented clubs kept in `host.storage` (§10.37); every pitch, ball in play and box score pure and seeded (`BaseballLogic`, `BaseballLeague`), unit-tested; 16-bit pixel art at its own resolution with its own lettering, scaled up pixelated; interactive (a tap starts a wave); day, dusk and night by `host.now()`; keys N, S |
@@ -852,7 +852,7 @@ and the commits.
 | small-christmas | — | The canvas is the picture's own pixels (a few hundred across), scaled up by CSS with `image-rendering: pixelated`, so a frame is tiny; 12 fps by default (a setting), idleUntil between frames; sky, moon and snow floor one baked layer; every sprite baked per palette; scanlines a baked overlay canvas; snow × density |
 | harvest | `mist`, `beams` (medium) | Land is one baked layer per resize; trees, leaves, apples, geese and clouds are baked sprites; the world is washed once per frame with the hour's light; leaves, apples, smoke, sparks and flocks × density; squirrels × (0.5 + 0.5 density) |
 | sky-island | — | The canvas is the picture's own pixels (2 CSS px each on a laptop or 1080p, 3 at 1440p, 4 at 4K, 1 on a phone), scaled up pixelated; the terrain (three tiers, their cliffs, the underside, the water) is one bake per season, the roots three sway frames, the sea of cloud two tileable strips and the ground one, rebaked with the light; everything that stands still (houses, trees, lamps, props, trimmings) is baked into one layer per street band, drawn in turn with whoever moves (trees are drawn live, swaying, only on High); the sky is a dithered bake redone as the light changes, the stars four baked twinkle frames; the night is one `source-atop` wash over the island's scratch, with the lit windows and lamps one glow layer redone only when the lit set changes; a passing island is one bake with a few live bits; 20 fps by default (a setting), 12 on Low, paced on a steady timeline through idleUntil; folk × (0.4 + 0.6 density), strays, wildlife, rain, snow, leaves, fireflies × density. Bench 2026-11-11 (v2): Low 21%, Medium 38%, High 46% |
-| ice-patrol | `shadows`, `sparkle` (medium) | WebGL: one grid drawn nine times (96, 64 or 48 cells a side by density), heights and slopes from two noise textures; shadows ten marched steps on High, six on Medium, compiled out when shed (after fading); flakes × density, wrapped in the vertex shader; the cockpit frame painted per light step, the gauges at 15 Hz on a strip of their own; a few dozen height lookups a frame on the main thread. The GPU is watched by the wallpaper itself (late frames give up shadows, then render scale to 0.4), since the governor only times callbacks; software renderers start there. No WebGL: 34 ridgelines a frame in 2D |
+| ice-patrol | `shadows`, `sparkle` (medium) | WebGL: one grid drawn nine times (96, 64 or 48 cells a side by density), heights and slopes from two noise textures; shadows ten marched steps on High, six on Medium, compiled out when shed (after fading); flakes × density, wrapped in the vertex shader; the cockpit frame painted per light step, the gauges at 15 Hz (8 on Low) on a strip of their own, each instrument only when its reading changes; the terrain scan a 144² map (80² on Low) scrolled by cells, four rows (two) rescanned a tick; lamp halos one sprite a colour; a few dozen height lookups a frame on the main thread. The GPU is watched by the wallpaper itself (late frames give up shadows, then render scale to 0.4), since the governor only times callbacks; software renderers start there. No WebGL: 34 ridgelines a frame in 2D |
 | sumo | — | The hall is one cached canvas (rebuilt on resize, tier and at dusk); a frame draws it, three jointed figures and a few marks. The crowd's rows and the cushions thrown follow density |
 | pocket-hockey | — | The canvas is the picture's own pixels (about 427 × 267 on a laptop, 206 × 458 on an upright phone; a pixel is 3 CSS px at 1280 × 800, in half steps below that), scaled up pixelated. The arena (ice, lines, boards, benches, a crowd of some thousands) is one bake a game; a working copy of it takes the skate marks and the resurfacer's stripes, so a frame is one blit of that, a dozen kept sprites, and lettering set once a line and kept. The round's other games are stepped 4 ms a frame. Hats, paper, spray, camera flashes and skate marks × density. Bench 2026-11-15 on a loaded machine (Snow beside it for scale: 20%, 24%, 60%): Low 14%, Medium 21%, High 44% |
 | baseball | — | The canvas is the picture's own pixels (about 3 CSS px each on a laptop), scaled up pixelated; the park (sky, stands, crowd, turf, fence) is one bake per game, size and light, with the crowd on its feet a second; the scoreboard and all the captions are two more canvases redrawn only when their words change; a frame blits those and draws about thirty men of a dozen rectangles each. The crowd, fireworks, confetti and rain follow density |
@@ -4096,10 +4096,12 @@ plains of snow; realism, not pixel art; falling snow on and off; night and
 day; a realistic cockpit with a realistic flight radar. The reference was a
 "night drive over an ice world" ambience video.
 
-**It is our own ice world.** No film's names, craft or cockpit: the
-speeder, its panel and the planet (a low sun, two moons) are drawn from
-nothing but the brief, so the repo's "art drawn in code, nothing that isn't
-ours" rule (§1) holds. The catalog name is one string if the owner wants
+**It is our own ice world.** No film's names, craft, props, lettering or
+panel layouts: the speeder, its panel and the planet (a low sun, two moons)
+are drawn from nothing but the brief, so the repo's "art drawn in code,
+nothing that isn't ours" rule (§1) holds. The cockpit (below) takes only
+the general shape the owner asked for: two struts over the pilot's head, a
+console with swept wings. Every instrument, label and mark on it is ours. The catalog name is one string if the owner wants
 another.
 
 **The first wallpaper on WebGL.** Lit, shadowed snow to the horizon is a
@@ -4166,25 +4168,83 @@ ridgelines on a 2D canvas (below).
 - **Wingmen** (0 to 3) hold slots off a heading that trails ours, so they
   swing wide in a turn, and each rides its own ground. Engines glow; nav
   lights and a strobe after dark.
-- **The cockpit** (`IceCockpit`, 2D, over the view): a canopy frame and a
-  panel, repainted only when the light outside moves a step or frost
-  creeps another notch across the glass. Instruments, about 15 times a
-  second:
-  - **Ground-mapping radar** (`radarRay`): a dish nodding ±62° about the
-    nose; each ray's returns are computed from the real terrain (a slope
-    that faces the dish shines, whatever is behind a ridge stays dark), and
-    painted on a tube that slowly forgets, so the picture smears a little
-    in a turn. Wingmen, beacons and stations are contacts.
+- **The air** (`IceLogic.bob`, 2026-11-15, owner: "tone it down when
+  there's no wind ... mute it completely for level flight"). What moves the
+  view and the airframe apart from flying: in still air a slow float (a
+  thirtieth of a degree, a breath every nine seconds; it was a twelfth of a
+  degree of jitter), in wind a buffet that grows with the snow and comes in
+  gusts (a quarter of a degree in a blizzard). `turbulence` (0 to 2, 1 by
+  default) scales all of it, and at 0 the flight is dead level in any
+  weather; banking and terrain-following are flight, and stay. A function
+  of the time alone, so it is the same at any frame rate; reduced motion
+  is 0.
+- **The cockpit** (`IceCockpit`, 2D, over the view; rebuilt 2026-11-15,
+  owner: "two columns ... you don't see a root as it's swept back behind
+  you ... the controls are spread over a trapezoid half, also swept back
+  ... buttons, additional gauges and switches that don't necessarily
+  contribute (but perhaps sometimes switch)"). A two-seat skimmer's front
+  seat, of our own detailing: dark, flat-panelled, angular.
+  - *Canopy:* two heavy struts stand on the dash and lean in over the
+    pilot's head, wider as they come back, and leave the picture at the
+    top: no roof, no root. Three long faces each (one catches the day),
+    jointed and riveted, a ribbed hose clipped along the shadowed face, a
+    hydraulic ram bracing each off the sill. Rime in the corners of the
+    glass always, more when it snows; a low sun finds the scratches; by
+    night the instruments stand faintly in the windscreen.
+  - *Console:* a hooded centre console with a brow (heading tape, two
+    warning lamps, two bays of fat rockers), and wings that fall away to
+    both sides under louvred walls, their panels sheared as panels angled
+    to the pilot are. The yoke's two grips rise either side of the centre
+    screen, on a canvas of their own moved by CSS: over with the turn,
+    back with the climb, further with a hand on the stick. No hands: they
+    did not look good enough.
+  - *Three canvases:* the frame (repainted when the light outside moves a
+    step, frost creeps a notch or a low sun arrives), the grips, and the
+    gauges: fifteen times a second (eight on Low), **each instrument only
+    when what it shows has changed** (`region`: a signature per
+    instrument). Lamp halos are one sprite a colour; night's glow on the
+    metal is baked into the frame.
+  - **Terrain scan** (`scanCell`; it was a sweeping radar until the owner
+    said "in the technology of this world, we wouldn't need the sweep, just
+    a static scan of the terrain"). The centre screen shows the real ground
+    all round the craft at once: relief lit from the north-west, elevation
+    bands and a contour every fiftieth of the range, and whatever stands
+    above our own height in a warning ink (amber, then red). The map is an
+    offscreen canvas, a pixel a cell (144 a side, 80 on Low), north-up; it
+    scrolls by whole cells as the craft moves and only the cells that came
+    into view are scanned, plus four rows a tick (two on Low) so the
+    warning ink keeps up. The screen turns it nose-up and slides it under
+    the craft, so it moves smoothly between. Range rings, a nose line, a
+    riding N, the craft in white; wingmen as carets, beacons and stations
+    as red blips with the nearest named. `R` rescans at the new range.
   - **Attitude ball**, **heading tape**, and a **terrain-following scope**:
     the ground the autopilot is about to cross, side on, with PULL UP when
-    it is working hard.
-  - On wide screens: airspeed, caution lamps (AP, LAMP, HEAT, ICE, TERR,
-    WIND) and height and climb bars. All of it reads the world.
+    it is working hard. A throttle ladder beside the scan.
+  - On wide screens, the wings: airspeed, caution lamps (AP, LAMP, HEAT,
+    ICE, TERR, WIND), the hour and the cold, and height and climb bars.
+    All of it reads the world.
+  - **The rest keeps house** (`IceLogic.greebles`: the time, a seed and the
+    flight's state in; no memory). Seventeen switches: six follow the craft
+    (autopilot, lamps, de-ice, panel lights, heater, boost: take the stick
+    and AP drops; night throws PNL), eleven are thrown now and then, each
+    on its own period (one somewhere every twenty seconds or so), and a
+    rocker's window lights as it goes over. Twelve lamps steady, dark,
+    blinking or flickering. The engine-load needle follows throttle and
+    climb and never quite rests; three ladders creep over minutes (the
+    cells' heat rises with the load). WARN blinks in rough air (snow over
+    0.8) or a bank past 0.5 rad, and clears; MAN is a hand on the stick. On
+    Low and under reduced motion the lamps hold, the needle rests and a
+    switch is thrown an eighth as often.
 - **Views:** canopy and panel, panel only, or none. `onScroll` turns the
   head with Android's pages. The panel has three sizes (`panelSize`: full,
   small ×0.68, extra small ×0.48): everything on it is drawn in shares of
-  its height, so a smaller one is the same panel lower down, and the outer
-  instruments fit narrower screens.
+  its height, so a smaller one is the same console lower down under more
+  glass, the struts standing out on its sills. The wings' instruments
+  appear where the screen is wide enough; spare wing is vented plate. An
+  upright phone gets the centre console alone, its speed in the scan's
+  corner.
+  - The old cockpit (padded coaming, roof bow, round sweeping radar) is
+    gone, not kept as a style: it shared no drawing code with this one.
 - **By hand** (2026-11-15; `IceLogic.pilotStep`, `PILOT`). `W A S D` or the
   arrows turn (0.42 rad/s, banking to 0.85 rad), climb and dive; `Q`/`E`
   are the throttle (×0.45 to ×2.2, to 220 m/s at most: the dial's end); a
@@ -4207,7 +4267,9 @@ ridgelines on a 2D canvas (below).
   time of day, `V` view, `R` radar range.
 
 **Cost, and a second governor.** The main thread steers (a few dozen
-height lookups a frame), sweeps the radar and repaints small instruments.
+height lookups a frame), rescans a few rows of the terrain map (about
+1,700 lookups a tick; a whole map, 62,000, only at the start and on `R`)
+and repaints the instruments that changed.
 The GPU does the rest, and the stage's governor (§4.8) can't see it: it
 times the page's own callbacks. So the wallpaper watches its own frames:
 when they arrive late for 2.5 s it gives up its shadows, then pixels
@@ -4231,11 +4293,15 @@ and 120 fps and never comes within 4 m of the snow at any speed, height or
 frame rate; by hand, the stick turns, climbs and is given back at five
 seconds, and fifteen minutes of diving flat out at whatever is there never
 comes within 4 m either; the sun, the moons and the light by the hour; weather comes
-and goes; the radar's shadows; the schema's options match the code's.
-Smoke: in the air on frame one with wingmen, lights, a radar picture and
-live gauges; the 2D fallback at the same speed on Low as High, and flown there by
+and goes; the air's bob (nothing at 0, still air far below wind, linear in
+the setting, the same at any frame rate); the scan's relief and contours;
+the switches (repeatable from a seed, thrown now and then, held when calm,
+wired to the craft); the schema's options match the code's.
+Smoke: in the air on frame one with wingmen, lights, the scan's map whole
+and centred on the craft, and live gauges; the 2D fallback at the same speed on Low as High, and flown there by
 held keys and a forwarded press until let go; night
-lights the lamps and the stars; a blizzard closes in; the keys step and
+lights the lamps and the stars; a blizzard closes in and buffets the view,
+and not at all with Turbulence at 0, taken live; the keys step and
 save; a phone's panel fits above the gesture bar.
 
 **Not built:** terrain as a height-field ray march (dearer per pixel,
