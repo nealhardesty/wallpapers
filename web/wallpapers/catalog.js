@@ -287,6 +287,7 @@
               'jellyfin/frames/none.js', 'jellyfin/frames/old-tv.js', 'jellyfin/frames/mantel.js', 'jellyfin/frames/cinema.js',
               'jellyfin/frames/drive-in.js', 'jellyfin/frames/porthole.js', 'jellyfin/frames/gallery.js', 'jellyfin/frames/arcade.js',
               'jellyfin/frames/ambilight.js', 'jellyfin/frames/camcorder.js',
+              'jellyfin/frames/christmas-kit.js', 'jellyfin/frames/christmas-lights.js', 'jellyfin/frames/snowed-in.js', 'jellyfin/frames/christmas-tree.js',
               'jellyfin/jellyfin.js'],
           make: host => new JellyfinAnimationManager(host), cost: 'high', motion: 'slow', interactive: true,
           network: 'user', offline: true, media: true, secrets: ['auth'],

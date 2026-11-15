@@ -121,7 +121,8 @@ class JellyfinAnimationManager {
         this.config = config;
         if (this.video) this.video.volume = config.volume;
         const changed = keys => keys.some(key => JSON.stringify(before[key]) !== JSON.stringify(config[key]));
-        if (changed(['frame', 'fit'])) { this.pickFrame(); this.resize(); }
+        // A frame's own options (the Christmas frames' are all xmas…) repaint it.
+        if (changed(['frame', 'fit', ...Object.keys(config).filter(key => key.startsWith('xmas'))])) { this.pickFrame(); this.resize(); }
         else if (changed(['showTitle'])) this.dirty();
         if (changed(['server'])) {
             this.feed = { status: {}, options: {} };
@@ -168,7 +169,7 @@ class JellyfinAnimationManager {
     env() {
         const effects = this.effects();
         return {
-            now: this.host.now(), title: this.item ? JellyfinLogic.titleOf(this.item) : '', quality: this.host.quality,
+            config: this.config, now: this.host.now(), title: this.item ? JellyfinLogic.titleOf(this.item) : '', quality: this.host.quality,
             motion: effects.has('frameMotion') && !this.host.reducedMotion, effects, insets: this.host.insets, reducedMotion: this.host.reducedMotion,
             viewport: { w: innerWidth, h: innerHeight }, channel: this.channel, volume: this.config.volume, video: this.video,
             playing: this.state === 'playing' && !this.userPaused, paused: this.state === 'playing' && this.userPaused,
@@ -271,7 +272,7 @@ class JellyfinAnimationManager {
             ctx.fillStyle = '#fff';
             ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
             ctx.shadowBlur = 6;
-            ctx.fillText(JellyfinLogic.titleOf(this.item), s.x + px, Math.min(s.y + px * 2.2, bottom - px));
+            ctx.fillText(JellyfinLogic.titleOf(this.item), s.x + px, Math.min(s.y + px * 2.2, bottom - px), s.w - px * 2);   // squeezed to fit a small screen (the tree's ornament)
             ctx.restore();
             wait = Math.min(wait, this.titleUntil - now < 1200 ? 50 : this.titleUntil - 1200 - now);
         }

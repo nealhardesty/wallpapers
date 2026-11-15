@@ -9,6 +9,7 @@
         const loaded = feed?.options?.[list] || [];
         return [['', loaded.length ? first(loaded[0][1]) : none], ...loaded];
     };
+    const XMAS = config => ['christmas-lights', 'snowed-in', 'christmas-tree'].includes(config.frame);
     const LANGUAGES = [['eng', 'English'], ['spa', 'Español'], ['fre', 'Français'], ['ger', 'Deutsch'], ['ita', 'Italiano'], ['por', 'Português'],
         ['dut', 'Nederlands'], ['swe', 'Svenska'], ['nor', 'Norsk'], ['dan', 'Dansk'], ['fin', 'Suomi'], ['pol', 'Polski'],
         ['rus', 'Русский'], ['jpn', '日本語'], ['kor', '한국어'], ['chi', '中文'], ['ara', 'العربية'], ['hin', 'हिन्दी']];
@@ -57,7 +58,20 @@
         { key: 'frame', label: 'Frame', type: 'select',
           options: [['old-tv', '📺 Old TV'], ['mantel', '🔥 Mantel'], ['cinema', '🎭 Cinema'], ['drive-in', '🚗 Drive-in'], ['porthole', '⚓ Porthole'],
               ['gallery', '🖼️ Gallery'], ['arcade', '🕹️ Arcade'], ['ambilight', '🌈 Ambilight'], ['camcorder', '📹 Camcorder'], ['vhs', '📼 VHS'],
+              ['christmas-lights', '✨ Christmas Lights'], ['snowed-in', '☃️ Snowed In'], ['christmas-tree', '🎄 Christmas Tree'],
               ['seasonal', '📅 Seasonal (mantel in winter, drive-in in summer)'], ['none', '⬛ None']] },
+        { key: 'xmasTv', label: 'TV ornament', type: 'select', when: config => config.frame === 'christmas-tree', options: [['small', 'Small'], ['medium', 'Medium'], ['large', 'Large']],
+          help: 'The video plays in an ornament on the tree' },
+        { key: 'xmasTopper', label: 'On top of the tree', type: 'select', when: config => config.frame === 'christmas-tree', options: [['star', '⭐ A star'], ['bow', '🎀 A bow'], ['none', 'Nothing']] },
+        { key: 'xmasPresents', label: 'Presents under the tree', type: 'toggle', when: config => config.frame === 'christmas-tree' },
+        { key: 'xmasSnow', label: 'Snow outside', type: 'select', when: config => config.frame === 'snowed-in' || config.frame === 'christmas-tree', options: [['light', '🌨️ Light'], ['heavy', '❄️ Heavy'], ['blizzard', '🌬️ Blizzard']] },
+        { key: 'xmasFire', label: 'Light the fire', type: 'toggle', when: config => config.frame === 'snowed-in' },
+        { key: 'xmasCat', label: 'A cat by the fire', type: 'toggle', when: config => config.frame === 'snowed-in' },
+        { key: 'xmasBulbs', label: 'Bulbs', type: 'select', when: config => config.frame === 'christmas-lights', options: [['big', '💡 Big'], ['mini', '✨ Mini']] },
+        { key: 'xmasGarland', label: 'Fir garland', type: 'toggle', when: config => config.frame === 'christmas-lights' },
+        { key: 'xmasBows', label: 'Bows and holly', type: 'toggle', when: config => config.frame === 'christmas-lights' },
+        { key: 'xmasColors', label: 'Light colours', type: 'select', when: XMAS, options: [['multi', '🌈 Every colour'], ['warm', '🕯️ Warm white'], ['cool', '🧊 Blue and white'], ['candy', '🍬 Red, white and green']] },
+        { key: 'xmasPattern', label: 'Lights', type: 'select', when: XMAS, options: [['twinkle', '✨ Twinkle'], ['chase', '🏃 Chase'], ['fade', '🌗 Slow fade'], ['steady', '💡 Steady']] },
         { key: 'fit', label: 'Fit', type: 'select', when: config => config.frame === 'none', options: [['contain', 'Whole picture'], ['cover', 'Fill the screen']] },
         { key: 'showTitle', label: 'Show the title', type: 'toggle' },
 

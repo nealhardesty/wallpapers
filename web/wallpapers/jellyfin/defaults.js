@@ -19,6 +19,18 @@ WP.defaults('jellyfin', {
     burnInImageSubs: true,     // image subtitles need the server to burn them in (a transcode)
     frame: 'old-tv',
     fit: 'contain',            // with no frame: contain or cover
+    // The Christmas frames' own options (frames/christmas-kit.js).
+    xmasColors: 'multi',       // the lights: multi, warm, cool, candy
+    xmasPattern: 'twinkle',    // twinkle, chase, fade, steady
+    xmasBulbs: 'big',          // Christmas Lights: big bulbs or mini
+    xmasGarland: true,         // Christmas Lights: fir along the top
+    xmasBows: true,            // Christmas Lights: bows and holly
+    xmasSnow: 'heavy',         // Snowed In, Christmas Tree: light, heavy, blizzard
+    xmasFire: true,            // Snowed In: the fire is lit
+    xmasCat: true,             // Snowed In: a cat asleep by the fire
+    xmasTv: 'medium',          // Christmas Tree: the TV ornament: small, medium, large
+    xmasTopper: 'star',        // Christmas Tree: star, bow, none
+    xmasPresents: true,        // Christmas Tree: presents underneath
     showTitle: true,
     maxResolution: 'auto',     // auto (by tier), 480, 720, 1080, 2160
     posterMode: 'auto',        // auto (on battery saver), always, never
