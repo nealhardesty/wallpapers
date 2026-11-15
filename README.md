@@ -592,6 +592,18 @@ the picture's colours onto the wall, a camcorder viewfinder or a VHS deck, a
 submarine porthole, an arcade cabinet, or none at all. **Seasonal** picks
 the mantel in winter and the drive-in in summer.
 
+Three more are for Christmas, each with its own options in the panel
+(light colours and twinkle, chase, fade or steady, plus the ones below):
+- ✨ **Christmas Lights**: the video nearly full screen with a string of
+  lights round it; big or mini bulbs, a fir garland, bows and holly.
+- ☃️ **Snowed In**: a flat-panel TV in a den, heavy snow at the window
+  behind it, a fireplace hung with stockings, bookcases, a small tree
+  with presents and a cat asleep on the rug; choose how hard it snows,
+  whether the fire is lit, and whether the cat is in.
+- 🎄 **Christmas Tree**: a big twinkling tree, with the video playing in a
+  little TV-shaped ornament (small, medium or large) among the baubles,
+  over a heap of presents; choose the topper and the snow.
+
 To connect:
 1. Open the panel (`,`), pick 📺 Jellyfin, type your server's address
    (`nas.lan:8096`, an IP address, or an https address), and press **Connect**.

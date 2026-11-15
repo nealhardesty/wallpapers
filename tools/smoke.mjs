@@ -2750,6 +2750,34 @@ const STAGE_CHECKS = {
             if (!await waitFor(async () => !await shut(), 3000)) record('they didn\'t reopen after the change');
             return true;
         }],
+        ['Christmas frames: about 12 fps and still on Low; an option repaints once; the TV ornament in three sizes', async () => {
+            const mock = jellyfinServer();
+            for (const frame of ['christmas-lights', 'snowed-in', 'christmas-tree']) {
+                for (const [tier, low, high] of [['medium', 10, 30], ['low', 0, 1]]) {
+                    await fresh(`${WEB}/stage.html?w=jellyfin&tier=${tier}&date=2026-12-24T20:00:00`, jellyfinSignedIn(mock, { order: 'inOrder', subtitles: 'off', showTitle: false, frame }));
+                    if (!await waitFor(() => counts(`m.state === 'playing' && m.video.currentTime > 0.2`), 10000)) return record(`${frame} ${tier}: never played`);
+                    await sleep(4600);   // past the 🔇 badge's fade
+                    const drawn = await framesIn(2000);
+                    if (drawn < low || drawn > high) record(`${frame} ${tier}: ${drawn} frames in 2 s`);
+                    if (tier === 'medium') await shoot(`jellyfin-${frame}-lit`);
+                }
+            }
+            // Still on the tree: each option is one repaint, and the ornament's screen grows with its setting.
+            const widths = [];
+            for (const size of ['small', 'medium', 'large']) {
+                const before = await counts('m.paints');
+                await counts(`m.applySettings({ ...m.config, xmasTv: '${size}' })`);
+                const after = await counts('({ paints: m.paints, w: m.layout.screen.w, ratio: m.layout.screen.w / m.layout.screen.h })');
+                if (after.paints - before !== 1) record(`xmasTv ${size}: ${after.paints - before} repaints`);
+                if (Math.abs(after.ratio - 16 / 9) > 0.01) record(`xmasTv ${size}: the screen is ${after.ratio.toFixed(3)}`);
+                widths.push(after.w);
+            }
+            if (!(widths[0] < widths[1] && widths[1] < widths[2])) record(`the ornament's sizes: ${widths.map(v => v.toFixed(0)).join(', ')}`);
+            const steady = await counts('m.paints');
+            await counts(`m.applySettings({ ...m.config, volume: 0.5 })`);
+            if (await counts('m.paints') !== steady) record('the volume repainted the room');
+            return true;
+        }],
         ['mantel: the fire flickers at about 12 fps, and holds still on Low', async () => {
             const mock = jellyfinServer();
             for (const [tier, low, high] of [['medium', 10, 30], ['low', 0, 1]]) {

@@ -3130,6 +3130,35 @@ letterbox. The screen rect always keeps the video's aspect ratio, and
   and a joystick; `INSERT COIN` blinks between items.
 - **Seasonal:** picks the frame by date (Mantel in winter, Drive-in in
   summer), like the player's Seasonal choice.
+- **Three for Christmas** (2026-11-15, owner idea), sharing
+  `frames/christmas-kit.js` (`JellyfinXmas`: strands of lights, fir,
+  bows, holly, baubles, presents, a tree, the mantel's fire, a window on
+  the snow). Their options are settings named `xmas…`, shown in the panel
+  only while their frame is chosen, and reach a frame as `env.config`; a
+  change to one repaints the art once.
+  - **Christmas Lights** (`christmas-lights`): the video nearly full
+    screen in a thin bezel, a string of lights hung round it. Options:
+    big or mini bulbs, a fir garland along the top, bows and holly. An
+    upright phone's spare room gets hanging baubles and a row of presents.
+  - **Snowed In** (`snowed-in`): a den. A flat-panel TV on a low bookcase
+    in front of a wide window, snow falling on pines and a lamp post
+    outside; a brick fireplace to one side with a garlanded mantel,
+    stockings, a wreath and a cat on the rug; a tall bookcase and a small
+    lit tree with presents on the other. Upright: the TV on the wall
+    under the window, fire and tree below. Options: the snow (light,
+    heavy, blizzard), the fire lit or not, the cat.
+  - **Christmas Tree** (`christmas-tree`): a floor-to-ceiling tree, and
+    the video in an ornament shaped like a little red television hung on
+    it. Presents heaped below with a teddy bear, milk and biscuits on a
+    table, snow at the window. Options: the ornament's size (its screen
+    is 30%, 42% or 58% of the tree's width), the topper (star, bow, none),
+    the presents, the snow.
+  - All three: light colours (every colour, warm white, blue and white,
+    red-white-green) and pattern (twinkle, chase, slow fade, steady).
+  - Cost: the overlay draws one baked glow per bulb, the flakes as small
+    rects (clipped to the panes, less whatever stands in front of them)
+    and the fire's baked tongues at 12 fps; one still picture on Low.
+    Seasonal still picks the Mantel in winter.
 
 Frames are a registry, `{ id, layout(w, h, aspect) → { screen, … },
 paintStatic(ctx), tick(ctx, t), transition(kind), drawCue(ctx, cue) }`,
