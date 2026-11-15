@@ -167,11 +167,17 @@ two moons and an aurora, and the landing lamps throwing a pool of light on
 the snow ahead. Snow comes and goes on its own, from a few flurries (and a
 halo round the sun) to a blizzard that closes the world down to the streaks
 pouring past the canopy. Wingmen fly ahead with their engines glowing, and
-far beacons blink out on the ice. The cockpit's instruments are real: the
-radar sweeps the actual terrain ahead (slopes that face it shine, the ground
-behind a ridge stays dark), the attitude ball rolls with the horizon, and
-the terrain scope shows the ground the autopilot is about to cross. The
-panel comes in three sizes (full, small, extra small) for more of the view.
+far beacons blink out on the ice. You sit in a dark, angular cockpit: two
+heavy canopy struts lean in over your head, the console's wings sweep back
+past you under louvred walls, and the yoke moves with the turn. Its
+instruments are real: the centre screen is a live scan of the actual
+terrain all round you (relief, contours, and anything higher than you fly
+in amber and red), the attitude ball rolls with the horizon, and the
+terrain scope shows the ground the autopilot is about to cross. The rest
+keeps house: lamps blink, a needle follows the engine, and now and then a
+switch is thrown. The panel comes in three sizes (full, small, extra
+small) for more of the view. Turbulence sets how much the air moves you:
+a slow float in still air, buffets in a storm, and at 0 dead level flight.
 You can fly it yourself: `W` `A` `S` `D` or the arrows turn, climb and dive,
 `Q` and `E` are the throttle, and a drag on the screen works as a stick.
 You can't hit anything (the autopilot keeps the height, and turns away from

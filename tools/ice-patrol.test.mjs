@@ -1,7 +1,8 @@
 // Ice Patrol (SPEC §10.34): the world's own logic, in a Node vm, without a
 // browser. The noise tiles; the textures decode to the heights the pilot
 // flies by; the autopilot covers the same ground at any frame rate and
-// never touches the snow; the sun, the weather and the radar behave.
+// never touches the snow; the sun, the weather, the air's bob, the terrain
+// scan and the cockpit's switches behave.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -255,28 +256,125 @@ test('air: the harder it snows, the less you see', () => {
     assert.equal(L.air(0).flakes, 0);
 });
 
-test('radar: a slope that faces the dish shines, and the ground behind a ridge is dark', () => {
-    const out = new Float32Array(40);
-    // Level snow from 50 m up: an unbroken return, strong from right
-    // below (the beam meets it squarely) and fading with distance.
-    const level = () => {
-        assert.ok([...out].every(v => v > 0), 'flat ground returns everywhere');
-        for (let i = 1; i < out.length; i++) assert.ok(out[i] <= out[i - 1] + 1e-6, 'and fades with range');
-        assert.ok(out[39] < 0.25 && out[0] > out[39]);
+test('bob: nothing at 0, a float in still air, buffets in wind, linear in the setting, the same at any frame rate', () => {
+    const rms = (wind, k, fps = 60) => {
+        const sum = { pitch: 0, roll: 0, x: 0, y: 0 }, out = {};
+        let n = 0;
+        for (let t = 0; t < 600; t += 1 / fps, n++) {
+            L.bob(t, wind, k, out);
+            for (const key in sum) sum[key] += out[key] ** 2;
+        }
+        for (const key in sum) sum[key] = Math.sqrt(sum[key] / n);
+        return sum;
     };
-    L.radarRay(() => 0, 0, 50, 0, 0, 4000, 40, out);
-    level();
-    // A ridge 300 m high, 1.5 km north, a kilometre through.
-    const ridge = (x, z) => Math.max(0, 300 - Math.abs(z - 1500) * 0.6);
-    L.radarRay(ridge, 0, 50, 0, 0, 4000, 40, out);
-    const bin = z => Math.floor(z / 100);
-    assert.ok(out[bin(1250)] > 0.6 && out[bin(1250)] > out[bin(900)] * 2, `its near face: ${out[bin(1250)]}`);
-    assert.equal(out[bin(1750)], 0, 'its far face');
-    assert.equal(out[bin(2400)], 0, 'the ground in its shadow');
-    assert.ok(out[bin(500)] > 0, 'the ground before it');
-    // Look the other way and there is no ridge.
-    L.radarRay(ridge, 0, 50, 0, Math.PI, 4000, 40, out);
-    level();
+    // Turbulence 0: dead level, whatever the weather.
+    for (const wind of [0, 0.3, 1]) for (let t = 0; t < 60; t += 0.37) assert.deepEqual(plain(L.bob(t, wind, 0)), { pitch: 0, roll: 0, x: 0, y: 0 });
+    const calm = rms(0, 1), storm = rms(1, 1), flurry = rms(0.3, 1);
+    for (const key of ['pitch', 'roll', 'x', 'y']) {
+        assert.ok(calm[key] > 0, `still air still floats (${key})`);
+        assert.ok(storm[key] > calm[key] * 6, `${key}: a blizzard ${storm[key]} against still air ${calm[key]}`);
+        assert.ok(flurry[key] > calm[key] && flurry[key] < storm[key], `${key}: flurries in between`);
+    }
+    // Still air: under a twentieth of a degree, and slow (it takes seconds to cross zero). A blizzard: a quarter of a degree and more.
+    assert.ok(calm.pitch < 0.05 * L.RAD && calm.roll < 0.05 * L.RAD && calm.y < 0.25, `still air: ${JSON.stringify(calm)}`);
+    assert.ok(storm.pitch > 0.25 * L.RAD, `a blizzard pitches ${storm.pitch / L.RAD}°`);
+    let crossings = 0;
+    for (let t = 0, last = 0; t < 600; t += 1 / 60) { const p = L.bob(t, 0, 1).pitch; if (p * last < 0) crossings++; last = p; }
+    assert.ok(crossings < 600 * 0.3, `still air crosses level ${crossings} times in ten minutes`);
+    // Linear in the setting.
+    for (const t of [0.4, 3.3, 71.9]) {
+        const one = L.bob(t, 0.7, 1), two = plain(L.bob(t, 0.7, 2)), half = plain(L.bob(t, 0.7, 0.5));
+        for (const key of ['pitch', 'roll', 'x', 'y']) {
+            assert.ok(Math.abs(two[key] - 2 * one[key]) < 1e-12 && Math.abs(half[key] - one[key] / 2) < 1e-12, `${key} scales with the setting`);
+        }
+    }
+    // A function of the time alone: the same ride sampled at 10 fps as at 120.
+    const slow = rms(1, 1, 10), fast = rms(1, 1, 120);
+    for (const key of ['pitch', 'roll', 'x', 'y']) assert.ok(Math.abs(slow[key] / fast[key] - 1) < 0.03, `${key}: ${slow[key]} at 10 fps, ${fast[key]} at 120`);
+    assert.deepEqual(plain(L.bob(12.5, 0.6, 1.3)), plain(L.bob(12.5, 0.6, 1.3)));
+});
+
+test('scan: flat snow is even, a slope facing north-west is lit, and contours fall where the height crosses them', () => {
+    const out = [0, 0, 0];
+    L.scanCell(() => 37, 100, 200, 50, 40, out);
+    assert.deepEqual(out, [37, 0.42, 0]);
+    // Rising to the south-east: the face looks north-west, into the light.
+    const lit = L.scanCell((x, z) => 0.2 * (x - z), 0, 0, 50, 1e6, [0, 0, 0])[1], dark = L.scanCell((x, z) => 0.2 * (z - x), 0, 0, 50, 1e6, [0, 0, 0])[1];
+    assert.ok(lit > 0.7 && dark < 0.1, `lit ${lit}, shaded ${dark}`);
+    for (let x = 0; x < 3000; x += 130) { const r = L.scanCell(land.height, x, x * 0.7, 60, 80, [0, 0, 0])[1]; assert.ok(r >= 0 && r <= 1); }
+    // A ramp of 1 in 10, cells of 50 m, a contour every 40 m: a line wherever the next cell east is in another band.
+    const ramp = x => x / 10;
+    let lines = 0;
+    for (let i = 0; i < 80; i++) {
+        const c = L.scanCell(ramp, i * 50, 0, 50, 40, out)[2];
+        assert.equal(c, Math.floor(ramp(i * 50) / 40) !== Math.floor(ramp((i + 1) * 50) / 40) ? 1 : 0);
+        lines += c;
+    }
+    assert.equal(lines, 10);
+    // The real land has both: lines somewhere, but not everywhere.
+    let marked = 0;
+    for (let j = 0; j < 40; j++) for (let i = 0; i < 40; i++) marked += L.scanCell(land.height, i * 100, j * 100, 100, 80, out)[2];
+    assert.ok(marked > 10 && marked < 1400, `${marked} of 1600 cells on a contour`);
+});
+
+test('greebles: the same from the same time and seed; a switch thrown now and then; calm holds them; the craft is read', () => {
+    const G = L.GREEBLE, snap = (t, seed, state) => plain(L.greebles(t, seed, state)), idle = array => Object.values(array).slice(G.wired.length);
+    assert.deepEqual(snap(321.5, 9, { level: 0.4 }), snap(321.5, 9, { level: 0.4 }));
+    assert.equal(Object.keys(snap(0, 1).switches).length, G.switches);
+    assert.equal(Object.keys(snap(0, 1).lamps).length, G.lamps);
+    assert.notDeepEqual([0, 100, 200, 300].map(t => idle(snap(t, 9).switches)), [0, 100, 200, 300].map(t => idle(snap(t, 10).switches)), 'another seed, another cockpit');
+    // Half an hour, looked at four times a second: how often a switch is thrown, and a lamp changes.
+    const count = calm => {
+        let flips = 0, blinks = 0, last = null, most = 0;
+        const out = {};
+        for (let t = 0; t < 1800; t += 0.25) {
+            const g = L.greebles(t, 5, { calm }, out), now = [...g.switches, ...g.lamps];
+            if (last) {
+                let here = 0;
+                for (let i = 0; i < G.switches; i++) here += now[i] !== last[i];
+                for (let i = G.switches; i < now.length; i++) blinks += now[i] !== last[i];
+                flips += here;
+                most = Math.max(most, here);
+            }
+            last = now;
+        }
+        return { flips, blinks, most };
+    };
+    const live = count(false), calm = count(true);
+    assert.ok(live.flips >= 30 && live.flips <= 220, `${live.flips} switches thrown in half an hour`);   // one every 8 to 60 s
+    assert.ok(live.most <= 2, `${live.most} thrown at once`);
+    assert.ok(live.blinks > 300, `${live.blinks} lamp changes`);
+    assert.ok(calm.flips <= live.flips / 4, `calm: ${calm.flips} against ${live.flips}`);
+    assert.equal(calm.blinks, 0, 'calm lamps hold');
+    assert.equal(L.greebles(10, 5, { calm: true }).load, L.greebles(250, 5, { calm: true }).load, 'and the needle does not wander');
+    // Some lamps are on and some off, at any moment.
+    const on = Object.values(snap(77, 5).lamps).reduce((a, b) => a + b);
+    assert.ok(on > 1 && on < G.lamps - 1, `${on} of ${G.lamps} lamps lit`);
+    // The wired switches follow the craft.
+    const wired = state => Object.fromEntries(G.wired.map((name, i) => [name, snap(50, 5, state).switches[i]]));
+    assert.deepEqual(wired({}), { auto: 1, lamps: 0, deice: 0, panel: 0, heat: 0, boost: 0 });
+    assert.deepEqual(wired({ manual: true, lamps: 1, level: 0.9, night: 1, throttle: 2 }), { auto: 0, lamps: 1, deice: 1, panel: 1, heat: 1, boost: 1 });
+    // The warning: rough air or a steep bank, and it clears.
+    assert.equal(L.greebles(3, 5, {}).warn, false);
+    assert.equal(L.greebles(3, 5, { level: 0.9 }).warn, true);
+    assert.equal(L.greebles(3, 5, { roll: -0.7 }).warn, true);
+    assert.equal(L.greebles(3, 5, { level: 0.5, roll: 0.3 }).warn, false);
+    // The load follows the throttle and the climb, and stays on its dial; the levels creep slowly, within theirs.
+    const load = state => L.greebles(40, 5, { calm: true, ...state }).load;
+    assert.ok(load({ throttle: 2.2 }) > load({ throttle: 1 }) + 0.3 && load({ throttle: 1 }) > load({ throttle: 0.45 }));
+    assert.ok(load({ climb: 30 }) > load({}) + 0.1);
+    let lo = 1, hi = 0, step = 0;
+    for (let t = 0, last = null; t < 3600; t += 1) {
+        const g = L.greebles(t, 5, { throttle: 0.45 + (t % 7) / 4 });
+        assert.ok(g.load >= 0 && g.load <= 1);
+        for (const c of g.creep) { assert.ok(c >= 0 && c <= 1); }
+        const c = L.greebles(t, 5, {}).creep[1];
+        lo = Math.min(lo, c);
+        hi = Math.max(hi, c);
+        if (last !== null) step = Math.max(step, Math.abs(c - last));
+        last = c;
+    }
+    assert.ok(hi - lo > 0.3 && step < 0.01, `a level creeps from ${lo} to ${hi}, at most ${step} a second`);
 });
 
 test('settings: the panel offers what the code knows, and the keys step through it', () => {
@@ -296,6 +394,12 @@ test('settings: the panel offers what the code knows, and the keys step through 
     for (const binding of entry.keys.slice(0, 2)) for (const key of binding.keys) assert.ok(stick[key.toLowerCase()], `${key} pushes the stick`);
     assert.deepEqual(options('panelSize'), Object.keys(plain(vm.runInContext('ICE_PANEL_SIZES', context))));
     assert.deepEqual(plain(entry.effects.map(([name]) => name)), ['shadows', 'sparkle']);
+    // Turbulence: a slider from dead level to twice the bob, 1 by default.
+    const turbulence = schema.find(c => c.key === 'turbulence');
+    assert.deepEqual([turbulence.min, turbulence.max, context.WP.defaultsOf('ice-patrol').turbulence], [0, 2, 1]);
+    // Every switch the cockpit shows is one the logic keeps, and none twice.
+    const shown = [...plain(vm.runInContext('ICE_BAYS', context)).flat().map(([i]) => i), ...plain(vm.runInContext('ICE_TOGGLES', context)).map(([i]) => i).filter(i => i >= 0), ...plain(vm.runInContext('ICE_SIDE_TOGGLES', context)).flat()];
+    assert.deepEqual([...shown].sort((a, b) => a - b), Array.from({ length: L.GREEBLE.switches }, (_, i) => i));
 });
 
 test('cheap and clean: no per-frame pixel reads, blurs, clocks or storage of its own', () => {
