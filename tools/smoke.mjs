@@ -2155,6 +2155,143 @@ const STAGE_CHECKS = {
             return true;
         }],
     ],
+    'ski-run': [
+        ['on the mountain on the first frame: the lead and two friends on the snow, tracks behind them, the land about them', async () => {
+            if (!await stageWith('ski-run', null, '&seed=7')) return record('not ready');
+            await sleep(2500);
+            const s = await evaluate(`(m => { const W = m.world, C = W.course; return { flat: m.flat, riders: W.riders.length, kinds: W.riders.map(r => r.kind).join(),
+                off: Math.max(...W.riders.map(r => r.air ? 0 : Math.abs(r.y - C.height(r.x, r.z)))), speed: W.riders[0].v, tracks: m.trails.get(W.riders[0].id).pts.length,
+                chunks: m.chunks.size, meshes: [...m.chunks.values()].filter(c => c.mesh).length, trees: [...m.chunks.values()].reduce((n, c) => n + (c.trees ? c.trees.n : 0), 0),
+                drawn: m.renderer.drawn, moving: m.moving.n / 3, batches: m.scene.batches.reduce((n, b) => n + b.n, 0), shot: m.cam.shot, type: C.find(W.riders[0].z).type }; })(WP.stage.manager)`);
+            if (s.riders !== 3 || s.kinds !== 'ski,board,ski') record(`who is skiing: ${JSON.stringify(s)}`);
+            if (!(s.off < 0.01) || !(s.speed > 8)) record(`the riders are ${s.off} m off the snow at ${s.speed} m/s`);
+            if (s.tracks < 100) record(`the lead has ${s.tracks} points of track behind`);
+            if (s.chunks !== 61 || s.trees < 3000) record(`the land: ${s.chunks} chunks, ${s.trees} trees`);
+            if (s.shot !== 'follow' || s.type !== 'groomer') record(`it starts ${s.shot} on a ${s.type}`);
+            // With WebGL: a mesh for every chunk, trees by the batch, the riders as triangles.
+            if (!s.flat && (s.meshes !== 61 || s.drawn.triangles < 60000 || s.drawn.calls > 160 || s.moving < 600 || s.batches < 400)) record(`the view: ${JSON.stringify(s)}`);
+            if (await evaluate(DRAWN) < 30) record('barely drawn');
+            await shoot('ski-run');
+            return s.riders === 3;
+        }],
+        ['without WebGL the run goes on, flat: in real time on Low as on High; carved by hand and given back; a jump sent and one botched; friends; cameras', async () => {
+            const noGl = "(() => { const real = HTMLCanvasElement.prototype.getContext; HTMLCanvasElement.prototype.getContext = function (kind, ...rest) { return /^webgl/.test(kind) ? null : real.call(this, kind, ...rest); }; })()";
+            const { identifier } = await cdp.send('Page.addScriptToEvaluateOnNewDocument', { source: noGl });
+            try {
+                for (const tier of ['low', 'high']) {
+                    if (!await stageWith('ski-run', null, `&seed=7&tier=${tier}`)) return record(`${tier}: not ready without WebGL`);
+                    await sleep(500);
+                    const at = () => evaluate('(m => ({ flat: m.flat, time: m.world.time, z: m.world.riders[0].z, t: performance.now(), n: WP.host.frames.count }))(WP.stage.manager)');
+                    const a = await at();
+                    await sleep(2500);
+                    const b = await at();
+                    const rate = (b.time - a.time) / ((b.t - a.t) / 1000), fps = (b.n - a.n) / ((b.t - a.t) / 1000);
+                    if (!b.flat) record(`${tier}: still on WebGL`);
+                    if (Math.abs(rate - 1) > 0.08) record(`${tier}: the mountain runs at ${rate.toFixed(2)}× real time at ${fps.toFixed(0)} fps`);
+                    if (!(b.z - a.z > 15)) record(`${tier}: the lead came ${(b.z - a.z).toFixed(1)} m in 2.5 s`);
+                    if (await evaluate(DRAWN) < 20) record(`${tier}: barely drawn without WebGL`);
+                }
+                await shoot('ski-run-flat');
+                // The rest on open pistes with nobody else about, so a jump can be sent wherever the lead has got to.
+                const open = { configVersion: 1, sections: ['groomer', 'powder'], others: 0 };
+                if (!await stageWith('ski-run', open, '&seed=7')) return record('open pistes: not ready');
+                await sleep(500);
+                const lead = () => evaluate('(m => { const r = m.world.riders[0]; return { active: m.world.hand.active, manual: r.manual, air: r.air, lift: r.lift, trick: r.trick && r.trick.name, fall: r.fall && r.fall.phase, v: r.v, riders: m.world.riders.length, shot: m.cam.shot }; })(WP.stage.manager)');
+                const run = (key, shift = false) => evaluate(`WP.entry('ski-run').keys.find(k => k.keys.includes('${key}')).run(WP.stage.manager, { key: '${key}', shift: ${shift} })`);
+                const press = (type, name) => evaluate(`document.dispatchEvent(new KeyboardEvent('${type}', { key: '${name}', bubbles: true }))`);
+                // By hand: D held carries the lead across; let go, and four seconds later the line is their own again. A press the player forwards counts too.
+                const before = await lead();
+                if (before.active || Math.abs(before.manual) > 0.01) record(`carved by hand before a key: ${JSON.stringify(before)}`);
+                await press('keydown', 'd');
+                await sleep(1500);
+                const held = await lead();
+                if (!held.active || held.manual < 4) record(`D held for 1.5 s: ${JSON.stringify(held)}`);
+                await press('keyup', 'd');
+                await sleep(5500);
+                const back = await lead();
+                if (back.active || Math.abs(back.manual) > held.manual * 0.6) record(`5.5 s after letting go: ${JSON.stringify(back)}`);
+                await run('a');
+                await sleep(300);
+                const tapped = await lead();
+                if (!tapped.active || tapped.manual >= back.manual) record(`a forwarded A: ${JSON.stringify(tapped)}`);
+                // Sent: off the snow, a trick, and landed. Sent badly: a tumble, sitting up, shaking it off, and away again.
+                await waitFor(async () => { const s = await lead(); return !s.air && !s.fall && s.v > 6; }, 8000);
+                const said = await run('j');
+                if (said !== 'Sending it') record(`J said ${said}`);
+                const up = await waitFor(async () => { const s = await lead(); return s.air && s.lift > 0.5 && s.trick ? s : null; }, 3000);
+                if (!up) record('J: no trick in the air'); else await shoot('ski-run-trick');
+                if (!await waitFor(async () => { const s = await lead(); return !s.air && !s.fall && s.v > 6; }, 8000)) record('the sent jump was not landed');
+                await run('j', true);
+                const phases = new Set();
+                const through = await waitFor(async () => { const s = await lead(); if (s.fall) phases.add(s.fall); return phases.size >= 3 && !s.fall && s.v > 4; }, 20000);
+                if (!through || !phases.has('tumble') || !phases.has('shake')) record(`a botched jump went through ${[...phases]}`);
+                if (await evaluate("localStorage.getItem('wp:ski-run')") !== JSON.stringify(open)) record('carving and jumping saved something');
+                // Friends come and go with the setting, live.
+                for (const friends of [3, 1]) {
+                    await evaluate(`(m => m.applySettings({ ...m.config, friends: ${friends} }))(WP.stage.manager)`);
+                    const s = await lead();
+                    if (s.riders !== friends + 1) record(`${friends} friends: ${s.riders} riders`);
+                }
+                // V steps through the cameras, and saves.
+                const seen = [];
+                for (let i = 0; i < 4; i++) { const name = await run('v'); await sleep(250); seen.push([await evaluate('WP.stage.manager.config.camera'), (await lead()).shot, name]); }
+                if (seen.map(s => s[0]).join() !== 'front,diorama,auto,follow') record(`V went through ${seen.map(s => s[0])}`);
+                if (seen[0][1] !== 'front' || seen[1][1] !== 'diorama' || seen[3][1] !== 'follow' || !['follow', 'front', 'diorama', 'side'].includes(seen[2][1])) record(`the cameras showed ${seen.map(s => s[1])}`);
+                if (seen.some(s => !s[2])) record(`V said ${seen.map(s => s[2])}`);
+                await run('v');
+                if (await evaluate("JSON.parse(localStorage.getItem('wp:ski-run')).camera") !== 'front') record('V did not save the camera');
+                if (await run('g') !== 'On a board' || await evaluate('WP.stage.manager.world.riders[0].kind') !== 'board') record('G did not put the lead on a board');
+            } finally {
+                await cdp.send('Page.removeScriptToEvaluateOnNewDocument', { identifier });
+            }
+            return true;
+        }],
+        ['night lights the floodlights and the stars; snow closes in; fog rolls through; T and X step and save', async () => {
+            if (!await stageWith('ski-run', { configVersion: 1, time: 'day', weather: 'clear' }, '&seed=7')) return record('midday: not ready');
+            await sleep(1500);
+            const day = await evaluate(AVERAGE);
+            if (!await stageWith('ski-run', { configVersion: 1, time: 'night', weather: 'clear' }, '&seed=7')) return record('night: not ready');
+            await sleep(1500);
+            const night = await evaluate(AVERAGE);
+            const n = await evaluate('(m => ({ flat: m.flat, lit: m.lit, stars: m.scene.stars, lamps: m.scene.lamps.length, glows: m.glows.n, masts: m.masts.length, sun: m.scene.lightCol[0], day: m.day }))(WP.stage.manager)');
+            if (n.lit < 0.9 || n.stars < 0.9 || n.masts < 4) record(`night: ${JSON.stringify(n)}`);
+            if (!n.flat && (n.lamps < 2 || n.glows < 4)) record(`the floodlights: ${JSON.stringify(n)}`);
+            // A floodlit piste is bright; the night about it is not.
+            if (night.reduce((a, b) => a + b) > day.reduce((a, b) => a + b) * 0.8) record(`night ${night} is hardly darker than midday ${day}`);
+            await shoot('ski-run-night');
+            if (!await stageWith('ski-run', { configVersion: 1, time: 'day', weather: 'snow' }, '&seed=7')) return record('snow: not ready');
+            await sleep(1500);
+            const w = await evaluate('(m => ({ level: m.weather.level, see: m.air.visibility, flakes: m.scene.flakes, sun: m.scene.lightCol[0], shadow: m.scene.shadow }))(WP.stage.manager)');
+            if (w.level < 0.69 || w.see > 800 || w.flakes < 0.8 || w.sun > 0.6) record(`snow: ${JSON.stringify(w)}`);
+            await shoot('ski-run-snow');
+            // X and T, as the catalog binds them: on to fog, and on through dusk to night.
+            const keys = await evaluate(`(m => { const run = key => WP.entry('ski-run').keys.find(k => k.keys.includes(key)).run(m, {}); return { x: run('x'), t: [run('t'), run('t')], config: m.config, saved: JSON.parse(localStorage.getItem('wp:ski-run')) }; })(WP.stage.manager)`);
+            if (keys.config.weather !== 'fog' || keys.config.time !== 'night') record(`the keys left ${JSON.stringify({ weather: keys.config.weather, time: keys.config.time })}`);
+            if (keys.saved.weather !== 'fog' || keys.saved.time !== 'night') record(`the keys saved ${JSON.stringify(keys.saved)}`);
+            if (!/fog/.test(keys.x) || !/dusk/.test(keys.t[0]) || !/night/.test(keys.t[1])) record(`the keys said ${JSON.stringify([keys.x, keys.t])}`);
+            if (!await waitFor(() => evaluate('WP.stage.manager.weather.mist > 0.6'), 45000)) record('X did not bring the fog in');
+            return true;
+        }],
+        ['a phone held upright: the picture is lifted clear of the gesture bar, and wide enough to hold the piste', async () => {
+            const viewport = { width: 412, height: 915, deviceScaleFactor: 2.625 };
+            try {
+                if (!await bootStage('w=ski-run&host=android&seed=7', viewport)) return record('not ready on a phone');
+                await sleep(1500);
+                const g = await evaluate(`(m => { const r = m.world.riders[0], c = m.scene.cam, dx = r.x - c.x, dy = r.y + 0.9 - c.y, dz = r.z - c.z;
+                    const depth = dx * Math.sin(c.heading) * Math.cos(c.pitch) + dy * Math.sin(c.pitch) + dz * Math.cos(c.heading) * Math.cos(c.pitch);
+                    const up = -dx * Math.sin(c.heading) * Math.sin(c.pitch) + dy * Math.cos(c.pitch) - dz * Math.cos(c.heading) * Math.sin(c.pitch);
+                    return { lift: m.scene.lift, tanY: m.scene.tanY, tan: m.cam.tan, inset: WP.host.insets.bottom, w: m.width, h: m.height, y: (0.5 - up / depth / m.scene.tanY / 2 - m.scene.lift / 2) * m.height, depth, tier: WP.host.quality.tier }; })(WP.stage.manager)`);
+                if (g.inset !== 48 || Math.abs(g.lift - 48 / 915) > 1e-6) record(`lifted ${g.lift} for a ${g.inset} px inset`);
+                if (g.tanY < g.tan * 1.5 || g.tanY > 1.2) record(`the lens on a phone: tan ${g.tanY} against ${g.tan}`);
+                if (!(g.depth > 3) || !(g.y > 915 * 0.25 && g.y < 915 - 48 - 80)) record(`the lead is at ${g.y} px down, ${g.depth} m off`);
+                if (await evaluate(DRAWN) < 30) record('barely drawn on a phone');
+                await shoot('ski-run-phone');
+            } finally {
+                await cdp.send('Emulation.clearDeviceMetricsOverride');
+            }
+            return true;
+        }],
+    ],
     synthwave: [
         ['every palette renders, each its own colours', async () => {
             // The panel's options; the unit tests hold them to the palettes

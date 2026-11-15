@@ -347,6 +347,18 @@
               { keys: ['x'], label: 'Next weather (comes and goes, clear, fair, overcast, rain)', run: walk => walk.nextWeather() },
               { keys: ['n'], label: 'On to the next place down the road', run: walk => walk.skipAhead() },
           ] },
+        { id: 'ski-run', name: 'Fresh Tracks', icon: '⛷️', accent: '#9fd6ff', background: '#b9cbe0',
+          scripts: ['ski-run/ski-logic.js', 'ski-run/ski-models.js', 'ski-run/ski-gl.js', 'ski-run/ski-run.js'],
+          make: host => new SkiRunAnimationManager(host), cost: 'high', interactive: true,
+          effects: [['shadows', 'medium'], ['sparkle', 'medium']],
+          keys: [
+              { keys: ['a', 'd', 'ArrowLeft', 'ArrowRight'], label: 'Carve it yourself: move the lead rider across the piste. They take their own line again 4 seconds after you let go', run: (run, { key }) => run.nudge(key) },
+              { keys: ['j', 'ArrowUp'], label: 'Send it: the lead jumps, here and now (with Shift, and lands in a heap)', run: (run, { shift }) => run.sendIt(shift) },
+              { keys: ['v'], label: 'Next camera (behind, in front, from on high, the director)', run: run => run.nextCamera() },
+              { keys: ['t'], label: 'Next time of day (goes round, your clock, dawn, midday, dusk, night)', run: run => run.nextTime() },
+              { keys: ['x'], label: 'Next weather (comes and goes, clear, flurries, snow, fog)', run: run => run.nextWeather() },
+              { keys: ['g'], label: 'The lead rider swaps skis for a board, or back', run: run => run.swapGear() },
+          ] },
         { id: 'bing', name: 'Bing Image of the Day', icon: '🖼️', accent: '#8ab4ff', scripts: ['bing/bing.js'],
           make: host => new BingWallpaperManager(host), cost: 'none', network: ['www.bing.com'] },
     ];
