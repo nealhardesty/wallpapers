@@ -41,6 +41,8 @@ wallpapers' only home. They run in three hosts:
 > (§10.36, 2026-11-15), an invented league of three-on-three in top-down
 > pixel art, makes 45. The Never-Ending Baseball Season (§10.37,
 > 2026-11-15), a pixel-art league played a pitch at a time, makes 46.
+> Wayfarer (§10.38, 2026-11-15), an endless walk through a cosy fantasy
+> world, makes 47.
 > Phase 10, the clock overlay (§4.9), was built 2026-10-28; §10 holds the
 > other ideas.
 > Windows (§10.25): the W0 spikes passed, and W1 (the desktop core: behind
@@ -157,6 +159,7 @@ Added for Christmas, drawn in code (designs in §10.27–§10.30):
 | `sumo` | sumo-logic.js, sumo-art.js, sumo.js | ~1.3k lines | No network; a league of invented wrestlers kept in `host.storage`, written in Japanese with an English gloss (§10.35); bouts and tournaments pure and seeded (`SumoLogic`), unit-tested; interactive (a tap throws a cushion); evening by `host.now()`; keys N, B |
 | `pocket-hockey` | hockey-logic.js, hockey-art.js, pocket-hockey.js | ~2.4k lines | No network; an invented league of eight clubs and the game in progress kept in `host.storage` (§10.35); the league, the 60 Hz game (physics, steering, signature moves) and the seasons pure and seeded (`HockeyLogic`), unit-tested; top-down pixel art at its own resolution, scaled up pixelated, with its own 5×7 font; interactive (a tap throws something on the ice, or starts a wave); keys N, G, B, X, W |
 | `baseball` | baseball-logic.js, baseball-league.js, baseball-talk.js, baseball-art.js, baseball.js | ~2.4k lines | No network; a league of eight invented clubs kept in `host.storage` (§10.37); every pitch, ball in play and box score pure and seeded (`BaseballLogic`, `BaseballLeague`), unit-tested; 16-bit pixel art at its own resolution with its own lettering, scaled up pixelated; interactive (a tap starts a wave); day, dusk and night by `host.now()`; keys N, S |
+| `wayfarer` | way-logic.js, way-models.js, way-actors.js, way-gl.js, wayfarer.js | ~3.6k lines | The second on WebGL (§10.38): an endless road through eight kinds of country with villages, walled cities and landmarks along it, all a pure function of a seed (`WayLogic`), unit-tested; every shape modelled in code as triangles (`WayModels`, `WayActors`); built a 64 m square at a time as the walk reaches it; three cameras; day, night, weather and seasons; a flat 2D fallback without WebGL; its own watch on the GPU; interactive (drag to look around); keys V, T, X, N |
 
 About 1.7 MB of JavaScript in total. **Not imported:** links, weather, clocks,
 search/omniprompt, custom links, status bar, Docker/nginx, the homepage's
@@ -850,6 +853,7 @@ and the commits.
 | sumo | — | The hall is one cached canvas (rebuilt on resize, tier and at dusk); a frame draws it, three jointed figures and a few marks. The crowd's rows and the cushions thrown follow density |
 | pocket-hockey | — | The canvas is the picture's own pixels (about 427 × 267 on a laptop, 206 × 458 on an upright phone; a pixel is 3 CSS px at 1280 × 800, in half steps below that), scaled up pixelated. The arena (ice, lines, boards, benches, a crowd of some thousands) is one bake a game; a working copy of it takes the skate marks and the resurfacer's stripes, so a frame is one blit of that, a dozen kept sprites, and lettering set once a line and kept. The round's other games are stepped 4 ms a frame. Hats, paper, spray, camera flashes and skate marks × density. Bench 2026-11-15 on a loaded machine (Snow beside it for scale: 20%, 24%, 60%): Low 14%, Medium 21%, High 44% |
 | baseball | — | The canvas is the picture's own pixels (about 3 CSS px each on a laptop), scaled up pixelated; the park (sky, stands, crowd, turf, fence) is one bake per game, size and light, with the crowd on its feet a second; the scoreboard and all the captions are two more canvases redrawn only when their words change; a frame blits those and draws about thirty men of a dozen rectangles each. The crowd, fireworks, confetti and rain follow density |
+| wayfarer | `shadows`, `mirror` (medium) | WebGL: the land as squares of triangles built on the main thread as the walk reaches them (in steps of a few things at a time, 3 ms of building a frame at most, so even a city's square never holds a frame up) and drawn in one call each. High: 7×7 near squares of 64 m inside 9×9 coarse 256 m squares, land drawn to 1040 m, shadows from a 2048² picture 110 m across. Medium: 5×5 inside 7×7, to 790 m, a fifth of the trees and a third of the small plants gone, shadows 1024² over 70 m. Low: 5×5 inside 5×5, to 530 m, half the trees and two thirds of the plants gone, the near ground 4 m to a cell instead of 2, a third fewer townsfolk, no shadows, no clouds in the water. Far squares carry houses with their trimmings left off and a third of the trees as four or ten triangles each. Everyone who moves and is in front of the camera is posed on the main thread into one buffer (2,000 to 12,000 triangles) and drawn in one call. The shadow picture holds only what stands on the ground in the squares its box touches, depth in three bytes, compiled out when shed (after fading). Triangles a frame, shadow pass included, at 1280×800 (forest at night / city by day / lake): High 307k / 278k / 204k, Medium 143k / 198k / 115k, Low 103k / 101k / 57k (on a software renderer; before the second pass it was 436k / 444k / 358k, 293k / 299k / 262k and 214k / 198k / 130k). The GPU is watched by the wallpaper itself (late frames give up shadows, then render scale to 0.4, then the outer rings of squares); software renderers start there. No WebGL: 30 slices of ground, the road and the nearest trees and houses as cut-outs, in 2D |
 
 #### In the panel
 
@@ -4546,10 +4550,235 @@ consulted, so a clash cannot be ruled out, only made unlikely.
 - **Not built:** sound; substitutions other than pitchers; trades; a
   record book across seasons; umbrellas in the rain.
 
+### 10.38 Wayfarer (`wayfarer`, owner request, 2026-11-15)
+
+The owner's brief: a never-ending walk through a fantasy world, "cozy more
+than anything", in the style of a well-known online fantasy game (animated
+cartoon, but semi-realistic), with day and night, "just wandering into
+forests, lakes, mountain passes and lots of towns and fantasy cities"; and
+for the whole batch, "be extra creative here. fun is the theme." Decided
+with the owner beforehand: all three cameras as a setting (behind the
+traveller by default, through their eyes, a cinematic drift) with a key to
+switch; and an original world.
+
+**It is our own world.** The *style* is what was asked for: chunky
+proportions, big readable shapes, painted colour, soft stepped light. No
+names, races, places, characters or designs come from that game or any
+other, and nothing is real (§1). Every shape is modelled in code as
+triangles: no asset files, no libraries, no network. "Wayfarer" is one
+string in the catalog if the owner wants another name.
+
+**The second wallpaper on WebGL**, and built the other way round from Ice
+Patrol (§10.34). There the ground is a formula the shaders evaluate; here
+the ground has a road, bridges, lakes and towns worked into it, which no
+shader could evaluate cheaply. So JavaScript builds the land as triangles,
+a square at a time, and the height the traveller walks on is the same
+function call that made the vertices: the two cannot disagree. WebGL 1
+shaders (unchanged on a WebGL 2 context), no extensions.
+
+- **The road (`WayLogic.world(seed)`, pure, unit-tested).** It runs on in
+  +z for ever and wanders in x (two noises, never steeper than about 50°
+  off its line), so it cannot cross itself. Every 360 m of it is a *leg*
+  of one country, with a *place* at its middle. Everything is a function
+  of the seed and of where you ask: nothing is stored, nothing repeats, and
+  the hashes take whole numbers of any size, so three million kilometres
+  out is the same kind of world (a test walks there).
+- **Eight countries**: meadow, forest, lake, pass, farm, moor, coast and
+  grove (the enchanted one: giant mushrooms, teal trees with glowing
+  motes, wisps). Each run of eight legs is a shuffle of all eight, so the
+  walk always arrives somewhere new and never meets the same country twice
+  running. Each sets how the land lies (hills by the road, how high the
+  valley's sides climb: 215 m in the pass), how wooded it is and with
+  what, its grass, its small plants and its animals. Neighbours blend over
+  the middle of the stretch between them.
+- **Places.** By a roll per leg and the *Towns and cities* setting: a
+  walled city (never in the pass, by the lake or on the coast), a village
+  (a hamlet in the pass), or the country's own landmark: standing stones
+  or a castle on a mound (meadow, moor), an elder tree with a door or a
+  ruined tower (forest), a jetty and a fishing hut (lake), a cairn and a
+  broken watchtower (pass), a windmill and barn (farm), a ruined abbey
+  (moor), a lighthouse (coast), a fairy ring under a giant mushroom
+  (grove). The road is the same road whatever is built along it.
+  - *A village* lines its street, raggedly (each house set back and turned
+    a little differently): timber-framed houses built for their plots, no
+    two alike (floor heights, roof pitch, jetties riding out on a beam,
+    end-on or side-on gables in lapping courses with a ridge, a dormer, a
+    stone ground floor, a lean, ivy, sills and window boxes, shutters, a
+    lintel and a step, a lantern on a bracket, a chimney with a pot), an
+    inn and shops with hanging signs, barrels, crates, sacks and planters
+    by the doors, a plaza with a well and two stalls, a notice board, a
+    chapel, a cart, a bench, bunting, lamp posts, people, and a cat on a
+    garden wall.
+  - *A city* is an oval of wall (crenellated, a tower every third length,
+    flags) the road runs through gate to gate, two rows of tall houses
+    either side of the high street with a lane between them, a square with
+    a fountain and five stalls (fruit, loaves, cloth, pots, fish), a keep
+    and a spire tall enough to be the skyline from the street, washing
+    across the back lanes, guards at the gates.
+- **The ground (`ground(x, z)`).** The road's own height (it climbs from
+  one leg's middle to the next, gently, and is level where a stream
+  crosses), plus hills that begin a few metres from the road, plus the
+  valley's sides rising with distance. A settlement stands on levelled
+  ground; a castle on its mound. A lake or a bay of the sea is cut into
+  one side, in the road's own coordinates, so the shore can never reach
+  the road, and the hills stand back from it. A stream runs level right
+  across the land to its edge in a valley of its own (the hills stand
+  back from it too), under a stone bridge at the road, which is what
+  `surface()` stands the traveller on.
+- **Squares (`WayModels.square`).** The near ground is 64 m squares at 2 m
+  a cell, each with everything rooted in it (`scatter`: trees on a jittered
+  grid, with glades; small plants thick by the road and thin away from it;
+  what the place put there; fences, lamps, milestones, shrines and resting
+  places along the road; who lives there) stamped into one list of
+  triangles. Far ground is 256 m squares at 16 m, carrying only buildings
+  (houses with the trimmings left off: a fifth of the triangles) and a
+  third of the trees as four or ten triangles each, and giving
+  way (a hole in the shader) where the near squares are. A vertex is 24
+  bytes: position, normal with occlusion, colour, and four bytes the
+  shaders read (how far inside the road's edge, cobbles, furrows, snow; or
+  sway, glow, flutter, phase). Squares are built as the walk reaches them,
+  each in steps of three things at a time (`squareSteps`, a generator), 3 ms
+  a frame, and the drawn set changes only when a new one is whole.
+- **Positions from the camera.** A square's vertices are in its own metres
+  from its own corner; the shaders are given that corner *from the camera*,
+  worked out in doubles. Everyone who moves is stamped already relative to
+  the camera.
+- **The look.** Colour is painted on the vertices (grass by country and
+  season, rock where it is steep, sand at the water, snow where it is
+  cold, the fields of a farm, heather on the moor) and then worked over in
+  the fragment shader with a small tileable texture of four noises: three
+  tones laid with a loaded brush, strokes close by, heavier on leaves. The
+  road is a ragged-edged band of worn earth with ruts, cobbled in town.
+  Light is a wrapped terminator pulled part of the way into three steps,
+  warm sun and cool sky, a rim of sky on edges that turn away. Roofs are
+  laid in lapping courses and flare at the eaves.
+- **Shadows** (`shadows`, medium): one picture from the sun (or the big
+  moon) of what stands on the ground within 110 m of the traveller (70 m
+  on Medium), depth packed into three bytes of an ordinary
+  texture, four taps weighed by where between them the point falls. The
+  box moves in whole texels, so shadows do not swim as the walk moves it.
+- **Water**: the sky lying on it at a glance (with `mirror`, medium, the
+  clouds and far ranges too), clear in the shallows, a line of foam at the
+  shore, the sun's glitter, rings where rain lands.
+- **The sky** is one function the fog shares: a sun that rises behind the
+  traveller's right shoulder and sets ahead and to the left (so the
+  evenings are walked into), heaped clouds lit from the sun's side, two
+  far ranges of mountains with snow on them (taller near the pass), about
+  6,000 stars and a river of them, and two moons that are lit balls. Mist
+  lies in the low ground at dawn and dusk.
+- **Night.** Windows glow (it is in the triangles: a far city's windows are
+  lit too), lamp posts throw pools on the cobbles (the nearest four are
+  real lights in the shaders; the rest are glows), the traveller's lantern
+  hangs from the staff, mushrooms and wisps shine in the grove, fireflies
+  blink where there is cover.
+- **Seasons** turn along the road, one every dozen legs, so the walk goes
+  out of summer into autumn: leaf and grass colours, blossom and apples,
+  bare trees and snow on roofs and ground in winter, leaves or petals in
+  the air. The pass is always cold: rain falls there as snow.
+- **The journey** (`journeyStep`, pure). The traveller walks (1.75 m/s at
+  Pace 1, a little slower in town), stops a few seconds where there is
+  something to look at (the lake, a city's gates ahead, a castle, a
+  landmark), keeps right while somebody passes, and after dark leaves the
+  road at the next resting place, sits by a fire for most of a minute and
+  walks on. Linear in elapsed time: the same road at 10 fps as at 120.
+- **Who else is there** (`WayActors`): townsfolk who stroll, stand at
+  their stalls, talk, sit, hoe, fish and guard, and wave as you pass;
+  children running rings; sheep, cows, goats, deer (which bolt), rabbits,
+  hens, cats, ducks, gulls, crows and pigeons (which fly up); a windmill's
+  sails; boats; other travellers' camps at night; carts, riders and
+  walkers coming the other way; and across the sky geese, and far off a
+  dragon, an airship or a balloon. Each is a few small models on a
+  skeleton of matrices posed by sines.
+- **Cameras** (`camera`, pure): *follow* is on the road behind the
+  traveller; *first* is their eyes; *drift* cuts every quarter minute
+  between six shots (a crane rising behind, the traveller walking up to a
+  camera in the road, a bird's view, a low shot backing away, one they
+  walk past, a high one), with a breath of dark at each cut. Every low
+  camera sits on the road itself, where nothing is ever built or grows,
+  and the others are above the rooftops, so none needs to know what it
+  might be inside. Townsfolk sidestep the camera (6 m in front of it, 3 m
+  behind), the traveller and one another, and anything that still comes
+  within two paces of the lens thins out to nothing in the shader, so no
+  head or branch fills a corner of the picture. A drag turns the view and it eases back after four
+  seconds; `onScroll` turns it with Android's pages.
+- **Keys:** `V` camera, `T` time of day, `X` weather, `N` on to the next
+  place (the walk jumps to just short of it, through the same dip).
+
+**Cost, and its own governor**, as Ice Patrol's: the stage's governor
+(§4.8) times the page's callbacks and cannot see the GPU, so the wallpaper
+watches its own frames. Late for 2.5 s, it gives up shadows, then pixels
+(render scale 0.75, 0.55, 0.4), and with the last two the outer ring of
+squares; it remembers the step under `host.storage` and tries one better
+each start. A software renderer starts at the lightest step.
+
+- "Day", as a fixed hour, is mid-morning: the sun high enough to be day
+  and low enough to light one side of a street and shade the other.
+  Occlusion painted on the vertices (the foot of a wall, under the eaves,
+  under a tree) darkens the sky's light there.
+- Tiers: near squares 7×7 (High) or 5×5, far 9×9, 7×7 (Medium) or 5×5 (Low), with the fog drawn in to match; trees and
+  plants × density, by a hash, so a thinned wood is the same wood;
+  animals × (0.4 + 0.6 density); drops × density; `shadows` and
+  `mirror` declared in the catalog.
+- A lost context (`webglcontextlost`) is rebuilt and every square uploaded
+  again.
+- Reduced motion: no head bob and little sway. A whole first frame is
+  built and drawn in `start()` (about 0.3 s of building on this machine).
+- **No WebGL:** the same walk as a flat picture on a 2D canvas: thirty
+  slices of the real ground in the country's colours, water where it
+  lies, the road as a ribbon, the nearest trees and houses as cut-outs
+  (windows lit at night), and the traveller. It is what the smoke test
+  times.
+
+**Tests.** Unit (`tools/wayfarer.test.mjs`, 16): the road never jumps or
+doubles back, is level across and no steeper than a third along; the
+ground is continuous and the road is never awash; every round has all
+eight countries, never two the same running, and every kind of place
+turns up; the towns setting scales settlements and leaves the road alone;
+the same seed is the same world; it all holds 3 × 10⁹ m from home; a
+village lines its street and a city stands inside its walls with nothing
+on the road; trees keep off the road, out of the water and out of town,
+and a far square is a thinning of the near one; four hours of day and
+night walked with feet on the ground, on the road, resting by fires and
+stopping at views; the same road at 10, 30, 60 and 120 fps; every camera
+in clear air for an hour; the sun, the moons and the light by the hour;
+weather holds and comes and goes; squares are sound triangles within
+budget, with lights in town and water in the lake; everyone can be posed;
+the schema's options match the code's; and the sources are clean (no
+pixel reads, clocks, timers or storage of their own; GLSL a WebGL 1 GPU
+will take). Smoke: on the road on frame one and walking; the three
+cameras, a drag, and the keys; night's lanterns and stars, rain, and snow
+in winter; the 2D fallback at the same pace on Low as on High; a phone
+held upright.
+
+**Not verified.** Everything was built on a software renderer (headless
+Chrome), where a frame takes a third of a second: frame rate, smoothness,
+the shadow map's quality and the GPU watch's thresholds on a real GPU, a
+phone, the Mac saver and the Windows host are all untested (see "Open
+questions"). `make bench` was not run for it (its numbers on this box
+would mean nothing). The walk was looked at in stills only, never in
+motion at speed: gaits, the cloak, wheels turning and the cinematic cuts'
+timing are as written, not as watched.
+
+**Not built:** steering by hand (the road is the point; `N` skips ahead);
+people going indoors at dusk (fewer are simply about after dark); houses
+you can see into; rivers that run to the lake; sound.
+
 ## Open questions
 
 New questions go here, each with a recommendation.
 
+- **Wayfarer on real devices.** Like Ice Patrol it was built and tested on a
+  software renderer only (headless Chrome, a third of a second a frame), so
+  its frame rate, its shadows' quality on a real GPU and its cost on a phone
+  are unmeasured. *Recommendation:* look at High on a desktop GPU and Medium
+  on the phone before a release; record `make bench` and `make
+  android-bench` there; if a phone struggles, the first lever is the near
+  ring (5×5 to 3×3 squares) and the second is thinner trees.
+- **Wayfarer in Seasonal?** It has every season in it and no month of its
+  own. *Recommendation:* the owner's call; it isn't in `WP.SEASONS`.
+- **Wayfarer's name and looks.** "Wayfarer", the ranger and the fox are my
+  choices. *Recommendation:* the owner may prefer another name (one string
+  in the catalog) or another default traveller or companion (two defaults).
 - **Ice Patrol in Seasonal?** It would suit January to April beside Snow.
   *Recommendation:* the owner's call; it isn't in `WP.SEASONS` yet.
 - **Ice Patrol on real devices.** Built and tested on a software renderer

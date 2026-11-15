@@ -2029,6 +2029,132 @@ const STAGE_CHECKS = {
             return true;
         }],
     ],
+    // Wayfarer (§10.38): on the road on frame one with the world built about
+    // it and the traveller on the ground; the three cameras; day and night;
+    // rain; the keys; the same walk without WebGL; a phone. Headless Chrome
+    // draws its WebGL in software, so the pace is timed on the 2D fallback.
+    wayfarer: [
+        ['on the road on the first frame: the land built, the traveller and a companion on it, and it walks', async () => {
+            if (!await stageWith('wayfarer', null, '&seed=7')) return record('not ready');
+            const state = () => evaluate('JSON.parse(JSON.stringify(WP.stage.manager.debugState()))');
+            const first = await state();
+            if (first.flat) record('no WebGL in the smoke browser');
+            if (first.near < 25 || first.far < 25 || first.queue) record(`the world on frame one: ${JSON.stringify({ near: first.near, far: first.far, queue: first.queue })}`);
+            if (Math.abs(first.y - first.ground) > 0.01 || first.mode !== 'walk' || Math.abs(first.d) > 0.6) record(`the traveller: ${JSON.stringify({ y: first.y, ground: first.ground, mode: first.mode, d: first.d })}`);
+            if (first.moving < 1500 || !first.companion) record(`only ${first.moving} vertices of traveller and companion`);
+            if (!(first.clear > 0.4) || !first.feet || !first.head) record(`the camera: ${first.clear} m up, feet ${first.feet}`);
+            await sleep(3000);
+            const s = await state();
+            if (!(s.distance > first.distance)) record(`it has not walked: ${first.distance} then ${s.distance}`);
+            if (s.drawn.squares < 20 || s.drawn.triangles < 20000) record(`drawn: ${JSON.stringify(s.drawn)}`);
+            if (await evaluate(DRAWN) < 30) record('barely drawn');
+            if (await evaluate("Object.keys(localStorage).filter(k => k.startsWith('wp:wayfarer')).length")) record('it saved something by itself');
+            await shoot('wayfarer-road');
+            return true;
+        }],
+        ['the three cameras, a drag to look round, and the keys: V steps and saves, T and X too, N goes on down the road', async () => {
+            if (!await stageWith('wayfarer', { configVersion: 1, time: 'day', weather: 'clear' }, '&seed=7')) return record('not ready');
+            const where = () => evaluate('(m => ({ ...JSON.parse(JSON.stringify(m.debugState())), x: m.standing.x, z2: m.standing.z }))(WP.stage.manager)');
+            const run = key => evaluate(`WP.entry('wayfarer').keys.find(k => k.keys.includes('${key}')).run(WP.stage.manager, {})`);
+            const away = s => Math.hypot(s.cam.x - s.x, s.cam.z - s.z2);
+            const a = await where();
+            if (a.camera !== 'follow' || away(a) < 3.5 || away(a) > 9 || !a.feet || a.feet[1] < 400 || a.feet[1] > 800) record(`behind the traveller: ${away(a).toFixed(1)} m, feet at ${a.feet}`);
+            // A drag turns the view; nothing is saved by looking.
+            await drag([[900, 400], [760, 400], [620, 410], [480, 410]], 60);
+            const turned = await evaluate('WP.stage.manager.glance.yaw');
+            if (!(turned < -0.5)) record(`a drag across the screen turned the view ${turned} rad`);
+            if (await evaluate("localStorage.getItem('wp:wayfarer')") !== JSON.stringify({ configVersion: 1, time: 'day', weather: 'clear' })) record('looking round saved something');
+            const said = [await run('v')];
+            await sleep(1500);
+            const b = await where();
+            if (b.camera !== 'first' || away(b) > 0.6 || b.moving > a.moving - 300) record(`through their eyes: ${away(b).toFixed(2)} m away, ${b.moving} vertices moving (${a.moving} with the traveller drawn)`);
+            said.push(await run('v'));
+            await sleep(1500);
+            const c = await where();
+            if (c.camera !== 'drift' || !(c.clear > 0.4)) record(`cinematic: ${JSON.stringify({ camera: c.camera, clear: c.clear })}`);
+            // The next shot: the veil dips and the camera is somewhere else.
+            await evaluate('WP.stage.manager.shot.t = 999');
+            if (!await waitFor(() => evaluate('WP.stage.manager.shot.index === 1'), 15000)) record('the cinematic camera never cut');
+            await sleep(1500);
+            const d = await where();
+            if (Math.hypot(d.cam.x - c.cam.x, d.cam.y - c.cam.y, d.cam.z - c.cam.z) < 3 || !(d.clear > 0.4)) record(`the cut left the camera where it was: ${JSON.stringify(d.cam)}`);
+            if (!/eyes/.test(said[0]) || !/Cinematic/.test(said[1])) record(`V said ${JSON.stringify(said)}`);
+            const t = await run('t'), x = await run('x'), n = await run('n');
+            await sleep(400);
+            const after = await where(), saved = await evaluate("JSON.parse(localStorage.getItem('wp:wayfarer'))");
+            if (saved.camera !== 'drift' || saved.time !== 'dusk' || saved.weather !== 'fair') record(`the keys saved ${JSON.stringify(saved)}`);
+            if (!/dusk/.test(t) || !/fair/.test(x) || !/^On to /.test(n)) record(`the keys said ${JSON.stringify([t, x, n])}`);
+            if (!(after.z > d.z + 60) || after.near < 25 || after.queue || Math.abs(after.y - after.ground) > 0.01) record(`N: from ${d.z.toFixed(0)} to ${after.z.toFixed(0)}, ${after.near} squares, ${after.queue} to build`);
+            await shoot('wayfarer-cinematic');
+            return true;
+        }],
+        ['night lights the lanterns and the stars, and is darker than noon; rain falls, and snow where it is cold', async () => {
+            // Into the nearest town, where the windows are.
+            const toTown = "(m => { let l = m.world.leg(Math.floor(m.journey.z / 360)); while (!l.radius) l = m.world.leg(l.i + 1); m.journey.z = l.zc - 30; m.companion.x = null; m.stream(true); m.snap = true; })(WP.stage.manager)";
+            const state = () => evaluate('(m => ({ ...JSON.parse(JSON.stringify(m.debugState())), tint: m.scene.fallTint, size: m.scene.dropSize, cold: m.cold, wetGround: m.scene.wet }))(WP.stage.manager)');
+            if (!await stageWith('wayfarer', { configVersion: 1, time: 'day', weather: 'clear', towns: 1.6 }, '&seed=7')) return record('midday: not ready');
+            await evaluate(toTown);
+            await sleep(2500);
+            const day = await evaluate(AVERAGE), noon = await state();
+            if (noon.lit !== 0 || noon.stars !== 0 || noon.fall > 0.1) record(`midday: ${JSON.stringify({ lit: noon.lit, stars: noon.stars, fall: noon.fall })}`);
+            if (!await stageWith('wayfarer', { configVersion: 1, time: 'night', weather: 'clear', towns: 1.6 }, '&seed=7')) return record('night: not ready');
+            await evaluate(toTown);
+            await sleep(2500);
+            const night = await evaluate(AVERAGE), n = await state();
+            if (n.lit < 0.95 || n.stars < 0.9 || n.glows < 12 || n.lamps < 2) record(`night: ${JSON.stringify({ lit: n.lit, stars: n.stars, glows: n.glows, lamps: n.lamps })}`);
+            if (night.reduce((a, b) => a + b) > day.reduce((a, b) => a + b) * 0.7) record(`night ${night} is hardly darker than midday ${day}`);
+            await shoot('wayfarer-night');
+            if (!await stageWith('wayfarer', { configVersion: 1, time: 'day', weather: 'rain', season: 'summer' }, '&seed=7')) return record('rain: not ready');
+            await sleep(1500);
+            const r = await state();
+            if (r.wet < 0.7 || r.cloud < 0.95 || r.fall < 0.5) record(`rain: ${JSON.stringify({ wet: r.wet, cloud: r.cloud, fall: r.fall })}`);
+            if (r.cold < 0.5 ? (r.size > 0.03 || r.wetGround < 0.5) : (r.size < 0.03 || r.wetGround > 0.5)) record(`what falls where it is ${r.cold < 0.5 ? 'warm' : 'cold'}: ${JSON.stringify({ size: r.size, wet: r.wetGround })}`);
+            await shoot('wayfarer-rain');
+            if (!await stageWith('wayfarer', { configVersion: 1, time: 'day', weather: 'rain', season: 'winter' }, '&seed=7')) return record('snow: not ready');
+            await sleep(1500);
+            const w = await state();
+            if (w.cold !== 1 || w.size < 0.03 || w.wetGround > 0.01 || w.fall < 0.4) record(`winter rain is not snow: ${JSON.stringify({ cold: w.cold, size: w.size, wet: w.wetGround, fall: w.fall })}`);
+            return true;
+        }],
+        ['without WebGL it walks on, painted flat: as far each second on Low as on High', async () => {
+            const noGl = "(() => { const real = HTMLCanvasElement.prototype.getContext; HTMLCanvasElement.prototype.getContext = function (kind, ...rest) { return /^webgl/.test(kind) ? null : real.call(this, kind, ...rest); }; })()";
+            const { identifier } = await cdp.send('Page.addScriptToEvaluateOnNewDocument', { source: noGl });
+            try {
+                for (const tier of ['low', 'high']) {
+                    if (!await stageWith('wayfarer', { configVersion: 1, rests: false, campfire: false, time: 'day', towns: 0, life: 0 }, `&seed=7&tier=${tier}`)) return record(`${tier}: not ready without WebGL`);
+                    await sleep(500);
+                    const at = () => evaluate('(m => ({ flat: m.flat, d: m.journey.distance, t: performance.now(), n: WP.host.frames.count, y: m.standing.y, ground: m.world.surface(m.standing.x, m.standing.z) }))(WP.stage.manager)');
+                    const a = await at();
+                    await sleep(2500);
+                    const b = await at();
+                    const speed = (b.d - a.d) / ((b.t - a.t) / 1000), fps = (b.n - a.n) / ((b.t - a.t) / 1000);
+                    if (!b.flat) record(`${tier}: still on WebGL`);
+                    if (Math.abs(speed / 1.75 - 1) > 0.08) record(`${tier}: ${speed.toFixed(2)} m/s at ${fps.toFixed(0)} fps; expected 1.75`);
+                    if (Math.abs(b.y - b.ground) > 0.01) record(`${tier}: the traveller is ${b.y - b.ground} m off the ground`);
+                    if (await evaluate(DRAWN) < 20) record(`${tier}: barely drawn without WebGL`);
+                }
+                await shoot('wayfarer-flat');
+            } finally {
+                await cdp.send('Page.removeScriptToEvaluateOnNewDocument', { identifier });
+            }
+            return true;
+        }],
+        ['a phone held upright: a wide enough view, with the traveller in it above the gesture bar', async () => {
+            const viewport = { width: 412, height: 915, deviceScaleFactor: 2.625 };
+            try {
+                if (!await bootStage('w=wayfarer&host=android&seed=7', viewport)) return record('not ready on a phone');
+                await sleep(1500);
+                const g = await evaluate('(m => ({ ...JSON.parse(JSON.stringify(m.debugState())), inset: WP.host.insets.bottom }))(WP.stage.manager)');
+                if (g.inset !== 48) record(`the inset is ${g.inset}`);
+                if (!g.feet || !g.head || g.feet[0] < 40 || g.feet[0] > 372 || g.feet[1] > 915 - 48 - 20 || g.head[1] < 200) record(`the traveller on the screen: head ${g.head}, feet ${g.feet}`);
+                if (g.tanY < Math.tan(40 * Math.PI / 180)) record(`a narrow view: tan ${g.tanY}`);
+                await shoot('wayfarer-phone');
+            } finally {
+                await cdp.send('Emulation.clearDeviceMetricsOverride');
+            }
+            return true;
+        }],
+    ],
     synthwave: [
         ['every palette renders, each its own colours', async () => {
             // The panel's options; the unit tests hold them to the palettes

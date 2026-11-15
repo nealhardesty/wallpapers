@@ -39,7 +39,7 @@ Click one to see it live.
 | [<img src="web/wallpapers/harvest/thumb.webp" width="200" alt="Harvest Valley">](https://nealhardesty.github.io/wallpapers/?w=harvest)<br>🌾 Harvest Valley | [<img src="web/wallpapers/weather/thumb.webp" width="200" alt="Weather">](https://nealhardesty.github.io/wallpapers/?w=weather)<br>🌦️ Weather | [<img src="web/wallpapers/world-clock/thumb.webp" width="200" alt="World Clock">](https://nealhardesty.github.io/wallpapers/?w=world-clock)<br>🌍 World Clock | [<img src="web/wallpapers/orrery/thumb.webp" width="200" alt="Orrery">](https://nealhardesty.github.io/wallpapers/?w=orrery)<br>🪐 Orrery |
 | [<img src="web/wallpapers/cat-ornament/thumb.webp" width="200" alt="The Cat vs. the Ornament">](https://nealhardesty.github.io/wallpapers/?w=cat-ornament)<br>🐾 The Cat vs. the Ornament | [<img src="web/wallpapers/last-bulb/thumb.webp" width="200" alt="The Last Bulb on the Strand">](https://nealhardesty.github.io/wallpapers/?w=last-bulb)<br>💡 The Last Bulb on the Strand | [<img src="web/wallpapers/frost/thumb.webp" width="200" alt="Frost on the Glass">](https://nealhardesty.github.io/wallpapers/?w=frost)<br>🧊 Frost on the Glass | [<img src="web/wallpapers/small-christmas/thumb.webp" width="200" alt="A Very Small Christmas">](https://nealhardesty.github.io/wallpapers/?w=small-christmas)<br>🎄 A Very Small Christmas |
 | [<img src="web/wallpapers/sky-island/thumb.webp" width="200" alt="Sky Island">](https://nealhardesty.github.io/wallpapers/?w=sky-island)<br>🏝️ Sky Island | [<img src="web/wallpapers/ice-patrol/thumb.webp" width="200" alt="Ice Patrol">](https://nealhardesty.github.io/wallpapers/?w=ice-patrol)<br>🛩️ Ice Patrol | [<img src="web/wallpapers/sumo/thumb.webp" width="200" alt="Sumo Championship">](https://nealhardesty.github.io/wallpapers/?w=sumo)<br>🤼 Sumo Championship | [<img src="web/wallpapers/pocket-hockey/thumb.webp" width="200" alt="Pocket Hockey">](https://nealhardesty.github.io/wallpapers/?w=pocket-hockey)<br>🏒 Pocket Hockey |
-| [<img src="web/wallpapers/baseball/thumb.webp" width="200" alt="The Never-Ending Baseball Season">](https://nealhardesty.github.io/wallpapers/?w=baseball)<br>⚾ The Never-Ending Baseball Season | | | |
+| [<img src="web/wallpapers/baseball/thumb.webp" width="200" alt="The Never-Ending Baseball Season">](https://nealhardesty.github.io/wallpapers/?w=baseball)<br>⚾ The Never-Ending Baseball Season | [<img src="web/wallpapers/wayfarer/thumb.webp" width="200" alt="Wayfarer">](https://nealhardesty.github.io/wallpapers/?w=wayfarer)<br>🥾 Wayfarer | | |
 
 The **Fireplace** 🔥 burns wood you'd recognise: furrowed oak, papery birch,
 scaly pine or bleached driftwood (following its Wood Type), round or split,
@@ -177,8 +177,37 @@ You can fly it yourself: `W` `A` `S` `D` or the arrows turn, climb and dive,
 You can't hit anything (the autopilot keeps the height, and turns away from
 a wall you couldn't climb), and five seconds after you let go it takes over
 again. `X` changes the weather, `T` the time of day, `V` the view (canopy,
-panel only, or none), `R` the radar's range. It is the one wallpaper drawn with
+panel only, or none), `R` the radar's range. It is drawn with
 WebGL, so it wants a GPU; without one it carries on as paper-cut ridgelines.
+
+**Wayfarer** 🥾 is a walk that never ends, through a cosy fantasy world of
+its own. A hooded traveller with a staff and a pack, and a fox trotting
+ahead, follows a road that wanders on for ever: through deep forest and
+flowering meadow, along a lake's shore and round a bay of the sea, over a
+mountain pass with snow on the firs, across the moors, past farms with a
+windmill turning, and through an enchanted grove of giant mushrooms that
+glows after dark. Every few minutes the road arrives somewhere: a
+timber-framed village with smoking chimneys, bunting over the street, a
+well, market stalls and people who wave; a walled city with gate towers, a
+market square and fountain, a keep and a spire; or a landmark: standing
+stones, a castle on its hill, a ruined abbey, a lighthouse, an elder tree
+with a door in it, a fairy ring. Streams are crossed on stone bridges.
+Sheep and cows graze, deer bolt as you come near, crows fly up from the
+ruins, carts and riders pass on the road, geese cross the sky, and now and
+then, far off, a dragon, an airship or a balloon. The day goes round: golden
+mornings and evenings with long shadows, then a blue night with two moons,
+stars, fireflies, lit windows and lanterns, the traveller's own lantern
+swinging from the staff, and a while spent sitting by a campfire. Weather
+comes and goes (rain on the lake, snow in the pass and in winter), and the
+seasons turn along the road, so you walk out of summer into autumn. Three
+cameras: behind the traveller, through their eyes, or cinematic, which cuts
+between a crane shot, a bird's view, a low shot looking back and more.
+Choose the traveller (ranger, wizard, bard or knight) and the companion
+(fox, dog, pack pony, cat, a wisp of light, or none), the pace, how many
+towns there are, the season and the hour. Drag to look around. `V` changes
+the camera, `T` the time of day, `X` the weather, and `N` goes on down the
+road to the next place. Like Ice Patrol it is drawn with WebGL; without it
+the walk carries on as a flat storybook picture.
 
 **Sumo Championship** 🤼 is a tournament that never ends, drawn as a
 woodblock print that moves and written in Japanese. Sixteen wrestlers meet
@@ -608,7 +637,7 @@ you tick it, then seven, with the rest folded away:
   this one (or let it go), `V` another island passes, `O` a small one comes to orbit, `B` a balloon, `W` weather, `S` season, `H` holiday · Weather `V` next view (days, hours, now), `U` °C or °F,
   `R` refresh now · World Clock `V` next view (map, faces, board), `M` centre
   the map on the next place, `L` next map look · Orrery `=`/`+` faster, `-` slower,
-  `0` back to now, `L` look, `S` scale, `V` from above or tilted · Matrix `R` the code comes down again, `L` next look (the 1999 film, the sequels, Resurrections), `H` next colour · Cherry Blossoms `G` a gust, `B` shake the bough, `N` a new tree, `S` next sky, `W` next ground · Sumo Championship `N` to the finish or the next bout, `B` the ranking sheet · The Never-Ending Baseball Season `N` the next half-inning (Shift: the end of the game), `S` the standings and the leaders · Pocket Hockey `N` to the end of the period (or past whatever is showing), `G` to the final horn, `B` the table, then the scorers, `X` throw something on the ice, `W` a wave · Ice Patrol `W` `A` `S` `D` or arrows fly it, `Q`/`E` throttle, `X` weather, `T` time of day, `V` view, `R` radar range · Fireplace `L` a log burns through and a fresh one lands, `W` the wood laid again.
+  `0` back to now, `L` look, `S` scale, `V` from above or tilted · Matrix `R` the code comes down again, `L` next look (the 1999 film, the sequels, Resurrections), `H` next colour · Cherry Blossoms `G` a gust, `B` shake the bough, `N` a new tree, `S` next sky, `W` next ground · Sumo Championship `N` to the finish or the next bout, `B` the ranking sheet · The Never-Ending Baseball Season `N` the next half-inning (Shift: the end of the game), `S` the standings and the leaders · Pocket Hockey `N` to the end of the period (or past whatever is showing), `G` to the final horn, `B` the table, then the scorers, `X` throw something on the ice, `W` a wave · Ice Patrol `W` `A` `S` `D` or arrows fly it, `Q`/`E` throttle, `X` weather, `T` time of day, `V` view, `R` radar range · Wayfarer `V` camera, `T` time of day, `X` weather, `N` on to the next place · Fireplace `L` a log burns through and a fresh one lands, `W` the wood laid again.
 
 **Touch and drag:** tap or drag on Zen Garden (rake), Koi Pond (ripples;
 feed them in settings), Murmuration (you're the falcon), Lantern Festival,
@@ -617,7 +646,7 @@ Harvest Valley (shake an apple tree; tap the scarecrow, or the sky for geese),
 The Cat vs. the Ornament (a laser dot for the cats), The Last Bulb on the
 Strand (jiggle a bulb), Frost on the Glass (draw in it; tap to breathe), A Very Small Christmas (the tree
 jingles, the train goes round, the floor is where it moves to), Sky Island (a cat comes, a person
-waves, the lake jumps a fish, a house at night switches its lights, the sky sends a bird),
+waves, the lake jumps a fish, a house at night switches its lights, the sky sends a bird), Wayfarer (drag to look around),
 Satellites (what's that one?), Matrix (a splash of code), Cherry Blossoms (tap the bough to shake it, the air for a puff of wind; drag to push the air along), Weather (a day's hours; tap outside to go back),
 Pocket Hockey (the ice: something is thrown onto it; the seats: a wave),
 World Clock (a city becomes home, and the map turns to it; tap it again to go back), Sumo Championship (a cushion), The Never-Ending Baseball Season (a wave, a beach ball, a hot dog) and

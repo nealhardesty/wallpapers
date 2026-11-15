@@ -337,6 +337,16 @@
               { keys: ['n'], label: 'On to the next half-inning (with Shift, to the end of the game)', run: (baseball, { shift }) => baseball.skip(shift) },
               { keys: ['s'], label: 'Hold up the standings, the leading bats, the leading arms', run: baseball => baseball.sheet() },
           ] },
+        { id: 'wayfarer', name: 'Wayfarer', icon: '🥾', accent: '#f0b860', background: '#1a2233',
+          scripts: ['wayfarer/way-logic.js', 'wayfarer/way-models.js', 'wayfarer/way-actors.js', 'wayfarer/way-gl.js', 'wayfarer/wayfarer.js'],
+          make: host => new WayfarerAnimationManager(host), cost: 'high', interactive: true,
+          effects: [['shadows', 'medium'], ['mirror', 'medium']],
+          keys: [
+              { keys: ['v'], label: 'Next camera (behind the traveller, through their eyes, cinematic)', run: walk => walk.nextCamera() },
+              { keys: ['t'], label: 'Next time of day (goes round, your clock, dawn, day, dusk, night)', run: walk => walk.nextTime() },
+              { keys: ['x'], label: 'Next weather (comes and goes, clear, fair, overcast, rain)', run: walk => walk.nextWeather() },
+              { keys: ['n'], label: 'On to the next place down the road', run: walk => walk.skipAhead() },
+          ] },
         { id: 'bing', name: 'Bing Image of the Day', icon: '🖼️', accent: '#8ab4ff', scripts: ['bing/bing.js'],
           make: host => new BingWallpaperManager(host), cost: 'none', network: ['www.bing.com'] },
     ];
