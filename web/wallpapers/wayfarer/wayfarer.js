@@ -23,6 +23,8 @@ const WAY_CAMERAS = ['follow', 'orbit', 'first', 'drift'];
 const WAY_CAMERA_NAMES = { follow: 'Behind the traveller', orbit: 'Orbit: drag to turn it about them', first: 'Through their eyes', drift: 'Cinematic' };
 const WAY_ORBITS = ['fixed', 'turning'];
 const WAY_PICKS = ['surprise', 'choose'];
+// How much wildlife (WayLogic.WILD_LEVELS), and how the herds and flocks there always were scale with it.
+const WAY_WILD = { none: 0, few: 0.6, some: 1, plenty: 1.5 };
 const WAY_CRAFT = ['never', 'sometimes', 'often'];
 // Which countries the road passes through: all of them, a kind of country, or the ones ticked.
 const WAY_COUNTRY = { all: null, woods: ['forest', 'deepwood', 'grove'], open: ['meadow', 'farm', 'moor'], shore: ['lake', 'coast', 'meadow'], high: ['pass', 'moor', 'forest'], choose: null };
@@ -47,6 +49,8 @@ class WayfarerAnimationManager {
         this.onWheel = event => this.zoom(event.deltaY);
         this.gpu = { step: 0, late: 0, calm: 0, pace: 0, gaveUp: false };
         this.shadowFade = 0;
+        this.wild = new Map();      // the wild animals, by the stretch of road they are at home along
+        this.wildParties = [];
         this.near = new Map();      // squares by key, built and (with WebGL) on the GPU
         this.far = new Map();
         this.active = { near: [], far: [], hole: null, key: '' };
@@ -241,6 +245,11 @@ class WayfarerAnimationManager {
             this.stream(true);
         }
         if (before.companions !== config.companions || before.companionPick !== config.companionPick || String(before.companionChoice) !== String(config.companionChoice)) this.gather();
+        if (before.wildlife !== config.wildlife) {
+            // More or fewer animals: the wild ones are let out afresh, and the herds counted again. Nothing else moves.
+            for (const [id, made] of this.actors) if (made.herd) this.actors.delete(id);
+            this.cast();
+        }
         if (before.traveller !== config.traveller) { this.shift = WayLogic.shiftStart(this.world.seed); this.stealth = WayLogic.stealthStart(this.world.seed); }
         if (before.camera !== config.camera) { this.cut = 0; this.shot.t = 0; this.shot.z0 = this.journey.z; this.snap = true; }
         if (!config.touch) this.glance.yaw = this.glance.pitch = 0;
@@ -370,7 +379,7 @@ class WayfarerAnimationManager {
                 seen.add(id);
                 if (this.actors.has(id)) return;
                 const made = [], v = s.v ?? L.hash(sq.cx * 31 + index, sq.cz, 5), r = k => WayModels.rnd(v + 0.01, k);
-                const life = this.config.life;
+                const life = this.config.life, herds = WAY_WILD[this.config.wildlife] ?? 1;
                 if (s.k === 'folk') {
                     // Fewer about after dark and in the rain; the guards stay.
                     if (s.role !== 'guard' && (r(1) > life * (0.25 + 0.75 * this.density) || (night > 0.6 && r(2) < 0.6) || (wet > 0.3 && r(3) < 0.6))) { this.actors.set(id, made); return; }
@@ -382,7 +391,9 @@ class WayfarerAnimationManager {
                 else if (s.kind === 'camp') { if (L.camp(this.world, s.slot)?.tended) made.push({ kind: 'camp', x: s.x, y: s.y, z: s.z, yaw: s.yaw, d: s.d, v, look: WayActors.townsfolk(v, 'sit') }); }
                 else if (s.kind === 'child') for (let i = 0; i < s.n * Math.min(1, life); i++) made.push({ kind: 'folk', role: 'child', look: WayActors.townsfolk(r(10 + i), 'child'), x: s.x, z: s.z, x0: s.x, z0: s.z, yaw: 0, stride: i / 3, v: r(10 + i), turn: i / s.n * 6.28, wave: 0 });
                 else {
-                    const n = Math.max(1, Math.round((s.n || 1) * (0.4 + 0.6 * this.density) * Math.min(1.5, life)));
+                    // The herds, flocks and strays: as many as the wildlife setting says, and none at 'none'.
+                    const n = herds ? Math.max(1, Math.round((s.n || 1) * (0.4 + 0.6 * this.density) * herds)) : 0;
+                    made.herd = true;
                     for (let i = 0; i < n; i++) {
                         const a = r(20 + i) * 6.28, d = i ? 1.5 + 4 * r(30 + i) : 0;
                         made.push({ kind: s.kind, x: s.x + Math.sin(a) * d, z: s.z + Math.cos(a) * d, x0: s.x, z0: s.z, y: s.y, yaw: r(40 + i) * 6.28, v: r(50 + i), gait: r(60 + i), moving: 0, graze: 1, timer: 2 + 9 * r(70 + i), state: 'idle', fold: 1, alt: 0, perch: s.perch || 0 });
@@ -392,6 +403,34 @@ class WayfarerAnimationManager {
             });
         }
         for (const id of this.actors.keys()) if (!seen.has(id)) this.actors.delete(id);
+    }
+
+    // The wild ones (WayLogic.wildlife): whoever is at home along the road about the traveller, out to where nothing
+    // is drawn. They are the world's (a stretch has the same animals whenever it is asked); the setting says how many
+    // of them are let out, so turning it changes who is about and nothing else.
+    castWild() {
+        const L = WayLogic, c = this.config, me = this.standing, cz = Math.floor(me.z / L.CHUNK), key = `${cz},${c.wildlife},${this.density}`;
+        if (this.wildWorld !== this.world) { this.wild.clear(); this.wildWorld = this.world; this.wildAt = null; }
+        if (key === this.wildAt) return;
+        if (this.wildAt && !this.wildAt.endsWith(`,${c.wildlife},${this.density}`)) this.wild.clear();
+        this.wildAt = key;
+        const share = (L.WILD_LEVELS[c.wildlife] ?? L.WILD_LEVELS.some) * (0.55 + 0.45 * this.density), keep = new Set();
+        for (let dz = -3; dz <= 3; dz++) {
+            const k = cz + dz;
+            keep.add(k);
+            if (!this.wild.has(k)) this.wild.set(k, share ? this.world.wildlife(cz + dz).filter(g => g.roll < share).map(g => L.wildStart(g, this.world, this.density)) : []);
+        }
+        for (const k of this.wild.keys()) if (!keep.has(k)) this.wild.delete(k);
+        this.wildParties = [...this.wild.values()].flat();
+    }
+    stepWild(dt, me) {
+        this.castWild();
+        const ctx = { t: this.seconds, night: this.light.night, me, random: Math.random, party: null };
+        for (const party of this.wildParties) {
+            if (Math.abs(party[0].g.x - me.x) + Math.abs(party[0].g.z - me.z) > 260) continue;
+            ctx.party = party;
+            for (const a of party) WayLogic.wildStep(a, dt, this.world, ctx);
+        }
     }
 
     // ---- A frame ---------------------------------------------------------------------------------
@@ -493,6 +532,7 @@ class WayfarerAnimationManager {
             if (this.shadowFade === 0) this.applyQuality();
         }
         this.stepActors(dt, me);
+        this.stepWild(dt, me);
         this.stepRoad(dt, me);
         this.stepSky(dt, me);
     }
@@ -829,6 +869,44 @@ class WayfarerAnimationManager {
             }
         }
 
+        // The wild ones. Near the eye they are the finer animals; further off the plainer ones stand in; the small are
+        // not drawn from far away at all. The nearest so many, by the tier.
+        {
+            const fineR = this.detail > 1 ? 13 : this.detail ? 8 : 0, most = this.detail > 1 ? 44 : this.detail ? 26 : 14, reach = this.detail > 1 ? 1 : this.detail ? 0.75 : 0.55, night = this.light.night, shown = [];
+            for (const party of this.wildParties) for (const a of party) { if (!a.hidden && inView(a.x, a.z, (a.K.see || 170) * reach)) shown.push([Math.hypot(a.x - view.x, a.z - view.z), a]); }
+            shown.sort((p, q) => p[0] - q[0]);
+            let n = 0;
+            for (const [away, a] of shown) {
+                if (n++ >= most) break;
+                const K = a.K, p = rel(a.x, a.y, a.z);
+                if (K.swarm) {
+                    // Many small things about one place: where each is, is only the time of day.
+                    const out2 = K.hours === 'night' ? L.smooth(0.45, 0.7, night) : 1 - L.smooth(0.4, 0.65, night);
+                    if (out2 < 0.05) { n--; continue; }
+                    for (let i = 0; i < a.count; i++) {
+                        const u = t + a.v * 40 + i * 7.3;
+                        if (K.swarm === 'glow') { const blink = Math.max(0, Math.sin(u * 0.9 + i)) ** 2 * out2; this.glows.add(p[0] + Math.sin(i * 2.4 + u * 0.11) * 3.4, p[1] + 0.25 + 0.3 * Math.sin(u * 0.4 + i), p[2] + Math.cos(i * 1.7 + u * 0.09) * 3.4, 0.07, 0.7 * blink, blink, 0.35 * blink, 1); continue; }
+                        if (K.swarm === 'butterfly') {
+                            const bx = p[0] + Math.sin(u * 0.5 + i * 2.1) * 2.4, by = p[1] + 0.6 + 0.4 * Math.sin(u * 0.9 + i), bz = p[2] + Math.cos(u * 0.37 + i * 1.3) * 2.4;
+                            for (const side of [-1, 1]) { st.reset(bx, by, bz, u * 1.3 + i, 1.7 * out2).size(side, 1, 1).rz(0.9 * Math.sin(u * 22)); out.stamp(WayCompanions.butterfly(), st.top, null, 0, 0, 1); }
+                            continue;
+                        }
+                        const bat = K.swarm === 'bat', turn = u * (bat ? 0.9 : 1.3) * (i % 2 ? 1 : -1) + i * 2.4, wide = (bat ? 5 : 8) + 2.5 * Math.sin(u * 0.31 + i), bx = p[0] + Math.sin(turn) * wide, by = p[1] + (bat ? 4 : 7) + 1.6 * Math.sin(u * 0.7 + i * 1.9), bz = p[2] + Math.cos(turn) * wide;
+                        st.reset(bx, by, bz, turn + (i % 2 ? 1 : -1) * Math.PI / 2, 2.2 * out2);
+                        out.stamp(WayCompanions.flyerBody(K.swarm), st.top, null, 0, 0, 1);
+                        for (const side of [-1, 1]) { st.push().size(side, 1, 1).rz((bat ? 0.8 : 0.5) * Math.sin(u * (bat ? 26 : 17))); out.stamp(WayCompanions.flyer(K.swarm), st.top, null, 0, 0, 1); st.pop(); }
+                    }
+                    continue;
+                }
+                if (a.kind === 'fish') { st.reset(p[0], p[1] + a.alt, p[2], a.yaw, 1).rx(-a.pitch); out.stamp(WayCompanions.fish(), st.top, null, 0, 0, 1); continue; }
+                if (away < fineR || !K.far) WayCompanions.pose(K.rig, out, st, p[0], p[1], p[2], { lite: true, size: K.size, yaw: a.yaw, gait: a.gait, moving: a.moving, rest: a.rest, down: a.down, alarm: a.alarm, alt: a.alt, wing: a.wing, bank: a.bank, pitch: a.pitch, t: t + a.v * 9 }, fx);
+                else if (K.bird) A.bird(out, st, K.far, p[0], p[1] + a.alt + 0.12, p[2], { yaw: a.yaw, fold: a.wing ? 0 : 1, flap: a.wing ? (K.act === 'soar' ? 0.12 : 0.7) * Math.sin(t * (K.act === 'soar' ? 1.5 : 11) + a.v * 9) : 0, roll: -(a.bank || 0) * 0.6 });
+                else A.beast(out, st, K.far, p[0], p[1], p[2], { yaw: a.yaw, gait: a.gait / 1.3, moving: a.moving, graze: a.down, t: t + a.v * 9, size: K.farSize || 1 }, K.farCoat || null);
+                if (K.glow && lit > 0.05) this.glows.add(p[0], p[1] + 0.25, p[2], 0.8, K.glow[0] * lit, K.glow[1] * lit, K.glow[2] * lit, 1);
+            }
+            this.wildDrawn = Math.min(n, most);
+        }
+
         // The camp: the fire the traveller sits by, and other travellers' fires along the road.
         const fire = (x, y, z, strength) => {
             const p = rel(x, y, z), flick = 0.8 + 0.2 * Math.sin(t * 11) * Math.sin(t * 7.3) + 0.1 * Math.sin(t * 23);
@@ -1108,6 +1186,7 @@ class WayfarerAnimationManager {
         const j = this.journey, me = this.standing, r = this.world.at(j.z), grand = !!r.near.grand;       // (the world keeps one row: ask it first)
         return {
             flat: this.flat, z: j.z, d: j.d, distance: j.distance, speed: j.speed, mode: j.mode, y: me.y, ground: this.world.surface(me.x, me.z), biome: r.near.biome, place: r.near.place,
+            wild: { level: this.config.wildlife, parties: this.wildParties.length, animals: this.wildParties.reduce((n, p) => n + p.length, 0), kinds: [...new Set(this.wildParties.map(p => p[0].kind))], drawn: this.wildDrawn || 0 }, herds: [...this.actors.values()].reduce((n, g) => n + (g.herd ? g.length : 0), 0),
             near: this.active.near.length, far: this.active.far.length, queue: this.queue.length, actors: [...this.actors.values()].reduce((n, g) => n + g.length, 0), moving: this.moving.n,
             glows: this.glows.n, puffs: this.puffs.n, lamps: this.lamps.length, day: this.day, lit: this.light.lit, night: this.light.night, stars: this.light.stars, cloud: this.weather.cloud, wet: this.weather.wet,
             fall: this.scene.fall, shadow: this.scene.shadow, camera: this.config.camera, cam: { ...this.cam }, orbit: { az: this.orbit.az, el: this.orbit.el, dist: this.orbit.dist, reach: this.orbit.reach, open: WayLogic.inOpen(this.world, this.cam.x, this.cam.y, this.cam.z, 0.2) }, clear: this.cam.y - Math.max(this.world.surface(this.cam.x, this.cam.z), this.world.water(this.cam.x, this.cam.z)),

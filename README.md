@@ -210,7 +210,9 @@ behind a moat and a drawbridge, with a cathedral, a guildhall and a castle
 on a rock above the roofs; or a landmark: standing
 stones, a castle on its hill, a ruined abbey, a lighthouse, an elder tree
 with a door in it, a fairy ring. Streams are crossed on stone bridges.
-Sheep and cows graze, deer bolt as you come near, crows fly up from the
+Each country has its wild things (a setting says how many): a bear well back
+among the trunks, stags, squirrels on the boughs, hares boxing, herons and
+swans, ibex in the pass, bats and glow-worms after dark. Sheep and cows graze, deer bolt as you come near, crows fly up from the
 ruins, carts and riders pass on the road, geese cross the sky, and now and
 then, far off, a dragon, an airship or a balloon. The day goes round: golden
 mornings and evenings with long shadows, then a blue night with two moons,

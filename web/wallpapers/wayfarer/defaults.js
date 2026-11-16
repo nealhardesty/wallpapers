@@ -24,7 +24,8 @@ WP.defaults('wayfarer', {
     biomePick: 'all',      // which countries the road passes through: all, woods, open, shore, high, or choose
     biomeChoice: ['meadow', 'forest', 'deepwood', 'lake', 'pass', 'farm', 'moor', 'coast', 'grove'],      // which, when it is 'choose' (none ticked is all of them)
     towns: 1,              // × how many of the places along the road are settled
-    life: 1,               // × folk, animals and traffic
+    life: 1,               // × folk and traffic
+    wildlife: 'some',      // the wild animals of each country, and the herds and flocks: none, few, some or plenty
     wonders: true,         // dragons, airships and balloons, far off
     touch: true,           // a drag looks around
     fov: 56,               // degrees, top to bottom on a wide screen

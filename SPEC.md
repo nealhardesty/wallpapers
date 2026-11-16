@@ -5238,9 +5238,53 @@ creature, marking or design is taken from one.
   turns their head. A unit test walks to two fires and back at 10, 30
   and 120 fps and measures how far each went across the way it faced
   (the old code: 21 m for the traveller).
+- **Also in the fifth pass: wildlife** ("more background creatures, and more often, maybe controllable: bears, elk, squirrels").
+  - *Who.* 27 kinds (`WayLogic.WILD`), each country its own
+    (`WILDLIFE`): forest and deep forest have the bear, stags, squirrels
+    (up trunks, and in the deep forest out along the boughs over the
+    road), a boar with piglets, fox cubs, badgers, hedgehogs, a woodpecker
+    and an owl; meadow and farmland hares that box, pheasants, fox cubs,
+    hedgehogs, a kestrel hanging on the wind, butterflies and swallows;
+    lake and coast herons, swans with cygnets, otters, a fish that jumps,
+    seals on the shore; the moor wild ponies, stags, hares, marmots, a
+    kestrel and an eagle; the pass ibex, marmots, an eagle and now and
+    then a bear; the grove moon-hares that glow and mushlings; after dark
+    bats and glow-worms, and the owl goes round on the wing. The herds and
+    flocks there were before (sheep, cows, deer, rabbits, goats, ducks,
+    gulls, crows, wisps) are still there.
+  - *Where.* `world.wildlife(cz)` gives up to six parties to each 64 m of
+    road, within about forty metres of it (where they are seen), the same
+    whenever it is asked; each has a `roll`, and the setting lets out those
+    under its share (`WILD_LEVELS`: none 0, few 0.25, some 0.6, plenty
+    0.96), so turning it up adds animals and moves none. Every kind keeps
+    a distance from the road's middle (`keep`: 6 m at the least, 20 m for
+    the bear), in where it starts, where it wanders and where it runs to;
+    none are placed in a town, at a landmark or a camp. The manager holds
+    those within three stretches (192 m and more: beyond where any is
+    drawn).
+  - *What they do* (`wildStep`): graze and look up as the traveller
+    nears; the shy ones bound away from the traveller and from the road
+    (a heron and a pheasant get up and fly), and settle where they stop;
+    the young follow the first of their party; climbers go up and down;
+    swimmers go round; fliers circle or hang. Those on the ground walk the
+    way they face, with the turn limited.
+  - *How they are drawn.* Within 13 m (8 m on Medium, never on Low) the
+    companions' lite rig; beyond it WayActors' plain beasts and birds
+    stand in (new entries for the bear, stag, boar, wild pony, ibex, seal,
+    swan, heron, eagle, kestrel, owl, pheasant and woodpecker; the small
+    ones borrow a cat or a rabbit in their own coat); the nearest 44, 26
+    or 14 by the tier; swarms are a few triangles each or only lights.
+    The orbit's cutaway takes leaves only, so it never takes an animal.
+  - *The setting.* `wildlife`: `none`, `few`, `some` (the default) or
+    `plenty`; it takes effect at once and leaves the walk alone. It
+    governs the herds and flocks too (×0, 0.6, 1, 1.5), which `life` used
+    to: `life` is now folk and traffic only.
+  - *Cost.* Worst case measured (plenty, twelve companions, the deep
+    forest in autumn, a far orbit): High 463k (455k without wildlife),
+    Medium 227k (227k), Low 89k (89k).
 - **Settings added:** `orbitMode`, `orbitAzimuth`, `orbitElevation`,
   `orbitDistance`, `companions`, `companionPick`, `companionChoice`,
-  `warpaint`, `craft`, `biomePick`, `biomeChoice`. `companion` (the one
+  `warpaint`, `craft`, `biomePick`, `biomeChoice`, `wildlife`. `companion` (the one
   companion of the first version, then "the first") was removed on
   2026-11-16 with `configVersion` 2.
 - **Not built:** pinch to zoom (no multi-touch in `host.gestures`: on a
@@ -5248,7 +5292,7 @@ creature, marking or design is taken from one.
   fallback draws every traveller as the same cut-out in their own colours,
   and none of the company.
 
-**Tests.** Unit (`tools/wayfarer.test.mjs`, 28; the fourth pass added the boughs over the deep forest's road, the bow's string, the company changing on the road and nobody spinning; the fifth, the walk to a fire and back (30 now); the third pass added the country chosen and honoured, autumn in the woods, and the border that does not change its mind; the six before that: the orbit in clear air at 48 bearings and heights for an hour, its drag, fixed and turning at 10 and 120 fps; every companion posed, the count, the named cats against the roster, the seed; the company on the road, by the fire and at any frame rate; every traveller, the druid's changes and the rogue's hiding; grand cities; fine models and budgets). Smoke adds: the orbit's drag, wheel, overhead, grass and a village at four bearings; six companions, none, the barbarian's brand, the druid there and back, the rogue unseen and back; a grand city before its gate, in its square at five bearings, on its drawbridge and from down the road at night. The original sixteen: the road never jumps or
+**Tests.** Unit (`tools/wayfarer.test.mjs`, 28; the fourth pass added the boughs over the deep forest's road, the bow's string, the company changing on the road and nobody spinning; the fifth, the walk to a fire and back, and wildlife (31 now); the third pass added the country chosen and honoured, autumn in the woods, and the border that does not change its mind; the six before that: the orbit in clear air at 48 bearings and heights for an hour, its drag, fixed and turning at 10 and 120 fps; every companion posed, the count, the named cats against the roster, the seed; the company on the road, by the fire and at any frame rate; every traveller, the druid's changes and the rogue's hiding; grand cities; fine models and budgets). Smoke adds: the orbit's drag, wheel, overhead, grass and a village at four bearings; six companions, none, the barbarian's brand, the druid there and back, the rogue unseen and back; a grand city before its gate, in its square at five bearings, on its drawbridge and from down the road at night. The original sixteen: the road never jumps or
 doubles back, is level across and no steeper than a third along; the
 ground is continuous and the road is never awash; every round has all
 the countries (nine now), never two stretches the same running, and every kind of place

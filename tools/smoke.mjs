@@ -2425,6 +2425,40 @@ const STAGE_CHECKS = {
             if (settled.leaving.length) record(`still here: ${settled.leaving.join()}`);
             return true;
         }],
+        ['wildlife: some by default, more at plenty, nobody at none (the herds too), each country its own, all of them off the road; the setting changes who is about and nothing else', async () => {
+            if (!await stageWith('wayfarer', { configVersion: 2, time: 'day', weather: 'clear', rests: false, biomePick: 'choose', biomeChoice: ['forest', 'meadow'] }, '&seed=7')) return record('not ready');
+            const state = () => evaluate("(m => { const w = m.world, s = m.debugState(), ground = m.wildParties.flat().filter(a => !a.K.swarm && (a.K.where || 'land') === 'land' && a.alt < 0.3); return { seed: w.seed, z: m.journey.z, distance: m.journey.distance, party: m.party.map(p => p.id).join(), wild: s.wild, herds: s.herds, nearest: ground.length ? Math.min(...ground.map(a => Math.abs(w.lateral(a.x, a.z)))) : null, moving: m.moving.n, triangles: s.drawn.triangles }; })(WP.stage.manager)");
+            const set = level => evaluate(`(m => m.applySettings({ ...m.config, wildlife: '${level}' }))(WP.stage.manager)`);
+            await sleep(1500);
+            const some = await state();
+            if (some.wild.level !== 'some' || !(some.wild.animals >= 8) || !(some.wild.parties >= 5)) record(`some: ${JSON.stringify(some.wild)}`);
+            if (some.nearest !== null && some.nearest < 5) record(`an animal ${some.nearest.toFixed(1)} m from the middle of the road`);
+            await set('plenty');
+            await sleep(1200);
+            const plenty = await state();
+            if (!(plenty.wild.parties > some.wild.parties * 1.3) || !(plenty.wild.animals > some.wild.animals)) record(`plenty: ${plenty.wild.parties} parties and ${plenty.wild.animals} animals, against ${some.wild.parties} and ${some.wild.animals} at some`);
+            if (plenty.nearest !== null && plenty.nearest < 5) record(`plenty: an animal ${plenty.nearest.toFixed(1)} m from the middle of the road`);
+            await shoot('wayfarer-wildlife');
+            await set('few');
+            await sleep(600);
+            const few = await state();
+            if (!(few.wild.parties < some.wild.parties) || !(few.wild.parties > 0)) record(`few: ${few.wild.parties} parties, against ${some.wild.parties} at some`);
+            await set('none');
+            await sleep(1200);
+            const none = await state();
+            if (none.wild.animals !== 0 || none.wild.parties !== 0 || none.herds !== 0 || none.wild.drawn !== 0) record(`none: ${JSON.stringify({ wild: none.wild, herds: none.herds })}`);
+            if (!(none.moving < plenty.moving)) record(`none draws ${none.moving} vertices of what moves, plenty ${plenty.moving}`);
+            // The walk went on through all of it: the same world, the same company, further down the same road.
+            for (const [name, now, before] of [['plenty', plenty, some], ['few', few, plenty], ['none', none, few]]) if (now.seed !== some.seed || now.party !== some.party || !(now.z >= before.z) || now.z - before.z > 30 || !(now.distance >= before.distance)) record(`${name}: the walk was disturbed (${JSON.stringify({ seed: [some.seed, now.seed], z: [before.z, now.z] })})`);
+            await set('some');
+            await sleep(800);
+            const back = await state();
+            if (back.wild.parties !== some.wild.parties && Math.abs(back.z - some.z) < 1) record(`back at some: ${back.wild.parties} parties, ${some.wild.parties} before`);
+            // Each country has its own, and enough kinds of them.
+            const lands = await evaluate("(() => { const L = WayLogic, out = {}; for (const biome of L.BIOMES) { const w = L.world(7, { biomes: [biome] }), kinds = new Set(); let strangers = 0; for (let cz = 1700; cz < 1760; cz++) for (const g of w.wildlife(cz)) { kinds.add(g.kind); if (!L.WILDLIFE[biome].includes(g.kind)) strangers++; } out[biome] = [kinds.size, strangers]; } return out; })()");
+            for (const [biome, [kinds, strangers]] of Object.entries(lands)) if (kinds < 4 || strangers) record(`${biome}: ${kinds} kinds, ${strangers} that do not belong`);
+            return true;
+        }],
         ['without WebGL it walks on, painted flat: as far each second on Low as on High', async () => {
             const noGl = "(() => { const real = HTMLCanvasElement.prototype.getContext; HTMLCanvasElement.prototype.getContext = function (kind, ...rest) { return /^webgl/.test(kind) ? null : real.call(this, kind, ...rest); }; })()";
             const { identifier } = await cdp.send('Page.addScriptToEvaluateOnNewDocument', { source: noGl });

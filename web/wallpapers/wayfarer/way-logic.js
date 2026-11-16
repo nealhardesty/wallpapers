@@ -308,6 +308,7 @@ const WayLogic = (() => {
         w.layout = layouts(w);
         w.scatter = scatters(w);
         w.solids = solidsOf(w);
+        w.wildlife = wildlifeOf(w);
         return w;
     }
 
@@ -979,6 +980,269 @@ const WayLogic = (() => {
         return { x, y, z: j.z, heading: travel + j.look * 1.2, travel };
     }
 
+    // ---- Wildlife -----------------------------------------------------------------------------
+    // What lives in each country, off the road and about its own business. rig: who it is drawn as close by
+    // (WayCompanions), far: who stands in for it further off (WayActors' plainer beasts and birds; none: it is too
+    // small to see from there) with farSize and farCoat, size; rare: the share of its chances it takes (a bear is not behind every tree); n: how many together; young: [who, how many] that follow the first of them;
+    // where: land (the default), water, shore, tree, air; keep: no nearer the road's middle than this, ever; range: how
+    // far it wanders from home; pace and run (metres a second); shy: it is off when the traveller comes this near (on the
+    // wing, if it has `wing`); act: what it does between whiles; hours: 'day' or 'night' for those only out then.
+    const WILD = {
+        bear: { rig: 'grizzly', far: 'bear', rare: 0.3, n: [1, 1], keep: 20, range: 14, pace: 0.7, act: 'amble', big: 1 },
+        stag: { rig: 'stag', far: 'stag', rare: 0.7, n: [1, 3], keep: 10, range: 12, pace: 0.6, shy: 22, run: 7, act: 'graze', big: 1 },
+        boar: { rig: 'boar', far: 'boar', rare: 0.6, n: [1, 1], young: ['piglet', 3], keep: 9, range: 9, pace: 0.8, shy: 16, run: 5, act: 'graze' },
+        piglet: { rig: 'piglet', far: 'boar', farSize: 0.4, farCoat: [176, 136, 96], n: [0, 0], keep: 7, pace: 1.6, act: 'follow', see: 50 },
+        foxcubs: { rig: 'fox', size: 0.55, far: 'fox', farSize: 0.55, n: [2, 3], keep: 7, range: 5, pace: 2.4, act: 'play', see: 80 },
+        badger: { rig: 'badger', far: 'cat', farSize: 1.6, farCoat: [110, 110, 116], n: [1, 2], keep: 7, range: 8, pace: 0.6, act: 'graze', see: 55 },
+        hedgehog: { rig: 'hedgehog', far: 'rabbit', farSize: 0.7, farCoat: [150, 126, 100], n: [1, 1], keep: 6, range: 4, pace: 0.25, act: 'graze', see: 35 },
+        hare: { rig: 'brownhare', far: 'rabbit', farSize: 1.5, n: [2, 2], keep: 7, range: 3, pace: 2, shy: 16, run: 8, act: 'box', see: 90 },
+        squirrel: { rig: 'squirrel', far: 'cat', farSize: 0.5, farCoat: [196, 96, 46], n: [1, 2], where: 'tree', keep: 6, pace: 2.2, act: 'climb', see: 45 },
+        wildpony: { rig: 'wildpony', far: 'wildpony', n: [2, 4], keep: 11, range: 14, pace: 0.6, shy: 11, run: 6, act: 'graze', big: 1 },
+        ibex: { rig: 'ibex', far: 'ibex', n: [2, 3], keep: 9, range: 8, pace: 0.5, act: 'graze' },
+        marmot: { rig: 'marmot', far: 'rabbit', farSize: 1.3, farCoat: [176, 144, 98], n: [1, 3], keep: 6.5, range: 3, pace: 0.9, shy: 12, run: 4, act: 'sentry', see: 50 },
+        moonhare: { rig: 'hare', far: 'rabbit', farSize: 1.4, n: [1, 2], keep: 7, range: 6, pace: 1.6, shy: 13, run: 7, act: 'graze', glow: [0.5, 0.7, 1], see: 90 },
+        mushling: { rig: 'mushling', n: [2, 3], keep: 7, range: 5, pace: 0.5, act: 'amble', see: 50 },
+        pheasant: { rig: 'pheasant', far: 'pheasant', bird: true, n: [1, 2], keep: 7, range: 6, pace: 0.7, shy: 13, wing: true, act: 'graze', see: 80 },
+        heron: { rig: 'heron', far: 'heron', bird: true, n: [1, 1], where: 'shore', keep: 8, shy: 12, wing: true, act: 'stand' },
+        swan: { rig: 'swan', far: 'swan', bird: true, n: [1, 2], young: ['cygnet', 3], where: 'water', keep: 7, act: 'swim' },
+        cygnet: { rig: 'cygnet', far: 'duck', bird: true, n: [0, 0], where: 'water', keep: 7, act: 'follow', pace: 1.2, see: 50 },
+        otter: { rig: 'otter', far: 'cat', farSize: 1.7, farCoat: [112, 78, 54], n: [1, 2], where: 'water', keep: 7, act: 'swim', see: 60 },
+        fish: { n: [1, 1], where: 'water', keep: 7, act: 'jump', see: 70 },
+        seal: { rig: 'seal', far: 'seal', n: [1, 3], where: 'shore', keep: 9, act: 'bask' },
+        kestrel: { rig: 'kestrel', far: 'kestrel', bird: true, rare: 0.35, n: [1, 1], where: 'air', keep: 0, act: 'hover' },
+        eagle: { rig: 'eagle', far: 'eagle', bird: true, rare: 0.2, n: [1, 1], where: 'air', keep: 0, act: 'soar', see: 400 },
+        owl: { rig: 'owl', far: 'owl', bird: true, rare: 0.6, n: [1, 1], where: 'tree', keep: 6, act: 'perch', see: 90 },
+        woodpecker: { rig: 'woodpecker', far: 'woodpecker', bird: true, n: [1, 1], where: 'tree', keep: 6, act: 'peck', see: 60 },
+        butterflies: { swarm: 'butterfly', n: [5, 8], keep: 4, hours: 'day', see: 40 },
+        swallows: { swarm: 'swallow', rare: 0.6, n: [4, 6], keep: 0, where: 'air', hours: 'day', see: 90 },
+        bats: { swarm: 'bat', rare: 0.6, n: [5, 8], keep: 0, where: 'air', hours: 'night', see: 60 },
+        glowworms: { swarm: 'glow', n: [8, 12], keep: 3, hours: 'night', see: 60 },
+    };
+    // Who is at home where (twice in a list: twice as likely).
+    const WILDLIFE = {
+        meadow: ['hare', 'hare', 'foxcubs', 'hedgehog', 'kestrel', 'butterflies', 'butterflies', 'swallows', 'pheasant', 'stag', 'glowworms', 'bats'],
+        farm: ['pheasant', 'pheasant', 'hare', 'hedgehog', 'swallows', 'swallows', 'butterflies', 'kestrel', 'bats', 'foxcubs'],
+        forest: ['bear', 'stag', 'stag', 'squirrel', 'squirrel', 'boar', 'foxcubs', 'badger', 'woodpecker', 'owl', 'hedgehog', 'bats', 'glowworms'],
+        deepwood: ['bear', 'stag', 'squirrel', 'squirrel', 'squirrel', 'boar', 'badger', 'owl', 'woodpecker', 'woodpecker', 'glowworms', 'bats'],
+        lake: ['heron', 'heron', 'swan', 'swan', 'otter', 'fish', 'fish', 'stag', 'butterflies', 'bats', 'squirrel'],
+        coast: ['seal', 'seal', 'heron', 'otter', 'fish', 'fish', 'swallows', 'hare'],
+        moor: ['wildpony', 'wildpony', 'stag', 'hare', 'kestrel', 'eagle', 'marmot', 'glowworms'],
+        pass: ['ibex', 'ibex', 'marmot', 'marmot', 'eagle', 'eagle', 'bear'],
+        grove: ['moonhare', 'moonhare', 'mushling', 'mushling', 'squirrel', 'owl', 'glowworms', 'glowworms', 'butterflies'],
+    };
+    // How much of it there is: the share of the places that could hold somebody that do.
+    const WILD_LEVELS = { none: 0, few: 0.25, some: 0.6, plenty: 0.96 };
+    // (The line of a bough over the road, height and reach, as WayModels builds it: a squirrel's way out along one.)
+    const BOUGH_LINE = [[0, 0], [2.6, 0.25], [5.2, 1.3], [6.8, 3.2], [7.5, 5.4], [7.4, 7.2]];
+    // wildlife(cz): who could be at home along this CHUNK metres of the road (within fifty metres of it, where they
+    // are seen), the same every time it is asked: up to six parties, each { kind, n, x, z, y, d, roll, v, biome } and,
+    // for those in trees, the tree or the bough. `roll` is what the setting is held against (WILD_LEVELS): turning it
+    // up adds to those already there, never moves them.
+    function wildlifeOf(w) {
+        const cache = new Map();
+        return function wildlife(cz) {
+            let out = cache.get(cz);
+            if (out) return out;
+            if (cache.size > 800) cache.clear();
+            cache.set(cz, out = []);
+            const z0 = cz * CHUNK;
+            let trees = null;
+            const fits = (K, x, z) => {
+                const r = w.at(z), d = (x - r.x) * r.cos, ad = Math.abs(d), p = r.near, where = K.where || 'land';
+                if (ad < Math.max(K.keep, where === 'air' ? 0 : 6) || ad > (where === 'air' ? 110 : 85)) return null;
+                if (where !== 'air') {
+                    if (p.radius && Math.hypot(d, r.dz) < p.radius * 1.15 + 16) return null;                     // not in town
+                    if (r.gate && Math.abs(z - r.gate.z) < 40) return null;
+                    for (const l of [r.a, r.b]) if (l.grand && Math.abs(z - l.zc) < GRAND.A + 130) return null;
+                    if (p.place !== 'none' && !p.radius && Math.hypot(d - p.side * 16, r.dz) < 24) return null;   // nor on a landmark
+                    if (p.mound && Math.hypot(d - p.mound.d, r.dz) < 36) return null;
+                    for (let k = Math.floor((z - 20) / 120) - 1; k * 120 < z + 140; k++) { const c = camp(w, k); if (c && Math.hypot(c.x - x, c.z - z) < 12) return null; }
+                }
+                const y = w.ground(x, z), level = w.water(x, z);
+                if (where === 'water' ? !(y < level - 0.35) : where === 'shore' ? !(y > level - 0.3 && y < level + 0.45) : where === 'air' ? false : !(y > level + 0.4)) return null;
+                return { y: where === 'water' ? level : Math.max(y, where === 'shore' ? level - 0.05 : y), d, level };
+            };
+            for (let slot = 0; slot < 6; slot++) {
+                const h = k => w.hash(cz, slot, 70 + k), roll = h(0), side = h(2) < 0.5 ? -1 : 1;
+                const sz = z0 + CHUNK * h(1), r = w.at(sz), b = h(3) < w.share(r.x, sz) ? r.b : r.a, list = WILDLIFE[b.biome];
+                const kind = list[Math.floor(h(4) * list.length)], K = WILD[kind], n = K.n[0] + Math.floor(h(5) * (K.n[1] - K.n[0] + 1));
+                if (K.rare && h(8) > K.rare) continue;
+                if (K.where === 'tree') {
+                    const cx = Math.floor(r.x / CHUNK);
+                    trees ??= [cx - 1, cx, cx + 1].flatMap(c => w.scatter(c, cz)).filter(it => (it.k === 'tree' && it.kind !== 'snag' && it.kind !== 'shroom') || it.k === 'bough');
+                    const near = trees.filter(it => { const d = Math.abs(w.lateral(it.x, it.z)); return d > 6 && d < 40 && fits({ keep: 6 }, it.x, it.z); });
+                    // (A squirrel likes a bough over the road best.)
+                    const boughs = kind === 'squirrel' ? near.filter(it => it.k === 'bough') : [], pick = boughs.length ? boughs : near.filter(it => it.k === 'tree');
+                    if (!pick.length) continue;
+                    const tr = pick[Math.floor(h(6) * pick.length)];
+                    out.push({ kind, n, x: tr.x, z: tr.z, y: tr.y, d: w.lateral(tr.x, tr.z), roll, v: h(7), biome: b.biome, ...(tr.k === 'bough' ? { bough: { yaw: tr.yaw, s: tr.s } } : { tree: { h: (tr.kind === 'birch' ? 5.2 : tr.kind === 'fir' ? 2.6 : 3.3) * tr.s * 1.25, r: (tr.kind === 'birch' ? 0.2 : 0.42) * tr.s * 1.25 } }) });
+                    continue;
+                }
+                // A few tries for a place that suits it (water for a swan, the water's edge for a heron, dry land off the
+                // road for a bear): mostly within a stone's throw of the road, where they are seen.
+                for (let t = 0; t < (K.where === 'shore' || K.where === 'water' ? 24 : 7); t++) {
+                    const z = z0 + CHUNK * w.hash(cz * 7 + slot, t, 91), d = side * (K.where === 'air' ? 50 * w.hash(cz * 7 + slot, t, 92) : Math.max(K.keep, 6) + 0.5 + (K.where === 'shore' || K.where === 'water' ? 78 : 30) * w.hash(cz * 7 + slot, t, 92) ** 2), [x] = w.place(z, d);
+                    if (K.where === 'air') { out.push({ kind, n, x, z, y: Math.max(w.ground(x, z), w.water(x, z)), d, roll, v: h(7), biome: b.biome }); break; }
+                    const ok = fits(K, x, z);
+                    if (ok) { out.push({ kind, n, x, z, y: ok.y, d: ok.d, roll, v: h(7), biome: b.biome }); break; }
+                }
+            }
+            return out;
+        };
+    }
+    // The animals of one party, where they start: [{ kind, i, x, z, y, home, yaw, ... }]. `share` (0 to 1) thins a
+    // party on the lower tiers.
+    function wildStart(g, w, share = 1) {
+        const K = WILD[g.kind], out = [], rnd = k => hash(Math.floor(g.v * 1e6), k, 4177), n = K.swarm ? 1 : Math.max(1, Math.round(g.n * (0.5 + 0.5 * share)));
+        const one = (kind, i) => {
+            const k = WILD[kind], away = Math.sign(g.d) || 1, a = rnd(i * 7 + 1) * TAU, far = i ? 1.2 + (k.range || 3) * 0.4 * rnd(i * 7 + 2) : 0, r = w.at(g.z);
+            // (Others of the party stand further from the road than the first, never nearer.)
+            let x = g.x + Math.sin(a) * far + (i ? away * far * 0.6 / r.cos : 0), z = g.z + Math.cos(a) * far;
+            if ((k.where || 'land') !== 'land' && k.where !== 'water') { x = g.x; z = g.z; }
+            return { kind, K: k, g, i, x, z, y: g.y, hx: x, hz: z, yaw: rnd(i * 7 + 3) * TAU, alt: 0, gait: rnd(i * 7 + 4), moving: 0, state: 'idle', timer: 1 + 6 * rnd(i * 7 + 5), v: rnd(i * 7 + 6), rest: 0, down: 0, wing: 0, pitch: 0, bank: 0, alert: 0, alarm: 0, u: 0, turn: rnd(i * 7 + 3) * TAU, hidden: false, count: K.swarm ? Math.max(2, Math.round(g.n * (0.4 + 0.6 * share))) : 1 };
+        };
+        for (let i = 0; i < n; i++) out.push(one(g.kind, i));
+        if (K.young && !K.swarm) for (let i = 0; i < Math.max(1, Math.round(K.young[1] * share)); i++) out.push(one(K.young[0], n + i));
+        return out;
+    }
+    // Along a tree's trunk or out along a bough, u from 0 (the ground) to 1: where, how high, and how steep.
+    function wildPath(g, u) {
+        if (g.bough) {
+            const s = g.bough.s, at = u * (BOUGH_LINE.length - 1), i = Math.min(BOUGH_LINE.length - 2, Math.floor(at)), f = at - i, A = BOUGH_LINE[i], B = BOUGH_LINE[i + 1], y = mix(A[0], B[0], f) * s, out = mix(A[1], B[1], f) * s;
+            return { x: g.x + Math.sin(g.bough.yaw) * out, z: g.z + Math.cos(g.bough.yaw) * out, alt: y + 0.24 * s * (1 - u * 0.6), pitch: Math.atan2(B[0] - A[0], B[1] - A[1]), yaw: g.bough.yaw, len: 12.5 * s };
+        }
+        const t = g.tree, a = g.v * TAU;
+        return { x: g.x + Math.sin(a) * t.r, z: g.z + Math.cos(a) * t.r, alt: u * t.h, pitch: Math.PI / 2, yaw: a + Math.PI, len: t.h };
+    }
+    // One step of one wild animal's small life. ctx: { t, night (0 to 1), me: { x, z } (the traveller), random, party
+    // (the others of its party) }. Those on the ground walk the way they face, turn no faster than their size allows,
+    // and never come nearer the road than their kind keeps (so never onto it).
+    function wildStep(a, dt, w, ctx) {
+        const K = a.K, g = a.g, me = ctx.me, random = ctx.random, act = K.act, dxm = a.x - me.x, dzm = a.z - me.z, near = Math.hypot(dxm, dzm);
+        const ease = (v, to, secs) => v + (to - v) * (1 - Math.exp(-dt / secs)), rate = (K.big ? 1.4 : 3.2) * dt;
+        const go = (tx, tz, speed, most = rate) => {
+            const dx = tx - a.x, dz = tz - a.z, left = Math.hypot(dx, dz);
+            if (left < 1e-3) return 0;
+            const to = Math.atan2(dx, dz);
+            a.yaw = turnTo(a.yaw, to, dt * 5, most);
+            const step = Math.min(speed * Math.max(0.1, Math.cos(Math.min(Math.abs(turnTo(0, to - a.yaw, 1)), Math.PI / 2))) * dt, left);
+            a.x += Math.sin(a.yaw) * step; a.z += Math.cos(a.yaw) * step; a.gait += step; a.moving = ease(a.moving, 1, 0.2);
+            return left - step;
+        };
+        const dry = (x, z) => Math.abs(w.lateral(x, z)) >= K.keep && w.ground(x, z) > w.water(x, z) + 0.4;
+        a.alert = ease(a.alert, near < (K.shy || 8) + 12 ? 1 : 0, 0.5);
+        a.timer -= dt;
+        if (K.swarm) return a;
+        if (act === 'climb') {
+            // Up the trunk (or out along the bough), a look about, and down again to forage at the foot of it.
+            const p0 = wildPath(g, a.u);
+            if (a.state === 'idle') { a.moving = ease(a.moving, 0, 0.2); a.rest = ease(a.rest, 1, 0.3); if (a.timer < 0) { a.state = a.u < 0.5 ? 'up' : 'down'; a.top = 0.55 + 0.45 * random(); } }
+            else { a.rest = ease(a.rest, 0, 0.15); a.u = clamp(a.u + (a.state === 'up' ? 1 : -1) * K.pace * dt / p0.len, 0, 1); a.gait += K.pace * dt; a.moving = 1; if (a.state === 'up' ? a.u >= a.top : a.u <= 0) { a.state = 'idle'; a.timer = (a.u > 0 ? 2 : 4) + 5 * random(); } }
+            const p = wildPath(g, a.u), up = a.state === 'down' ? -1 : 1, onTrunk = a.u > 0.02;
+            a.x = p.x; a.z = p.z; a.alt = p.alt; a.y = g.y;
+            a.pitch = ease(a.pitch, onTrunk ? p.pitch * up : 0, 0.12);
+            a.yaw = turnTo(a.yaw, onTrunk ? p.yaw + (up < 0 && g.bough ? Math.PI : 0) : p.yaw + Math.PI, dt * 8, 6 * dt);
+            return a;
+        }
+        if (act === 'swim') {
+            // Round and about on the water, the young in a line behind.
+            a.turn += dt * 0.2 * (a.v < 0.5 ? 1 : -1);
+            const wide = 2.5 + 3 * a.v, x = a.hx + Math.sin(a.turn) * wide, z = a.hz + Math.cos(a.turn * 0.7) * wide * 0.7;
+            const moved = Math.hypot(x - a.x, z - a.z);
+            if (moved > 1e-4) a.yaw = turnTo(a.yaw, Math.atan2(x - a.x, z - a.z), dt * 4, 3 * dt);
+            a.x = x; a.z = z; a.moving = 0.4; a.gait += moved;
+            a.alt = K.rig === 'otter' ? -0.1 - 0.12 * Math.max(0, Math.sin(ctx.t * 0.5 + a.v * 9)) : 0;
+            return a;
+        }
+        if (act === 'jump') {
+            // A fish: out of the water in an arc, now and then, and gone again.
+            if (a.leap > 0) { a.leap -= dt; const u = 1 - Math.max(0, a.leap) / 0.9; a.x = a.jx + Math.sin(a.yaw) * u * 1.3; a.z = a.jz + Math.cos(a.yaw) * u * 1.3; a.alt = Math.sin(Math.PI * u) * 0.65 - 0.12; a.pitch = Math.cos(Math.PI * u) * 1.1; a.hidden = a.leap <= 0; if (a.hidden) a.timer = 4 + 9 * random(); }
+            else if (a.timer < 0) { a.leap = 0.9; a.yaw = random() * TAU; a.jx = a.hx + (random() - 0.5) * 4; a.jz = a.hz + (random() - 0.5) * 4; a.hidden = false; }
+            else a.hidden = true;
+            return a;
+        }
+        if (act === 'hover' || act === 'soar') {
+            // A kestrel hangs on the wind and moves on; an eagle goes round on a thermal, high up.
+            const soar = act === 'soar', wide = soar ? 38 : 9, hang = !soar && (ctx.t * 0.07 + a.v) % 1 < 0.4;
+            if (!hang) a.turn += dt * (soar ? 0.12 : 0.3);
+            const x = g.x + Math.sin(a.turn) * wide, z = g.z + Math.cos(a.turn) * wide;
+            a.yaw = turnTo(a.yaw, hang ? a.yaw : a.turn + Math.PI / 2, dt * 3, 2 * dt);
+            a.x = x; a.z = z; a.y = g.y; a.alt = ease(a.alt || (soar ? 40 : 13), soar ? 42 + 4 * Math.sin(ctx.t / 17 + a.v * 6) : 13 + Math.sin(ctx.t / 5), 2);
+            a.wing = 1; a.bank = soar ? 0.4 : 0; a.gait += dt * (hang ? 3.2 : soar ? 0.3 : 1.2);
+            return a;
+        }
+        if (act === 'perch' || act === 'peck') {
+            // In a tree: an owl dozes by day and goes round on silent wings by night; a woodpecker works at the trunk.
+            const p = wildPath(g, act === 'peck' ? 0.5 : 0.72), abroad = act === 'perch' && ctx.night > 0.6 && (ctx.t * 0.035 + a.v) % 1 < 0.45;
+            a.fly = ease(a.fly || 0, abroad ? 1 : 0, 0.8);
+            if (a.fly > 0.02) a.turn += dt * 0.5;
+            const wide = 10 * a.fly, cx = p.x - Math.sin(a.perch ?? (a.perch = a.turn)) * wide, cz = p.z - Math.cos(a.perch) * wide;
+            if (a.fly < 0.02) a.perch = a.turn;
+            const x = cx + Math.sin(a.turn) * wide, z = cz + Math.cos(a.turn) * wide;
+            a.yaw = turnTo(a.yaw, a.fly > 0.3 ? a.turn + Math.PI / 2 : act === 'peck' ? Math.atan2(g.x - p.x, g.z - p.z) : p.yaw + 0.6 * Math.sin(ctx.t * 0.3 + a.v * 9), dt * 3, 3 * dt);
+            a.x = x; a.z = z; a.y = g.y; a.alt = p.alt + 1.5 * a.fly + (act === 'peck' && (ctx.t * 0.4 + a.v) % 1 < 0.3 ? 0.012 * Math.sin(ctx.t * 40) : 0);
+            a.wing = a.fly > 0.1 ? 1 : 0; a.rest = 0; a.gait += dt * (a.wing ? 1 : 0); a.bank = 0.3 * a.fly;
+            return a;
+        }
+        if (act === 'follow') {
+            // The young keep behind the first of the party, in a line.
+            const lead = ctx.party[0], back = 0.55 + 0.4 * (a.i - 1), tx = lead.x - Math.sin(lead.yaw) * back, tz = lead.z - Math.cos(lead.yaw) * back, left = Math.hypot(tx - a.x, tz - a.z);
+            if (K.where === 'water') { a.x = ease(a.x, tx, 0.5); a.z = ease(a.z, tz, 0.5); a.yaw = turnTo(a.yaw, lead.yaw + 0.3 * Math.sin(ctx.t * 2 + a.i), dt * 4, 4 * dt); a.moving = 0.4; return a; }
+            if (left > 0.25) go(tx, tz, Math.min(K.pace + left * 1.5, 6), 5 * dt); else a.moving = ease(a.moving, 0, 0.2);
+            a.down = ease(a.down, left > 0.25 ? 0 : 1, 0.4);
+            a.y = w.ground(a.x, a.z);
+            return a;
+        }
+        // On the wing for a while (a heron put up from the shallows, a pheasant from the grass), and down again further off.
+        if (a.state === 'fly') {
+            a.wing = 1; a.rest = 0; a.down = 0; a.moving = 0; a.gait += dt * 1.6;
+            a.yaw = turnTo(a.yaw, a.turn, dt * 3, 2.5 * dt);
+            a.x += Math.sin(a.yaw) * 8 * dt; a.z += Math.cos(a.yaw) * 8 * dt;
+            const ground = Math.max(w.ground(a.x, a.z), w.water(a.x, a.z) - 0.05);
+            a.alt = ease(a.alt, a.timer > 1.2 ? 5 : 0, 0.7); a.y = ease(a.y, ground, 0.5);
+            if (a.timer < 0 && a.alt < 0.15) { a.state = 'idle'; a.alt = 0; a.wing = 0; a.y = ground; a.timer = 5 + 6 * random(); a.hx = a.x; a.hz = a.z; }
+            return a;
+        }
+        a.wing = 0;
+        if (K.shy && near < K.shy && a.state !== 'flee') {
+            // Away from whoever is coming, and from the road.
+            const side = Math.sign(w.lateral(a.x, a.z)) || 1, r = w.at(a.z), ax = dxm / (near || 1) + side * 0.9 / r.cos, az = dzm / (near || 1), al = Math.hypot(ax, az) || 1;
+            if (K.wing) { a.state = 'fly'; a.timer = 5; a.turn = Math.atan2(ax, az); return a; }
+            a.state = 'flee'; a.timer = 3.5 + random(); a.tx = a.x + ax / al * 26; a.tz = a.z + az / al * 26;
+        }
+        if (a.state === 'flee') {
+            a.down = ease(a.down, 0, 0.1); a.rest = 0; a.alarm = 0;
+            const left = go(a.tx, a.tz, K.run || 4, (K.big ? 2.4 : 5) * dt);
+            if (a.timer < 0 || left < 0.5) { a.state = 'idle'; a.timer = 5 + 6 * random(); a.hx = a.x; a.hz = a.z; }
+        } else if (a.state === 'walk') {
+            a.down = ease(a.down, 0, 0.3); a.rest = ease(a.rest, 0, 0.2);
+            if (go(a.tx, a.tz, K.pace) < 0.3 || a.timer < -30) { a.state = 'idle'; a.timer = act === 'play' ? 0.3 + 1.2 * random() : act === 'box' ? 2 + 4 * random() : 3 + 9 * random(); }
+        } else {
+            a.moving = ease(a.moving, 0, 0.25);
+            const calm = a.alert < 0.5;
+            a.down = ease(a.down, act === 'graze' && calm ? 1 : 0, 0.6);
+            a.rest = ease(a.rest, act === 'bask' ? 1 - 0.4 * a.alert : act === 'sentry' || (act === 'amble' && a.v > 0.5 && a.timer > 2) ? 1 : 0, 0.5);
+            if (act === 'box' && ctx.party.length > 1) {
+                // Two hares up on their hind legs at one another.
+                const o = ctx.party[a.i ? 0 : 1], close = Math.hypot(o.x - a.x, o.z - a.z) < 1.4;
+                a.alarm = close && o.state === 'idle' ? 1 : 0;
+                if (close) a.yaw = turnTo(a.yaw, Math.atan2(o.x - a.x, o.z - a.z), dt * 5, 4 * dt);
+            }
+            if (act !== 'bask' && act !== 'stand' && a.timer < 0) {
+                // Somewhere else to be, not far off and no nearer the road.
+                for (let tries = 0; tries < 5; tries++) {
+                    const o = act === 'box' && ctx.party.length > 1 ? ctx.party[a.i ? 0 : 1] : null, turn = random() * TAU, far = o ? 0.9 : (K.range || 4) * (0.3 + 0.7 * random());
+                    const tx = (o ? o.x : a.hx) + Math.sin(turn) * far, tz = (o ? o.z : a.hz) + Math.cos(turn) * far;
+                    if (dry(tx, tz)) { a.tx = tx; a.tz = tz; a.state = 'walk'; a.timer = 0; break; }
+                }
+                if (a.state !== 'walk') a.timer = 2;
+            }
+            if (act === 'stand') a.yaw = turnTo(a.yaw, a.turn + 0.5 * Math.sin(ctx.t * 0.2 + a.v * 9), dt, 0.5 * dt);
+        }
+        a.y = K.where === 'shore' ? Math.max(w.ground(a.x, a.z), w.water(a.x, a.z) - 0.05) : w.ground(a.x, a.z);
+        return a;
+    }
+
     // ---- Companions --------------------------------------------------------------------------
     // Who can walk with the traveller. group: how the panel sorts them. role: what they do on the road (heel: keep
     // their place; scout: run ahead and wait; lag: stop to sniff, then catch up; chase: go after butterflies; herd:
@@ -1110,7 +1374,7 @@ const WayLogic = (() => {
         // Where it would like to be, in the road's terms (ahead, to the right), and what it is doing there.
         const st = STATIONS[c.slot % STATIONS.length];
         let ahead = st[0] + 0.5 * Math.sin(ctx.t / (7 + c.slot) + c.slot * 2), side = st[1] + 0.35 * Math.sin(ctx.t / (9.3 + c.slot) + c.slot), rest = 0, down = 0, role = c.role, fly = 0, high = 0, haste = 1;
-        if (kind.nocturnal) role = ctx.night > 0.5 ? 'fly' : 'ride';                         // an owl sleeps the day away on a shoulder
+        if (kind.nocturnal) role = c.leaving || ctx.night > 0.5 ? 'fly' : 'ride';       // an owl sleeps the day away on a shoulder (sent home, it flies there)
         if (kind.close) { ahead = -0.2 + 0.2 * Math.sin(ctx.t / 5); side = 0.75; }                // at the heel
         if (kind.aloof) side += Math.sign(side) * 0.5;
         if (role === 'led') { ahead = c.led2 ? -2.9 : 2.7; side = c.led2 ? -1.1 : -1.5; }
@@ -1396,6 +1660,7 @@ const WayLogic = (() => {
         RAD, TAU, SLOT, CHUNK, RUN, BIOMES, LAND, SEASONS, ROAD, GRAND, WEATHER, WALK, SHOTS, beyondWall,
         clamp, mix, mix3, smooth, hash, noise1, noise2,
         world, camp, nextCamp, bodies, light, weatherStart, weatherStep,
+        WILD, WILDLIFE, WILD_LEVELS, wildStart, wildStep,
         COMPANIONS, COMPANION, GROUPS, PARTY_MAX, party, partyStart, partyChange, companionStart, companionStep, FORMS, SHIFT, shiftStart, shiftStep, stealthStart, stealthStep, spook, fenceAt, vault,
         journeyStart, journeyStep, standing, sight, camera, ORBIT, orbitStart, orbitGrab, orbitDrag, orbitStep, orbitCamera, sightline, inOpen, wrapPi,
     };

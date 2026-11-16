@@ -71,13 +71,14 @@ const WayCompanions = (() => {
         // The druid's other shapes: each keeps her antlers, a collar of leaves, and her marks, which still glow.
         bear: Q({ len: 1.75, tall: 1.04, girth: 0.46, belly: 1.08, hip: 1.02, neck: [0.32, 0.36], head: 0.27, muzzle: [0.2, 0.115], ears: ['round', 0.9], tail: ['stub', 0.12, 0.2], coat: [104, 76, 56], under: [84, 62, 48], shag: true, mark: p => p === 'muzzle' ? [176, 140, 104] : null, leg: 1.3, stride: 1.5, gait: 'walk', rest: 'sit', druid: 1 }),
         panther: Q({ len: 1.5, tall: 0.8, girth: 0.235, chest: 1.1, neck: [0.26, 0.55], head: 0.2, muzzle: [0.085, 0.09], ears: ['prick', 0.75], tail: ['whip', 1.15, 0.5], coat: shiny([30, 30, 42], 0.3), eye: [120, 255, 200], cat: true, nose: [50, 44, 56], leg: 1.05, stride: 1.25, gait: 'walk', rest: 'curl', druid: 0.8 }),
+        // The wild ones of each country (WayLogic.WILD), on the same rig: most are a cousin of somebody above.
         // A dragon, but a small one: the quad's rig with wings, horns and a ridge down its back.
         whelp: Q({ len: 0.66, tall: 0.36, girth: 0.14, neck: [0.24, 0.95], head: 0.1, muzzle: [0.12, 0.05], ears: ['none', 0], tail: ['thick', 0.62, 0.1], coat: [60, 150, 130], under: [240, 220, 150], mark: (p, x, y, z) => p === 'muzzle' && y < -0.025 ? [240, 220, 150] : p === 'body' && y > 0.02 && patch(x, y, z, 40, 9) > 0.62 ? [44, 120, 112] : null, eye: [255, 200, 60], horns: 0.12, ridge: true, wings: true, stride: 0.6, rest: 'curl' }),
     };
 
     // The druid's antlers, on whatever head she has: the same rack as her helm's, each beam sweeping back, out and up
     // with five tines, moss on it, and her light at every tip.
-    function antlers(s, x0, y0, z0, k) {
+    function antlers(s, x0, y0, z0, k, plain = false) {
         for (const x of [-1, 1]) {
             const beam = [[0, 0, 0, 0.03], [0.07, 0.1, -0.07, 0.027], [0.17, 0.2, -0.14, 0.024], [0.27, 0.34, -0.14, 0.02], [0.31, 0.5, -0.07, 0.016], [0.28, 0.64, 0.03, 0.011], [0.23, 0.72, 0.11, 0]].map(([dx, dy, dz, r]) => [x * (x0 + dx * k), y0 + dy * k, z0 + dz * k, r * k, 1]);
             s.paint([240, 232, 212], 0).fx(0).tube(beam, 5);
@@ -87,8 +88,8 @@ const WayCompanions = (() => {
                 s.tube([[b[0], b[1], b[2], b[3] * 0.8, 1], [b[0] + x * dx * k * 0.62, b[1] + dy * k * 0.4, b[2] + dz * k * 0.62, b[3] * 0.6, 1], [tip[0], tip[1], tip[2], 0, 1]], 4);
                 tips.push(tip);
             }
-            for (const at of [2, 4]) s.paint([104, 150, 78], 0).blob(beam[at][0], beam[at][1] + 0.016 * k, beam[at][2], 0.032 * k, 0.015 * k, 0.032 * k, { segs: 5, bands: 3, lump: 0.3, seed: at });
-            for (const tip of tips) s.paint([150, 255, 214], 0).fx(0, 255).blob(tip[0], tip[1], tip[2], 0.01 * k, 0.01 * k, 0.01 * k, { segs: 5, bands: 3, lump: 0, under: 1 });
+            if (!plain) for (const at of [2, 4]) s.paint([104, 150, 78], 0).blob(beam[at][0], beam[at][1] + 0.016 * k, beam[at][2], 0.032 * k, 0.015 * k, 0.032 * k, { segs: 5, bands: 3, lump: 0.3, seed: at });
+            if (!plain) for (const tip of tips) s.paint([150, 255, 214], 0).fx(0, 255).blob(tip[0], tip[1], tip[2], 0.01 * k, 0.01 * k, 0.01 * k, { segs: 5, bands: 3, lump: 0, under: 1 });
             s.fx(0);
         }
     }
@@ -96,6 +97,17 @@ const WayCompanions = (() => {
     const finer = (path, n = 2) => { const out = []; for (let i = 0; i < path.length - 1; i++) for (let k = 0; k < n; k++) { const t = k / n, e = t * t * (3 - 2 * t); out.push(path[i].map((v, j) => v + (path[i + 1][j] - v) * (j < 3 ? t : e))); } out.push(path[path.length - 1]); return out; };
     const tuft = (s, at, out, len, wide, tone = 1) => { const col = s.col, l = Math.hypot(out[0], out[1], out[2]) || 1, sx = out[1] / l * wide, sy = -out[0] / l * wide, sz = wide * 0.6; s.col = [Math.min(255, col[0] * tone), Math.min(255, col[1] * tone), Math.min(255, col[2] * tone)]; s.tri([at[0] - sx, at[1] - sy, at[2] - sz], [at[0] + sx, at[1] + sy, at[2] + sz], [at[0] + out[0] * len, at[1] + out[1] * len, at[2] + out[2] * len], [out[0] / l, out[1] / l + 0.3, out[2] / l]); s.col = col; };
     // lite: the same animal in a third of the triangles, for further off and for the Low tier.
+    Object.assign(KINDS, {
+        grizzly: { ...KINDS.bear, druid: 0 },
+        stag: { ...KINDS.deer, size: 1.22, horns: 0, rack: 0.62, coat: [150, 104, 70], under: [226, 214, 196] },
+        boar: { ...KINDS.pig, coat: [84, 66, 56], under: [70, 56, 48], shag: true, mark: p => p === 'paw' ? [40, 34, 32] : null, nose: [70, 56, 56], size: 1.05 },
+        piglet: { ...KINDS.pig, size: 0.4, coat: [176, 136, 96], mark: (p, x, y, z) => p === 'body' && Math.sin(x * 60) > 0.3 && y > 0 ? [110, 80, 60] : null, nose: [150, 110, 100] },
+        brownhare: { ...KINDS.hare, coat: [170, 138, 100], under: [236, 226, 208], mark: (p, x, y, z) => p === 'ear' && y > 0.2 ? [40, 34, 34] : null, size: 1.15 },
+        wildpony: { ...KINDS.pony, load: false, coat: [112, 84, 64], mane: [44, 36, 34], mark: p => p === 'paw' ? [40, 34, 32] : null, size: 0.92 },
+        ibex: { ...KINDS.goat, bell: false, coat: [206, 196, 180], horns: 0.44, mark: p => p === 'paw' || p === 'shin' ? [70, 60, 56] : null, size: 1.12 },
+        marmot: { ...KINDS.cub, size: 0.5, coat: [176, 144, 98], mark: p => p === 'muzzle' ? [226, 206, 170] : null, gait: 'bound', stride: 0.3 },
+        seal: { ...KINDS.otter, rest: 'graze', gait: 'waddle', size: 2.1, coat: [120, 124, 134], under: [176, 178, 184], mark: (p, x, y, z) => patch(x, y, z, 18, 6) > 0.66 ? [90, 92, 102] : null, leg: 0.7 },
+    });
     function quadParts(id, lite = false) {
         const F = lite ? (path => path) : finer;
         const q = KINDS[id], g = q.girth * (1 + 0.16 * (q.fluff || 0)), len = q.len, h = q.head, legL = q.tall * 0.42, leg = q.leg, deep = q.deep ?? 1.04, k = `quad:${id}:${lite ? 'lite' : 'fine'}:`;
@@ -182,6 +194,7 @@ const WayCompanions = (() => {
                 }
                 if (q.beard) s.paint([240, 232, 216], 0).tube([[0, -h * 0.5, h * 0.8, 0.02, 1], [0, -h * 1.2, h * 0.74, 0.003, 1]], 5);
                 if (q.druid) antlers(s, h * 0.42, h * 0.7, 0, q.druid);
+                if (q.rack) antlers(s, h * 0.42, h * 0.7, 0, q.rack, true);
             }),
             tail: part(k + 'tail', s => {
                 const [kind, t] = q.tail, plain = { cap: 2, k: furry };
@@ -228,7 +241,7 @@ const WayCompanions = (() => {
         const air = G.hop ? Math.max(0, Math.sin(tau)) * mv : 0, gambol = pose.alarm ? Math.abs(Math.sin(t * 9)) * pose.alarm * 0.12 : 0;
         const base = L.mix(q.tall - g * 0.25, g * (q.shell ? 0.35 : 0.96), lie) - sit * q.tall * 0.17;
         st.reset(x, y + (pose.alt || 0), z, pose.yaw, size).move(0, base + G.bob * Math.sin(tau * 2) * mv * q.tall + air * G.hop * q.tall + gambol + 0.03 * fly * Math.sin(t * 9), 0)
-            .rz(G.roll * Math.sin(tau) * mv + Math.PI * belly + (pose.bank || 0) * 0.5 * fly).rx(-0.52 * sit - G.pitch * Math.cos(tau) * mv - 0.2 * fly);
+            .rz(G.roll * Math.sin(tau) * mv + Math.PI * belly + (pose.bank || 0) * 0.5 * fly).rx(-0.52 * sit - G.pitch * Math.cos(tau) * mv - 0.2 * fly - (pose.pitch || 0));
         put(P.body);
         const feet = [[-1, 1, G.feet[0]], [1, 1, G.feet[1]], [-1, -1, G.feet[2]], [1, -1, G.feet[3]]];
         for (const [sx, sz, ph] of feet) {
@@ -274,6 +287,15 @@ const WayCompanions = (() => {
         gull: { size: 1.2, len: 0.36, r: 0.09, neck: 0.05, head: 0.052, beak: [0.06, 0.018, [236, 190, 60], true], span: 0.66, chord: 0.17, leg: 0.07, body: [246, 246, 242], wing: [196, 202, 214], belly: [250, 250, 248], feet: [236, 170, 80], flap: 0.5, glide: true, upright: 0.3, stride: 0.16, fingers: true },
         hawk: { size: 1, len: 0.38, r: 0.095, neck: 0.04, head: 0.055, beak: [0.045, 0.02, [236, 200, 80], true], span: 0.72, chord: 0.22, leg: 0.09, body: [124, 86, 60], wing: [96, 68, 52], belly: [240, 228, 206], feet: [236, 200, 80], barred: true, eye: [250, 210, 60], flap: 0.6, glide: true, upright: 0.85, stride: 0.16, fingers: true },
     };
+    Object.assign(BIRDS, {
+        swan: { ...BIRDS.goose, size: 1.5, neck: 0.46, body: [250, 250, 250], wing: [244, 244, 246], belly: [252, 252, 252] },
+        cygnet: { ...BIRDS.duckling, size: 0.6, body: [176, 172, 168], wing: [156, 152, 150], belly: [206, 202, 198] },
+        heron: { ...BIRDS.goose, size: 1.25, neck: 0.44, leg: 0.4, r: 0.11, body: [150, 160, 176], wing: [110, 120, 140], belly: [232, 234, 238], upright: 0.9 },
+        pheasant: { ...BIRDS.hen, size: 1.25, comb: false, body: [176, 100, 50], wing: [140, 84, 50], belly: [200, 130, 70], tailUp: 0.15 },
+        kestrel: { ...BIRDS.hawk, size: 0.72, body: [176, 110, 70], wing: [140, 90, 62] },
+        eagle: { ...BIRDS.hawk, size: 1.75, body: [84, 62, 48], wing: [66, 50, 42], belly: [110, 84, 62] },
+        woodpecker: { ...BIRDS.raven, size: 0.62, body: [34, 32, 36], wing: [230, 230, 226], belly: [240, 238, 232], upright: 1.0 },
+    });
     function birdParts(id) {
         const b = BIRDS[id], k = 'bird:' + id + ':', r = b.r, len = b.len;
         const feathers = (s, x0, x1, c0, c1, n, tipped) => {
@@ -591,5 +613,16 @@ const WayCompanions = (() => {
     // A butterfly for somebody to chase: two pairs of wings on nothing much.
     const butterfly = () => part('butterfly', s => { for (const [z, r] of [[0.012, 0.03], [-0.014, 0.022]]) for (const up of [1, -1]) s.paint([250, 190, 60], 0).fx(0, 60).tri([0, 0, z], [r * 1.3, 0, z + r * 0.6], [r, 0, z - r * 0.8], [0, up, 0]); s.fx(0); });
 
-    return { KINDS, BIRDS, GAITS, pose, quad, bird, known, butterfly, leaf };
+    // Small things on the wing, a few triangles each (they come in dozens): a bat, a swallow; and a fish out of the water.
+    const flyer = kind => part('flyer:' + kind, s => {
+        const c = kind === 'bat' ? [44, 38, 48] : [40, 52, 86], span = kind === 'bat' ? 0.19 : 0.16;
+        s.paint(c, 0).fx(0).tri([0, 0, 0.05], [0, 0, -0.06], [span, 0.01, kind === 'bat' ? -0.02 : -0.07], [0, 1, 0]).tri([0, 0, 0.05], [span, 0.01, kind === 'bat' ? -0.02 : -0.07], [span * 0.55, 0, 0.03], [0, 1, 0]);
+        s.tri([0, 0, -0.06], [0, 0, 0.05], [span, 0.01, kind === 'bat' ? -0.02 : -0.07], [0, -1, 0]).tri([span, 0.01, kind === 'bat' ? -0.02 : -0.07], [0, 0, 0.05], [span * 0.55, 0, 0.03], [0, -1, 0]);
+    });
+    const flyerBody = kind => part('flyer:body:' + kind, s => { s.paint(kind === 'bat' ? [56, 46, 52] : [236, 232, 224], 0).fx(0).blob(0, 0, 0, 0.022, 0.02, 0.06, { segs: 5, bands: 3, lump: 0 }); if (kind === 'swallow') s.paint([40, 52, 86], 0).tri([0, 0.004, -0.05], [0.03, 0, -0.14], [0, 0, -0.08], [0, 1, 0]).tri([0, 0.004, -0.05], [0, 0, -0.08], [-0.03, 0, -0.14], [0, 1, 0]); });
+    const fish = () => part('fish', s => {
+        s.paint(shiny([150, 170, 180], 0.5), 0).fx(0).tube([[0, 0, 0.2, 0.01, 1], [0, 0, 0.12, 0.05, 1.6], [0, 0, -0.02, 0.06, 1.7], [0, 0, -0.16, 0.022, 1.5]], 5);
+        for (const up of [1, -1]) s.paint([110, 130, 150], 0).tri([0, 0, -0.14], [0, 0.09, -0.27], [0, -0.09, -0.27], [up, 0, 0]);
+    });
+    return { KINDS, BIRDS, GAITS, pose, quad, bird, known, butterfly, leaf, flyer, flyerBody, fish };
 })();

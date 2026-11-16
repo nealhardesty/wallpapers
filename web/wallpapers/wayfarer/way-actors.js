@@ -205,6 +205,13 @@ const WayActors = (() => {
         dog: { len: 0.72, tall: 0.5, girth: 0.17, neck: [0.2, 0.7], head: 0.13, coat: [170, 130, 90], face: [170, 130, 90], legs: [170, 130, 90], tail: 0.34, tailUp: 0.9, ears: 0.9, snout: 1 },
         fox: { len: 0.66, tall: 0.36, girth: 0.14, neck: [0.16, 0.7], head: 0.12, coat: [222, 120, 50], face: [222, 120, 50], legs: [60, 44, 40], tail: 0.5, tailUp: 0.15, brush: [250, 244, 232], ears: 1.5, snout: 1, bib: [250, 244, 232] },
         cat: { len: 0.42, tall: 0.25, girth: 0.1, neck: [0.08, 0.8], head: 0.09, coat: [60, 56, 60], face: [60, 56, 60], legs: [60, 56, 60], tail: 0.34, tailUp: 1.3, ears: 1.3 },
+        // (The wild ones, far off: WayLogic.WILD says which of these stands in for whom.)
+        bear: { len: 1.75, tall: 1.04, girth: 0.5, neck: [0.34, 0.3], head: 0.27, coat: [104, 76, 56], face: [124, 92, 66], legs: [84, 62, 48], tail: 0.08, ears: 0.5, snout: 1 },
+        stag: { len: 1.58, tall: 1.22, girth: 0.3, neck: [0.66, 1.0], head: 0.17, coat: [150, 104, 70], face: [150, 104, 70], legs: [110, 78, 56], antlers: 1.0, tail: 0.12, ears: 1, rump: [226, 214, 196] },
+        boar: { len: 1.0, tall: 0.52, girth: 0.3, neck: [0.14, 0.2], head: 0.17, coat: [84, 66, 56], face: [70, 56, 48], legs: [50, 42, 38], tail: 0.12, ears: 0.7, snout: 1 },
+        wildpony: { len: 1.25, tall: 0.97, girth: 0.34, neck: [0.46, 0.8], head: 0.19, coat: [112, 84, 64], face: [112, 84, 64], legs: [60, 48, 42], mane: [44, 36, 34], tail: 0.7, ears: 0.5 },
+        ibex: { len: 1.05, tall: 0.78, girth: 0.28, neck: [0.32, 0.8], head: 0.14, coat: [206, 196, 180], face: [206, 196, 180], legs: [90, 80, 72], horns: 0.44, tail: 0.1, ears: 0.6 },
+        seal: { len: 1.5, tall: 0.3, girth: 0.3, neck: [0.3, 0.5], head: 0.19, coat: [120, 124, 134], face: [120, 124, 134], legs: [100, 104, 114], tail: 0.3, ears: 0 },
         rabbit: { len: 0.3, tall: 0.16, girth: 0.09, neck: [0.05, 0.8], head: 0.075, coat: [176, 150, 120], face: [176, 150, 120], legs: [176, 150, 120], tail: 0.05, brush: [250, 250, 250], ears: 3 },
     };
     function beastParts(kind) {
@@ -272,6 +279,8 @@ const WayActors = (() => {
         pigeon: { size: 0.3, body: [150, 156, 170], wing: [120, 126, 140], span: 0.7 }, goose: { size: 0.7, body: [150, 140, 130], wing: [120, 112, 104], span: 1.6 },
         duck: { size: 0.36, body: [150, 110, 76], wing: [120, 90, 66], span: 0.6, head: [40, 110, 76] }, hen: { size: 0.3, body: [200, 120, 70], wing: [176, 100, 60], span: 0.4, head: [200, 120, 70], comb: true },
         dragon: { size: 9, body: [150, 50, 44], wing: [196, 110, 60], span: 2.6, dragon: true },
+        swan: { size: 0.8, body: [250, 250, 250], wing: [240, 240, 244], span: 1.5 }, heron: { size: 0.7, body: [150, 160, 176], wing: [110, 120, 140], span: 1.6 }, eagle: { size: 0.95, body: [84, 62, 48], wing: [66, 50, 42], span: 2.0 },
+        kestrel: { size: 0.36, body: [176, 110, 70], wing: [140, 90, 62], span: 1.3 }, owl: { size: 0.4, body: [150, 118, 84], wing: [124, 96, 70], span: 1.2 }, pheasant: { size: 0.42, body: [176, 100, 50], wing: [140, 84, 50], span: 0.6 }, woodpecker: { size: 0.22, body: [34, 32, 36], wing: [230, 230, 226], span: 0.7 },
     };
     function birdParts(kind) {
         const b = BIRDS[kind], k = 'bird:' + kind;

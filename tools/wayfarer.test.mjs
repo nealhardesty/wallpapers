@@ -398,6 +398,9 @@ test('settings: the panel offers what the code knows, and the keys are declared'
     assert.ok(!('companion' in context.WP.defaultsOf('wayfarer')) && !schema.some(c => c.key === 'companion'), 'the old first companion is gone');
     assert.equal(context.WP.defaultsOf('wayfarer').configVersion, 2);
     assert.deepEqual(options('orbitMode'), constant('WAY_ORBITS'));
+    assert.deepEqual(options('wildlife'), Object.keys(L.WILD_LEVELS));
+    assert.deepEqual(Object.keys(constant('WAY_WILD')), Object.keys(L.WILD_LEVELS));
+    assert.equal(context.WP.defaultsOf('wayfarer').wildlife, 'some');
     assert.deepEqual(options('biomePick'), Object.keys(constant('WAY_COUNTRY')));
     assert.deepEqual(options('biomeChoice').sort(), plain(L.BIOMES).sort());
     for (const [pick, list] of Object.entries(constant('WAY_COUNTRY'))) for (const b of list || []) assert.ok(L.BIOMES.includes(b), `${pick}: ${b}`);
@@ -1027,4 +1030,92 @@ test('to a campfire and back to the road, everybody walks the way they face: nob
         }
         assert.ok(who[0].worst < 0.4, `the traveller walked ${who[0].worst.toFixed(2)} rad off the way they faced`);
     }
+});
+
+test('wildlife: each country has its own, in the same places every time, off the road and out of town; they keep off the road whatever they do, and nobody slides or spins', () => {
+    // Every kind has somebody to be drawn as, near and (if it is big enough to see) far.
+    for (const [id, k] of Object.entries(L.WILD)) {
+        if (k.swarm || id === 'fish') continue;
+        assert.ok(K.known(k.rig), `${id}: no rig ${k.rig}`);
+        if (k.far) assert.ok((k.bird ? A.BIRDS : A.BEASTS)[k.far], `${id}: nobody stands in for it far off`);
+        if (k.young) assert.ok(L.WILD[k.young[0]] && L.WILD[k.young[0]].act === 'follow');
+    }
+    assert.ok(['bear', 'stag', 'squirrel'].every(id => L.WILD[id]) && Object.keys(L.WILD).length >= 27);
+    for (const [biome, list] of Object.entries(L.WILDLIFE)) for (const id of list) assert.ok(L.WILD[id] && L.BIOMES.includes(biome), `${biome}: ${id}`);
+    const seenAll = new Set();
+    for (const biome of L.BIOMES) {
+        const w = L.world(7, { biomes: [biome] }), again = L.world(7, { biomes: [biome] }), seen = new Set();
+        let parties = 0, some = 0, few = 0, squares = 0;
+        for (let cz = 1700; cz < 1790; cz++) {
+            {
+                const here = w.wildlife(cz);
+                squares++;
+                assert.deepEqual(plain(again.wildlife(cz)), plain(here), 'the same stretch, the same animals');
+                if (cz === 1700 && biome === 'forest') { for (let other = 0; other < 900; other++) w.wildlife(5000 + other); assert.deepEqual(plain(w.wildlife(cz)), plain(here), 'and again after the world has forgotten it'); }
+                for (const g of here) {
+                    const k = L.WILD[g.kind], r = w.at(g.z), d = Math.abs(w.lateral(g.x, g.z)), where = k.where || 'land';
+                    parties++; some += g.roll < L.WILD_LEVELS.some; few += g.roll < L.WILD_LEVELS.few;
+                    seen.add(g.kind); seenAll.add(g.kind);
+                    assert.ok(L.WILDLIFE[biome].includes(g.kind), `${g.kind} in ${biome}`);
+                    assert.ok(g.n >= k.n[0] && g.n <= k.n[1] && g.roll >= 0 && g.roll < 1);
+                    if (where !== 'air') {
+                        assert.ok(d < 90, `${g.kind} ${d.toFixed(0)} m away`);
+                        assert.ok(d >= Math.max(6, k.keep) - 1e-6, `${g.kind} ${d.toFixed(1)} m from the road's middle`);
+                        assert.ok(!(r.near.radius && Math.hypot(w.lateral(g.x, g.z), r.dz) < r.near.radius), `${g.kind} in town`);
+                    }
+                    const y = w.ground(g.x, g.z), level = w.water(g.x, g.z);
+                    if (where === 'water') assert.ok(y < level - 0.3, `${g.kind} on dry land`);
+                    if (where === 'land') assert.ok(y > level + 0.3, `${g.kind} in the water`);
+                    if (where === 'tree') assert.ok(g.tree || g.bough, `${g.kind} with no tree`);
+                }
+            }
+        }
+        assert.ok(seen.size >= 4, `${biome}: only ${[...seen]}`);
+        assert.ok(some / squares > 0.6 && some / squares < 3.6 && parties > some * 1.3 && few < some * 0.6 && few > 0, `${biome}: ${(parties / squares).toFixed(2)} a square at most, ${(some / squares).toFixed(2)} at some, ${(few / squares).toFixed(2)} at few`);
+        // Turned up, the setting adds to who is there: nobody moves.
+        const cz = 1720, at = level => plain(w.wildlife(cz).filter(g => g.roll < L.WILD_LEVELS[level]));
+        for (const g of at('few')) assert.ok(at('some').some(o => o.x === g.x && o.kind === g.kind) && at('plenty').some(o => o.x === g.x && o.kind === g.kind));
+        assert.equal(at('none').length, 0);
+    }
+    for (const id of Object.keys(L.WILD)) assert.ok(seenAll.has(id) || L.WILD[id].n[1] === 0, `${id} is at home nowhere`);
+    // A squirrel in the deep forest has a bough over the road to run along.
+    const deep = L.world(7, { biomes: ['deepwood'] });
+    let onBough = 0;
+    for (let cz = 1700; cz < 1790; cz++) for (const g of deep.wildlife(cz)) if (g.kind === 'squirrel' && g.bough) onBough++;
+    assert.ok(onBough > 10, `${onBough} squirrels on boughs`);
+    // Their lives: three minutes of a walk past them, at three frame rates.
+    const wrap = a => { a %= 2 * Math.PI; if (a > Math.PI) a -= 2 * Math.PI; if (a < -Math.PI) a += 2 * Math.PI; return a; };
+    let fled = 0;
+    for (const fps of [10, 30, 120]) for (const biome of ['forest', 'meadow', 'lake', 'moor']) {
+        const w = L.world(7, { biomes: [biome] }), j = L.journeyStart(w, 360 * 300 + 60), dt = 1 / fps, squares = new Map(), moved = new Set();
+        let t = 0, seed = 1;
+        const random = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+        for (let i = 0; i < 180 * fps; i++) {
+            t += dt;
+            L.journeyStep(j, dt, w, { pace: 1, night: i > 120 * fps ? 1 : 0, camps: false, rests: false });
+            const me = L.standing(j, w), cz = Math.floor(me.z / 64);
+            for (let dz = -1; dz <= 2; dz++) {
+                const key = cz + dz;
+                if (!squares.has(key)) squares.set(key, w.wildlife(cz + dz).map(g => L.wildStart(g, w)));
+                for (const party of squares.get(key)) for (const a of party) {
+                    const x0 = a.x, z0 = a.z, yaw0 = a.yaw, k = a.K, where = k.where || 'land';
+                    L.wildStep(a, dt, w, { t, night: i > 120 * fps ? 1 : 0, me, random, party });
+                    assert.ok(Number.isFinite(a.x + a.z + a.y + a.yaw + a.alt + a.gait), `${a.kind} is nowhere (${a.state})`);
+                    if (k.swarm || a.hidden) continue;
+                    const gone = Math.hypot(a.x - x0, a.z - z0), v = gone / dt, d = Math.abs(w.lateral(a.x, a.z));
+                    if (v > 0.2) moved.add(a.kind);
+                    if (a.state === 'flee' || a.state === 'fly') fled++;
+                    // Off the road: those on the ground keep their distance, and a metre's grace for the young at heel.
+                    if (where === 'land' && a.alt < 0.3) assert.ok(d > k.keep - 1.6, `${a.kind} is ${d.toFixed(1)} m from the road's middle (it keeps ${k.keep}), ${a.state}`);
+                    if (where === 'land' && a.alt < 0.3 && k.act !== 'follow') {
+                        assert.ok(Math.abs(wrap(a.yaw - yaw0)) / dt < 6.5, `${a.kind} spins at ${(Math.abs(wrap(a.yaw - yaw0)) / dt).toFixed(1)} rad/s`);
+                        if (v > 0.8) assert.ok(Math.abs(wrap(Math.atan2(a.x - x0, a.z - z0) - a.yaw)) < 0.5, `${a.kind} slides (${a.state})`);
+                        assert.ok(v < 9.5, `${a.kind} at ${v.toFixed(1)} m/s`);
+                    }
+                }
+            }
+        }
+        assert.ok(moved.size >= 3, `${biome} at ${fps} fps: only ${[...moved]} stirred`);
+    }
+    assert.ok(fled > 0, 'nobody shy was ever startled');
 });
