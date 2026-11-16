@@ -161,7 +161,7 @@ Added for Christmas, drawn in code (designs in §10.27–§10.30):
 | `sumo` | sumo-logic.js, sumo-art.js, sumo.js | ~1.3k lines | No network; a league of invented wrestlers kept in `host.storage`, written in Japanese with an English gloss (§10.35); bouts and tournaments pure and seeded (`SumoLogic`), unit-tested; interactive (a tap throws a cushion); evening by `host.now()`; keys N, B |
 | `pocket-hockey` | hockey-logic.js, hockey-art.js, pocket-hockey.js | ~2.4k lines | No network; an invented league of eight clubs and the game in progress kept in `host.storage` (§10.35); the league, the 60 Hz game (physics, steering, signature moves) and the seasons pure and seeded (`HockeyLogic`), unit-tested; top-down pixel art at its own resolution, scaled up pixelated, with its own 5×7 font; interactive (a tap throws something on the ice, or starts a wave); keys N, G, B, X, W |
 | `baseball` | baseball-logic.js, baseball-league.js, baseball-talk.js, baseball-art.js, baseball.js | ~2.4k lines | No network; a league of eight invented clubs kept in `host.storage` (§10.37); every pitch, ball in play and box score pure and seeded (`BaseballLogic`, `BaseballLeague`), unit-tested; 16-bit pixel art at its own resolution with its own lettering, scaled up pixelated; interactive (a tap starts a wave); day, dusk and night by `host.now()`; keys N, S |
-| `wayfarer` | way-logic.js, way-models.js, way-detail.js, way-actors.js, way-people.js, way-companions.js, way-gl.js, wayfarer.js | ~6.6k lines | The second on WebGL (§10.38): an endless road through eight kinds of country with villages, walled cities, grand cities under a castle and landmarks along it, all a pure function of a seed (`WayLogic`), unit-tested; every shape modelled in code as triangles (`WayModels`, `WayActors`); built a 64 m square at a time as the walk reaches it, finer near the traveller; four cameras, one of them an orbit a drag turns; nine travellers (one changes shape, one goes unseen) and 46 companions, six at once, the named cats among them; day, night, weather and seasons; a flat 2D fallback without WebGL; its own watch on the GPU; interactive (drag to look around, or to turn the orbit); keys V, T, X, N, G |
+| `wayfarer` | way-logic.js, way-models.js, way-detail.js, way-actors.js, way-people.js, way-companions.js, way-gl.js, wayfarer.js | ~6.6k lines | The second on WebGL (§10.38): an endless road through nine kinds of country (which of them is a setting) with villages, walled cities, grand cities under a castle and landmarks along it, all a pure function of a seed (`WayLogic`), unit-tested; every shape modelled in code as triangles (`WayModels`, `WayActors`); built a 64 m square at a time as the walk reaches it, finer near the traveller; four cameras, one of them an orbit a drag turns; nine travellers (one changes shape, one goes unseen) and 46 companions, six at once, the named cats among them; day, night, weather and seasons; a flat 2D fallback without WebGL; its own watch on the GPU; interactive (drag to look around, or to turn the orbit); keys V, T, X, N, G |
 | `ski-run` | ski-logic.js, ski-models.js, ski-gl.js, ski-run.js | ~3.7k lines | The third on WebGL (§10.39), with instancing: an endless ski run stitched from eleven kinds of section, one `height(x, z)` for the riders and the mesh (`SkiLogic`), riders, tricks, wipeouts, cameras and a ski school all pure and unit-tested; trees, figures and props modelled in code (`SkiModels`); a flat 2D fallback without WebGL; its own watch on the GPU; interactive (carve by keys or a drag, tap to jump; the riders take it back after 4 s); keys A, D, arrows, J, V, T, X, G |
 
 About 1.7 MB of JavaScript in total. **Not imported:** links, weather, clocks,
@@ -856,7 +856,7 @@ and the commits.
 | sumo | — | The hall is one cached canvas (rebuilt on resize, tier and at dusk); a frame draws it, three jointed figures and a few marks. The crowd's rows and the cushions thrown follow density |
 | pocket-hockey | — | The canvas is the picture's own pixels (about 427 × 267 on a laptop, 206 × 458 on an upright phone; a pixel is 3 CSS px at 1280 × 800, in half steps below that), scaled up pixelated. The arena (ice, lines, boards, benches, a crowd of some thousands) is one bake a game; a working copy of it takes the skate marks and the resurfacer's stripes, so a frame is one blit of that, a dozen kept sprites, and lettering set once a line and kept. The round's other games are stepped 4 ms a frame. Hats, paper, spray, camera flashes and skate marks × density. Bench 2026-11-15 on a loaded machine (Snow beside it for scale: 20%, 24%, 60%): Low 14%, Medium 21%, High 44% |
 | baseball | — | The canvas is the picture's own pixels (about 3 CSS px each on a laptop), scaled up pixelated; the park (sky, stands, crowd, turf, fence) is one bake per game, size and light, with the crowd on its feet a second; the scoreboard and all the captions are two more canvases redrawn only when their words change; a frame blits those and draws about thirty men of a dozen rectangles each. The crowd, fireworks, confetti and rain follow density |
-| wayfarer | `shadows`, `mirror` (medium) | *(Upgraded 2026-11-15, §10.38: fine scenery within 18 m of the road in the 3×3 squares about the traveller on High, 9 m on Medium, none on Low; fine houses on High only; the finest figures for the traveller and the nearest four townsfolk on High, one on Medium, none on Low; lite animals beyond 16 m, 6.5 m on Medium, always on Low; townsfolk drawn to 160, 55 and 30 m; measured 427k/206k/71k triangles a frame on an open road and 447k/223k/101k at worst in a grand city's square.)* WebGL: the land as squares of triangles built on the main thread as the walk reaches them (in steps of a few things at a time, 3 ms of building a frame at most, so even a city's square never holds a frame up) and drawn in one call each. High: 7×7 near squares of 64 m inside 9×9 coarse 256 m squares, land drawn to 1040 m, shadows from a 2048² picture 110 m across. Medium: 5×5 inside 7×7, to 790 m, a fifth of the trees and a third of the small plants gone, shadows 1024² over 70 m. Low: 5×5 inside 5×5, to 530 m, half the trees and two thirds of the plants gone, the near ground 4 m to a cell instead of 2, a third fewer townsfolk, no shadows, no clouds in the water. Far squares carry houses with their trimmings left off and a third of the trees as four or ten triangles each. Everyone who moves and is in front of the camera is posed on the main thread into one buffer (2,000 to 12,000 triangles) and drawn in one call. The shadow picture holds only what stands on the ground in the squares its box touches, depth in three bytes, compiled out when shed (after fading). Triangles a frame, shadow pass included, at 1280×800 (forest at night / city by day / lake): High 307k / 278k / 204k, Medium 143k / 198k / 115k, Low 103k / 101k / 57k (on a software renderer; before the second pass it was 436k / 444k / 358k, 293k / 299k / 262k and 214k / 198k / 130k). The GPU is watched by the wallpaper itself (late frames give up shadows, then render scale to 0.4, then the outer rings of squares); software renderers start there. No WebGL: 30 slices of ground, the road and the nearest trees and houses as cut-outs, in 2D |
+| wayfarer | `shadows`, `mirror` (medium) | *(Upgraded 2026-11-15, §10.38: fine scenery within 18 m of the road in the 3×3 squares about the traveller on High, 9 m on Medium, none on Low; fine houses on High only; the finest figures for the traveller and the nearest four townsfolk on High, one on Medium, none on Low; lite animals beyond 16 m, 6.5 m on Medium, always on Low; townsfolk drawn to 160, 55 and 30 m; measured 427k/206k/71k triangles a frame on an open road and 447k/223k/101k at worst in a grand city's square; the deep forest, added 2026-11-16, 449k/224k/81k at worst.)* WebGL: the land as squares of triangles built on the main thread as the walk reaches them (in steps of a few things at a time, 3 ms of building a frame at most, so even a city's square never holds a frame up) and drawn in one call each. High: 7×7 near squares of 64 m inside 9×9 coarse 256 m squares, land drawn to 1040 m, shadows from a 2048² picture 110 m across. Medium: 5×5 inside 7×7, to 790 m, a fifth of the trees and a third of the small plants gone, shadows 1024² over 70 m. Low: 5×5 inside 5×5, to 530 m, half the trees and two thirds of the plants gone, the near ground 4 m to a cell instead of 2, a third fewer townsfolk, no shadows, no clouds in the water. Far squares carry houses with their trimmings left off and a third of the trees as four or ten triangles each. Everyone who moves and is in front of the camera is posed on the main thread into one buffer (2,000 to 12,000 triangles) and drawn in one call. The shadow picture holds only what stands on the ground in the squares its box touches, depth in three bytes, compiled out when shed (after fading). Triangles a frame, shadow pass included, at 1280×800 (forest at night / city by day / lake): High 307k / 278k / 204k, Medium 143k / 198k / 115k, Low 103k / 101k / 57k (on a software renderer; before the second pass it was 436k / 444k / 358k, 293k / 299k / 262k and 214k / 198k / 130k). The GPU is watched by the wallpaper itself (late frames give up shadows, then render scale to 0.4, then the outer rings of squares); software renderers start there. No WebGL: 30 slices of ground, the road and the nearest trees and houses as cut-outs, in 2D |
 | ski-run | `shadows`, `sparkle` (medium) | WebGL with instancing: 61 chunks of ground mesh at four levels of detail, built one or two a frame as the run goes by; trees as instances of 15 models, sorted into batches and culled on the main thread each frame (a few thousand), their detail distances and far thinning × density; riders and the lift stamped into one soup; one shadow map (2048 High, 1024 Medium), compiled out when shed (after fading); spray and flakes × density. The ground's grid thins by tier (113, 69 or 49 columns); far riders are stamped from plainer parts; trees are re-batched every 2 to 4 frames. About 75, 230 and 420 thousand triangles a frame on Low, Medium and High in some 100 draw calls (§10.39). The GPU is watched by the wallpaper itself, as Ice Patrol's. No WebGL: some 550 strips of slope, the trees and the riders a frame in 2D |
 
 #### In the panel
@@ -4653,7 +4653,8 @@ shaders (unchanged on a WebGL 2 context), no extensions.
   of the seed and of where you ask: nothing is stored, nothing repeats, and
   the hashes take whole numbers of any size, so three million kilometres
   out is the same kind of world (a test walks there).
-- **Eight countries**: meadow, forest, lake, pass, farm, moor, coast and
+- **Nine countries** (eight at first; the deep forest came with the third
+  pass, below, as did two legs to a stretch): meadow, forest, lake, pass, farm, moor, coast and
   grove (the enchanted one: giant mushrooms, teal trees with glowing
   motes, wisps). Each run of eight legs is a shuffle of all eight, so the
   walk always arrives somewhere new and never meets the same country twice
@@ -5050,18 +5051,84 @@ creature, marking or design is taken from one.
   original travellers keep their plainer figure, and townsfolk are drawn
   to 30 m (55 m on Medium, 160 m on High); a grand city's towers, walls and
   great buildings in their far builds outside those 3×3 squares.
+- **A third pass (2026-11-16, the owner on a real GPU): faces, the country, the deep forest, and why the land seemed to switch.**
+  - *"Sometimes the biomes randomly seem to switch."* Nothing was ever
+    rebuilt as another country: a square built twice is the same square to
+    the byte (now a unit test, after the world's caches have been flushed,
+    at every detail and tier, and against the far squares' colours). What
+    the owner saw was three true things. (1) The country changed every
+    360 m, three and a half minutes, so "meadow" was gone almost as soon as
+    it had begun. (2) Where two met, each tree and plant chose its country
+    by a coin weighted by distance along the road, over 160 m: a
+    salt-and-pepper of firs among mushrooms with no edge to it, which reads
+    as the land not knowing what it is. (3) The air (how misty, whether
+    leaves or the grove's motes are falling, fireflies) was the nearest
+    leg's, and stepped at the midpoint between two legs. Fixed: a country
+    now lasts two legs (`RUN`, 720 m, seven minutes); `world.share(x, z)`
+    says which country a point belongs to, a border that wanders forty
+    metres either way with tongues of each into the other and a narrow
+    edge where they mingle, and the trees, the plants and the ground's
+    colour all ask it; `world.air(z)` turns the air's weights over 140 m.
+    (Looking for it also found a cliff where a bay's shore closes: its
+    distance is now measured across the shore, not along the road.)
+  - *The country is a setting.* `biomePick` (`all`, the default; `woods`,
+    `open`, `shore`, `high`; or `choose`) and `biomeChoice` (chips for the
+    nine; none ticked is all of them). A round visits each allowed country
+    once, in a shuffled order, never the same in two stretches running;
+    two countries go by turns; one never ends. Grand cities still need
+    meadow or farmland and walled cities open country, so a road through
+    the woods alone has villages, hamlets and landmarks only. Changing it
+    takes effect at once: the land where the traveller stands is rebuilt as
+    the new world's (same seed, same road), and the walk, the company and
+    the hour go on.
+  - *The deep forest* (`deepwood`, the ninth country): trees half as big
+    again and a third more of them, crowding the road so the crowns close
+    over it, ferns, mushrooms, bushes, mossy rocks and fallen logs under
+    them, deer, rabbits and wisps, an elder tree or a ruin for its
+    landmark, the thickest mist and the most fireflies. Seasons were there
+    already (they turn along the road, or `season` fixes one): in autumn
+    half as many leaves again drift down as anywhere else (the same pooled
+    drops as rain, scaled by density), the ground under the trees turns to
+    drifts of fallen leaves and leaves lie on it (`litter`), here and, more
+    thinly, in the forest. Measured (follow / 40 m orbit): High 415k /
+    439k in summer and 425k / 449k in autumn; Medium 200k / 219k and 204k /
+    224k (the autumn orbit is 2% over the 220k target); Low 72k / 80k and
+    73k / 81k. To hold that, fine trees and bushes there reach 0.42 of the
+    usual band from the road, and Medium and Low thin its trees a little
+    harder than other countries'.
+  - *Faces.* Eyes stood a centimetre out of the head. They now lie in the
+    face (a flat white a hair proud of the skin, a larger soft iris, a
+    pupil, a point of light, a line of lashes), and everyone blinks every
+    four seconds or so. The rogue's scarf sits below her eyes.
+  - *The druid's helm*: a cap of bark plates bound in bronze, a brow piece
+    to a point with a stone in it, leaf cheek-guards, a crest of bronze
+    leaves, and a rack whose beams sweep back, out and up with five curved
+    tines a side, moss on them, a charm of beads and a feather from each, a
+    sprig of blossom, a light at every tip after dark and four fireflies
+    about them at night. Her other shapes wear the same rack, and the
+    animals' eyes lie flatter in their heads too.
+  - *The elf ranger's bow* is a recurve (limbs that belly and turn away at
+    the ends, flat in the limb, a wrapped grip, horn nocks, a taut string;
+    drawn, the limbs bend and the nocks come back); capes have a hem with a
+    band of trim, gathered shoulders, a clasp on a chain, swing a beat
+    behind the stride, and a quiver rides outside one. The hooded
+    wanderer's cloak is the same cloth and got the same.
+  - *The women's figures* are fuller in the bust and hip and narrower in
+    the waist (the trunks `f` and `c`), and the druid's feather mantle is a
+    small collar so her bodice shows.
 - **Settings added:** `orbitMode`, `orbitAzimuth`, `orbitElevation`,
   `orbitDistance`, `companions`, `companionPick`, `companionChoice`,
-  `warpaint`, `craft`; `companion` gained every kind.
+  `warpaint`, `craft`, `biomePick`, `biomeChoice`; `companion` gained every
+  kind.
 - **Not built:** pinch to zoom (no multi-touch in `host.gestures`: on a
   phone the distance is the slider); people on the castle's ramp. The 2D
   fallback draws every traveller as the same cut-out in their own colours,
   and none of the company.
 
-**Tests.** Unit (`tools/wayfarer.test.mjs`, 22; the six added: the orbit in clear air at 48 bearings and heights for an hour, its drag, fixed and turning at 10 and 120 fps; every companion posed, the count, the named cats against the roster, the seed; the company on the road, by the fire and at any frame rate; every traveller, the druid's changes and the rogue's hiding; grand cities; fine models and budgets). Smoke adds: the orbit's drag, wheel, overhead, grass and a village at four bearings; six companions, none, the barbarian's brand, the druid there and back, the rogue unseen and back; a grand city before its gate, in its square at five bearings, on its drawbridge and from down the road at night. The original sixteen: the road never jumps or
+**Tests.** Unit (`tools/wayfarer.test.mjs`, 25; the third pass added the country chosen and honoured, autumn in the woods, and the border that does not change its mind; the six before that: the orbit in clear air at 48 bearings and heights for an hour, its drag, fixed and turning at 10 and 120 fps; every companion posed, the count, the named cats against the roster, the seed; the company on the road, by the fire and at any frame rate; every traveller, the druid's changes and the rogue's hiding; grand cities; fine models and budgets). Smoke adds: the orbit's drag, wheel, overhead, grass and a village at four bearings; six companions, none, the barbarian's brand, the druid there and back, the rogue unseen and back; a grand city before its gate, in its square at five bearings, on its drawbridge and from down the road at night. The original sixteen: the road never jumps or
 doubles back, is level across and no steeper than a third along; the
 ground is continuous and the road is never awash; every round has all
-eight countries, never two the same running, and every kind of place
+the countries (nine now), never two stretches the same running, and every kind of place
 turns up; the towns setting scales settlements and leaves the road alone;
 the same seed is the same world; it all holds 3 × 10⁹ m from home; a
 village lines its street and a city stands inside its walls with nothing
@@ -5267,6 +5334,16 @@ New questions go here, each with a recommendation.
   traveller and a party of six for a minute on a real GPU; if Medium
   struggles in a grand city, the lever is `sight` (how far off townsfolk are
   drawn) in `drawLife`.
+- **Wayfarer's third pass, unwatched.** The owner's report that the
+  countries "randomly switch" could not be reproduced here (software
+  renderer, stills); the fix is to the three things the code showed could
+  read that way (§10.38). One remains by design: far squares carry a third
+  of the trees, so a wood thickens as the walk reaches it. Faces, the helm,
+  the bow, the capes and the women's figures were judged from stills; the
+  blink, the cape's swing and the fireflies have not been watched moving.
+  *Recommendation:* walk a border between the deep forest and a meadow on a
+  real GPU; if the land still seems to switch, note the place (`?seed=`,
+  the distance in the HUD) and what changed.
 - **The Evenfolk and the owl-beast** are names and designs of mine, as are
   the ids `archer` (the elf ranger; `ranger` was taken) and the key `G`
   (`F` is fullscreen). *Recommendation:* the owner's call.

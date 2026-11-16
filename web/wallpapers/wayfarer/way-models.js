@@ -258,7 +258,7 @@ const WayModels = (() => {
         meadow: [[122, 178, 72], [104, 158, 62], [142, 152, 62], [176, 184, 150]], forest: [[84, 136, 62], [72, 120, 56], [124, 116, 58], [150, 160, 140]],
         lake: [[116, 176, 78], [100, 160, 70], [146, 150, 70], [170, 180, 150]], pass: [[124, 150, 92], [116, 142, 86], [136, 132, 84], [190, 196, 190]],
         farm: [[126, 178, 72], [116, 166, 64], [164, 160, 70], [180, 186, 150]], moor: [[134, 142, 80], [128, 134, 74], [150, 124, 70], [170, 170, 150]],
-        coast: [[150, 184, 96], [140, 172, 90], [166, 160, 86], [180, 186, 156]], grove: [[70, 140, 98], [60, 128, 96], [96, 124, 104], [150, 176, 170]],
+        coast: [[150, 184, 96], [140, 172, 90], [166, 160, 86], [180, 186, 156]], deepwood: [[72, 122, 62], [60, 108, 54], [112, 104, 54], [142, 152, 132]], grove: [[70, 140, 98], [60, 128, 96], [96, 124, 104], [150, 176, 170]],
     };
 
     // ---- Models, made once ----------------------------------------------------------------
@@ -334,6 +334,10 @@ const WayModels = (() => {
                 s.paint(C.white, 1).fx(140).tri([x - 0.03, 0, z], [x + 0.03, 0, z], [x, h, z], [0, 1, 0]);
                 s.paint(C.white, 3).fx(140).blob(x, h, z, 0.06, 0.035, 0.06, { segs: 5, bands: 2, lump: 0, under: 1 });
             }
+        } else if (kind === 'litter') {
+            // Fallen leaves, lying.
+            for (let i = 0; i < 9; i++) { const a = i * 2.4 + r(i) * 3, d = 0.1 + 0.6 * r(i + 5), x = Math.sin(a) * d, z = Math.cos(a) * d, t2 = r(i + 9) * 6, k = 0.8 + 0.3 * r(i + 14); s.paint([255 * k, 255 * k, 255 * k], 3).fx(0, 0, 4).tri([x + Math.sin(t2) * 0.07, 0.03, z + Math.cos(t2) * 0.07], [x + Math.cos(t2) * 0.04, 0.035 + 0.02 * r(i), z - Math.sin(t2) * 0.04], [x - Math.sin(t2) * 0.07, 0.03, z - Math.cos(t2) * 0.07], [0, 1, 0]).tri([x + Math.sin(t2) * 0.07, 0.03, z + Math.cos(t2) * 0.07], [x - Math.sin(t2) * 0.07, 0.03, z - Math.cos(t2) * 0.07], [x - Math.cos(t2) * 0.04, 0.03, z + Math.sin(t2) * 0.04], [0, 1, 0]); }
+            s.fx(0);
         } else if (kind === 'lily') { s.paint([84, 150, 84], 0).fx(0).prism(7, 0, 0.02, 0, 0.5, 0.03, 0.5, { cap: true }); if (r(1) < 0.4) s.paint([250, 220, 230], 0).blob(0.1, 0.1, 0, 0.12, 0.08, 0.12, { segs: 5, bands: 2, lump: 0 }); }
     });
 
@@ -806,7 +810,8 @@ const WayModels = (() => {
     // rock where it is steep, sand by the water, snow where it is cold, and
     // the fields of a farm.
     function groundColour(w, x, z, y, ny, row, season, out) {
-        const a = GRASS[row.a.biome], b = GRASS[row.b.biome], t = row.t, si = season.index, sn = season.next, st = season.t;
+        // (Which country a point is in is the world's to say, WayLogic's share: the ground, the trees and the plants agree.)
+        const a = GRASS[row.a.biome], b = GRASS[row.b.biome], t = w.share(x, z), si = season.index, sn = season.next, st = season.t;
         const patch = L.noise2(x / 23, z / 23, w.seed + 5), big = L.noise2(x / 90, z / 90, w.seed + 6);
         let r = L.mix(L.mix(a[si][0], a[sn][0], st), L.mix(b[si][0], b[sn][0], st), t), g = L.mix(L.mix(a[si][1], a[sn][1], st), L.mix(b[si][1], b[sn][1], st), t), bl = L.mix(L.mix(a[si][2], a[sn][2], st), L.mix(b[si][2], b[sn][2], st), t);
         const k = 0.8 + 0.26 * patch + 0.14 * big;
@@ -822,6 +827,9 @@ const WayModels = (() => {
                 r = c[0] * k2; g = c[1] * k2; bl = c[2] * k2; furrow = 1;
             }
         }
+        // Under the trees in autumn the leaves lie where they fell, in drifts.
+        const fallen = (si === 2 ? 1 - st : sn === 2 ? st : 0) * L.mix(row.a.biome === 'deepwood' ? 1 : row.a.biome === 'forest' ? 0.6 : 0, row.b.biome === 'deepwood' ? 1 : row.b.biome === 'forest' ? 0.6 : 0, t) * L.smooth(0.3, 0.62, patch) * 0.7;
+        if (fallen > 0) { r = L.mix(r, 184, fallen); g = L.mix(g, 110, fallen); bl = L.mix(bl, 46, fallen); }
         if (moor > 0.3 && patch > 0.6) { const h = moor * L.smooth(0.6, 0.74, patch) * 0.6 * (1 - season.snow); r = L.mix(r, 150, h); g = L.mix(g, 96, h); bl = L.mix(bl, 150, h); }
         // Rock on the steeps; scree and snow in the pass; sand at the water's edge.
         const alpine = L.mix(row.a.biome === 'pass' ? 1 : 0, row.b.biome === 'pass' ? 1 : 0, t), high = y - row.y;
@@ -872,14 +880,14 @@ const WayModels = (() => {
             if (++done % 3 === 0) yield;
             const lx = item.x - x0, lz = item.z - z0, season = w.season(item.z), v = item.v || 0, phase = Math.floor(v * 255);
             if (item.k === 'tree') {
-                if (density < 1 && rnd(v, 11) > density + 0.15) continue;
+                if (density < 1 && rnd(v, 11) > density + (item.b === 'deepwood' ? 0.03 : 0.15)) continue;     // (the deep forest has trees to spare)
                 const cone = item.kind === 'fir', sc = item.s * (item.kind === 'shroom' ? 1.3 : 1.25);
                 TINT[1] = leafTint(item.kind, season, v);
                 TINT[2] = null;
                 TINT[3] = (BLOOM[item.kind] || BLOOM.apple)[season.t > 0.5 ? season.next : season.index];
                 const bare = item.kind === 'snag' || (season.snow > 0.5 && !cone && item.kind !== 'pine' && item.kind !== 'shroom' && item.kind !== 'glade');
                 if (far && bare) continue;          // a bare tree is nothing at a distance
-                const close = !far && detail > 0 && Math.abs(w.lateral(item.x, item.z)) < band;
+                const close = !far && detail > 0 && Math.abs(w.lateral(item.x, item.z)) < (item.b === 'deepwood' ? band * 0.42 : band);
                 const m = far ? farTree(cone || item.kind === 'poplar') : (close ? WayDetail.tree : tree)(bare ? 'snag' : item.kind, Math.floor(v * 3));
                 props.stamp(m, place(lx, item.y - 0.1, lz, item.yaw, far ? sc * 1.3 : sc, far ? sc * 1.2 : sc * (0.9 + 0.3 * rnd(v, 5))), TINT, Math.max(season.snow, w.cold(item.z)) * 0.6, phase);
                 if (!far) { darken(item.x, item.z, 3.4 * sc, 0.34); if (item.kind === 'glade' || item.kind === 'shroom') lights.push([item.x, item.y + 3.5 * sc, item.z, 5, 0.3, 0.9, 0.8, 1]); }
@@ -932,12 +940,14 @@ const WayModels = (() => {
             // Small and fixed things.
             let m = null, model3 = null, lit = 1;
             TINT[1] = TINT[2] = TINT[3] = TINT[5] = null;
-            if (item.k === 'bush' || item.k === 'tuft' || item.k === 'fern' || item.k === 'flower' || item.k === 'heather' || item.k === 'reed') {
+            // Leaves on the ground are autumn's: there only while it lasts.
+            if (item.k === 'litter' && (season.index === 2 ? 1 - season.t : season.next === 2 ? season.t : 0) < 0.25) continue;
+            if (item.k === 'bush' || item.k === 'tuft' || item.k === 'fern' || item.k === 'flower' || item.k === 'heather' || item.k === 'reed' || item.k === 'litter') {
                 if ((density < 1 && rnd(v, 12) > density) || (season.snow > 0.5 && item.k !== 'bush' && item.k !== 'reed' && rnd(v, 14) < 0.6)) continue;
                 const g = GRASS[item.b || 'meadow'], gc = lerp3(g[season.index], g[season.next], season.t);
                 TINT[1] = item.k === 'bush' ? leafTint('oak', season, v) : item.k === 'reed' ? [150, 170, 90] : season.snow > 0.5 ? [176, 160, 112] : [gc[0] * 0.92, gc[1] * 0.98, gc[2] * 0.9];
-                TINT[3] = item.k === 'heather' ? [150 + 30 * v, 92, 150] : BRIGHT[Math.floor(v * 5.99)];
-                model3 = detail > 0 && (item.k === 'bush' ? Math.abs(w.lateral(item.x, item.z)) < band : (item.k === 'tuft' || item.k === 'flower') && Math.abs(w.lateral(item.x, item.z)) < band / 2) ? WayDetail.small(item.k, Math.floor(v * 3)) : small(item.k, Math.floor(v * 3));
+                TINT[3] = item.k === 'litter' ? LEAF.oak[2][Math.floor(v * 2.999)] : item.k === 'heather' ? [150 + 30 * v, 92, 150] : BRIGHT[Math.floor(v * 5.99)];
+                model3 = detail > 0 && (item.k === 'bush' ? Math.abs(w.lateral(item.x, item.z)) < (item.b === 'deepwood' ? band * 0.42 : band) : (item.k === 'tuft' || item.k === 'flower') && Math.abs(w.lateral(item.x, item.z)) < band / 2) ? WayDetail.small(item.k, Math.floor(v * 3)) : small(item.k, Math.floor(v * 3));
                 m = place(lx, item.y, lz, item.yaw, item.s * (item.k === 'reed' ? 1.5 : 1.05));
             } else if (item.k === 'rock') { model3 = detail > 0 ? WayDetail.rock(Math.floor(v * 3)) : small('rock', Math.floor(v * 3)); m = place(lx, item.y, lz, item.yaw, item.s * 1.2); }
             else if (item.k === 'lily') { model3 = small('lily', Math.floor(v * 3)); m = place(lx, item.y, lz, v * 6, 0.7 + 0.5 * v); }
@@ -968,7 +978,7 @@ const WayModels = (() => {
                 if (item.k === 'shrine') lights.push([item.x, item.y + 0.7, item.z, 1.5, 1, 0.7, 0.34, 1]);
             }
             // Small plants keep their colour in the pass; only winter whitens them.
-            const tiny = item.k === 'tuft' || item.k === 'fern' || item.k === 'flower' || item.k === 'heather' || item.k === 'reed' || item.k === 'bush';
+            const tiny = item.k === 'litter' || item.k === 'tuft' || item.k === 'fern' || item.k === 'flower' || item.k === 'heather' || item.k === 'reed' || item.k === 'bush';
             if (model3) props.stamp(model3, m, TINT, item.k === 'bridge' ? 0 : tiny ? 0 : snow * 0.8, phase, lit);
         }
 

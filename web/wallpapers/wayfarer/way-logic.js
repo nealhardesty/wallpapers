@@ -40,7 +40,8 @@ const WayLogic = (() => {
     // The countries, and what each does to the land: hills by the road (m),
     // how high the valley's sides climb, how much lower or higher it lies,
     // and how wooded it is.
-    const BIOMES = ['meadow', 'forest', 'lake', 'pass', 'farm', 'moor', 'coast', 'grove'];
+    const BIOMES = ['meadow', 'forest', 'lake', 'pass', 'farm', 'moor', 'coast', 'grove', 'deepwood'];
+    const RUN = 2;          // legs of road to a stretch of one country: it changes every 720 m, not every 360
     const LAND = {
         meadow: { relief: 5, wall: 12, lift: 0, trees: 0.13 },
         forest: { relief: 7, wall: 26, lift: 4, trees: 1 },
@@ -50,6 +51,8 @@ const WayLogic = (() => {
         moor: { relief: 9, wall: 44, lift: 10, trees: 0.05 },
         coast: { relief: 4, wall: 20, lift: -8, trees: 0.12 },
         grove: { relief: 6, wall: 20, lift: 2, trees: 0.75 },
+        // The deep forest: old, tall and close, the crowns meeting over the road.
+        deepwood: { relief: 6, wall: 30, lift: 5, trees: 1.3 },
     };
     const SEASONS = ['spring', 'summer', 'autumn', 'winter'];
     const ROAD = { half: 1.9, village: 2.7, city: 3.3 };
@@ -61,19 +64,21 @@ const WayLogic = (() => {
     const moatQ = out => (GRAND.moat[1] - GRAND.moat[0]) / 2 - Math.abs(out - (GRAND.moat[0] + GRAND.moat[1]) / 2);
 
     // ---- The world ---------------------------------------------------------------
-    // options: { towns: 0 to 2 (how many of the places are settled), season: 'journey' or one of SEASONS }
+    // options: { towns: 0 to 2 (how many of the places are settled), season: 'journey' or one of SEASONS,
+    // biomes: which countries the road passes through (ids from BIOMES; none, or nothing valid, is all of them) }
     function world(seed, options = {}) {
         seed = (seed >>> 0) || 1;
+        const chosen = BIOMES.map((b, i) => i).filter(i => (options.biomes || BIOMES).includes(BIOMES[i])), allowed = chosen.length ? chosen : BIOMES.map((b, i) => i), NB = allowed.length;
         const towns = options.towns ?? 1, fixedSeason = SEASONS.indexOf(options.season);
         const s = k => seed + k * 7919;
 
-        // Each run of eight legs visits every country once, in its own order.
+        // Each round visits every country the road is allowed once, in its own order; and each stays for RUN legs.
         const rounds = new Map();
         function round(k) {
             let order = rounds.get(k);
             if (!order) {
-                order = BIOMES.map((_, i) => i);
-                for (let i = 7; i > 0; i--) {
+                order = allowed.slice();
+                for (let i = NB - 1; i > 0; i--) {
                     const j = Math.floor(hash(k, i, s(1)) * (i + 1));
                     [order[i], order[j]] = [order[j], order[i]];
                 }
@@ -83,16 +88,17 @@ const WayLogic = (() => {
             return order;
         }
         function biomeIndex(i) {
-            const k = Math.floor(i / 8), order = round(k), at = i - k * 8;
-            // Never the same country twice running, across a round's edge either.
-            if (at < 2 && order[0] === round(k - 1)[7]) return order[1 - at];
+            const q = Math.floor(i / RUN), k = Math.floor(q / NB), order = round(k), at = q - k * NB;
+            if (NB === 2) return allowed[((q % 2) + 2) % 2];           // two countries: by turns
+            // Never the same country in two stretches running, across a round's edge either (unless it is the only one).
+            if (NB > 1 && at < 2 && order[0] === round(k - 1)[NB - 1]) return order[1 - at];
             return order[at];
         }
 
         // A grand city wants gentle, open country, and never stands next to another. It lies level from gate to
         // gate, halfway in height between its neighbours, so the road does its climbing outside the walls.
         const height = i => 40 + 12 * hash(i, 0, s(2)) + LAND[BIOMES[biomeIndex(i)]].lift;
-        const couldBeGrand = i => { const b = BIOMES[biomeIndex(i)], before = BIOMES[biomeIndex(i - 1)]; return (b === 'meadow' || b === 'farm') && before !== 'pass' && before !== 'forest' && hash(i, 7, s(2)) < 0.34 * towns; };
+        const couldBeGrand = i => { const b = BIOMES[biomeIndex(i)], before = BIOMES[biomeIndex(i - 1)]; return (b === 'meadow' || b === 'farm') && before !== 'pass' && before !== 'forest' && before !== 'deepwood' && hash(i, 7, s(2)) < 0.34 * towns; };
         const isGrand = i => couldBeGrand(i) && !couldBeGrand(i - 1);
 
         // A leg: its country, how high its middle lies, and the place there.
@@ -104,12 +110,12 @@ const WayLogic = (() => {
             const r = k => hash(i, k, s(2));
             l = { i, biome, land, zc, e: 40 + 12 * r(0) + land.lift, side: r(1) < 0.5 ? -1 : 1, place: 'none', radius: 0, lake: null, sea: null, mound: null, stream: null, plaza: null };
             // Settled, or a landmark. Cities want room; the pass gets a hamlet.
-            const roll = r(2), open = biome !== 'pass' && biome !== 'lake' && biome !== 'coast';
+            const roll = r(2), open = biome !== 'pass' && biome !== 'lake' && biome !== 'coast' && biome !== 'deepwood';
             // (The leg before a grand city keeps to a landmark: nothing stands between the road and the sight of its towers.)
             const clear = isGrand(i + 1);
             if (roll < 0.2 * towns && open && !clear) l.place = 'city';
             else if (roll < 0.56 * towns && !clear) l.place = biome === 'pass' ? 'hamlet' : 'village';
-            else l.place = { meadow: r(3) < 0.5 ? 'stones' : 'castle', forest: r(3) < 0.5 ? 'elder' : 'ruin', lake: 'jetty', pass: 'cairn', farm: 'mill', moor: r(3) < 0.5 ? 'abbey' : 'castle', coast: 'lighthouse', grove: 'ring' }[biome];
+            else l.place = { meadow: r(3) < 0.5 ? 'stones' : 'castle', forest: r(3) < 0.5 ? 'elder' : 'ruin', lake: 'jetty', pass: 'cairn', farm: 'mill', moor: r(3) < 0.5 ? 'abbey' : 'castle', coast: 'lighthouse', grove: 'ring', deepwood: r(3) < 0.6 ? 'elder' : 'ruin' }[biome];
             // In open, gentle country some of the cities are grand: a wider wall with a moat, and a castle on a rock inside it.
             if (isGrand(i)) { l.place = 'city'; l.grand = GRAND; l.e = (height(i - 1) + height(i + 1)) / 2; }
             l.radius = l.grand ? GRAND.radius : { city: 118, village: 62, hamlet: 34 }[l.place] || 0;
@@ -144,6 +150,7 @@ const WayLogic = (() => {
             row.relief = mix(a.land.relief, b.land.relief, t);
             row.wall = mix(a.land.wall, b.land.wall, t);
             row.near = g < 0.5 ? a : b;                 // the leg whose middle is nearest
+            row.g = g;
             row.dz = z - row.near.zc;
             row.gate = b.stream;                        // the stream between the two, if any
             if (b.stream) row.streamY = b.streamY ?? (b.streamY = mix(a.e, b.e, 0.5) - 2.3);
@@ -155,13 +162,15 @@ const WayLogic = (() => {
         // How far the sea's shore has drawn back from the road, this far along from the bay's middle.
         const headland = dz => { const u = Math.min(1, Math.abs(dz) / 168), u4 = u * u * u * u; return 2000 * (1 - Math.sqrt(1 - u4)); };
         // How far inside a leg's water a point is (metres, negative on land), or -1e9.
-        function lakeQ(p, d, dz, x, z) {
+        function lakeQ(p, d, dz, x, z, raw = false) {
             if (p.lake) {
                 const l = p.lake, across = d * l.side - l.gap - l.r;
                 return l.r - Math.hypot(across, dz / 1.1) + 16 * (noise2(x / 55, z / 55, s(7)) - 0.5);
             }
             // The sea comes in as a bay: open to the horizon, closed by headlands before the leg ends.
-            if (p.sea) return d * p.sea.side - p.sea.gap - 26 * noise1(z / 90, s(8)) - headland(dz);
+            // (Where a bay closes its shore runs nearly along the road's own direction: measured across it, not along d, or the
+            // beach there would be a cliff.)
+            if (p.sea) { const q = d * p.sea.side - p.sea.gap - 26 * noise1(z / 90, s(8)) - headland(dz); return raw ? q : q / Math.min(5, Math.hypot(1, (headland(dz + 1) - headland(dz - 1)) / 2)); }
             return -1e9;
         }
         const streamQ = (st, d, z) => 4.4 - Math.abs(z - st.z - st.flip * 18 * Math.sin(d / 45));
@@ -172,7 +181,7 @@ const WayLogic = (() => {
             const n = noise2(x / 110, z / 110, s(5)) * 2 - 1 + 0.5 * (noise2(x / 41, z / 41, s(6)) * 2 - 1);
             let h = r.relief * 0.66 * n * smooth(3, 26, ad);
             // Water lies in a basin: the hills stand back from its shore.
-            const q = p.lake || p.sea ? lakeQ(p, d, r.dz, x, z) : -1e9, qb = p.sea ? q + headland(r.dz) : q;
+            const q = p.lake || p.sea ? lakeQ(p, d, r.dz, x, z) : -1e9, qb = p.sea ? lakeQ(p, d, r.dz, x, z, true) + headland(r.dz) : q;
             const basin = qb > -90 ? 1 - (1 - smooth(-12, -90, qb)) * smooth(176, 130, Math.abs(r.dz)) : 1;
             if (ad > 16) {
                 const ridge = 1 - Math.abs(noise2(x / 260, z / 260, s(9)) * 2 - 1);
@@ -264,6 +273,22 @@ const WayLogic = (() => {
             return { index, next, t, snow: index === 3 ? 1 - t : next === 3 ? t : 0 };
         }
 
+        // Which of the two countries a point belongs to, where one gives way to the other: 0 the one behind, 1 the one
+        // ahead. Not a line across the road and not a scatter of both: a border that wanders by forty metres or so,
+        // with tongues of each into the other, and a narrow edge where they mingle. Trees, plants and the ground's
+        // colour all ask this, so they change together, and in the same place however often it is asked.
+        function share(x, z) {
+            const r = z === row.z ? row : at(z);
+            if (r.a.biome === r.b.biome) return 0;
+            return smooth(0.42, 0.58, r.g + 0.22 * (noise2(x / 130, z / 130, s(13)) - 0.5) + 0.06 * (noise2(x / 31, z / 31, s(14)) - 0.5));
+        }
+        // The air of the place, for whatever is not rooted in the ground (mist, what drifts down, fireflies): each a
+        // weight that turns slowly from one country's to the next along the road, never at a step.
+        const AIR = { meadow: [0.4, 1, 0, 1], forest: [1, 1, 0, 1], lake: [1, 1, 0, 1], pass: [0.4, 0, 0, 0], farm: [0.4, 1, 0, 0], moor: [1, 0, 0, 0], coast: [0.4, 0, 0, 0], grove: [1, 0, 1, 1], deepwood: [1.5, 1.8, 0, 1] };
+        function air(z) {
+            const r = at(z), t = smooth(0.3, 0.7, r.g), A = AIR[r.a.biome], B = AIR[r.b.biome];
+            return { mist: mix(A[0], B[0], t), leafy: mix(A[1], B[1], t), grove: mix(A[2], B[2], t), cover: mix(A[3], B[3], t) };
+        }
         // The country at z, as its two neighbours and how far between them.
         const biome = z => { const r = at(z); return { a: r.a.biome, b: r.b.biome, t: r.t, near: r.near }; };
         // How cold: the pass and the winter. Rain falls as snow above a half.
@@ -273,7 +298,7 @@ const WayLogic = (() => {
         }
 
         const w = {
-            seed, towns, leg, at, roadX, ground, water, surface, bridge, pave, place, lateral, heading, season, biome, cold,
+            seed, towns, leg, at, roadX, ground, water, surface, bridge, pave, place, lateral, heading, season, biome, cold, share, air, biomes: allowed.map(i => BIOMES[i]),
             moatQ: (x, z) => { const r = at(z); return r.near.grand ? moatQ(beyondWall((x - r.x) * r.cos, r.dz)) : -1e9; },
             lakeQ: (x, z) => { const r = at(z); return lakeQ(r.near, (x - r.x) * r.cos, r.dz, x, z); },
             streamQ: (x, z) => { const r = at(z); return r.gate ? streamQ(r.gate, (x - r.x) * r.cos, z) : -1e9; },
@@ -576,6 +601,7 @@ const WayLogic = (() => {
         meadow: [['oak', 0.7], ['poplar', 1]], forest: [['fir', 0.55], ['oak', 0.85], ['birch', 1]], lake: [['willow', 0.45], ['birch', 0.8], ['oak', 1]],
         pass: [['fir', 0.8], ['snag', 1]], farm: [['apple', 0.6], ['poplar', 1]], moor: [['snag', 0.5], ['fir', 1]], coast: [['pine', 0.8], ['oak', 1]],
         grove: [['shroom', 0.3], ['glade', 0.8], ['willow', 1]],
+        deepwood: [['oak', 0.55], ['fir', 0.8], ['birch', 0.9], ['willow', 1]],
     };
     function scatters(w) {
         return function scatter(cx, cz, far = false) {
@@ -595,7 +621,7 @@ const WayLogic = (() => {
                     const gi = cx * N + i, gj = cz * N + j, pick = w.hash(gi, gj, 30);
                     if (far && w.hash(gi, gj, 31) > 0.34) continue;
                     const x = (gi + 0.15 + 0.7 * w.hash(gi, gj, 32)) * STEP, z = (gj + 0.15 + 0.7 * w.hash(gi, gj, 33)) * STEP;
-                    const r = w.at(z), b = w.hash(gi, gj, 34) < r.t ? r.b : r.a, d = (x - r.x) * r.cos, ad = Math.abs(d), p = r.near;
+                    const r = w.at(z), b = w.hash(gi, gj, 34) < w.share(x, z) ? r.b : r.a, d = (x - r.x) * r.cos, ad = Math.abs(d), p = r.near;
                     // Woods have glades, and thin out up the valley's sides in the pass.
                     let want = b.land.trees * (0.35 + 1.3 * smooth(0.25, 0.7, noise2(x / 70, z / 70, w.seed + 77)));
                     if (b.biome === 'pass') want *= 1 - smooth(40, 140, ad);
@@ -612,7 +638,8 @@ const WayLogic = (() => {
                     if (p.place !== 'none' && !p.radius && Math.hypot(d - p.side * 16, r.dz) < 15) continue;
                     const y = w.ground(x, z);
                     if (y < w.water(x, z) + 0.5 || y - r.y > 60 || onCamp(x, z, 6)) continue;        // not in the water, nor above the tree line
-                    out.push({ k: 'tree', kind, x, z, y, yaw: roll * 40, s: 0.75 + 0.6 * w.hash(gi, gj, 36), v: w.hash(gi, gj, 37), b: b.biome });
+                    // (In the deep forest they are half as big again: old trees, their crowns closing over the road.)
+                    out.push({ k: 'tree', kind, x, z, y, yaw: roll * 40, s: (0.75 + 0.6 * w.hash(gi, gj, 36)) * (b.biome === 'deepwood' ? 1.55 : 1), v: w.hash(gi, gj, 37), b: b.biome });
                 }
             }
             // What a place put here.
@@ -632,8 +659,8 @@ const WayLogic = (() => {
                     const gi = cx * M + i, gj = cz * M + j, pick = w.hash(gi, gj, 40);
                     if (pick > 0.5) continue;
                     const x = (gi + w.hash(gi, gj, 41)) * FINE, z = (gj + w.hash(gi, gj, 42)) * FINE;
-                    const r = w.at(z), d = (x - r.x) * r.cos, ad = Math.abs(d), b = w.hash(gi, gj, 43) < r.t ? r.b : r.a;
-                    if (ad < 2.5 || pick > 0.5 * (1 - smooth(14, 60, ad)) + 0.05) continue;
+                    const r = w.at(z), d = (x - r.x) * r.cos, ad = Math.abs(d), b = w.hash(gi, gj, 43) < w.share(x, z) ? r.b : r.a;
+                    if (ad < 2.5 || pick > 0.5 * (1 - smooth(14, 60, ad) * (b.biome === 'deepwood' ? 0.86 : 1)) + 0.05) continue;
                     if ((r.near.radius && Math.hypot(d, r.dz) < r.near.radius && !(r.near.grand && beyondWall(d, r.dz) > 2)) || onCamp(x, z, 4.6)) continue;
                     const town = r.a.grand ? r.a : r.b.grand ? r.b : null;
                     if (town && Math.abs(z - town.zc) < GRAND.A + 100 && ad < 22 && Math.abs(z - town.zc) > GRAND.A) continue;
@@ -641,7 +668,7 @@ const WayLogic = (() => {
                     if (y < level - 0.05) { if (y > level - 0.9 && roll < 0.5) out.push({ k: 'reed', x, z, y: level, v, s: 0.8 + 0.6 * roll }); else if (roll > 0.8 && y > level - 2.5 && r.near.lake) out.push({ k: 'lily', x, z, y: level, v, s: 1 }); continue; }
                     if (y < level + 0.5) { if (roll < 0.6) out.push({ k: 'reed', x, z, y, v, s: 0.7 + 0.5 * roll }); continue; }
                     const kind = b.biome === 'pass' ? (roll < 0.36 ? 'rock' : 'tuft') : b.biome === 'moor' ? (roll < 0.14 ? 'rock' : roll < 0.6 ? 'heather' : 'tuft')
-                        : b.biome === 'grove' ? (roll < 0.3 ? 'shroom' : roll < 0.55 ? 'fern' : 'flower') : b.biome === 'forest' ? (roll < 0.3 ? 'fern' : roll < 0.42 ? 'shroom' : roll < 0.6 ? 'bush' : roll < 0.7 ? 'rock' : 'tuft')
+                        : b.biome === 'grove' ? (roll < 0.3 ? 'shroom' : roll < 0.55 ? 'fern' : 'flower') : b.biome === 'deepwood' ? (roll < 0.46 ? 'fern' : roll < 0.54 ? 'shroom' : roll < 0.66 ? 'bush' : roll < 0.74 ? 'rock' : roll < 0.78 && ad > 4.5 ? 'logs' : 'litter') : b.biome === 'forest' ? (roll < 0.3 ? 'fern' : roll < 0.42 ? 'shroom' : roll < 0.6 ? 'bush' : roll < 0.7 ? 'rock' : 'tuft')
                         : b.biome === 'farm' ? (roll < 0.25 ? 'flower' : 'tuft') : roll < 0.38 ? 'flower' : roll < 0.52 ? 'bush' : roll < 0.6 ? 'rock' : 'tuft';
                     if (kind === 'bush' && ad < 4.4) continue;
                     out.push({ k: kind, x, z, y, v, s: 0.7 + 0.7 * w.hash(gi, gj, 46), yaw: v * 30, b: b.biome, glow: kind === 'shroom' && b.biome === 'grove' });
@@ -688,7 +715,7 @@ const WayLogic = (() => {
             // Animals, by the country: a few to a square, well off the road.
             const r = w.at(z0 + CHUNK / 2), b = r.t > 0.5 ? r.b : r.a, lives = w.hash(cx, cz, 60);
             const herd = { meadow: lives < 0.3 ? 'sheep' : lives < 0.42 ? 'deer' : lives < 0.55 ? 'rabbit' : '', farm: lives < 0.35 ? 'cow' : lives < 0.6 ? 'sheep' : '', forest: lives < 0.25 ? 'deer' : lives < 0.4 ? 'rabbit' : '', moor: lives < 0.3 ? 'sheep' : lives < 0.4 ? 'crow' : '',
-                pass: lives < 0.2 ? 'goat' : '', lake: lives < 0.4 ? 'duck' : lives < 0.5 ? 'deer' : '', coast: lives < 0.35 ? 'gull' : '', grove: lives < 0.45 ? 'wisp' : lives < 0.6 ? 'deer' : '' }[b.biome];
+                deepwood: lives < 0.3 ? 'deer' : lives < 0.5 ? 'rabbit' : lives < 0.62 ? 'wisp' : '', pass: lives < 0.2 ? 'goat' : '', lake: lives < 0.4 ? 'duck' : lives < 0.5 ? 'deer' : '', coast: lives < 0.35 ? 'gull' : '', grove: lives < 0.45 ? 'wisp' : lives < 0.6 ? 'deer' : '' }[b.biome];
             if (herd) {
                 const x = x0 + CHUNK * (0.2 + 0.6 * w.hash(cx, cz, 61)), z = z0 + CHUNK * (0.2 + 0.6 * w.hash(cx, cz, 62)), d = w.lateral(x, z), y = w.ground(x, z), level = w.water(x, z);
                 const afloat = herd === 'duck', okay = afloat ? y < level - 0.3 : y > level + 0.4;
@@ -1139,6 +1166,8 @@ const WayLogic = (() => {
             c.alt = ease(c.alt, 0, 0.3); c.wing = ease(c.wing, 0, 0.3);
             if (c.speed > 0.3) rest = 0;
         }
+        // On a bridge, between its parapets.
+        if (c.alt < 0.5 && c.riding < 0.5 && w.bridge(c.z) !== null) { const side = w.lateral(c.x, c.z); if (Math.abs(side) > 2.0) c.x = w.place(c.z, clamp(side, -2.0, 2.0))[0]; }
         c.rest = ease(c.rest, rest, rest ? 0.5 : 0.25);
         c.down = ease(c.down, down, 0.35);
         c.y = w.surface(c.x, c.z);
@@ -1301,7 +1330,7 @@ const WayLogic = (() => {
     }
 
     return {
-        RAD, TAU, SLOT, CHUNK, BIOMES, LAND, SEASONS, ROAD, GRAND, WEATHER, WALK, SHOTS, beyondWall,
+        RAD, TAU, SLOT, CHUNK, RUN, BIOMES, LAND, SEASONS, ROAD, GRAND, WEATHER, WALK, SHOTS, beyondWall,
         clamp, mix, mix3, smooth, hash, noise1, noise2,
         world, camp, nextCamp, bodies, light, weatherStart, weatherStep,
         COMPANIONS, COMPANION, GROUPS, party, partyStart, companionStart, companionStep, FORMS, SHIFT, shiftStart, shiftStep, stealthStart, stealthStep, spook, fenceAt, vault,

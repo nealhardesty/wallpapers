@@ -64,20 +64,20 @@ test('the ground: continuous, with hills, valleys, mountains and water, and the 
     }
 });
 
-test('the countries: all eight in every round, never the same twice running, with every kind of place', () => {
+test('the countries: all nine in every round, two legs to a stretch, never the same in two stretches running, with every kind of place', () => {
     const biomes = {}, places = {};
     let streams = 0;
-    for (let i = 104; i < 424; i++) {
+    for (let i = 108; i < 468; i++) {
         const l = world.leg(i);
         biomes[l.biome] = (biomes[l.biome] || 0) + 1;
         places[l.place] = (places[l.place] || 0) + 1;
         streams += !!l.stream;
-        assert.notEqual(l.biome, world.leg(i - 1).biome, `two legs of ${l.biome} at ${i}`);
+        assert.equal(l.biome === world.leg(i - 1).biome, i % L.RUN !== 0, `the country at ${i}: ${world.leg(i - 1).biome} then ${l.biome}`);
         if (l.place === 'city') assert.ok(!['pass', 'lake', 'coast'].includes(l.biome), `a city in the ${l.biome}`);
         if (l.stream) assert.ok(![l.biome, world.leg(i - 1).biome].some(b => ['pass', 'lake', 'coast'].includes(b)));
     }
     assert.deepEqual(Object.keys(biomes).sort(), plain(L.BIOMES).sort());
-    for (const [biome, n] of Object.entries(biomes)) assert.equal(n, 40, `${biome} came round ${n} times in 40 rounds`);
+    for (const [biome, n] of Object.entries(biomes)) assert.equal(n, 40, `${biome} came round ${n} times in 20 rounds`);
     for (const kind of ['city', 'village', 'hamlet', 'stones', 'castle', 'elder', 'ruin', 'jetty', 'cairn', 'mill', 'abbey', 'lighthouse', 'ring']) assert.ok(places[kind] >= 2, `${kind}: ${places[kind]}`);
     assert.ok(places.city >= 15 && places.village >= 60, `cities ${places.city}, villages ${places.village}`);
     assert.ok(streams > 20, `${streams} streams`);
@@ -115,7 +115,7 @@ test('three million kilometres down the road it is the same kind of world, to th
         biomes.add(world.at(z).near.biome);
     }
     assert.ok(jump < 1, `a step of ${jump} m`);
-    assert.equal(biomes.size, 8);
+    assert.equal(biomes.size, 9);
     // A square built out there keeps its own small numbers: the camera's offset is taken in doubles.
     const cz = Math.floor(z0 / 64), cx = Math.floor(world.roadX(z0) / 64), sq = M.square(world, cx, cz, 64, 32, false);
     for (let i = 0; i < sq.ground.n; i++) assert.ok(Math.abs(sq.ground.F[i * 6]) < 70 && Math.abs(sq.ground.F[i * 6 + 2]) < 70, 'local metres');
@@ -387,6 +387,9 @@ test('settings: the panel offers what the code knows, and the keys are declared'
     assert.deepEqual(options('companionChoice'), plain(L.COMPANIONS.map(c => c.id)));
     assert.deepEqual(plain(schema.find(c => c.key === 'companionChoice').options.map(o => o[1])), plain(L.COMPANIONS.map(c => c.label)), 'the chips name them as the code does');
     assert.deepEqual(options('orbitMode'), constant('WAY_ORBITS'));
+    assert.deepEqual(options('biomePick'), Object.keys(constant('WAY_COUNTRY')));
+    assert.deepEqual(options('biomeChoice').sort(), plain(L.BIOMES).sort());
+    for (const [pick, list] of Object.entries(constant('WAY_COUNTRY'))) for (const b of list || []) assert.ok(L.BIOMES.includes(b), `${pick}: ${b}`);
     assert.deepEqual(options('craft'), constant('WAY_CRAFT'));
     assert.deepEqual(plain(L.GROUPS), constant('WAY_PICKS').slice(1, -1));
     assert.deepEqual(options('traveller'), Object.keys(A.LOOKS));
@@ -745,7 +748,7 @@ test('grand cities: rarer, level from gate to gate behind a moat, a castle on it
         assert.ok(sq.props.n % 3 === 0 && sq.props.n < 260000 && sq.high - sq.low > 50, `the castle's square: ${sq.props.n} vertices, ${(sq.high - sq.low).toFixed(0)} m tall`);
         let lit = 0, coursed = 0;
         for (let v = 0; v < sq.props.n; v++) { lit += sq.props.B[v * 24 + 21] > 200; coursed += (sq.props.B[v * 24 + 15] << 24 >> 24) < 0; }
-        assert.ok(lit > 200 && coursed > sq.props.n * 0.3, `${lit} vertices of lit window, ${coursed} of coursed stone`);
+        assert.ok(lit > 200 && coursed > 5000, `${lit} vertices of lit window, ${coursed} of coursed stone`);
         const far = M.square(world, Math.floor(citadel.x / 256), Math.floor(citadel.z / 256), 256, 16, true);
         assert.ok(far.beacons.length >= 4 && far.props.n > 6000 && far.props.n < 120000 && far.lights.length === 0, `far: ${far.props.n} vertices, ${far.beacons.length} lights kept`);
         let tall = -Infinity, glowing = 0;
@@ -782,4 +785,98 @@ test('fine models: what stands by the road near the traveller is built finer, wi
     s.paint(M.C.gold, 0).box(0, 0, 0, 1, 1, 1).paint(M.C.stone, 0).course(true).box(0, 0, 0, 1, 1, 1).course(false).paint([255, 255, 255], 0).tube([[0, 0, 0, 1, 1], [0, 2, 0, 0.5, 1]], 8, { cap: 3, k: () => 1.4 });
     assert.ok(s.B[19] < 80 && s.B[30 * 24 + 19] === 255 && (s.B[30 * 24 + 15] << 24 >> 24) < 0 && (s.B[15] << 24 >> 24) > 0 && s.B[60 * 24 + 16] === 255, 'gloss, courses, and a colour that does not wrap');
     assert.equal(s.n, 60 + 8 * 6 + 2 * 8 * 3);
+});
+
+test('the country: the road passes only through what is chosen; one country alone and none ticked both give an endless road; the deep forest is there, tall and close', () => {
+    const through = (biomes, legs = 200) => { const w = L.world(7, { biomes }), seen = {}; for (let i = 300; i < 300 + legs; i++) seen[w.leg(i).biome] = (seen[w.leg(i).biome] || 0) + 1; return { w, seen }; };
+    assert.deepEqual(Object.keys(through(['forest', 'deepwood', 'grove']).seen).sort(), ['deepwood', 'forest', 'grove']);
+    assert.deepEqual(through(['deepwood']).seen, { deepwood: 200 });
+    assert.deepEqual(Object.keys(through([]).seen).sort(), plain(L.BIOMES).sort());
+    assert.deepEqual(Object.keys(through(['nowhere']).seen).sort(), plain(L.BIOMES).sort());
+    assert.deepEqual(through(undefined).seen, through(plain(L.BIOMES)).seen);
+    assert.deepEqual(plain(through(['lake', 'coast']).w.biomes), ['lake', 'coast']);
+    for (const biomes of [['deepwood'], ['pass'], ['lake', 'coast'], ['meadow', 'farm'], ['moor', 'grove', 'pass']]) {
+        // Each selection: its stretches by turns (when there are two or more), a road that is walkable, places along it.
+        const { w, seen } = through(biomes, 120), places = new Set();
+        for (const n of Object.values(seen)) assert.ok(Math.abs(n - 120 / biomes.length) <= 2 * L.RUN, `${biomes}: ${JSON.stringify(seen)}`);
+        for (let i = 300; i < 420; i++) { places.add(w.leg(i).place); if (biomes.length > 1 && i % L.RUN === 0) assert.notEqual(w.leg(i).biome, w.leg(i - 1).biome, `${biomes}: the same country twice running at ${i}`); }
+        assert.ok(places.size >= 2, `${biomes}: only ${[...places]}`);
+        const j = L.journeyStart(w, 360 * 300);
+        for (let i = 0; i < 20 * 900; i++) { L.journeyStep(j, 0.05, w, { pace: 1, night: 0, camps: false, rests: false }); if (i % 40 === 0) { const me = L.standing(j, w); assert.ok(Number.isFinite(me.y) && me.y > w.water(me.x, me.z) + 0.4, `${biomes}: in the water at ${j.z}`); } }
+        assert.ok(j.distance > 1400, `${biomes}: walked ${j.distance} m`);
+        const cz = Math.floor(j.z / 64), sq = M.square(w, Math.floor(w.roadX(j.z) / 64), cz, 64, 32, false, 1, 2);
+        assert.ok(sq.props.n % 3 === 0 && sq.ground.n === 35 * 35);
+    }
+    // Grand cities want meadow or farmland; walled cities open country: without them there are none, and the road is the same road.
+    const only = through(['deepwood', 'pass', 'lake']).w, open = through(['meadow', 'farm']).w;
+    let grand = 0, cities = 0, farm = 0;
+    for (let i = 300; i < 700; i++) { grand += !!only.leg(i).grand; cities += only.leg(i).place === 'city'; farm += !!open.leg(i).grand; }
+    assert.ok(grand === 0 && cities === 0 && farm > 10, `${grand} grand cities and ${cities} cities in the woods, ${farm} in open country`);
+    assert.equal(only.roadX(54321), world.roadX(54321));
+    // The deep forest: more trees to a square than the forest, bigger, close enough to meet over the road; ferns, mushrooms and fallen logs under them.
+    const deep = L.world(7, { biomes: ['deepwood'], season: 'summer' }), wood = L.world(7, { biomes: ['forest'], season: 'summer' });
+    const count = (w, pick) => { let n = 0; for (let cz = 1700; cz < 1740; cz++) { const cx = Math.floor(w.roadX(cz * 64 + 32) / 64); for (const dx of [-1, 0, 1]) for (const it of w.scatter(cx + dx, cz)) n += pick(it, w) ? 1 : 0; } return n; };
+    const trees = it => it.k === 'tree';
+    assert.ok(count(deep, trees) > count(wood, trees) * 1.15, `${count(deep, trees)} trees in the deep forest, ${count(wood, trees)} in the forest`);
+    assert.ok(count(deep, it => it.k === 'tree' && it.s > 1.2) > count(deep, trees) * 0.7 && count(wood, it => it.k === 'tree' && it.s > 1.4) === 0, 'and they are bigger');
+    assert.ok(count(deep, (it, w) => it.k === 'tree' && Math.abs(w.lateral(it.x, it.z)) < 9) > 150, 'crowding the road');
+    for (const kind of ['fern', 'shroom', 'logs', 'litter', 'bush', 'rock']) assert.ok(count(deep, it => it.k === kind) > 20, `${kind}: ${count(deep, it => it.k === kind)}`);
+    assert.equal(count(deep, (it, w) => it.k === 'tree' && Math.abs(w.lateral(it.x, it.z)) < 5.6), 0, 'but never on it');
+});
+
+test('autumn in the woods: leaves in the air and on the ground, and only then; the air of a place turns slowly along the road', () => {
+    const autumn = L.world(7, { biomes: ['deepwood'], season: 'autumn' }), summer = L.world(7, { biomes: ['deepwood'], season: 'summer' });
+    const cz = 1700, cx = Math.floor(autumn.roadX(cz * 64 + 32) / 64), fall = M.square(autumn, cx, cz, 64, 32, false, 1, 0), green = M.square(summer, cx, cz, 64, 32, false, 1, 0);
+    assert.ok(fall.props.n > green.props.n + 300, `leaves lying in autumn: ${fall.props.n} vertices against ${green.props.n}`);
+    const tone = sq => { let r = 0, g = 0; for (let i = 0; i < sq.ground.n; i++) { r += sq.ground.B[i * 24 + 16]; g += sq.ground.B[i * 24 + 17]; } return r / g; };
+    assert.ok(tone(fall) > tone(green) * 1.25, `the ground under the trees turns: ${tone(green).toFixed(2)} to ${tone(fall).toFixed(2)}`);
+    assert.ok(autumn.air(cz * 64).leafy > 1.5 && L.world(7, { biomes: ['pass'] }).air(cz * 64).leafy === 0 && L.world(7, { biomes: ['grove'] }).air(cz * 64).grove === 1);
+    // No step anywhere along forty kilometres of every country: mist, leaves, motes and fireflies come and go over a hundred metres and more.
+    let before = world.air(0), worst = 0;
+    for (let z = 1; z < 40000; z += 1) { const now = world.air(z); for (const key of ['mist', 'leafy', 'grove', 'cover']) worst = Math.max(worst, Math.abs(now[key] - before[key])); before = now; }
+    assert.ok(worst < 0.03, `the air changes by ${worst.toFixed(3)} in a metre`);
+});
+
+test('one country gives way to the next over a wandering border, in the same place however it is asked: no tree, plant or patch of ground changes its mind', () => {
+    // Along and across the land: which country a point belongs to never jumps, and settles to one or the other away from the border.
+    let worst = 0, mixed = 0, n = 0, borders = 0;
+    for (let z = 360 * 200; z < 360 * 260; z += 2) for (const d of [-150, -40, 0, 40, 150]) {
+        const [x] = world.place(z, d), here = world.share(x, z), r = world.at(z), same = r.a.biome === r.b.biome;
+        assert.ok(here >= 0 && here <= 1);
+        if (same) assert.equal(here, 0);
+        // (Between one pair of legs and the next the count starts again from 0: the country it names is the same.)
+        const pair = zz => Math.floor(zz / 360 - 0.5);
+        worst = Math.max(worst, pair(z + 2) === pair(z) ? Math.abs(world.share(x, z + 2) - here) : 0, Math.abs(world.share(x + 2, z) - here));
+        if (pair(z + 2) !== pair(z) && !same) assert.equal(here, 1, 'by the end of a stretch between two legs the land is all the country ahead');
+        mixed += here > 0.02 && here < 0.98; n++;
+        if (d === 0 && !same && here >= 0.5 && world.share(x, z - 2) < 0.5) borders++;
+    }
+    assert.ok(worst < 0.16, `a step of ${worst.toFixed(2)} in two metres`);
+    assert.ok(mixed / n < 0.12 && mixed > 100, `${(mixed / n * 100).toFixed(1)}% of the land is border`);
+    assert.ok(borders >= 25 && borders <= 31, `${borders} borders crossed in sixty legs: one every ${L.RUN} legs, each crossed once`);
+    // The border is not a line across the road: it runs further along in one place than another.
+    const start = (() => { for (let z = 360 * 200; ; z += 1) { const r = world.at(z); if (r.a.biome !== r.b.biome && r.g < 0.1) return z; } })();
+    const edge = d => { for (let z = start; ; z += 1) if (world.share(world.place(z, d)[0], z) > 0.5) return z; };
+    assert.ok(Math.max(...[-200, -100, 0, 100, 200].map(edge)) - Math.min(...[-200, -100, 0, 100, 200].map(edge)) > 12, 'it wanders');
+    // Trees take their country from it, and so does the ground: on either side of the border they are of their own side.
+    const z0 = edge(0), r = world.at(z0), back = world.scatter(Math.floor(world.roadX(z0 - 130) / 64), Math.floor((z0 - 130) / 64)).filter(it => it.k === 'tree'), ahead = world.scatter(Math.floor(world.roadX(z0 + 130) / 64), Math.floor((z0 + 130) / 64)).filter(it => it.k === 'tree');
+    for (const it of back) if (world.share(it.x, it.z) === 0) assert.equal(it.b, world.at(it.z).a.biome);
+    for (const it of ahead) if (world.share(it.x, it.z) === 1) assert.equal(it.b, world.at(it.z).b.biome);
+    void r;
+    // What is built is what was built: the same square again after the world has forgotten and remembered ten thousand legs, at any detail, in any order.
+    const cz = Math.floor(z0 / 64), cx = Math.floor(world.roadX(z0) / 64), bytes = sq => Buffer.from(sq.ground.B.buffer, 0, sq.ground.n * 24).toString('base64').length + ':' + sq.props.n + ':' + [...sq.ground.B.subarray(16, 16 + 24 * 40)].join('');
+    const first = M.square(world, cx, cz, 64, 32, false, 1, 0), kinds = sq => world.scatter(sq.cx, sq.cz).filter(it => it.k === 'tree').map(it => `${it.x.toFixed(2)},${it.b},${it.kind}`).join();
+    const treesFirst = kinds(first);
+    for (let i = 0; i < 10000; i += 7) world.leg(i * 13 + 5);
+    for (let k = 0; k < 40; k++) world.layout(1000 + k);
+    world.ground(123456, 654321); world.at(98765.4);
+    const again = M.square(world, cx, cz, 64, 32, false, 1, 0), fine = M.square(world, cx, cz, 64, 32, false, 1, 2), thin = M.square(world, cx, cz, 64, 32, false, 0.35, 0);
+    assert.equal(bytes(again), bytes(first), 'the same square, built again later');
+    assert.equal(kinds(again), treesFirst);
+    for (const other of [fine, thin]) for (let i = 0; i < first.ground.n; i++) for (let k = 16; k < 19; k++) assert.equal(other.ground.B[i * 24 + k], first.ground.B[i * 24 + k], 'the ground is one colour whatever the detail or the tier');
+    // And a far square's ground is the near ground's colours, coarser: the land does not change as the walk reaches it.
+    const far = M.square(world, Math.floor(cx * 64 / 256), Math.floor(cz * 64 / 256), 256, 16, true);
+    let off = 0, m = 0;
+    for (let j = 1; j < 17; j++) for (let i = 1; i < 17; i++) { const fx = far.x0 + (i - 1) * 16, fz = far.z0 + (j - 1) * 16; if (fx < first.x0 || fx >= first.x0 + 64 || fz < first.z0 || fz >= first.z0 + 64) continue; const ni = (fx - first.x0) / 2 + 1, nj = (fz - first.z0) / 2 + 1, a = (j * 19 + i) * 24, b = (nj * 35 + ni) * 24; for (let k = 16; k < 19; k++) off = Math.max(off, Math.abs(far.ground.B[a + k] - first.ground.B[b + k])); m++; }
+    assert.ok(m >= 9 && off <= 40, `far and near ground differ by ${off} of 255 at ${m} shared points`);
 });

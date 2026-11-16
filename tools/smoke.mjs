@@ -2281,6 +2281,34 @@ const STAGE_CHECKS = {
             await shoot('wayfarer-grand-night');
             return true;
         }],
+        ['the country: only the deep forest when it alone is ticked, leaves falling in its autumn; another choice changes the land where she stands and the walk goes on; the air never steps', async () => {
+            if (!await stageWith('wayfarer', { configVersion: 1, time: 'day', weather: 'clear', season: 'autumn', biomePick: 'choose', biomeChoice: ['deepwood'], rests: false }, '&seed=7')) return record('not ready');
+            const state = () => evaluate('(m => ({ ...JSON.parse(JSON.stringify(m.debugState())), legs: [0, 1, 2, 3, 4, 5].map(k => m.world.leg(Math.floor(m.journey.z / 360) + k).biome), air: m.world.air(m.journey.z) }))(WP.stage.manager)');
+            await sleep(2500);
+            const a = await state();
+            if (a.countries.join() !== 'deepwood' || a.legs.some(b => b !== 'deepwood') || a.biome !== 'deepwood') record(`the deep forest alone: ${JSON.stringify({ countries: a.countries, legs: a.legs })}`);
+            if (!(a.fall > 0.05) || !(a.leafy > 1.5) || !(a.tint[0] > a.tint[2] * 2) || a.wet > 0.05) record(`autumn in the deep forest: ${JSON.stringify({ fall: a.fall, leafy: a.leafy, tint: a.tint })}`);
+            if (a.drawn.triangles < 30000) record(`drawn: ${JSON.stringify(a.drawn)}`);
+            await shoot('wayfarer-deep-forest-autumn');
+            // Summer: nothing falls but what the wind takes.
+            await evaluate("(m => m.applySettings({ ...m.config, season: 'summer' }))(WP.stage.manager)");
+            await sleep(1500);
+            const green = await state();
+            if (green.fall > 0.01) record(`leaves fall in summer: ${green.fall}`);
+            // Another country, live: the same place on the road, the walk unbroken.
+            await evaluate("(m => m.applySettings({ ...m.config, biomePick: 'open' }))(WP.stage.manager)");
+            await sleep(1500);
+            const b = await state();
+            if (b.countries.join() !== 'meadow,farm,moor' || b.legs.some(x => !b.countries.includes(x)) || !(b.distance >= a.distance) || Math.abs(b.z - a.z) > 40 || b.near < 25 || Math.abs(b.y - b.ground) > 0.01) record(`open country: ${JSON.stringify({ countries: b.countries, legs: b.legs, z: [a.z, b.z], near: b.near })}`);
+            // None ticked is the whole world.
+            await evaluate("(m => m.applySettings({ ...m.config, biomePick: 'choose', biomeChoice: [] }))(WP.stage.manager)");
+            const all = await state();
+            if (all.countries.length !== 9) record(`none ticked: ${all.countries}`);
+            // Across a border between two countries the air's weights change by little from one frame's worth of road to the next.
+            const steps = await evaluate("(m => { const w = m.world; let z = m.journey.z; while (w.at(z).a.biome === w.at(z).b.biome || w.at(z).g < 0.2) z += 10; let worst = 0, before = w.air(z); for (let k = 0; k < 400; k++) { z += 0.5; const now = w.air(z); for (const key of ['mist', 'leafy', 'grove', 'cover']) worst = Math.max(worst, Math.abs(now[key] - before[key])); before = now; } return worst; })(WP.stage.manager)");
+            if (!(steps < 0.02)) record(`the air steps by ${steps} in half a metre at a border`);
+            return true;
+        }],
         ['without WebGL it walks on, painted flat: as far each second on Low as on High', async () => {
             const noGl = "(() => { const real = HTMLCanvasElement.prototype.getContext; HTMLCanvasElement.prototype.getContext = function (kind, ...rest) { return /^webgl/.test(kind) ? null : real.call(this, kind, ...rest); }; })()";
             const { identifier } = await cdp.send('Page.addScriptToEvaluateOnNewDocument', { source: noGl });

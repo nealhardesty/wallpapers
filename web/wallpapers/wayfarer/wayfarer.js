@@ -24,6 +24,8 @@ const WAY_CAMERA_NAMES = { follow: 'Behind the traveller', orbit: 'Orbit: drag t
 const WAY_ORBITS = ['fixed', 'turning'];
 const WAY_PICKS = ['surprise', 'cats', 'dogs', 'farm', 'wild', 'fantastic', 'choose'];
 const WAY_CRAFT = ['never', 'sometimes', 'often'];
+// Which countries the road passes through: all of them, a kind of country, or the ones ticked.
+const WAY_COUNTRY = { all: null, woods: ['forest', 'deepwood', 'grove'], open: ['meadow', 'farm', 'moor'], shore: ['lake', 'coast', 'meadow'], high: ['pass', 'moor', 'forest'], choose: null };
 const WAY_FIRST = ['any', ...WayLogic.COMPANIONS.map(c => c.id), 'none'];
 const WAY_FORM_NAMES = { self: 'herself again', bear: 'a bear', owlbeast: 'an owl-beast', panther: 'a great black cat' };
 // What a struggling GPU gives up, in turn: shadows, then resolution, then the outer ring of detail.
@@ -151,7 +153,7 @@ class WayfarerAnimationManager {
     // Already on the road on the first frame: a few minutes short of somewhere.
     seedScene() {
         const c = this.config, L = WayLogic;
-        this.world = L.world(Math.floor(Math.random() * 2 ** 31), { towns: c.towns, season: c.season });
+        this.world = L.world(Math.floor(Math.random() * 2 ** 31), { towns: c.towns, season: c.season, biomes: this.countries(c) });
         let leg = 40 + Math.floor(Math.random() * 4000);
         // The panel's thumbnail wants the picture on the tin: a village in the woods, just ahead.
         if (this.host.params.thumb) for (let tries = 0; tries < 6000 && !(this.world.leg(leg).place === 'village' && this.world.leg(leg).biome === 'forest'); tries++) leg++;
@@ -168,6 +170,7 @@ class WayfarerAnimationManager {
         this.shift = L.shiftStart(this.world.seed);
         this.stealth = L.stealthStart(this.world.seed);
     }
+    countries(c) { return c.biomePick === 'choose' ? c.biomeChoice : WAY_COUNTRY[c.biomePick]; }
     // Who walks with the traveller: by the settings, and by this world's seed where it is left to chance.
     gather() {
         const c = this.config, L = WayLogic;
@@ -222,9 +225,9 @@ class WayfarerAnimationManager {
     applySettings(config) {
         const before = this.config;
         this.config = config;
-        if (before.towns !== config.towns || before.season !== config.season) {
-            // Another world along the same road: rebuild what is in view.
-            this.world = WayLogic.world(this.world.seed, { towns: config.towns, season: config.season });
+        if (before.towns !== config.towns || before.season !== config.season || before.biomePick !== config.biomePick || String(before.biomeChoice) !== String(config.biomeChoice)) {
+            // Another world along the same road: rebuild what is in view. (The walk is not reset: the same place on the road, in other country.)
+            this.world = WayLogic.world(this.world.seed, { towns: config.towns, season: config.season, biomes: this.countries(config) });
             this.clearSquares();
             this.journey.camp = null;
             this.journey.mode = 'walk';
@@ -671,7 +674,8 @@ class WayfarerAnimationManager {
         scene.lit = light.lit;
         scene.wet = wet * (1 - this.cold);
         // The air: clear by day, soft at dawn, close in the rain; mist lies in the low ground.
-        const b = w.biome(j.z), misty = b.near.biome === 'forest' || b.near.biome === 'grove' || b.near.biome === 'lake' || b.near.biome === 'moor' ? 1 : 0.4;
+        // (The air turns slowly from one country's to the next: WayLogic's air, never the nearest leg's at a step.)
+        const b = w.biome(j.z), air = this.air = w.air(j.z), misty = air.mist;
         scene.fog = [1 / (this.reach + 458) + 0.0003 * light.golden + 0.0035 * wet + 0.0003 * n, (0.001 + 0.003 * light.golden * (1 - light.day * 0.5) + 0.0016 * n) * misty, w.at(j.z).y + 3 - view.y, this.reach];
         scene.wind = [this.wind[0] * 0.16, this.wind[2] * 0.16, this.seconds, still ? 0.3 : 1];
         scene.cloud = [L.mix(0.66, 0.3, this.weather.cloud), 0.1, 0.96];
@@ -715,8 +719,8 @@ class WayfarerAnimationManager {
             scene.fallTint = snow ? [0.95, 0.96, 1, 0.9] : [0.78, 0.83, 0.94, 0.5];
         } else {
             const leaves = Math.max(season.index === 2 ? 1 - season.t : season.next === 2 ? season.t : 0, 0), petals = season.index === 0 ? 1 - season.t : season.next === 0 ? season.t : 0;
-            const wooded = b.near.biome === 'forest' || b.near.biome === 'meadow' || b.near.biome === 'lake' || b.near.biome === 'farm' ? 1 : 0, grove = b.near.biome === 'grove' ? 1 : 0;
-            scene.fall = grove ? 0.08 : Math.max(leaves, petals) * wooded * 0.045;
+            const grove = air.grove > 0.5 ? 1 : 0;
+            scene.fall = L.mix(Math.max(leaves, petals) * air.leafy * 0.045, 0.08, grove ? L.smooth(0.5, 1, air.grove) : 0) * (grove ? 1 : L.smooth(0.5, 0, air.grove));
             vel = grove ? [this.wind[0] * 0.1, 0.25, this.wind[2] * 0.1] : [this.wind[0] * 0.5, -0.8, this.wind[2] * 0.5];
             scene.streak = 1 / 200;
             scene.dropSize = grove ? 0.04 : 0.085;
@@ -774,6 +778,8 @@ class WayfarerAnimationManager {
                 this.lamps.push([p[0], p[1] + 1, p[2], 0.6 * k, 1.3 * k, 0.8 * k, 14, 95]);
             } else if (hide > 0.02) { draw(ghosts[0].soup, 'self'); ghosts[0].alpha = 1; ghosts[0].shimmer = hide; }
             else draw(out, look.shifts ? shift.form : 'self');
+            // After dark a few fireflies keep company with the druid's antlers.
+            if (look.hat === 'antlers' && !changed && shift.change >= 1 && lit > 0.3) for (let i = 0; i < 4; i++) { const a = t * (0.5 + 0.13 * i) + i * 1.9, blink = Math.max(0, Math.sin(t * (1.1 + 0.3 * i) + i * 2)) ** 2 * lit; this.glows.add(p[0] + Math.sin(a) * (0.45 + 0.1 * i), p[1] + (2.25 + 0.25 * Math.sin(a * 1.7 + i) - 0.45 * j.sit) * (look.size || 1), p[2] + Math.cos(a) * (0.45 + 0.1 * i), 0.06, 0.8 * blink, blink, 0.3 * blink, 1); }
             // In another shape she carries no lantern: her marks give a little light of their own.
             if (changed && lit > 0.2) { this.glows.add(p[0], p[1] + 0.8, p[2], 1.6, 0.08 * lit, 0.26 * lit, 0.18 * lit, 1); this.lamps.push([p[0], p[1] + 1.1, p[2], 0.3 * lit, 0.9 * lit, 0.6 * lit, 11, 80]); }
         }
@@ -948,7 +954,7 @@ class WayfarerAnimationManager {
             this.glows.add(x, y, z, b[3] * (0.8 + away / 320), b[4] * s, b[5] * s, b[6] * s, 1);
         }
         // Fireflies on a warm night, wherever there is cover: a box of them about the eye, each blinking in its own time.
-        const b = this.world.biome(me.z).near.biome, cover = b === 'forest' || b === 'grove' || b === 'lake' || b === 'meadow' ? 1 : 0;
+        const cover = this.world.air(me.z).cover;
         const flies = Math.round(46 * this.density * cover * this.light.night * (1 - this.cold) * (1 - this.weather.wet));
         for (let i = 0; i < flies; i++) {
             const h = k => L.hash(i, k, 91), bx = 44, by = 5, x = ((h(0) * bx - view.x + Math.sin(t * 0.3 + i) * 1.5) % bx + bx) % bx - bx / 2, z = ((h(1) * bx - view.z + Math.cos(t * 0.23 + i * 2) * 1.5) % bx + bx) % bx - bx / 2;
@@ -1088,7 +1094,7 @@ class WayfarerAnimationManager {
             near: this.active.near.length, far: this.active.far.length, queue: this.queue.length, actors: [...this.actors.values()].reduce((n, g) => n + g.length, 0), moving: this.moving.n,
             glows: this.glows.n, puffs: this.puffs.n, lamps: this.lamps.length, day: this.day, lit: this.light.lit, night: this.light.night, stars: this.light.stars, cloud: this.weather.cloud, wet: this.weather.wet,
             fall: this.scene.fall, shadow: this.scene.shadow, camera: this.config.camera, cam: { ...this.cam }, orbit: { az: this.orbit.az, el: this.orbit.el, dist: this.orbit.dist, reach: this.orbit.reach, open: WayLogic.inOpen(this.world, this.cam.x, this.cam.y, this.cam.z, 0.2) }, clear: this.cam.y - Math.max(this.world.surface(this.cam.x, this.cam.z), this.world.water(this.cam.x, this.cam.z)),
-            feet: this.onScreen(me.x, me.y, me.z), head: this.onScreen(me.x, me.y + 1.85, me.z), shot: this.shot.index, veil: Number(this.veilShade), tanY: this.scene.tanY, gpu: this.gpu.step, drawn: this.renderer.drawn, traffic: this.traffic.length, wonders: this.wonders.length, companion: this.party.length > 0 && this.party.every(p => p.x !== null), party: this.party.map(p => ({ id: p.id, x: p.x, z: p.z, alt: p.alt, rest: p.rest, riding: p.riding, mode: p.mode })), traveller: this.config.traveller, form: this.shift.form, change: this.shift.change, hidden: this.stealth.hidden, detail: this.detail, ghost: this.ghosts.map(g => g.soup.n * (g.alpha > 0 ? 1 : 0)), grand,
+            feet: this.onScreen(me.x, me.y, me.z), head: this.onScreen(me.x, me.y + 1.85, me.z), shot: this.shot.index, veil: Number(this.veilShade), tanY: this.scene.tanY, gpu: this.gpu.step, drawn: this.renderer.drawn, traffic: this.traffic.length, wonders: this.wonders.length, companion: this.party.length > 0 && this.party.every(p => p.x !== null), party: this.party.map(p => ({ id: p.id, x: p.x, z: p.z, alt: p.alt, rest: p.rest, riding: p.riding, mode: p.mode })), traveller: this.config.traveller, leafy: this.air ? this.air.leafy : 0, tint: this.scene.fallTint, countries: this.world.biomes, form: this.shift.form, change: this.shift.change, hidden: this.stealth.hidden, detail: this.detail, ghost: this.ghosts.map(g => g.soup.n * (g.alpha > 0 ? 1 : 0)), grand,
         };
     }
 }

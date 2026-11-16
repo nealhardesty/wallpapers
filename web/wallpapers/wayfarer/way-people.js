@@ -22,9 +22,9 @@ const WayPeople = (() => {
     const TRUNK = {
         m: [[0, -0.02, 0, 0.17, 0.72], [0, 0.04, 0, 0.192, 0.7], [0, 0.12, 0, 0.182, 0.68], [0, 0.21, 0, 0.166, 0.66], [0, 0.31, 0.008, 0.196, 0.66], [0, 0.4, 0.014, 0.228, 0.63], [0, 0.47, 0.01, 0.236, 0.58], [0, 0.52, 0.002, 0.212, 0.54], [0, 0.56, -0.004, 0.15, 0.6], [0, 0.6, -0.004, 0.08, 0.86]],
         // A woman's: a narrow waist over the hips, a bust, slight shoulders, a slim neck.
-        f: [[0, -0.02, 0, 0.17, 0.74], [0, 0.04, 0, 0.198, 0.72], [0, 0.11, 0, 0.19, 0.7], [0, 0.2, 0, 0.128, 0.72], [0, 0.29, 0.008, 0.146, 0.74], [0, 0.36, 0.022, 0.166, 0.84], [0, 0.42, 0.024, 0.172, 0.84], [0, 0.475, 0.008, 0.172, 0.62], [0, 0.525, 0, 0.164, 0.52], [0, 0.565, -0.004, 0.105, 0.62], [0, 0.6, -0.004, 0.062, 0.86]],
-        // Fuller in the hip and the breast, under her robes: an hourglass.
-        c: [[0, -0.02, 0, 0.18, 0.74], [0, 0.04, 0, 0.214, 0.72], [0, 0.11, 0, 0.204, 0.7], [0, 0.2, 0, 0.128, 0.74], [0, 0.28, 0.01, 0.148, 0.78], [0, 0.35, 0.034, 0.176, 0.96], [0, 0.42, 0.036, 0.182, 0.94], [0, 0.475, 0.012, 0.174, 0.66], [0, 0.525, 0, 0.164, 0.52], [0, 0.565, -0.004, 0.105, 0.62], [0, 0.6, -0.004, 0.062, 0.86]],
+        f: [[0, -0.02, 0, 0.172, 0.76], [0, 0.04, 0, 0.206, 0.76], [0, 0.11, 0, 0.196, 0.74], [0, 0.2, 0, 0.118, 0.74], [0, 0.275, 0.008, 0.134, 0.78], [0, 0.345, 0.03, 0.164, 0.98], [0, 0.405, 0.036, 0.172, 1.0], [0, 0.46, 0.012, 0.168, 0.7], [0, 0.525, 0, 0.162, 0.52], [0, 0.565, -0.004, 0.105, 0.62], [0, 0.6, -0.004, 0.062, 0.86]],
+        // Fuller still in the hip and the breast, under her robes: an hourglass.
+        c: [[0, -0.02, 0, 0.182, 0.76], [0, 0.04, 0, 0.224, 0.76], [0, 0.11, 0, 0.212, 0.74], [0, 0.2, 0, 0.118, 0.76], [0, 0.27, 0.01, 0.136, 0.8], [0, 0.335, 0.04, 0.174, 1.1], [0, 0.4, 0.048, 0.184, 1.1], [0, 0.455, 0.018, 0.172, 0.78], [0, 0.525, 0, 0.162, 0.52], [0, 0.565, -0.004, 0.105, 0.62], [0, 0.6, -0.004, 0.062, 0.86]],
     };
     // More rings between the rings (so paint has somewhere to go), and a limb slimmed for a slighter build.
     const finer = (path, n = 2) => { const out = []; for (let i = 0; i < path.length - 1; i++) for (let k = 0; k < n; k++) { const t = k / n, e = t * t * (3 - 2 * t); out.push(path[i].map((v, j) => v + (path[i + 1][j] - v) * (j === 1 ? t : e))); } out.push(path[path.length - 1]); return out; };
@@ -142,7 +142,7 @@ const WayPeople = (() => {
                 // A druid's robe: a bodice of bark-brown leather laced with vine, a mantle of feathers on the shoulders, and a stone at the belt.
                 s.paint([98, 72, 52], 0).tube(band(trunk, 0.16, 0.4, 0.02, 8), 16, { k: (i, k) => 0.82 + 0.2 * noise(k, i) });
                 for (let i = 0; i < 4; i++) s.paint([120, 170, 84], 0).tube([[-0.04, 0.2 + i * 0.05, wide * 0.72, 0.006, 1], [0.04, 0.225 + i * 0.05, wide * 0.72 + 0.004, 0.006, 1]], 4);
-                for (let i = 0; i < 12; i++) { const a = i / 12 * TAU, r0 = 0.2, r1 = 0.33, c = Math.cos(a), n = Math.sin(a), tone = 0.8 + 0.3 * noise(i, 7); s.paint([255 * tone, 255 * tone, 255 * tone], 3).tri([n * r0 - c * 0.06, 0.6, c * r0 * 0.6 + n * 0.04], [n * r0 + c * 0.06, 0.6, c * r0 * 0.6 - n * 0.04], [n * r1, 0.44 + 0.02 * (i % 2), c * r1 * 0.62], [n * 0.5, 0.8, c * 0.5]); }
+                for (let i = 0; i < 12; i++) { const a = i / 12 * TAU, r0 = 0.15, r1 = 0.25, c = Math.cos(a), n = Math.sin(a), tone = 0.8 + 0.3 * noise(i, 7); s.paint([255 * tone, 255 * tone, 255 * tone], 3).tri([n * r0 - c * 0.05, 0.6, c * r0 * 0.6 + n * 0.03], [n * r0 + c * 0.05, 0.6, c * r0 * 0.6 - n * 0.03], [n * r1, 0.5 + 0.02 * (i % 2), c * r1 * 0.6 - 0.01], [n * 0.5, 0.8, c * 0.5]); }      // a small collar of feathers, lying on the shoulders
                 s.paint([90, 220, 190], 0).fx(0, 200).blob(0, 0.15, wide * 0.7 + 0.022, 0.024, 0.024, 0.012, { segs: 6, bands: 3, lump: 0, under: 1 }).fx(0);
             }
             if (garb === 'leathers') {
@@ -183,11 +183,16 @@ const WayPeople = (() => {
         // A longbow, as tall as she is: held by its grip (the origin), strung; `drawn` with the string back and an arrow on it.
         bow: drawn => part('bow:' + drawn, s => {
             const limb = [];
-            for (let i = -6; i <= 6; i++) { const u = i / 6; limb.push([0, u * 0.82, 0.13 - 0.2 * u * u + 0.09 * u * u * u * u, 0.017 - 0.008 * Math.abs(u), 0.7]); }
-            s.paint([124, 84, 52], 0).fx(0).tube(limb, 6, { ref: [1, 0, 0], k: (i, k) => 0.9 + 0.12 * noise(i, k) });
-            s.paint(LEATHER, 0).tube([[0, -0.07, 0.128, 0.022, 0.8], [0, 0.07, 0.128, 0.022, 0.8]], 6, { ref: [1, 0, 0] });
-            const tipZ = 0.13 - 0.2 + 0.09, pull = drawn ? -0.46 : tipZ;
-            s.paint([236, 232, 220], 0).tube([[0, 0.82, tipZ, 0.004, 1], [0, 0.02, pull, 0.004, 1], [0, -0.82, tipZ, 0.004, 1]], 3, { ref: [1, 0, 0] });
+            // A recurve: the limbs belly toward the archer and their ends turn away again; flat and broad in the limb,
+            // round at the grip, nocked in horn. Drawn, they bend in and the nocks come back.
+            const bend = drawn ? 1.5 : 1, shape = u => 0.11 - 0.3 * bend * u * u + (0.3 * bend - 0.08) * Math.pow(Math.abs(u), 5) + (drawn ? -0.06 * u * u : 0);
+            for (let i = -12; i <= 12; i++) { const u = i / 12, a = Math.abs(u); limb.push([0, u * (drawn ? 0.74 : 0.82), shape(u), a < 0.12 ? 0.02 : 0.0125 - 0.004 * a, a < 0.12 ? 0.9 : 2.3 - 0.9 * a]); }
+            s.paint([132, 88, 54], 0).fx(0).tube(limb, 6, { ref: [1, 0, 0], k: (i, k) => (0.9 + 0.12 * noise(i, k)) * (i % 4 === 0 ? 0.82 : 1) });
+            s.paint(LEATHER, 0).tube([[0, -0.085, shape(0.1), 0.024, 0.86], [0, 0, 0.112, 0.026, 0.86], [0, 0.085, shape(0.1), 0.024, 0.86]], 8, { ref: [1, 0, 0], k: (i, k) => k % 2 ? 0.78 : 1 });
+            s.paint(GOLD, 0).box(0.02, 0.1, 0.105, 0.01, 0.006, 0.02, 1);
+            const tipY = drawn ? 0.74 : 0.82, tipZ = shape(1), pull = drawn ? -0.46 : tipZ;
+            for (const y of [-tipY, tipY]) s.paint(BONE, 0).blob(0, y, tipZ, 0.012, 0.02, 0.014, { segs: 6, bands: 3, lump: 0 });
+            s.paint([240, 236, 224], 0).tube([[0, tipY, tipZ, 0.0045, 1], [0, 0.02, pull, 0.0045, 1], [0, -tipY, tipZ, 0.0045, 1]], 4, { ref: [1, 0, 0] });
             if (drawn) {
                 s.paint([120, 88, 60], 0).tube([[0, 0.03, -0.46, 0.007, 1], [0, 0.03, 0.3, 0.007, 1]], 4).paint(STEEL, 0).tube([[0, 0.03, 0.3, 0.016, 0.4], [0, 0.03, 0.37, 0, 1]], 4);
                 for (const a of [0, 2.1, 4.2]) s.paint([236, 232, 224], 0).quad([0, 0.03, -0.44], [Math.cos(a) * 0.025, 0.03 + Math.sin(a) * 0.025, -0.44], [Math.cos(a) * 0.025, 0.03 + Math.sin(a) * 0.025, -0.34], [0, 0.03, -0.34], [-Math.sin(a), Math.cos(a), 0]);
@@ -203,18 +208,39 @@ const WayPeople = (() => {
         }),
         // A small horn lantern at the belt, for those whose hands are full.
         beltlamp: () => part('beltlamp', s => { s.paint(C.iron, 0).fx(0).tube([[-0.2, 0.12, 0.06, 0.005, 1], [-0.235, 0.02, 0.07, 0.005, 1]], 3).prism(6, -0.235, 0.0, 0.07, 0.04, 0.03, 0.008).prism(6, -0.235, -0.11, 0.07, 0.036, -0.1, 0.036, { cap: true }); s.paint(C.flame, 0).fx(0, 255).prism(6, -0.235, -0.1, 0.07, 0.03, 0.0, 0.03); s.fx(0); }),
-        // A helm of bark and bronze over the brow, with a stone in it and a stag's antlers.
+        // The druid's helm: a cap of bark plates bound in bronze, a brow piece that comes to a point between the eyes with a
+        // stone in it, leaf-shaped cheek guards, a crest of bronze leaves; and a stag's rack, each beam sweeping back, out and
+        // up again in a long curve with five tines, moss on it, a charm of beads and a feather hanging from each side, a
+        // sprig of blossom, and a light at every tip that shows after dark.
         antlers: () => part('antlers', s => {
-            s.paint(W, 7).fx(0).tube([[0, 0.2, -0.02, 0.166, 1.0], [0, 0.27, -0.03, 0.16, 0.98], [0, 0.33, -0.04, 0.11, 0.98], [0, 0.355, -0.04, 0, 1]], 12, { k: (i, k) => 0.84 + 0.2 * noise(i, k) });
-            s.paint(BRONZE, 0).tube([[0, 0.2, -0.016, 0.17, 1.0], [0, 0.235, -0.018, 0.168, 1.0]], 12);
+            s.paint(W, 7).fx(0).tube(finer([[0, 0.205, -0.02, 0.166, 1.0], [0, 0.26, -0.03, 0.162, 0.98], [0, 0.31, -0.04, 0.128, 0.98], [0, 0.345, -0.04, 0.07, 0.98], [0, 0.358, -0.04, 0, 1]]), 14, { k: (i, k) => (k % 2 ? 0.8 : 1.04) * (0.9 + 0.14 * noise(i, k)) });
+            s.paint(BRONZE, 0).tube([[0, 0.196, -0.016, 0.169, 1.0], [0, 0.212, -0.016, 0.173, 1.0], [0, 0.236, -0.018, 0.169, 1.0]], 14);
+            for (let i = 0; i < 6; i++) { const z = 0.1 - i * 0.05, y = 0.325 + 0.03 * Math.sin((i + 0.5) / 6 * Math.PI); s.paint(BRONZE, 0).tri([-0.03, y, z], [0.03, y, z], [0, y + 0.07 - i * 0.004, z - 0.06], [0, 0.6, 0.8]).tri([0.03, y, z], [-0.03, y, z], [0, y + 0.07 - i * 0.004, z - 0.06], [0, 0.6, -0.8]); }
+            s.paint(BRONZE, 0).tri([-0.062, 0.236, 0.14], [0.062, 0.236, 0.14], [0, 0.128, 0.172], [0, 0.25, 0.97]).tri([-0.062, 0.236, 0.14], [0, 0.275, 0.15], [0.062, 0.236, 0.14], [0, 0.25, 0.97]);
+            s.paint([96, 236, 204], 0).fx(0, 235).blob(0, 0.222, 0.158, 0.021, 0.027, 0.011, { segs: 8, bands: 4, lump: 0, under: 1 }).fx(0);
             for (const x of [-1, 1]) {
-                s.paint(BRONZE, 0).tri([x * 0.1, 0.22, 0.135], [x * 0.168, 0.22, 0.03], [x * 0.14, 0.09, 0.105], [x * 0.7, 0, 0.7]);                              // a cheek-piece like a leaf
-                const beam = [[x * 0.11, 0.3, -0.03, 0.026, 1], [x * 0.2, 0.44, -0.07, 0.022, 1], [x * 0.3, 0.6, -0.08, 0.018, 1], [x * 0.33, 0.78, -0.04, 0.012, 1], [x * 0.3, 0.9, 0.02, 0, 1]];
-                s.paint(BONE, 0).tube(beam, 5, { k: (i, k) => 0.9 + 0.12 * noise(i, k) });
-                for (const [i, dx, dy, dz] of [[1, 0.02, 0.17, 0.12], [2, 0.12, 0.14, 0.06], [3, 0.1, 0.08, -0.1]]) s.tube([[beam[i][0], beam[i][1], beam[i][2], 0.015, 1], [beam[i][0] + x * dx, beam[i][1] + dy, beam[i][2] + dz, 0, 1]], 4);
+                s.paint([255, 196, 96], 0).fx(0, 200).blob(x * 0.1, 0.216, 0.128, 0.011, 0.011, 0.007, { segs: 6, bands: 3, lump: 0, under: 1 }).fx(0);
+                s.paint(BRONZE, 0).tri([x * 0.092, 0.222, 0.138], [x * 0.17, 0.222, 0.02], [x * 0.146, 0.07, 0.092], [x * 0.75, 0, 0.66]).paint([70, 124, 84], 0).tri([x * 0.112, 0.2, 0.125], [x * 0.16, 0.2, 0.05], [x * 0.146, 0.1, 0.094], [x * 0.76, 0, 0.65]);
+                // The beam, and its tines.
+                const beam = finer([[x * 0.1, 0.3, -0.03, 0.03, 1], [x * 0.17, 0.4, -0.1, 0.027, 1], [x * 0.27, 0.5, -0.17, 0.024, 1], [x * 0.37, 0.64, -0.17, 0.02, 1], [x * 0.41, 0.8, -0.1, 0.016, 1], [x * 0.38, 0.94, 0.0, 0.011, 1], [x * 0.33, 1.02, 0.08, 0, 1]], 3);
+                s.paint(BONE, 0).tube(beam, 6, { k: (i, k) => (k % 2 ? 0.86 : 1) * (0.92 + 0.1 * noise(i, k)) });
+                const tips = [[x * 0.33, 1.02, 0.08]];
+                for (const [at, dx, dy, dz, len] of [[2, 0.02, 0.1, 0.16, 1], [5, 0.1, 0.14, 0.1, 1.1], [8, 0.14, 0.12, -0.02, 1], [11, 0.1, 0.16, -0.1, 0.9], [14, -0.06, 0.14, -0.08, 0.7]]) {
+                    const b = beam[at], tip = [b[0] + x * dx * len, b[1] + dy * len, b[2] + dz * len];
+                    s.tube([[b[0], b[1], b[2], b[3] * 0.8, 1], [b[0] + x * dx * len * 0.62, b[1] + dy * len * 0.4, b[2] + dz * len * 0.62, b[3] * 0.6, 1], [tip[0], tip[1], tip[2], 0, 1]], 5);
+                    tips.push(tip);
+                }
+                for (const tip of tips) s.paint([150, 255, 214], 0).fx(0, 255).blob(tip[0], tip[1], tip[2], 0.0085, 0.0085, 0.0085, { segs: 5, bands: 3, lump: 0, under: 1 });
+                s.fx(0);
+                for (const at of [3, 7, 10]) s.paint([104, 150, 78], 0).blob(beam[at][0], beam[at][1] + 0.018, beam[at][2], 0.034, 0.016, 0.034, { segs: 6, bands: 3, lump: 0.3, seed: at });
+                // A charm on a thread: two beads and a feather; and a sprig in blossom.
+                const h = beam[6];
+                s.fx(50).paint([226, 214, 190], 0).tube([[h[0], h[1], h[2], 0.003, 1], [h[0] + x * 0.01, h[1] - 0.2, h[2] + 0.01, 0.003, 1]], 3);
+                s.paint([96, 236, 204], 0).fx(50, 160).blob(h[0] + x * 0.005, h[1] - 0.1, h[2] + 0.005, 0.012, 0.012, 0.012, { segs: 5, bands: 3, lump: 0 }).paint([255, 196, 96], 0).blob(h[0] + x * 0.008, h[1] - 0.15, h[2] + 0.008, 0.009, 0.009, 0.009, { segs: 5, bands: 3, lump: 0 });
+                s.fx(70).paint([236, 240, 250], 0).tri([h[0] + x * 0.01, h[1] - 0.2, h[2]], [h[0] + x * 0.04, h[1] - 0.27, h[2] + 0.01], [h[0] - x * 0.005, h[1] - 0.34, h[2] + 0.02], [x * 0.3, 0, 0.95]);
+                for (let i = 0; i < 4; i++) { const b = beam[12], a = i * 1.6; s.fx(40).paint(i % 2 ? [250, 200, 220] : [124, 176, 84], 0).blob(b[0] + Math.sin(a) * 0.03, b[1] + 0.03 + 0.01 * i, b[2] + Math.cos(a) * 0.03, 0.016, 0.01, 0.016, { segs: 5, bands: 2, lump: 0, under: 1 }); }
+                s.fx(0);
             }
-            s.paint([90, 230, 200], 0).fx(0, 230).blob(0, 0.245, 0.15, 0.026, 0.032, 0.014, { segs: 6, bands: 3, lump: 0, under: 1 }).fx(0);
-            s.paint(BRONZE, 0).tri([-0.05, 0.235, 0.145], [0.05, 0.235, 0.145], [0, 0.15, 0.165], [0, 0.2, 0.98]);
         }),
         // A cowl, and a scarf drawn up over the nose.
         cowl: () => part('cowl', s => {
@@ -222,7 +248,7 @@ const WayPeople = (() => {
             s.paint(W, 7).fx(0).tube([ring(0.14, 0.168, 0.2, 1.1), ring(0.07, 0.19, 0.2, 1.1), ring(-0.04, 0.2, 0.2, 1.08), ring(-0.14, 0.17, 0.21, 1.02), ring(-0.21, 0.09, 0.22, 1), ring(-0.24, 0, 0.22, 1)], 10, { cap: 2, k: fold(0.1, 0.6) });
             s.paint([70, 70, 70], 7).tube([ring(0.138, 0.162, 0.2, 1.1), ring(0.05, 0.18, 0.2, 1.1)], 10, { ao: () => 0.55 });
             s.paint(W, 7).tube([[0, 0.06, -0.01, 0.17, 0.9], [0, -0.02, -0.01, 0.23, 0.8], [0, -0.07, -0.01, 0.262, 0.76]], 10, { k: fold(0.14, 0.5), rag: rag(2, 0.08) });
-            s.paint([210, 210, 210], 7).tube([[0, -0.01, 0.03, 0.11, 1.0], [0, 0.06, 0.04, 0.128, 1.06], [0, 0.115, 0.042, 0.136, 1.1], [0, 0.146, 0.034, 0.136, 1.08], [0, 0.152, 0.026, 0.13, 1.08]], 12, { k: fold(0.14, 1.1) });
+            s.paint([210, 210, 210], 7).tube([[0, -0.01, 0.03, 0.11, 1.0], [0, 0.06, 0.04, 0.128, 1.06], [0, 0.108, 0.042, 0.136, 1.1], [0, 0.132, 0.03, 0.134, 1.08], [0, 0.138, 0.022, 0.128, 1.08]], 12, { k: fold(0.14, 1.1) });
         }),
         // A head: chin, jaw, cheekbones, brow and cranium as one form; eyes set into it under lids, a nose with a
         // bridge, lips, ears. v: m, f or e (one of the Evenfolk), then p for warpaint or 1, 2 for the Evenfolk's marks.
@@ -233,14 +259,14 @@ const WayPeople = (() => {
             const ey = 0.178, front = 0.151;
             for (const x of [-1, 1]) {
                 const ex = x * 0.054;
-                // The socket's shadow, the white set into it, the iris, the pupil and a point of light; a lid over it.
-                s.paint([210, 190, 190], 4).blob(ex, ey, front - 0.012, 0.031, 0.021, 0.012, { segs: 8, bands: 4, lump: 0, under: 1 });
-                s.paint([250, 248, 244], 0).gloss(0.4).blob(ex, ey, front - 0.006, 0.0235, 0.0135 + (f ? 0.002 : 0), 0.01, { segs: 10, bands: 4, lump: 0, under: 1 });
-                s.paint(elf ? (v[1] === '2' ? [120, 190, 230] : [236, 180, 84]) : f ? [70, 128, 104] : [96, 74, 54], 0).blob(ex + x * 0.001, ey - 0.001, front + 0.0005, 0.0105, 0.0115, 0.006, { segs: 8, bands: 3, lump: 0, under: 1 });
-                s.paint([20, 16, 18], 0).gloss(1).blob(ex + x * 0.001, ey - 0.001, front + 0.0045, 0.005, 0.0055, 0.003, { segs: 6, bands: 3, lump: 0, under: 1 });
-                s.paint([255, 255, 255], 0).fx(0, elf ? 90 : 0).blob(ex + 0.004, ey + 0.004, front + 0.0065, 0.0022, 0.0022, 0.001, { segs: 4, bands: 2, lump: 0, under: 1 }).fx(0).gloss(0);
-                s.paint(W, 4).tube([[ex - x * 0.026, ey + 0.008, front - 0.006, 0.005, 1], [ex, ey + 0.016, front + 0.004, 0.0075, 1], [ex + x * 0.027, ey + 0.007, front - 0.012, 0.005, 1]], 5, { ref: [0, 1, 0] });
-                s.paint([40, 30, 30], 0).tube([[ex - x * 0.025, ey + 0.006, front - 0.003, 0.0022, 1], [ex, ey + 0.0125, front + 0.0065, f ? 0.0034 : 0.0026, 1], [ex + x * 0.029, ey + 0.007, front - 0.01, f ? 0.003 : 0.0022, 1]], 4, { ref: [0, 1, 0] });      // the lashes' line
+                // An eye lies in the face, not on it: a flat white a hair proud of the skin, a big soft iris, a pupil and
+                // a point of light; a line of lashes over it.
+                const big = f ? 1.32 : 1.16;
+                s.paint([250, 248, 244], 0).blob(ex, ey, front - 0.0068, 0.0225 * big, 0.0142 * big, 0.003, { segs: 10, bands: 3, lump: 0, under: 1 });
+                s.paint(elf ? (v[1] === '2' ? [96, 168, 214] : [214, 160, 70]) : f ? [72, 132, 108] : [104, 80, 58], 0).blob(ex + x * 0.0008, ey - 0.0008, front - 0.0048, 0.0122 * big, 0.013 * big, 0.0018, { segs: 10, bands: 3, lump: 0, under: 1 });
+                s.paint([26, 20, 22], 0).blob(ex + x * 0.0008, ey - 0.0008, front - 0.0036, 0.0056 * big, 0.0062 * big, 0.0012, { segs: 7, bands: 3, lump: 0, under: 1 });
+                s.paint([255, 255, 255], 0).blob(ex + 0.0045, ey + 0.0048, front - 0.0028, 0.0034, 0.0034, 0.0008, { segs: 6, bands: 3, lump: 0, under: 1 });
+                s.paint([52, 38, 36], 0).tube([[ex - x * 0.024 * big, ey + 0.007, front - 0.006, 0.0016, 1], [ex, ey + 0.0142 * big, front - 0.003, f ? 0.0026 : 0.002, 1], [ex + x * 0.0265 * big, ey + 0.0085, front - 0.0095, f ? 0.0024 : 0.0016, 1]], 4, { ref: [0, 1, 0] });
                 // A brow: arched and fine, or straight and heavy.
                 s.paint([200, 200, 200], 6).tube([[ex - x * 0.03, ey + (f ? 0.03 : 0.024), front + 0.002, f ? 0.004 : 0.0065, 1], [ex + x * 0.004, ey + (f ? 0.04 : 0.031), front + 0.004, f ? 0.0052 : 0.008, 1], [ex + x * 0.036, ey + (f ? 0.034 : 0.03), front - 0.014, f ? 0.003 : 0.006, 1]], 5, { ref: [0, 1, 0] });
                 s.paint(W, 4);
@@ -261,6 +287,14 @@ const WayPeople = (() => {
             s.paint(lip, 0).tube([[-(f ? 0.024 : 0.028), my - 0.003, front - 0.017, 0.003, 1], [0, my - 0.008, front - 0.004, f ? 0.0085 : 0.0075, 1], [f ? 0.024 : 0.028, my - 0.003, front - 0.017, 0.003, 1]], 5, { ref: [0, 1, 0] });
             s.paint([96, 50, 52], 0).tube([[-(f ? 0.028 : 0.033), my + 0.0015, front - 0.0145, 0.0016, 1], [0, my - 0.001, front - 0.0005, 0.0018, 1], [f ? 0.028 : 0.033, my + 0.0015, front - 0.0145, 0.0016, 1]], 4, { ref: [0, 1, 0] });
             if (elf && v[1] === '1') s.paint([236, 250, 255], 0).fx(0, 110).quad([-0.0035, 0.008, front - 0.012], [0.0035, 0.008, front - 0.012], [0.0035, 0.06, front - 0.002], [-0.0035, 0.06, front - 0.002], [0, 0, 1]).fx(0);
+        }),
+        // Lids, for a blink: skin over each eye and the lashes' line along the bottom of it.
+        blink: f => part('blink:' + f, s => {
+            for (const x of [-1, 1]) {
+                const ex = x * 0.054, ey = 0.178, front = 0.151, big = f ? 1.32 : 1.16;
+                s.paint(W, 4).fx(0).blob(ex, ey + 0.001, front - 0.0052, 0.024 * big, 0.0155 * big, 0.0034, { segs: 10, bands: 3, lump: 0, under: 1 });
+                s.paint([52, 38, 36], 0).tube([[ex - x * 0.022 * big, ey - 0.006, front - 0.0045, 0.0016, 1], [ex, ey - 0.0105, front - 0.0015, 0.0022, 1], [ex + x * 0.024 * big, ey - 0.005, front - 0.008, 0.0016, 1]], 4, { ref: [0, 1, 0] });
+            }
         }),
         hair: v => part('hair:' + v, s => {
             s.paint(W, 6).fx(0);
@@ -309,8 +343,8 @@ const WayPeople = (() => {
         // A cloak in eight lengths and twelve gores, both its faces; the hem moves most.
         cloak: (short = false) => part('cloak:' + short, s => {
             // One sheet: every corner has its own slope and its own share of the wind, so it folds and never tears.
-            const COLS = 14, ROWS = short ? 5 : 9, at = (i, j) => {
-                const u = i / COLS * 2 - 1, v = j / ROWS * (short ? 0.5 : 1), w = 0.275 + 0.2 * v, wrap = 1 - u * u;
+            const COLS = 14, ROWS = short ? 7 : 9, at = (i, j) => {
+                const u = i / COLS * 2 - 1, v = j / ROWS * (short ? 0.66 : 1), w = 0.275 + 0.2 * v, wrap = 1 - u * u;
                 return [u * w * (1 + 0.05 * Math.cos(i * 1.9 + 1) * v), 0.56 - 1.16 * v, -0.15 - (0.17 * Math.sin(v * 2.2) + 0.05 * Math.cos(i * 1.8) * v) * (0.35 + 0.65 * wrap) + 0.17 * (1 - wrap)];
             };
             const corner = (i, j, inside) => {
@@ -319,14 +353,17 @@ const WayPeople = (() => {
                 let nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
                 const l = -(Math.hypot(nx, ny, nz) || 1) * Math.sign(nz || 1);
                 nx /= l; ny /= l; nz /= l;                      // facing back, away from the body
-                const k = (1 - 0.03 * j) * (0.86 + 0.14 * Math.cos(i * 1.8) * (j / ROWS)) * (inside ? 0.55 : 1);
+                // (A band of trim along the hem: a paler edge and a darker line over it.)
+                const k = (1 - 0.03 * j) * (0.86 + 0.14 * Math.cos(i * 1.8) * (j / ROWS)) * (inside ? 0.55 : j === ROWS ? 1.34 : j === ROWS - 1 ? 0.72 : 1);
                 s.fx(0, 0, Math.round(j * j * 1.7));
                 s.v(p[0] * (inside ? 0.97 : 1), p[1], p[2] + (inside ? 0.014 : 0), nx, ny, nz, inside ? 0.6 : 1, k);
             };
             s.paint(W, 3);
             for (const inside of [false, true]) for (let j = 0; j < ROWS; j++) for (let i = 0; i < COLS; i++) { corner(i, j, inside); corner(i, j + 1, inside); corner(i + 1, j + 1, inside); corner(i, j, inside); corner(i + 1, j + 1, inside); corner(i + 1, j, inside); }
-            s.fx(0).tube([[0, 0.46, 0, 0.3, 0.7], [0, 0.53, 0, 0.26, 0.68], [0, 0.6, 0, 0.16, 0.74]], 12, { k: fold(0.12, 0.5) });
-            s.paint(GOLD, 0).gloss(0.8).blob(0, 0.52, 0.185, 0.03, 0.03, 0.014, { segs: 6, bands: 3, lump: 0 }).gloss(0);
+            // Gathered over the shoulders, standing a little at the neck, and held at the throat by a clasp on a chain.
+            s.fx(0).tube([[0, 0.42, -0.01, short ? 0.262 : 0.3, 0.66], [0, 0.5, -0.004, short ? 0.248 : 0.275, 0.64], [0, 0.565, 0, 0.17, 0.7], [0, 0.625, 0, 0.1, 0.84]], 14, { k: fold(0.14, 0.5) });
+            s.paint(GOLD, 0).gloss(0.8).blob(0, 0.53, short ? 0.15 : 0.172, 0.03, 0.034, 0.014, { segs: 8, bands: 4, lump: 0 }).gloss(0);
+            for (const x of [-1, 1]) s.paint(GOLD, 0).tube([[x * 0.025, 0.53, short ? 0.152 : 0.174, 0.006, 1], [x * 0.1, 0.515, short ? 0.13 : 0.15, 0.006, 1]], 4, { ref: [0, 1, 0] });
         }),
         // A hood round the face, deep enough to shade it, with a peak behind; gathered on the shoulders.
         hood: () => part('hood', s => {
@@ -469,9 +506,9 @@ const WayPeople = (() => {
         st.ry(0.08 * Math.sin(tau) * mv);
         put(K.torso);
         if (look.apron) put(P.apron());
-        if (look.cloak && look.cape !== false) { st.push().rx(0.06 + 0.14 * mv + 0.05 * Math.sin(tau * 2) * mv - 0.06 * sit).rz(0.035 * Math.sin(tau) * mv); put(P.cloak(look.cape === 'short')); st.pop(); }
+        if (look.cloak && look.cape !== false) { st.push().rx(0.06 + 0.14 * mv + 0.05 * Math.sin(tau * 2 - 0.9) * mv - 0.06 * sit).rz(0.05 * Math.sin(tau - 0.7) * mv).ry(0.04 * Math.sin(tau - 0.7) * mv); put(P.cloak(look.cape === 'short')); st.pop(); }       // it swings a beat behind the stride
         if (look.lamp && pose.lantern) put(P.beltlamp());
-        if (look.back) put(P[look.back]());
+        if (look.back) { st.push(); if (look.cape === 'short') st.move(0, 0, -0.1); put(P[look.back]()); st.pop(); }      // (a quiver rides outside a cape)
         const act = pose.act || '', torch = !!(pose.lantern && look.torch && sit < 0.5);
         for (const side of [-1, 1]) {
             const ph = tau + (side > 0 ? 0 : Math.PI), holds = side > 0 && look.hand, brand = side < 0 && torch;
@@ -514,6 +551,8 @@ const WayPeople = (() => {
         }
         st.move(0, 0.63, 0).ry(pose.head || 0).rx(act === 'fish' || sit > 0.5 ? 0.12 : -0.03);
         put(K.face);
+        // A blink every few seconds (each in their own time).
+        if (((t * 0.23 + (look.v || 0.37) * 7) % 1) < 0.03) put(P.blink(K.build !== 'm'));
         if (K.hair) put(K.hair);
         if (K.beard) put(K.beard);
         if (look.hat) put((P[look.hat] || A.P[look.hat])());

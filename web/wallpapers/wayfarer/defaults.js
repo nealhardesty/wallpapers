@@ -22,6 +22,8 @@ WP.defaults('wayfarer', {
     weather: 'auto',       // auto, clear, fair, cloudy, rain
     rainOften: 1,          // × how much of the time it rains, in 'auto'
     season: 'journey',     // journey (it turns along the road), spring, summer, autumn, winter
+    biomePick: 'all',      // which countries the road passes through: all, woods, open, shore, high, or choose
+    biomeChoice: ['meadow', 'forest', 'deepwood', 'lake', 'pass', 'farm', 'moor', 'coast', 'grove'],      // which, when it is 'choose' (none ticked is all of them)
     towns: 1,              // × how many of the places along the road are settled
     life: 1,               // × folk, animals and traffic
     wonders: true,         // dragons, airships and balloons, far off

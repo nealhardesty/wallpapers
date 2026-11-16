@@ -191,16 +191,18 @@ its own. A traveller and their company follow a road that wanders on for
 ever (nine travellers to choose from: a hooded ranger, a wizard, a bard, a
 knight, a barbarian woman and man in furs, an antlered elf druid who turns
 into a bear, an owl-beast or a great black cat for a stretch, an elf ranger
-with a longbow, and a rogue who slips past the guards unseen, vaults a fence and stops to
+with a recurve bow, and a rogue who slips past the guards unseen, vaults a fence and stops to
 stroke the cat; and a first companion of your choosing with up to five more
 of 46 companions, from a hound, a donkey and a goose to a dragon whelp, a
 paper-lantern spirit and a snail with a lit window, with Moofy, Butters,
 Waffles, Ras The Destroyer, Ibbie, Maus, Turkey, Harry and Kitty Toes among
-them): through deep forest and
-flowering meadow, along a lake's shore and round a bay of the sea, over a
+them): through forest and the deep forest, where the crowns close over the
+road and the leaves come down in autumn, flowering meadow, along a lake's shore and round a bay of the sea, over a
 mountain pass with snow on the firs, across the moors, past farms with a
 windmill turning, and through an enchanted grove of giant mushrooms that
-glows after dark. Every few minutes the road arrives somewhere: a
+glows after dark. Which of the nine countries the road passes through is
+yours to say (all of them, the woods, open country, the shore, the high
+country, or the ones you tick). Every few minutes the road arrives somewhere: a
 timber-framed village with smoking chimneys, bunting over the street, a
 well, market stalls and people who wave; a walled city with gate towers, a
 market square and fountain, a keep and a spire; now and then a grand city

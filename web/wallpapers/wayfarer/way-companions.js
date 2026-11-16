@@ -75,13 +75,21 @@ const WayCompanions = (() => {
         whelp: Q({ len: 0.66, tall: 0.36, girth: 0.14, neck: [0.24, 0.95], head: 0.1, muzzle: [0.12, 0.05], ears: ['none', 0], tail: ['thick', 0.62, 0.1], coat: [60, 150, 130], under: [240, 220, 150], mark: (p, x, y, z) => p === 'muzzle' && y < -0.025 ? [240, 220, 150] : p === 'body' && y > 0.02 && patch(x, y, z, 40, 9) > 0.62 ? [44, 120, 112] : null, eye: [255, 200, 60], horns: 0.12, ridge: true, wings: true, stride: 0.6, rest: 'curl' }),
     };
 
-    // The druid's antlers, on whatever head she has: a beam and three tines a side, tipped with her light.
+    // The druid's antlers, on whatever head she has: the same rack as her helm's, each beam sweeping back, out and up
+    // with five tines, moss on it, and her light at every tip.
     function antlers(s, x0, y0, z0, k) {
         for (const x of [-1, 1]) {
-            const beam = [[x * x0, y0, z0, 0.03 * k, 1], [x * (x0 + 0.1 * k), y0 + 0.16 * k, z0 - 0.05 * k, 0.025 * k, 1], [x * (x0 + 0.2 * k), y0 + 0.34 * k, z0 - 0.06 * k, 0.018 * k, 1], [x * (x0 + 0.22 * k), y0 + 0.5 * k, z0, 0, 1]];
+            const beam = [[0, 0, 0, 0.03], [0.07, 0.1, -0.07, 0.027], [0.17, 0.2, -0.14, 0.024], [0.27, 0.34, -0.14, 0.02], [0.31, 0.5, -0.07, 0.016], [0.28, 0.64, 0.03, 0.011], [0.23, 0.72, 0.11, 0]].map(([dx, dy, dz, r]) => [x * (x0 + dx * k), y0 + dy * k, z0 + dz * k, r * k, 1]);
             s.paint([240, 232, 212], 0).fx(0).tube(beam, 5);
-            for (const [i, dx, dy, dz] of [[1, 0.02, 0.16, 0.1], [2, 0.11, 0.12, 0.05], [2, -0.02, 0.1, -0.1]]) s.tube([[beam[i][0], beam[i][1], beam[i][2], 0.016 * k, 1], [beam[i][0] + x * dx * k, beam[i][1] + dy * k, beam[i][2] + dz * k, 0, 1]], 4);
-            s.paint([120, 255, 200], 0).fx(0, 255).blob(x * (x0 + 0.22 * k), y0 + 0.5 * k, z0, 0.014 * k, 0.014 * k, 0.014 * k, { segs: 5, bands: 3, lump: 0, under: 1 }).fx(0);
+            const tips = [beam[6]];
+            for (const [at, dx, dy, dz] of [[1, 0.02, 0.1, 0.16], [2, 0.1, 0.14, 0.1], [3, 0.14, 0.12, -0.02], [4, 0.1, 0.15, -0.1], [5, -0.05, 0.1, -0.07]]) {
+                const b = beam[at], tip = [b[0] + x * dx * k, b[1] + dy * k, b[2] + dz * k];
+                s.tube([[b[0], b[1], b[2], b[3] * 0.8, 1], [b[0] + x * dx * k * 0.62, b[1] + dy * k * 0.4, b[2] + dz * k * 0.62, b[3] * 0.6, 1], [tip[0], tip[1], tip[2], 0, 1]], 4);
+                tips.push(tip);
+            }
+            for (const at of [2, 4]) s.paint([104, 150, 78], 0).blob(beam[at][0], beam[at][1] + 0.016 * k, beam[at][2], 0.032 * k, 0.015 * k, 0.032 * k, { segs: 5, bands: 3, lump: 0.3, seed: at });
+            for (const tip of tips) s.paint([150, 255, 214], 0).fx(0, 255).blob(tip[0], tip[1], tip[2], 0.01 * k, 0.01 * k, 0.01 * k, { segs: 5, bands: 3, lump: 0, under: 1 });
+            s.fx(0);
         }
     }
     // Rings between the rings, so a coat's markings have somewhere to be painted; and tufts of fur along an edge.
@@ -160,8 +168,8 @@ const WayCompanions = (() => {
                 for (const x of [-1, 1]) {
                     // Eyes that shine; a cat's are coloured, with a slit.
                     const ex = x * h * (q.popeyed ? 0.52 : 0.47), ey = h * (q.popeyed ? 0.7 : 0.2), ez = h * (q.popeyed ? 0.5 : 0.92), er = h * (q.popeyed ? 0.26 : q.cat ? 0.2 : 0.16);
-                    s.paint(shiny(q.cat || q.popeyed ? q.eye : [250, 248, 240], 0.7), 0).blob(ex, ey, ez, er, er, er * 0.7, { segs: 7, bands: 4, lump: 0, under: 1 });
-                    s.paint(BLACK, 0).blob(ex + x * er * 0.1, ey, ez + er * 0.42, er * (q.cat ? 0.26 : 0.62), er * (q.cat ? 0.74 : 0.62), er * 0.4, { segs: 6, bands: 3, lump: 0, under: 1 });
+                    s.paint(shiny(q.cat || q.popeyed ? q.eye : [250, 248, 240], 0.7), 0).blob(ex, ey, ez, er, er, er * (q.popeyed ? 0.7 : 0.4), { segs: 7, bands: 4, lump: 0, under: 1 });
+                    s.paint(BLACK, 0).blob(ex + x * er * 0.1, ey, ez + er * (q.popeyed ? 0.42 : 0.24), er * (q.cat ? 0.26 : 0.62), er * (q.cat ? 0.74 : 0.62), er * (q.popeyed ? 0.4 : 0.22), { segs: 6, bands: 3, lump: 0, under: 1 });
                     const [ek, es] = q.ears, ea = x * h * 0.52;
                     s.mark(dye('ear')).paint(q.face || q.coat, 0);
                     if (ek === 'prick' || ek === 'tuft') { s.tube([[ea, h * 0.5, h * 0.12, h * 0.36 * Math.min(es, 1.2), 0.5], [ea * 1.12, h * (0.5 + 0.62 * es), h * 0.08, h * 0.2, 0.45], [ea * 1.2, h * (0.5 + 1.0 * es), h * 0.04, 0, 1]], 6); s.mark(null).paint(PINK, 0).tri([ea - x * h * 0.16, h * 0.56, h * 0.2], [ea + x * h * 0.2, h * 0.56, h * 0.2], [ea * 1.17, h * (0.5 + 0.8 * es), h * 0.12], [0, 0.2, 1]); }
