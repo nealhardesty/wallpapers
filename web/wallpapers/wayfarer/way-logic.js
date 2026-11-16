@@ -103,7 +103,7 @@ const WayLogic = (() => {
         const isGrand = i => couldBeGrand(i) && !couldBeGrand(i - 1);
 
         // A leg: its country, how high its middle lies, and the place there.
-        const legs = new Map();
+        const legs = new Map(), SEA = 30, seaSide = hash(seed, 3, s(14)) < 0.5 ? -1 : 1;
         function leg(i) {
             let l = legs.get(i);
             if (l) return l;
@@ -122,8 +122,16 @@ const WayLogic = (() => {
             l.radius = l.grand ? GRAND.radius : { city: 118, village: 62, hamlet: 34 }[l.place] || 0;
             if (l.radius) l.plaza = { d: l.side * (l.place === 'city' ? 0 : 7.5), r: l.grand ? GRAND.plaza : l.place === 'city' ? 17 : l.place === 'village' ? 9.5 : 0 };
             if (l.grand) { l.rock = { d: l.side * GRAND.rock.d, dz: GRAND.rock.dz, r0: GRAND.rock.r0, r1: GRAND.rock.r1, h: GRAND.rock.h }; l.moat = l.e - 2.4; }
-            if (biome === 'lake') l.lake = { side: l.side, r: 95 + 40 * r(4), gap: 17, level: l.e - 1.1 };
-            if (biome === 'coast') l.sea = { side: l.side, gap: 24, level: l.e - 1.6 };
+            if (biome === 'lake') l.lake = { side: l.side, r: 80 + 22 * r(4), gap: 16.5, level: l.e - 4.6 };      // (a long lake, lying along the road for most of its leg, and far enough below it to be seen)
+            // The coast is one coast: the sea lies on the same hand all the way and at one level, with the road now a few
+            // metres above the tideline and now on a bluff over it. Only where the coast ends (another country before
+            // or after) does a headland close it and the road turn inland.
+            if (biome === 'coast') {
+                l.side = seaSide;
+                l.e = SEA + 4.5 + 7 * r(0);
+                l.sea = { side: l.side, gap: 11, level: SEA, open: [BIOMES[biomeIndex(i - 1)] === 'coast', BIOMES[biomeIndex(i + 1)] === 'coast'] };
+                if (l.radius) l.plaza = { d: l.side * (l.place === 'city' ? 0 : 7.5), r: l.plaza.r };
+            }
             if (l.place === 'castle') l.mound = { d: -l.side * (150 + 40 * r(5)), r: 78, h: 34 + 14 * r(6) };
             // A stream crosses the road where this leg begins, if the country on both sides allows.
             const before = BIOMES[biomeIndex(i - 1)], wet = b => b === 'pass' || b === 'lake' || b === 'coast';
@@ -162,16 +170,19 @@ const WayLogic = (() => {
 
         // How far the sea's shore has drawn back from the road, this far along from the bay's middle.
         const headland = dz => { const u = Math.min(1, Math.abs(dz) / 168), u4 = u * u * u * u; return 2000 * (1 - Math.sqrt(1 - u4)); };
+        // (Along an open coast there is none: only toward a neighbour that is another country.)
+        const cape = (sea, dz) => sea.open[dz < 0 ? 0 : 1] ? 0 : headland(dz);
         // How far inside a leg's water a point is (metres, negative on land), or -1e9.
         function lakeQ(p, d, dz, x, z, raw = false) {
             if (p.lake) {
-                const l = p.lake, across = d * l.side - l.gap - l.r;
-                return l.r - Math.hypot(across, dz / 1.1) + 16 * (noise2(x / 55, z / 55, s(7)) - 0.5);
+                const l = p.lake;
+                // (A long lake with its near shore along the road: nearest of that shore, its two ends and the far shore.)
+                return Math.min(d * l.side - l.gap, (148 - Math.abs(dz)) * 0.8, l.gap + 2 * l.r - d * l.side) + 12 * (noise2(x / 55, z / 55, s(7)) - 0.5);
             }
             // The sea comes in as a bay: open to the horizon, closed by headlands before the leg ends.
             // (Where a bay closes its shore runs nearly along the road's own direction: measured across it, not along d, or the
             // beach there would be a cliff.)
-            if (p.sea) { const q = d * p.sea.side - p.sea.gap - 26 * noise1(z / 90, s(8)) - headland(dz); return raw ? q : q / Math.min(5, Math.hypot(1, (headland(dz + 1) - headland(dz - 1)) / 2)); }
+            if (p.sea) { const q = d * p.sea.side - p.sea.gap - 9 * noise1(z / 70, s(8)) ** 1.5 - cape(p.sea, dz); return raw ? q : q / Math.min(5, Math.hypot(1, (cape(p.sea, dz + 1) - cape(p.sea, dz - 1)) / 2)); }
             return -1e9;
         }
         const streamQ = (st, d, z) => 4.4 - Math.abs(z - st.z - st.flip * 18 * Math.sin(d / 45));
@@ -182,8 +193,8 @@ const WayLogic = (() => {
             const n = noise2(x / 110, z / 110, s(5)) * 2 - 1 + 0.5 * (noise2(x / 41, z / 41, s(6)) * 2 - 1);
             let h = r.relief * 0.66 * n * smooth(3, 26, ad);
             // Water lies in a basin: the hills stand back from its shore.
-            const q = p.lake || p.sea ? lakeQ(p, d, r.dz, x, z) : -1e9, qb = p.sea ? lakeQ(p, d, r.dz, x, z, true) + headland(r.dz) : q;
-            const basin = qb > -90 ? 1 - (1 - smooth(-12, -90, qb)) * smooth(176, 130, Math.abs(r.dz)) : 1;
+            const q = p.lake || p.sea ? lakeQ(p, d, r.dz, x, z) : -1e9, qb = p.sea ? lakeQ(p, d, r.dz, x, z, true) + cape(p.sea, r.dz) : q;
+            const basin = qb > -90 ? 1 - (1 - smooth(-12, -90, qb)) * (p.sea && p.sea.open[r.dz < 0 ? 0 : 1] ? 1 : smooth(176, 130, Math.abs(r.dz))) : 1;
             if (ad > 16) {
                 const ridge = 1 - Math.abs(noise2(x / 260, z / 260, s(9)) * 2 - 1);
                 h += basin * r.wall * (smooth(16, 230, ad) * (0.35 + 0.65 * ridge) + Math.max(ad - 230, 0) * 0.0011 * (0.5 + ridge));
@@ -203,6 +214,19 @@ const WayLogic = (() => {
                 if (away < k.r1) h += k.h * smooth(k.r1, k.r0, away) * (1 + 0.1 * (noise2(x / 9, z / 9, s(12)) - 0.5) * smooth(k.r0 - 2, k.r0 + 6, away));
             }
             h += r.y;
+            // Toward the water the land falls away from the road's verge to the shore, so the water is seen from the road
+            // (level ground out to a brink hides whatever lies below it): a bluff where the road is high, a bank where it
+            // is low. Not under a settlement (its quay is a brink), nor under a lighthouse.
+            if ((p.sea || p.lake) && q < -1) {
+                const wt = p.sea || p.lake, sd = d * wt.side, top = wt.level + 0.5;
+                if (sd > 7 && h > top) {
+                    // (Only where the shore is near: far from it the land is the land.)
+                    let fall = smooth(0, 1, (sd - 7) / (sd - 7 - q - 0.5)) * smooth(-70, -32, q) * (p.lake ? smooth(176, 160, Math.abs(r.dz)) : 1);
+                    if (p.radius) fall *= smooth(p.radius * 0.95, p.radius * 1.5, Math.hypot(d, r.dz));
+                    else if (p.place !== 'none') fall *= smooth(11, 24, Math.hypot(sd - 16, r.dz));
+                    h = mix(h, top, fall);
+                }
+            }
             if (p.grand) { const mq = moatQ(beyondWall(d, r.dz)); if (mq > -5) h = mix(h, shore(mq, p.moat, 2.2), smooth(-5, -1, mq)); }
             if (q > -9) h = mix(h, shore(q, (p.lake || p.sea).level, p.sea ? 9 : 4.5), smooth(-9, -2, q));
             if (sq > -7) h = mix(h, shore(sq, r.streamY, 1.4), smooth(-7, -1, sq));
@@ -629,6 +653,7 @@ const WayLogic = (() => {
                     if (b.biome === 'pass') want *= 1 - smooth(40, 140, ad);
                     if (b.biome === 'farm' && ad > 9) want *= 0.25;
                     if (pick > want || ad < 5.6) continue;
+                    { const wt = p.sea || p.lake; if (wt && d * wt.side > 0 && w.hash(gi, gj, 39) > (p.sea ? 0.1 : 0.12) && w.lakeQ(x, z) > (p.sea ? -400 : -60)) continue; }
                     const kinds = TREES[b.biome], roll = w.hash(gi, gj, 35), kind = kinds.find(k => roll < k[1])[0];
                     if (ad < (kind === 'willow' ? 9.5 : kind === 'fir' || kind === 'elder' ? 6.6 : 5.6)) continue;        // the wide ones stand further back
                     if (p.radius && Math.hypot(d, r.dz) < p.radius * 1.12) continue;
@@ -665,6 +690,14 @@ const WayLogic = (() => {
             }
             if (far) return out;
 
+            // Off a coast, rocks stand out of the sea: stacks and skerries, a little way out.
+            for (let k = Math.ceil(z0 / 22); k * 22 < z0 + CHUNK; k++) {
+                const z = k * 22 + 14 * (w.hash(k, 5, 56) - 0.5), r = w.at(z), sea = r.near.sea;
+                if (!sea || w.hash(k, 5, 57) > 0.55) continue;
+                const [x] = w.place(z, sea.side * (30 + 85 * w.hash(k, 5, 58) ** 1.3));
+                if (!inside(x, z) || w.lakeQ(x, z) < 7) continue;
+                out.push({ k: 'rock', x, z, y: sea.level - 0.9, yaw: w.hash(k, 5, 59) * 6, s: 2.2 + 4.5 * w.hash(k, 5, 60) ** 2, v: w.hash(k, 5, 61), b: 'coast', stack: true });
+            }
             // Small things, thick by the road where they are seen: bushes, rocks, flowers, reeds.
             const FINE = 3.2, M = CHUNK / FINE;
             for (let j = 0; j < M; j++) {
@@ -802,7 +835,7 @@ const WayLogic = (() => {
     // How far the air is clear from a point along a direction, up to `far` metres: a swept test against the
     // ground, the water and whatever stands near.
     const near = [];
-    function sightline(w, from, dir, far) {
+    function sightline(w, from, dir, far, standing = false) {            // (standing: only what stands, not the ground or the water)
         const x1 = from[0] + dir[0] * far, z1 = from[2] + dir[2] * far, R = 31;
         const i0 = Math.floor((Math.min(from[0], x1) - R) / CHUNK), i1 = Math.floor((Math.max(from[0], x1) + R) / CHUNK), j0 = Math.floor((Math.min(from[2], z1) - R) / CHUNK), j1 = Math.floor((Math.max(from[2], z1) + R) / CHUNK);
         const mx = (from[0] + x1) / 2, mz = (from[2] + z1) / 2, reach = far / 2 + 1;
@@ -810,7 +843,7 @@ const WayLogic = (() => {
         for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) for (const o of w.solids(i, j)) if (Math.hypot(o.x - mx, o.z - mz) < reach + (o.r !== undefined ? o.r : Math.hypot(o.hw, o.hd))) near.push(o);
         for (let t = 0.7; t < far + 0.6; t += 0.3 + t * 0.012) {
             const x = from[0] + dir[0] * t, y = from[1] + dir[1] * t, z = from[2] + dir[2] * t;
-            let hit = t > 1.4 && y < Math.max(w.surface(x, z), w.water(x, z)) + 0.3;
+            let hit = !standing && t > 1.4 && y < Math.max(w.surface(x, z), w.water(x, z)) + 0.3;
             for (let k = 0; !hit && k < near.length; k++) hit = within(near[k], x, y, z, 0.45);
             if (hit) return Math.max(0.9, t - 0.75);
         }
@@ -1331,6 +1364,29 @@ const WayLogic = (() => {
         return n;
     }
 
+    // How much of a camera's picture is open water (0 to 1): a grid of rays through the screen, each followed to
+    // whatever it meets first: water, the ground, something standing, or nothing (the sky).
+    function waterSeen(w, cam, o = {}) {
+        const tanY = o.tanY || Math.tan(28 * RAD), tanX = tanY * (o.aspect || 16 / 9), cols = o.cols || 24, rows = o.rows || 14, far = o.far || 420;
+        const sh = Math.sin(cam.heading), ch = Math.cos(cam.heading), sp = Math.sin(cam.pitch), cp = Math.cos(cam.pitch), from = [cam.x, cam.y, cam.z];
+        let wet = 0;
+        for (let j = 0; j < rows; j++) for (let i = 0; i < cols; i++) {
+            const sx = ((i + 0.5) / cols * 2 - 1) * tanX, sy = (1 - (j + 0.5) / rows * 2) * tanY;
+            // (forward, right and up of the camera, as the renderer has them)
+            let dx = sh * cp + ch * sx - sh * sp * sy, dy = sp + cp * sy, dz = ch * cp - sh * sx - ch * sp * sy;
+            const len = Math.hypot(dx, dy, dz);
+            dx /= len; dy /= len; dz /= len;
+            if (dy > -0.004) continue;                // at or over the horizon: sky, or land too far off to tell
+            for (let t = 3; t < far; t += 1.5 + t * 0.06) {
+                const x = cam.x + dx * t, y = cam.y + dy * t, z = cam.z + dz * t, g = w.ground(x, z), level = w.water(x, z);
+                if (y > Math.max(g, level)) continue;
+                if (level > g + 0.05 && sightline(w, from, [dx, dy, dz], t, true) > t - 1.5) wet++;
+                break;
+            }
+        }
+        return wet / (cols * rows);
+    }
+
     // ---- Companions --------------------------------------------------------------------------
     // Who can walk with the traveller. group: how the panel sorts them. role: what they do on the road (heel: keep
     // their place; scout: run ahead and wait; lag: stop to sniff, then catch up; chase: go after butterflies; herd:
@@ -1748,7 +1804,7 @@ const WayLogic = (() => {
         RAD, TAU, SLOT, CHUNK, RUN, BIOMES, LAND, SEASONS, ROAD, GRAND, WEATHER, WALK, SHOTS, beyondWall,
         clamp, mix, mix3, smooth, hash, noise1, noise2,
         world, camp, nextCamp, bodies, light, weatherStart, weatherStep,
-        WILD, WILDLIFE, WILD_SHOW, WILD_LEVELS, wildStart, wildStep, wildSeen,
+        WILD, WILDLIFE, WILD_SHOW, WILD_LEVELS, wildStart, wildStep, wildSeen, waterSeen,
         COMPANIONS, COMPANION, GROUPS, PARTY_MAX, party, partyStart, partyChange, companionStart, companionStep, FORMS, SHIFT, shiftStart, shiftStep, stealthStart, stealthStep, spook, fenceAt, vault,
         journeyStart, journeyStep, standing, sight, camera, ORBIT, orbitStart, orbitGrab, orbitDrag, orbitStep, orbitCamera, sightline, inOpen, wrapPi,
     };

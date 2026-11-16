@@ -37,7 +37,33 @@ export function sight(biomes, seed, km, levels = ['few', 'some', 'plenty'], nigh
     return out;
 }
 
-if (process.argv[1] && import.meta.url.endsWith(process.argv[1].split('/').pop())) {
+// How often is the water in the picture? The same walk; every four seconds, the share of the follow camera's picture
+// that is open water (WayLogic.waterSeen). Returns { n, open (samples away from towns), seen and openSeen (those with
+// `least` of the picture water, or more), mean, best: [{ z, share }] }.
+export function waters(biomes, seed, km, least = 0.03) {
+    const w = L.world(seed, biomes ? { biomes } : {}), j = L.journeyStart(w, 360 * 300 + 60), out = { n: 0, open: 0, seen: 0, openSeen: 0, sum: 0, rows: [] };
+    for (let i = 0, t = 0; j.distance < km * 1000; i++) {
+        t += 0.1;
+        L.journeyStep(j, 0.1, w, { pace: 1, night: 0, camps: false, rests: false });
+        if (i % 40 !== 20) continue;
+        const r = w.at(j.z), open = !(r.near.radius && Math.abs(r.dz) < r.near.radius + 30), share = L.waterSeen(w, L.camera('follow', j, w, t, null, null));
+        out.n++; out.sum += share; if (share >= least) out.seen++;
+        if (open) { out.open++; if (share >= least) out.openSeen++; }
+        out.rows.push({ index: out.n - 1, z: j.z, share, open, above: L.standing(j, w).y - w.water(w.place(j.z, (r.near.sea || r.near.lake || { side: 1 }).side * 60)[0], j.z) });
+    }
+    return out;
+}
+
+if (process.argv.includes('--water')) {
+    const args = process.argv.slice(2).filter(a => a !== '--water'), flag = (name, or) => { const i = args.indexOf(name); return i < 0 ? or : args[i + 1]; };
+    const lands = args[0] && !args[0].startsWith('--') ? args[0].split(',') : ['coast', 'lake'], km = Number(flag('--km', 3)), seeds = String(flag('--seeds', '7,11,23')).split(',').map(Number);
+    console.log('country    water is 3% of the picture or more in this share of samples (and on the open road, away from towns); the mean share of the picture');
+    for (const land of lands) {
+        const sum = { n: 0, open: 0, seen: 0, openSeen: 0, sum: 0 };
+        for (const seed of seeds) { const got = waters(land === 'all' ? null : [land], seed, km); for (const k of Object.keys(sum)) sum[k] += got[k]; }
+        console.log(land.padEnd(10), `${Math.round(100 * sum.seen / sum.n)}% (${Math.round(100 * sum.openSeen / Math.max(1, sum.open))}%), mean ${(100 * sum.sum / sum.n).toFixed(1)}% of the picture`);
+    }
+} else if (process.argv[1] && import.meta.url.endsWith(process.argv[1].split('/').pop())) {
     const args = process.argv.slice(2), flag = (name, or) => { const i = args.indexOf(name); return i < 0 ? or : args[i + 1]; };
     const lands = args[0] && !args[0].startsWith('--') ? args[0].split(',') : [...L.BIOMES, 'all'], km = Number(flag('--km', 3)), seeds = String(flag('--seeds', '7,11,23')).split(',').map(Number);
     console.log('country    few              some             plenty           share of samples with a wild animal plainly in the picture (and on the open road, away from towns), the mean count, and how much of the walk is in town; day | night');

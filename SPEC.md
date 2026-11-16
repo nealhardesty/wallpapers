@@ -5346,6 +5346,38 @@ creature, marking or design is taken from one.
     worst is 458k on High (2% over), 214k on Medium, 95k on Low; with
     more than six companions, those from the fourth on are the lite
     models.
+- **A seventh pass (2026-11-16): "how come in coast I rarely see the coast?"**
+  - *Why.* Three things. Each coast leg had a bay of its own, on its own
+    side, closed by headlands before the leg ended: the shore was within
+    fifty metres of the road for some sixty metres either side of the
+    leg's middle and hundreds of metres off for the rest. The water lay
+    1.6 m below level ground that ran flat out to its brink, so from a
+    camera 2.5 m up the brink hid it. And the seaward side was as wooded
+    as the landward. Measured (`node tools/wayfarer-sight.mjs --water`,
+    `WayLogic.waterSeen`: rays through the follow camera's picture, each
+    to the first thing it meets; a sample counts when open water is 3% of
+    the picture or more): 0% of samples over 3 km and three seeds, and 1%
+    for the lake, which had the same fault.
+  - *Now the coast is one coast.* The sea is on the same hand all the way
+    (by the world's seed) and at one level; the road runs 4.5 to 11.5 m
+    above it and 11 to 20 m from the tideline; the land falls from the
+    road's verge to the shore (a bluff where the road is high, a bank
+    where it is low: no brink), under a village only at its quay; the
+    seaward side keeps one tree in ten; rocks stand out of the sea. A
+    headland closes it, and the road turns inland, only where the next
+    leg is another country (`sea.open`). The lake is a long one with its
+    near shore along the road for most of its leg, 4.6 m below it, its
+    bank falling to it the same way and mostly clear of trees.
+  - *Measured after:* the sea is in the picture in 65% of all samples and
+    81% of those on the open road (a mean of 5.4% of the picture); a lake
+    in 32% and 42%. A unit test holds 62% and 22% on the open road, and
+    that the sea keeps its side and its level, the road is dry, and the
+    shore is 9 to 30 m from it. Coast alone draws 216k / 239k triangles
+    on High (follow / far orbit), 111k / 123k on Medium, 37k / 39k on Low.
+  - *Not done:* surf and foam, wet sand, a causeway or sea bridge, a
+    harbour, a wreck, beach huts: the sea is the water there was (the
+    mirror on Medium and High), nearer and in sight. The lighthouse, the
+    boats and the gulls were there already.
 - **Settings added:** `orbitMode`, `orbitAzimuth`, `orbitElevation`,
   `orbitDistance`, `companions`, `companionPick`, `companionChoice`,
   `warpaint`, `craft`, `biomePick`, `biomeChoice`, `wildlife`. `companion` (the one
@@ -5356,7 +5388,7 @@ creature, marking or design is taken from one.
   fallback draws every traveller as the same cut-out in their own colours,
   and none of the company.
 
-**Tests.** Unit (`tools/wayfarer.test.mjs`, 28; the fourth pass added the boughs over the deep forest's road, the bow's string, the company changing on the road and nobody spinning; the fifth, the walk to a fire and back, and wildlife; the sixth, wildlife seen (32 now); the third pass added the country chosen and honoured, autumn in the woods, and the border that does not change its mind; the six before that: the orbit in clear air at 48 bearings and heights for an hour, its drag, fixed and turning at 10 and 120 fps; every companion posed, the count, the named cats against the roster, the seed; the company on the road, by the fire and at any frame rate; every traveller, the druid's changes and the rogue's hiding; grand cities; fine models and budgets). Smoke adds: the orbit's drag, wheel, overhead, grass and a village at four bearings; six companions, none, the barbarian's brand, the druid there and back, the rogue unseen and back; a grand city before its gate, in its square at five bearings, on its drawbridge and from down the road at night. The original sixteen: the road never jumps or
+**Tests.** Unit (`tools/wayfarer.test.mjs`, 28; the fourth pass added the boughs over the deep forest's road, the bow's string, the company changing on the road and nobody spinning; the fifth, the walk to a fire and back, and wildlife; the sixth, wildlife seen; the seventh, the coast (33 now); the third pass added the country chosen and honoured, autumn in the woods, and the border that does not change its mind; the six before that: the orbit in clear air at 48 bearings and heights for an hour, its drag, fixed and turning at 10 and 120 fps; every companion posed, the count, the named cats against the roster, the seed; the company on the road, by the fire and at any frame rate; every traveller, the druid's changes and the rogue's hiding; grand cities; fine models and budgets). Smoke adds: the orbit's drag, wheel, overhead, grass and a village at four bearings; six companions, none, the barbarian's brand, the druid there and back, the rogue unseen and back; a grand city before its gate, in its square at five bearings, on its drawbridge and from down the road at night. The original sixteen: the road never jumps or
 doubles back, is level across and no steeper than a third along; the
 ground is continuous and the road is never awash; every round has all
 the countries (nine now), never two stretches the same running, and every kind of place

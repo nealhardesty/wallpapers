@@ -1141,3 +1141,33 @@ test('wildlife is seen: with the camera behind the traveller, a wild animal is p
         assert.ok(got.plenty.sum / got.plenty.n > got.some.sum / got.some.n);
     }
 });
+
+test('the coast is a coast: the sea on one hand all the way and at one level, the road above it on dry ground, and in the picture most of the time; a lake lies along its road', async () => {
+    const { waters } = await import('./wayfarer-sight.mjs');
+    const coast = L.world(7, { biomes: ['coast'] });
+    const side = coast.leg(300).sea.side, level = coast.leg(300).sea.level;
+    for (let i = 300; i < 340; i++) {
+        const l = coast.leg(i);
+        assert.ok(l.sea && l.sea.side === side && l.sea.level === level && l.sea.open[0] && l.sea.open[1], `leg ${i}`);
+        assert.ok(l.e > level + 4 && l.e < level + 12.5, `the road ${(l.e - level).toFixed(1)} m over the sea`);
+    }
+    // All along it: dry and level underfoot, water within thirty metres on the sea's side, none on the other.
+    for (let z = 360 * 300; z < 360 * 312; z += 7) {
+        const r = coast.at(z);
+        for (const d of [-2.5, 0, 2.5]) { const [x] = coast.place(z, d); assert.ok(coast.ground(x, z) > level + 3.5 && coast.water(x, z) < coast.ground(x, z), `the road at ${z}`); }
+        let shore = null;
+        for (let d = 6; d < 60 && shore === null; d += 1) if (coast.lakeQ(coast.place(z, side * d)[0], z) > 0) shore = d;
+        if (!(r.near.radius && Math.abs(r.dz) < r.near.radius * 1.5)) assert.ok(shore !== null && shore >= 9 && shore <= 30, `the shore ${shore} m from the road at ${z}`);
+        assert.ok(coast.lakeQ(coast.place(z, -side * 40)[0], z) < -30, 'the land side is land');
+    }
+    // Where the coast ends the sea draws away behind a headland and the road goes inland: no water by the road a leg on.
+    const mixed = L.world(7, { biomes: ['coast', 'meadow'] });
+    let ends = 0;
+    for (let i = 300; i < 340; i++) { const l = mixed.leg(i), next = mixed.leg(i + 1); if (l.sea && !next.sea) { ends++; assert.ok(!l.sea.open[1]); const z = l.zc + 172, shoreFar = mixed.lakeQ(mixed.place(z, l.sea.side * 60)[0], z); assert.ok(shoreFar < -100, `the sea ${shoreFar.toFixed(0)} m off at the end of the coast`); } }
+    assert.ok(ends >= 3);
+    // In the picture (measured 2026-11-16 over 3 km and three seeds: the sea is 3% of the follow camera's picture or more
+    // in 81% of samples on the open road, and a lake in 42%; before, 0% and 1%).
+    const sea = waters(['coast'], 7, 1.5), lake = waters(['lake'], 7, 1.5);
+    assert.ok(sea.openSeen / sea.open > 0.62, `the sea in ${(100 * sea.openSeen / sea.open).toFixed(0)}% of the pictures`);
+    assert.ok(lake.openSeen / lake.open > 0.22, `the lake in ${(100 * lake.openSeen / lake.open).toFixed(0)}% of the pictures`);
+});

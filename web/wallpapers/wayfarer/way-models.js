@@ -981,7 +981,7 @@ const WayModels = (() => {
                 TINT[3] = item.k === 'litter' ? LEAF.oak[2][Math.floor(v * 2.999)] : item.k === 'heather' ? [150 + 30 * v, 92, 150] : BRIGHT[Math.floor(v * 5.99)];
                 model3 = detail > 0 && (item.k === 'bush' ? Math.abs(w.lateral(item.x, item.z)) < (item.b === 'deepwood' ? band * 0.3 : item.b === 'forest' || item.b === 'grove' ? band * 0.5 : band) : (item.k === 'tuft' || item.k === 'flower') && Math.abs(w.lateral(item.x, item.z)) < band / 2) ? WayDetail.small(item.k, Math.floor(v * 3)) : small(item.k, Math.floor(v * 3));
                 m = place(lx, item.y, lz, item.yaw, item.s * (item.k === 'reed' ? 1.5 : 1.05));
-            } else if (item.k === 'rock') { model3 = detail > 0 ? WayDetail.rock(Math.floor(v * 3)) : small('rock', Math.floor(v * 3)); m = place(lx, item.y, lz, item.yaw, item.s * 1.2); }
+            } else if (item.k === 'rock') { model3 = detail > 0 && !item.stack ? WayDetail.rock(Math.floor(v * 3)) : small('rock', Math.floor(v * 3)); m = place(lx, item.y, lz, item.yaw, item.s * 1.2, item.stack ? item.s * (1.6 + 1.2 * v) : item.s * 1.2); }
             else if (item.k === 'lily') { model3 = small('lily', Math.floor(v * 3)); m = place(lx, item.y, lz, v * 6, 0.7 + 0.5 * v); }
             else if (item.k === 'shroom') {
                 TINT[1] = leafTint('shroom', season, v); TINT[3] = BLOOM.shroom[0];

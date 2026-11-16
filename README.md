@@ -197,7 +197,7 @@ chance or ticked one by one, from a hound, a donkey and a goose to a dragon whel
 paper-lantern spirit and a snail with a lit window, with Moofy, Butters,
 Waffles, Ras The Destroyer, Ibbie, Maus, Turkey, Harry and Kitty Toes among
 them): through forest and the deep forest, where the crowns close over the
-road and the leaves come down in autumn, flowering meadow, along a lake's shore and round a bay of the sea, over a
+road and the leaves come down in autumn, flowering meadow, along a lake's shore and along a coast road above the sea, over a
 mountain pass with snow on the firs, across the moors, past farms with a
 windmill turning, and through an enchanted grove of giant mushrooms that
 glows after dark. Which of the nine countries the road passes through is
@@ -844,7 +844,7 @@ Run `make` to list every target.
 | `make open` | Open `web/index.html` in your default browser (from `file://`, no server needed), or bring its tab forward if it's already open (macOS, Chrome and Safari). `make open PAGE='?w=harvest'` opens a particular wallpaper |
 | `make bench` | Every wallpaper at every tier on a simulated phone (4× slower CPU), then the clock overlay's cost; checks the budgets, writes `bench/results.json` and the ⚡ badges |
 | `make bench-clock` | Just the clock overlay's cost: a bouncing clock with seconds against none |
-| `make wayfarer-sight` | Wayfarer: how often a wild animal is plainly in the picture behind the traveller, by country and wildlife setting |
+| `make wayfarer-sight` | Wayfarer: how often a wild animal is plainly in the picture behind the traveller, by country and wildlife setting (`node tools/wayfarer-sight.mjs --water`: how often the sea or a lake is) |
 | `make jellyfin-media` | Generate made-up test videos (patterns, tones, subtitles in several kinds) into `.jellyfin/media/`; needs `ffmpeg` |
 | `make jellyfin-dev` | Run a throwaway Jellyfin in Docker at http://localhost:8096 on that media, set up on first start (user `wallpapers`, password `wallpapers`, a playlist) |
 | `make jellyfin-stop` | Stop and remove that container (`.jellyfin/` stays; delete it to start over) |
