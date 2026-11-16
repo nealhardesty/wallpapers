@@ -906,7 +906,7 @@ const WayLogic = (() => {
     // sits a while by a fire. z is where along the road; d is metres to its right.
     const WALK = 1.75;                // metres a second at Pace 1
     function journeyStart(w, z) {
-        return { z, d: 0, distance: 0, speed: 0, mode: 'walk', timer: 0, stride: 0, look: 0, sit: 0, sinceRest: 1e9, sinceGaze: 0, camp: null, fire: 0, moving: 1, gazed: -1 };
+        return { z, d: 0, face: 0, distance: 0, speed: 0, mode: 'walk', timer: 0, stride: 0, look: 0, sit: 0, sinceRest: 1e9, sinceGaze: 0, camp: null, fire: 0, moving: 1, gazed: -1 };
     }
     // Something worth stopping for near z: which way to look (-1 left, 1 right, 0 ahead), or null.
     function sight(w, z) {
@@ -926,6 +926,8 @@ const WayLogic = (() => {
         const r = w.at(j.z), ease = (v, to, secs) => v + (to - v) * (1 - Math.exp(-dt / secs));
         const inTown = r.near.radius && Math.abs(r.dz) < r.near.radius ? 1 : 0;
         let want = WALK * options.pace * (inTown ? 0.8 : 1), lookTo = 0, sitTo = 0, dTo = 0;
+        // Which way the traveller walks, as an angle from the road's line (j.face): by default toward the road's middle a few paces on.
+        let faceTo = Math.atan2(-j.d, 3.5), across = 0, left = 0;
         j.sinceRest += dt;
         j.sinceGaze += dt;
         if (j.mode === 'walk') {
@@ -940,23 +942,29 @@ const WayLogic = (() => {
             want = 0; lookTo = j.gaze;
             if ((j.timer -= dt) <= 0) { j.mode = 'walk'; j.sinceGaze = 0; }
         } else if (j.mode === 'toCamp') {
-            // Off the road to the fire, slowing as it arrives.
-            const c = j.camp, left = c.z - j.z;
-            dTo = c.d - c.side * 1.5;
-            want = Math.min(want, Math.max(0.35, left * 0.5 + Math.abs(dTo - j.d) * 0.4));
-            if (left < 0.25 && Math.abs(dTo - j.d) < 0.3) { j.mode = 'camp'; j.timer = options.campSeconds || 55; }
+            // Off the road to the fire: straight for the place beside it, slowing as it arrives.
+            const c = j.camp;
+            dTo = c.d - c.side * 1.5; across = dTo - j.d; left = (c.z - j.z) / r.cos;
+            const far = Math.hypot(across, left);
+            faceTo = far > 0.05 ? Math.atan2(across, left) : j.face ?? 0;
+            want = Math.min(want, Math.max(0.35, far * 0.5));
+            if (far < 0.3) { j.mode = 'camp'; j.timer = options.campSeconds || 55; }
         } else if (j.mode === 'camp') {
-            want = 0; sitTo = 1; dTo = j.camp.d - j.camp.side * 1.5; lookTo = j.camp.side;
+            // Sat down facing the fire (the body turned to it, and the head a little more).
+            want = 0; sitTo = 1; faceTo = j.camp.side * 1.2; lookTo = j.camp.side * 0.3;
             if ((j.timer -= dt) <= 0 || (options.night < 0.3 && j.timer < 40)) { j.mode = 'fromCamp'; j.sinceRest = 0; }
         } else if (j.mode === 'fromCamp' && Math.abs(j.d) < 0.5) j.mode = 'walk';
         j.fire = ease(j.fire, j.mode === 'camp' || (j.mode === 'toCamp' && j.camp.z - j.z < 5) ? 1 : 0, j.mode === 'walk' || j.mode === 'fromCamp' ? 6 : 1.2);
         if (j.mode === 'walk' && j.fire < 0.02) j.camp = null;
         j.sit = ease(j.sit, sitTo, 0.6);
         j.speed = ease(j.speed, j.sit > 0.2 ? 0 : want, want > j.speed ? 0.7 : 0.45);
-        if (j.mode === 'toCamp' && j.camp.z - j.z < 0.25) j.speed = Math.min(j.speed, 0.2 * Math.abs(dTo - j.d));
-        const step = j.speed * dt;
-        j.z += step * r.cos * (j.mode === 'toCamp' && j.camp.z - j.z < 0.25 ? 0 : 1);
-        j.d = j.mode === 'toCamp' || j.mode === 'camp' ? j.d + clamp(dTo - j.d, -1, 1) * Math.min(1, dt * 1.1 * Math.max(j.speed, 0.5)) : ease(j.d, 0, 1.4);
+        // They walk the way they face, and turn to face the way they mean to go: off the road to a fire and back onto it
+        // is a walk on a curve, not a walk down the road with a slide across it. (Turned far from the way to go, they
+        // turn before they stride.)
+        j.face = turnTo(j.face ?? 0, faceTo, dt * 4, dt * 2.6);
+        const err = Math.abs(turnTo(0, faceTo - j.face, 1)), step = j.speed * Math.max(0.12, Math.cos(Math.min(err, Math.PI / 2))) * dt;
+        j.z += step * Math.cos(j.face) * r.cos;
+        j.d += step * Math.sin(j.face);
         j.distance += step;
         j.stride += step / 1.52;                               // a pair of steps every 1.52 m
         j.look = ease(j.look, lookTo, 0.8);
@@ -966,7 +974,9 @@ const WayLogic = (() => {
     // Where the traveller stands: world x, y, z and the way they face.
     function standing(j, w) {
         const [x] = w.place(j.z, j.d), y = w.surface(x, j.z);
-        return { x, y, z: j.z, heading: w.heading(j.z) + j.look * 1.2 };
+        // (heading: the way they face; travel: the way they walk, which is the same but for a look aside.)
+        const travel = w.heading(j.z) + (j.face ?? 0);
+        return { x, y, z: j.z, heading: travel + j.look * 1.2, travel };
     }
 
     // ---- Companions --------------------------------------------------------------------------
@@ -1189,23 +1199,32 @@ const WayLogic = (() => {
             // that finds itself a little ahead of its place slows down, where it used to turn round and come back (the
             // pack animals, whose place is ahead of the traveller, did it every time the traveller slowed).
             // (Only a place in the company moves so: not a place by the fire, nor where it stopped to sniff or wait, nor the way home.)
-            const keeps = !camping && !c.leaving && !c.petted && !(c.mode === 'sniff' || c.mode === 'wait'), fx = keeps ? Math.sin(me.heading) * j.speed : 0, fz = keeps ? Math.cos(me.heading) * j.speed : 0;
+            const keeps = !camping && !c.leaving && !c.petted && !(c.mode === 'sniff' || c.mode === 'wait'), fx = keeps ? Math.sin(me.travel) * j.speed : 0, fz = keeps ? Math.cos(me.travel) * j.speed : 0;
             const settle = (stopped || camping) && gap < 0.45, close = Math.min(gap * 1.6 * haste, kind.top);
-            let vx = settle ? 0 : fx + (gap > 1e-4 ? dx / gap * close : 0), vz = settle ? 0 : fz + (gap > 1e-4 ? dz / gap * close : 0), want = Math.hypot(vx, vz);
+            let vx = settle ? 0 : fx + (gap > 1e-4 ? dx / gap * close : 0), vz = settle ? 0 : fz + (gap > 1e-4 ? dz / gap * close : 0);
+            // Nobody walks through anybody: later ones go round earlier ones, and everyone round the traveller. Going
+            // round is part of where it means to go (so it is walked, facing it); only what is left is a nudge.
+            const rooms = [[me.x, me.z, c.petted ? 0.3 : 0.42 + kind.big * 0.6]];
+            if (ctx.avoid) rooms.push([ctx.avoid.x, ctx.avoid.z, ctx.avoid.room + kind.big]);           // nobody stands in front of a low camera
+            for (const o of others) { if (o === c) break; if (o.x !== null && o.alt < 0.8 && o.riding < 0.5) rooms.push([o.x, o.z, (kind.big + o.kind.big) * 0.62 + 0.12]); }
+            if (!settle) for (const [ox, oz, room] of rooms) { const ax = c.x - ox, az = c.z - oz, a = Math.hypot(ax, az), wide = room * 1.6; if (a < wide && a > 1e-4) { const k = (wide - a) / wide * 3.2 / a; vx += ax * k; vz += az * k; } }
+            let want = Math.hypot(vx, vz);
             if (want > kind.top) { vx *= kind.top / want; vz *= kind.top / want; want = kind.top; }
             c.speed += (want - c.speed) * Math.min(1, dt * 4);
             const most = turnRate(kind) * dt, ahead0 = w.heading(c.z), x0 = c.x, z0 = c.z;
-            if (want > 0.05 && c.speed > 0.05) { const step = Math.min(c.speed * dt, gap + Math.hypot(fx, fz) * dt); c.x += vx / want * step; c.z += vz / want * step; }
-            // Nobody walks through anybody: later ones step round earlier ones, and everyone round the traveller.
-            const apart = (ox, oz, room) => { const ax = c.x - ox, az = c.z - oz, a = Math.hypot(ax, az); if (a < room && a > 1e-4) { const push = Math.min(room - a, dt * 3) / a; c.x += ax * push; c.z += az * push; } };
-            apart(me.x, me.z, c.petted ? 0.3 : 0.42 + kind.big * 0.6);
-            if (ctx.avoid) apart(ctx.avoid.x, ctx.avoid.z, ctx.avoid.room + kind.big);           // nobody stands in front of a low camera
-            for (const o of others) { if (o === c) break; if (o.x !== null && o.alt < 0.8 && o.riding < 0.5) apart(o.x, o.z, (kind.big + o.kind.big) * 0.62 + 0.12); }
-            // It faces the way it has actually gone (its own steps and whoever it stepped round), no faster than its size
-            // lets it turn. A step or two back or aside is taken as it stands, facing down the road; and so it stands when the walk stops.
-            const gone = dt > 1e-4 ? Math.hypot(c.x - x0, c.z - z0) / dt : 0, to = Math.atan2(c.x - x0, c.z - z0), off = Math.abs(turnTo(0, to - c.yaw, 1));
-            if (gone > 0.35 && !(off > 1.6 && gone < 1.8 && gap < 1.6)) c.yaw = turnTo(c.yaw, to, dt * 6, most);
-            else c.yaw = turnTo(c.yaw, spot && rest > 0.5 ? spot.face : c.mode === 'go' && !camping ? ahead0 : c.yaw, dt * 3, most);
+            // Going somewhere, it walks the way it faces and turns to face the way it means to go (turned far from it, it
+            // turns before it strides): to a place by the fire and back to the road on a curve, never sideways. Only a
+            // small shuffle (a slow step back or aside to keep its place) is taken as it stands.
+            const to = Math.atan2(vx, vz), going = want > 0.5 && c.speed > 0.05 && !(gap < 1.6 && want < 1.8 && Math.abs(turnTo(0, to - c.yaw, 1)) > 1.6);
+            if (going) {
+                c.yaw = turnTo(c.yaw, to, dt * 6, most);
+                const err = Math.abs(turnTo(0, to - c.yaw, 1)), step = Math.min(c.speed * Math.max(0.1, Math.cos(Math.min(err, Math.PI / 2))) * dt, gap + Math.hypot(fx, fz) * dt);
+                c.x += Math.sin(c.yaw) * step; c.z += Math.cos(c.yaw) * step;
+            } else if (want > 0.05 && c.speed > 0.05) { const step = Math.min(c.speed * dt, gap + Math.hypot(fx, fz) * dt); c.x += vx / want * step; c.z += vz / want * step; }
+            for (const [ox, oz, room] of rooms) { const ax = c.x - ox, az = c.z - oz, a = Math.hypot(ax, az); if (a < room && a > 1e-4) { const push = Math.min(room - a, dt * 1.6) / a; c.x += ax * push; c.z += az * push; } }
+            // Standing or shuffling, it faces the fire if it has a place by one, and down the road otherwise.
+            const gone = dt > 1e-4 ? Math.hypot(c.x - x0, c.z - z0) / dt : 0;
+            if (!going) c.yaw = turnTo(c.yaw, spot && (rest > 0.5 || gap < 0.6) ? spot.face : c.mode === 'go' && !camping ? ahead0 : c.yaw, dt * 3, most);
             c.gait += Math.min(gone, kind.top) * dt;
             c.alt = ease(c.alt, 0, 0.3); c.wing = ease(c.wing, 0, 0.3);
             if (c.speed > 0.3) rest = 0;

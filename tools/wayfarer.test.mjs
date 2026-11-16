@@ -983,8 +983,48 @@ test('nobody spins: every companion turns no faster than its size allows, walks 
             });
         }
         party.forEach((c, k) => {
-            if (c.kind.big > 0.55 && ['heel', 'led', 'plod'].includes(c.role)) assert.ok(away[k] < 1.3 && turned[k] < 30, `${c.id} (${c.role}) faced ${away[k].toFixed(2)} rad off the road and turned ${turned[k].toFixed(0)} rad in 150 s at ${fps} fps`);
+            if (c.kind.big > 0.55 && ['heel', 'led', 'plod'].includes(c.role)) assert.ok(away[k] < 2.0 && turned[k] < 30, `${c.id} (${c.role}) faced ${away[k].toFixed(2)} rad off the road and turned ${turned[k].toFixed(0)} rad in 150 s at ${fps} fps`);
             assert.ok(Math.hypot(c.x - L.standing(j, w).x, c.z - L.standing(j, w).z) < 12, `${c.id} was left behind`);
         });
+    }
+});
+
+test('to a campfire and back to the road, everybody walks the way they face: nobody slides across, at 10, 30 and 120 fps', () => {
+    const wrap = a => { a %= 2 * Math.PI; if (a > Math.PI) a -= 2 * Math.PI; if (a < -Math.PI) a += 2 * Math.PI; return a; };
+    for (const fps of [10, 30, 120]) for (const seed of [7, 23]) {
+        const w = L.world(seed), j = L.journeyStart(w, 360 * 300 + 60), party = L.partyStart(['pony', 'dog', 'donkey', 'lamb', 'cat', 'tortoise']), dt = 1 / fps;
+        const who = [{ id: 'traveller' }, ...party].map(c => ({ id: c.id, slide: 0, walked: 0, worst: 0, last: null }));
+        let t = 0, camps = 0, was = 'walk', rnd = 1, sat = 0, faced = 9;
+        const random = () => (rnd = (rnd * 16807) % 2147483647) / 2147483647;
+        for (let i = 0; i < 900 * fps && camps < 2; i++) {
+            t += dt;
+            L.journeyStep(j, dt, w, { pace: 1, night: 1, camps: true, rests: false, campSeconds: 14 });
+            const me = L.standing(j, w);
+            for (const c of party) L.companionStep(c, dt, w, j, { t, night: 1, passing: false, others: party, scare: null, random, avoid: null, pet: null });
+            if (j.mode !== was) { if (j.mode === 'walk' && was === 'fromCamp') camps++; was = j.mode; }
+            if (j.mode === 'camp' && j.sit > 0.9) {
+                // Sat by the fire, turned to it; and the company round it, each facing it.
+                sat++;
+                faced = Math.min(faced, Math.cos(wrap(Math.atan2(j.camp.x - me.x, j.camp.z - me.z) - me.heading)));
+                if (j.timer < 4) for (const c of party) assert.ok(c.kind.big > 0.9 || Math.cos(wrap(Math.atan2(j.camp.x - c.x, j.camp.z - c.z) - c.yaw)) > 0.5, `${c.id} has its back to the fire`);
+            }
+            if (j.mode === 'walk') { for (const s of who) s.last = null; continue; }
+            [{ x: me.x, z: me.z, yaw: me.heading }, ...party].forEach((c, k) => {
+                const s = who[k];
+                if (s.last) {
+                    const dx = c.x - s.last[0], dz = c.z - s.last[1], v = Math.hypot(dx, dz) / dt;
+                    // Faster than a shuffle: how far it went across the way it faces.
+                    if (v > 0.6) { const off = Math.abs(wrap(Math.atan2(dx, dz) - c.yaw)); s.slide += Math.abs(Math.sin(off)) * v * dt; s.walked += v * dt; if (v > 1.2) s.worst = Math.max(s.worst, off); }
+                }
+                s.last = [c.x, c.z];
+            });
+        }
+        assert.equal(camps, 2, `two nights by a fire at ${fps} fps`);
+        assert.ok(sat > fps * 5 && faced > 0.7, `sat ${sat} frames, facing the fire to within ${Math.acos(Math.min(1, faced)).toFixed(2)} rad`);
+        for (const s of who) {
+            assert.ok(s.walked > 15, `${s.id} walked ${s.walked.toFixed(0)} m about the camps`);
+            assert.ok(s.slide < (s.id === 'traveller' ? 1.6 : 0.6 + 0.08 * s.walked), `${s.id} slid ${s.slide.toFixed(1)} m of ${s.walked.toFixed(0)} at ${fps} fps, seed ${seed}`);
+        }
+        assert.ok(who[0].worst < 0.4, `the traveller walked ${who[0].worst.toFixed(2)} rad off the way they faced`);
     }
 });

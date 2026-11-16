@@ -5216,6 +5216,28 @@ creature, marking or design is taken from one.
     small; fliers 6). A unit test walks every ground companion through
     slowing, stopping and a cart going by at 10, 30 and 120 fps; it
     fails on the old mover.
+- **A fifth pass (2026-11-16): "approaching a campfire, it's like they are sliding sideways".**
+  The traveller was the worst of it: their place is a distance along the
+  road and a distance to its right, and on the way to a fire the second
+  was eased across while they went on facing down the road (and for the
+  last of it only the second moved: a pure slide); the same on the way
+  back. Of 35 m walked about a camp, 20 m was sideways. The company slid
+  less, for two reasons: since the fourth pass they moved toward their
+  place whichever way they faced, with the turn limited, and anyone in
+  another's way was pushed aside at up to 3 m/s. Now the traveller has a
+  way they walk (`j.face`, an angle from the road's line, turned at no
+  more than 2.6 rad/s) and walks along it: to the place by the fire in a
+  straight line from where they left the road, sat turned to the fire,
+  and back onto the road on a curve; `standing()` gives `travel` as well
+  as `heading`. A companion going anywhere walks the way it faces and
+  turns toward where it means to go, slowing while it is turned away;
+  going round somebody is part of where it means to go, and only a small
+  nudge is left of the push; a slow step back or aside to keep its place
+  is still taken as it stands. Nothing else pulls anybody off the road's
+  line: at a view and before a gate the traveller stops on the road and
+  turns their head. A unit test walks to two fires and back at 10, 30
+  and 120 fps and measures how far each went across the way it faced
+  (the old code: 21 m for the traveller).
 - **Settings added:** `orbitMode`, `orbitAzimuth`, `orbitElevation`,
   `orbitDistance`, `companions`, `companionPick`, `companionChoice`,
   `warpaint`, `craft`, `biomePick`, `biomeChoice`. `companion` (the one
@@ -5226,7 +5248,7 @@ creature, marking or design is taken from one.
   fallback draws every traveller as the same cut-out in their own colours,
   and none of the company.
 
-**Tests.** Unit (`tools/wayfarer.test.mjs`, 28; the fourth pass added the boughs over the deep forest's road, the bow's string, the company changing on the road and nobody spinning (29 now); the third pass added the country chosen and honoured, autumn in the woods, and the border that does not change its mind; the six before that: the orbit in clear air at 48 bearings and heights for an hour, its drag, fixed and turning at 10 and 120 fps; every companion posed, the count, the named cats against the roster, the seed; the company on the road, by the fire and at any frame rate; every traveller, the druid's changes and the rogue's hiding; grand cities; fine models and budgets). Smoke adds: the orbit's drag, wheel, overhead, grass and a village at four bearings; six companions, none, the barbarian's brand, the druid there and back, the rogue unseen and back; a grand city before its gate, in its square at five bearings, on its drawbridge and from down the road at night. The original sixteen: the road never jumps or
+**Tests.** Unit (`tools/wayfarer.test.mjs`, 28; the fourth pass added the boughs over the deep forest's road, the bow's string, the company changing on the road and nobody spinning; the fifth, the walk to a fire and back (30 now); the third pass added the country chosen and honoured, autumn in the woods, and the border that does not change its mind; the six before that: the orbit in clear air at 48 bearings and heights for an hour, its drag, fixed and turning at 10 and 120 fps; every companion posed, the count, the named cats against the roster, the seed; the company on the road, by the fire and at any frame rate; every traveller, the druid's changes and the rogue's hiding; grand cities; fine models and budgets). Smoke adds: the orbit's drag, wheel, overhead, grass and a village at four bearings; six companions, none, the barbarian's brand, the druid there and back, the rogue unseen and back; a grand city before its gate, in its square at five bearings, on its drawbridge and from down the road at night. The original sixteen: the road never jumps or
 doubles back, is level across and no steeper than a third along; the
 ground is continuous and the road is never awash; every round has all
 the countries (nine now), never two stretches the same running, and every kind of place
