@@ -100,6 +100,7 @@ const WayCompanions = (() => {
     Object.assign(KINDS, {
         grizzly: { ...KINDS.bear, druid: 0 },
         stag: { ...KINDS.deer, size: 1.22, horns: 0, rack: 0.62, coat: [150, 104, 70], under: [226, 214, 196] },
+        moonstag: { ...KINDS.deer, size: 1.22, horns: 0, rack: 0.62, coat: [240, 242, 250], under: [250, 250, 252], mark: null },
         boar: { ...KINDS.pig, coat: [84, 66, 56], under: [70, 56, 48], shag: true, mark: p => p === 'paw' ? [40, 34, 32] : null, nose: [70, 56, 56], size: 1.05 },
         piglet: { ...KINDS.pig, size: 0.4, coat: [176, 136, 96], mark: (p, x, y, z) => p === 'body' && Math.sin(x * 60) > 0.3 && y > 0 ? [110, 80, 60] : null, nose: [150, 110, 100] },
         brownhare: { ...KINDS.hare, coat: [170, 138, 100], under: [236, 226, 208], mark: (p, x, y, z) => p === 'ear' && y > 0.2 ? [40, 34, 34] : null, size: 1.15 },
@@ -620,9 +621,32 @@ const WayCompanions = (() => {
         s.tri([0, 0, -0.06], [0, 0, 0.05], [span, 0.01, kind === 'bat' ? -0.02 : -0.07], [0, -1, 0]).tri([span, 0.01, kind === 'bat' ? -0.02 : -0.07], [0, 0, 0.05], [span * 0.55, 0, 0.03], [0, -1, 0]);
     });
     const flyerBody = kind => part('flyer:body:' + kind, s => { s.paint(kind === 'bat' ? [56, 46, 52] : [236, 232, 224], 0).fx(0).blob(0, 0, 0, 0.022, 0.02, 0.06, { segs: 5, bands: 3, lump: 0 }); if (kind === 'swallow') s.paint([40, 52, 86], 0).tri([0, 0.004, -0.05], [0.03, 0, -0.14], [0, 0, -0.08], [0, 1, 0]).tri([0, 0.004, -0.05], [0, 0, -0.08], [-0.03, 0, -0.14], [0, 1, 0]); });
+    // A seal hauled out: a long grey body tapering to its hind flippers, a small head held up, fore flippers on the rock.
+    const seal = () => part('seal', s => {
+        const coat = shiny([112, 118, 130], 0.35);
+        s.paint(coat, 0).fx(0).tube([[0, 0.1, -0.92, 0.04, 1.6], [0, 0.17, -0.6, 0.15, 1.25], [0, 0.26, -0.1, 0.27, 1.1], [0, 0.31, 0.32, 0.24, 1.05], [0, 0.42, 0.62, 0.15, 1], [0, 0.5, 0.76, 0.1, 1]], 8, { k: (i, k) => (k > 2 && k < 6 ? 0.92 : 1) });
+        s.blob(0, 0.56, 0.84, 0.115, 0.105, 0.14, { segs: 7, bands: 4, lump: 0 });
+        s.paint([84, 88, 98], 0).blob(0, 0.53, 0.97, 0.06, 0.05, 0.06, { segs: 5, bands: 3, lump: 0 });
+        s.paint([24, 22, 26], 0).blob(0, 0.55, 1.025, 0.018, 0.015, 0.012, { segs: 4, bands: 2, lump: 0 });
+        for (const x of [-1, 1]) {
+            s.paint([24, 22, 26], 0).blob(x * 0.07, 0.6, 0.9, 0.016, 0.018, 0.012, { segs: 4, bands: 2, lump: 0 });
+            s.paint([92, 96, 108], 0).tri([x * 0.2, 0.2, 0.3], [x * 0.52, 0.02, 0.36], [x * 0.3, 0.04, 0.08], [x * 0.3, 0.9, 0]).tri([x * 0.2, 0.2, 0.3], [x * 0.3, 0.04, 0.08], [x * 0.52, 0.02, 0.36], [x * 0.3, -0.9, 0]);
+            s.tri([0, 0.1, -0.9], [x * 0.2, 0.04, -1.18], [x * 0.02, 0.05, -1.12], [0, 1, 0]).tri([0, 0.1, -0.9], [x * 0.02, 0.05, -1.12], [x * 0.2, 0.04, -1.18], [0, -1, 0]);
+        }
+        for (let i = 0; i < 5; i++) s.paint([84, 88, 100], 0).blob(0.1 * Math.sin(i * 2.3), 0.44 - 0.03 * i, -0.2 + 0.12 * i * Math.cos(i), 0.045, 0.02, 0.05, { segs: 4, bands: 2, lump: 0 });
+    });
+    // A crab: a flat shell, eight legs and two claws held up.
+    const crab = () => part('crab', s => {
+        s.paint([206, 92, 60], 0).fx(0).blob(0, 0.05, 0, 0.085, 0.035, 0.06, { segs: 6, bands: 3, lump: 0 });
+        for (const x of [-1, 1]) {
+            for (let i = 0; i < 4; i++) { const z = -0.045 + i * 0.03; s.paint([186, 76, 50], 0).tri([x * 0.07, 0.05, z], [x * 0.15, 0.07, z + 0.005], [x * 0.19, 0, z + 0.01], [0, 0.9, 0.3]).tri([x * 0.07, 0.05, z], [x * 0.19, 0, z + 0.01], [x * 0.15, 0.07, z + 0.005], [0, -0.9, -0.3]); }
+            s.paint([226, 110, 70], 0).blob(x * 0.1, 0.085, 0.07, 0.03, 0.022, 0.035, { segs: 5, bands: 2, lump: 0 });
+            s.paint([24, 22, 26], 0).blob(x * 0.03, 0.095, 0.05, 0.008, 0.012, 0.008, { segs: 4, bands: 2, lump: 0 });
+        }
+    });
     const fish = () => part('fish', s => {
         s.paint(shiny([150, 170, 180], 0.5), 0).fx(0).tube([[0, 0, 0.2, 0.01, 1], [0, 0, 0.12, 0.05, 1.6], [0, 0, -0.02, 0.06, 1.7], [0, 0, -0.16, 0.022, 1.5]], 5);
         for (const up of [1, -1]) s.paint([110, 130, 150], 0).tri([0, 0, -0.14], [0, 0.09, -0.27], [0, -0.09, -0.27], [up, 0, 0]);
     });
-    return { KINDS, BIRDS, GAITS, pose, quad, bird, known, butterfly, leaf, flyer, flyerBody, fish };
+    return { KINDS, BIRDS, GAITS, pose, quad, bird, known, butterfly, leaf, flyer, flyerBody, fish, seal, crab };
 })();

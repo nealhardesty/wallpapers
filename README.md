@@ -844,6 +844,7 @@ Run `make` to list every target.
 | `make open` | Open `web/index.html` in your default browser (from `file://`, no server needed), or bring its tab forward if it's already open (macOS, Chrome and Safari). `make open PAGE='?w=harvest'` opens a particular wallpaper |
 | `make bench` | Every wallpaper at every tier on a simulated phone (4× slower CPU), then the clock overlay's cost; checks the budgets, writes `bench/results.json` and the ⚡ badges |
 | `make bench-clock` | Just the clock overlay's cost: a bouncing clock with seconds against none |
+| `make wayfarer-sight` | Wayfarer: how often a wild animal is plainly in the picture behind the traveller, by country and wildlife setting |
 | `make jellyfin-media` | Generate made-up test videos (patterns, tones, subtitles in several kinds) into `.jellyfin/media/`; needs `ffmpeg` |
 | `make jellyfin-dev` | Run a throwaway Jellyfin in Docker at http://localhost:8096 on that media, set up on first start (user `wallpapers`, password `wallpapers`, a playlist) |
 | `make jellyfin-stop` | Stop and remove that container (`.jellyfin/` stays; delete it to start over) |

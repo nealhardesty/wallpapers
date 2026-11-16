@@ -334,6 +334,8 @@ const WayModels = (() => {
 
     const small = (kind, variant) => model(`${kind}:${variant}`, s => {
         const r = k => rnd(variant + 2, k);
+        // (A toadstool by the path: the giant mushroom's shape in a dozen triangles, at the giant's size, for there are thousands.)
+        if (kind === 'toadstool') { s.paint([240, 232, 214], 2).fx(0).prism(4, 0, -0.3, 0, 0.5, 3.6, 0.34, { foot: 0.7 }); s.paint(C.white, 1).fx(14).blob(0, 3.7, 0, 2.5, 1.15, 2.5, { seed: variant, lump: 0.05, segs: 6, bands: 2, under: 0.5 }); for (let i = 0; i < 3; i++) { const a = i * 2.1 + r(9); s.paint(C.white, 3).fx(14).blob(Math.sin(a) * 1.3, 4.46, Math.cos(a) * 1.3, 0.3, 0.1, 0.3, { segs: 4, bands: 2, lump: 0 }); } return; }
         if (kind === 'bush') { s.paint(C.white, 1).fx(40).blob(0, 0.55, 0, 1.0, 0.75, 0.9, { seed: variant }); s.blob(0.6, 0.4, 0.3, 0.6, 0.5, 0.6, { seed: variant + 0.5 }); }
         else if (kind === 'rock') { s.paint(C.rock, 0).fx(0).blob(0, 0.25, 0, 0.8, 0.55, 0.65, { seed: variant, lump: 0.3, segs: 5, under: 0.5 }); if (r(1) < 0.5) s.blob(0.6, 0.12, 0.3, 0.4, 0.3, 0.4, { seed: variant + 0.4, lump: 0.3, segs: 5 }); }
         else if (kind === 'heather') { s.paint(C.white, 3).fx(30).blob(0, 0.14, 0, 0.5, 0.26, 0.42, { seed: variant, lump: 0.3 }); s.paint(C.white, 1).blob(0.3, 0.08, 0.2, 0.3, 0.16, 0.3, { seed: variant + 0.3, lump: 0.3, segs: 5 }); }
@@ -898,14 +900,16 @@ const WayModels = (() => {
             if (++done % 3 === 0) yield;
             const lx = item.x - x0, lz = item.z - z0, season = w.season(item.z), v = item.v || 0, phase = Math.floor(v * 255);
             if (item.k === 'tree') {
-                if (density < 1 && rnd(v, 11) > density + (item.b === 'deepwood' ? -0.05 : 0.15)) continue;     // (the deep forest has trees to spare)
+                if (density < 1 && rnd(v, 11) > density + (item.b === 'deepwood' ? -0.05 : item.b === 'grove' ? 0 : 0.15)) continue;     // (the deep forest and the grove have trees to spare)
                 const cone = item.kind === 'fir', sc = item.s * (item.kind === 'shroom' ? 1.3 : 1.25);
                 TINT[1] = leafTint(item.kind, season, v);
                 TINT[2] = null;
                 TINT[3] = (BLOOM[item.kind] || BLOOM.apple)[season.t > 0.5 ? season.next : season.index];
                 const bare = item.kind === 'snag' || (season.snow > 0.5 && !cone && item.kind !== 'pine' && item.kind !== 'shroom' && item.kind !== 'glade');
                 if (far && bare) continue;          // a bare tree is nothing at a distance
-                const close = !far && detail > 0 && item.b !== 'deepwood' && Math.abs(w.lateral(item.x, item.z)) < band;        // (the deep forest's fine work is its boughs)
+                const woods = item.b === 'deepwood' || item.b === 'forest' || item.b === 'grove';
+                // (Where the trees stand thick, the fine ones are only those right by the road; the deep forest's fine work is its boughs.)
+                const close = !far && detail > 0 && item.b !== 'deepwood' && item.b !== 'grove' && Math.abs(w.lateral(item.x, item.z)) < (woods ? band * 0.5 : band);
                 const m = far ? farTree(cone || item.kind === 'poplar') : (close ? WayDetail.tree : tree)(bare ? 'snag' : item.kind, Math.floor(v * 3));
                 props.stamp(m, place(lx, item.y - 0.1, lz, item.yaw, far ? sc * 1.3 : sc, far ? sc * 1.2 : sc * (0.9 + 0.3 * rnd(v, 5))), TINT, Math.max(season.snow, w.cold(item.z)) * 0.6, phase);
                 if (!far) { darken(item.x, item.z, 3.4 * sc, 0.34); if (item.kind === 'glade' || item.kind === 'shroom') lights.push([item.x, item.y + 3.5 * sc, item.z, 5, 0.3, 0.9, 0.8, 1]); }
@@ -970,17 +974,18 @@ const WayModels = (() => {
             // Leaves on the ground are autumn's: there only while it lasts.
             if (item.k === 'litter' && (season.index === 2 ? 1 - season.t : season.next === 2 ? season.t : 0) < 0.25) continue;
             if (item.k === 'bush' || item.k === 'tuft' || item.k === 'fern' || item.k === 'flower' || item.k === 'heather' || item.k === 'reed' || item.k === 'litter') {
+                if (item.b === 'grove' && item.k !== 'bush' && rnd(v, 15) < 0.35) continue;          // (the grove's floor is thick with them: a third fewer costs nothing to the eye)
                 if ((density < 1 && rnd(v, 12) > density) || (season.snow > 0.5 && item.k !== 'bush' && item.k !== 'reed' && rnd(v, 14) < 0.6)) continue;
                 const g = GRASS[item.b || 'meadow'], gc = lerp3(g[season.index], g[season.next], season.t);
                 TINT[1] = item.k === 'bush' ? leafTint('oak', season, v) : item.k === 'reed' ? [150, 170, 90] : season.snow > 0.5 ? [176, 160, 112] : [gc[0] * 0.92, gc[1] * 0.98, gc[2] * 0.9];
                 TINT[3] = item.k === 'litter' ? LEAF.oak[2][Math.floor(v * 2.999)] : item.k === 'heather' ? [150 + 30 * v, 92, 150] : BRIGHT[Math.floor(v * 5.99)];
-                model3 = detail > 0 && (item.k === 'bush' ? Math.abs(w.lateral(item.x, item.z)) < (item.b === 'deepwood' ? band * 0.42 : band) : (item.k === 'tuft' || item.k === 'flower') && Math.abs(w.lateral(item.x, item.z)) < band / 2) ? WayDetail.small(item.k, Math.floor(v * 3)) : small(item.k, Math.floor(v * 3));
+                model3 = detail > 0 && (item.k === 'bush' ? Math.abs(w.lateral(item.x, item.z)) < (item.b === 'deepwood' ? band * 0.3 : item.b === 'forest' || item.b === 'grove' ? band * 0.5 : band) : (item.k === 'tuft' || item.k === 'flower') && Math.abs(w.lateral(item.x, item.z)) < band / 2) ? WayDetail.small(item.k, Math.floor(v * 3)) : small(item.k, Math.floor(v * 3));
                 m = place(lx, item.y, lz, item.yaw, item.s * (item.k === 'reed' ? 1.5 : 1.05));
             } else if (item.k === 'rock') { model3 = detail > 0 ? WayDetail.rock(Math.floor(v * 3)) : small('rock', Math.floor(v * 3)); m = place(lx, item.y, lz, item.yaw, item.s * 1.2); }
             else if (item.k === 'lily') { model3 = small('lily', Math.floor(v * 3)); m = place(lx, item.y, lz, v * 6, 0.7 + 0.5 * v); }
             else if (item.k === 'shroom') {
                 TINT[1] = leafTint('shroom', season, v); TINT[3] = BLOOM.shroom[0];
-                model3 = tree('shroom', Math.floor(v * 3)); m = place(lx, item.y, lz, v * 6, (item.s || 1) * (item.tree ? 1 : 0.11));
+                model3 = item.tree ? tree('shroom', Math.floor(v * 3)) : small('toadstool', Math.floor(v * 3)); m = place(lx, item.y, lz, v * 6, (item.s || 1) * (item.tree ? 1 : 0.11));
                 lit = item.glow ? 1 : 0;
                 if (item.glow && (item.tree || rnd(v, 13) < 0.3)) lights.push([item.x, item.y + (item.tree ? 16 : 0.5), item.z, item.tree ? 9 : 1.6, 0.4, 0.9, 0.75, 1]);
             } else if (item.k === 'lamp') {

@@ -5239,7 +5239,7 @@ creature, marking or design is taken from one.
   and 120 fps and measures how far each went across the way it faced
   (the old code: 21 m for the traveller).
 - **Also in the fifth pass: wildlife** ("more background creatures, and more often, maybe controllable: bears, elk, squirrels").
-  - *Who.* 27 kinds (`WayLogic.WILD`), each country its own
+  - *Who.* 27 kinds at first, 31 after the sixth pass (`WayLogic.WILD`), each country its own
     (`WILDLIFE`): forest and deep forest have the bear, stags, squirrels
     (up trunks, and in the deep forest out along the boughs over the
     road), a boar with piglets, fox cubs, badgers, hedgehogs, a woodpecker
@@ -5255,8 +5255,8 @@ creature, marking or design is taken from one.
   - *Where.* `world.wildlife(cz)` gives up to six parties to each 64 m of
     road, within about forty metres of it (where they are seen), the same
     whenever it is asked; each has a `roll`, and the setting lets out those
-    under its share (`WILD_LEVELS`: none 0, few 0.25, some 0.6, plenty
-    0.96), so turning it up adds animals and moves none. Every kind keeps
+    under its share (`WILD_LEVELS`: none 0, few 0.15, some 0.6, plenty
+    0.96; six places to a stretch at first, eight with the sixth pass), so turning it up adds animals and moves none. Every kind keeps
     a distance from the road's middle (`keep`: 6 m at the least, 20 m for
     the bear), in where it starts, where it wanders and where it runs to;
     none are placed in a town, at a landmark or a camp. The manager holds
@@ -5282,6 +5282,70 @@ creature, marking or design is taken from one.
   - *Cost.* Worst case measured (plenty, twelve companions, the deep
     forest in autumn, a far orbit): High 463k (455k without wildlife),
     Medium 227k (227k), Low 89k (89k).
+- **A sixth pass (2026-11-16): the wildlife was there and was not seen.**
+  - *Measured.* `make wayfarer-sight` (`tools/wayfarer-sight.mjs`,
+    `WayLogic.wildSeen`) walks each country behind the follow camera and,
+    every four seconds, counts the wild animals in the picture: on the
+    screen, 12 px tall or more at 1080p, with nothing between (the ground,
+    a trunk, a wall). As the fifth pass left it, at `some`: 12% of samples
+    over all countries (1% in the forest, 30% on the moor). They were too
+    few, too far from the road, behind the trees, and mostly out to the
+    side of what the camera sees.
+  - *Changed.* Every 64 m of road now has two places for a party of the
+    country's big animals (`WILD_SHOW`: stags in herds of three to six,
+    wild ponies, ibex, a heron, a bear now and then, a white stag in the
+    grove), on the verge 7 to 12 m from the road, one each side, somewhere
+    with a clear line from the road forty metres back; they keep to that
+    strip and hold their ground until the traveller is within nine metres
+    or so. Small and bold kinds are placed 6 to 14 m off. More than half
+    the parties with dry ground opposite cross the road, once, when the
+    traveller is 40 to 62 m short of them, at a walk (and at a run if the
+    traveller is within 32 m while they are on it; a unit test holds them
+    14 m clear). Swallows by day and bats by night are about the roofs in
+    a town. Butterflies and swallows are drawn half as big again. Nobody
+    appears at full size at the edge of sight: they grow over the last of
+    the distance. New: the bear fishing at a lake's edge and scratching
+    its back on a tree, crabs on the shore, a seal with a seal's body, the
+    white stag.
+  - *Now* (3 km, three seeds, day; night is the same within two points).
+    Share of samples with an animal plainly in the picture, whole walk
+    and (on the open road, away from towns, which are 21 to 39% of a
+    walk and have people, cats and hens but no wild animals):
+
+    | country | few | some | plenty | mean at some |
+    |---|---|---|---|---|
+    | meadow | 34% (51%) | 55% (76%) | 61% (79%) | 3.1 |
+    | forest | 24% (33%) | 51% (64%) | 62% (75%) | 1.9 |
+    | deep forest | 16% (20%) | 40% (45%) | 51% (55%) | 1.0 |
+    | lake | 28% (33%) | 52% (59%) | 63% (70%) | 2.1 |
+    | pass | 29% (32%) | 60% (64%) | 72% (77%) | 1.8 |
+    | farm | 31% (47%) | 56% (77%) | 64% (83%) | 4.0 |
+    | moor | 50% (71%) | 70% (89%) | 78% (93%) | 6.3 |
+    | coast | 28% (35%) | 45% (52%) | 61% (67%) | 1.6 |
+    | grove | 45% (63%) | 65% (83%) | 75% (89%) | 3.2 |
+    | all | 25% (33%) | 49% (61%) | 59% (71%) | 2.2 |
+
+    The aim was 70% at `some` and 90% at `plenty` over the whole walk; it
+    is met on the open road in open country and not in the woods (the
+    deep forest's own boughs stand in a row between the road and anything
+    behind them) nor on the coast (the shore is far from the road), and
+    not anywhere once the towns are counted. A unit test holds the
+    open-road figures a good way under these.
+  - *Budget.* A road through one country had never been measured: the
+    forest alone was 486k triangles on High and the grove 581k, with or
+    without wildlife. The causes were fine trees in a wide band where the
+    trees stand thick, and in the grove every little mushroom drawn as
+    the giant one (some 200 triangles each, a couple of dozen to a
+    square). Now: half the band in the forest, none in the grove (nor the
+    deep forest); a toadstool of its own; a third fewer of the grove's
+    flowers and ferns; the grove's trees thinned on Medium and Low as the
+    deep forest's are. With three companions and `some`, every
+    single-country road and the mixed one is inside target on every tier
+    (the worst: deep forest 445k on High, grove 202k on Medium after the
+    thinning, grove 82k on Low). With `plenty` and twelve companions the
+    worst is 458k on High (2% over), 214k on Medium, 95k on Low; with
+    more than six companions, those from the fourth on are the lite
+    models.
 - **Settings added:** `orbitMode`, `orbitAzimuth`, `orbitElevation`,
   `orbitDistance`, `companions`, `companionPick`, `companionChoice`,
   `warpaint`, `craft`, `biomePick`, `biomeChoice`, `wildlife`. `companion` (the one
@@ -5292,7 +5356,7 @@ creature, marking or design is taken from one.
   fallback draws every traveller as the same cut-out in their own colours,
   and none of the company.
 
-**Tests.** Unit (`tools/wayfarer.test.mjs`, 28; the fourth pass added the boughs over the deep forest's road, the bow's string, the company changing on the road and nobody spinning; the fifth, the walk to a fire and back, and wildlife (31 now); the third pass added the country chosen and honoured, autumn in the woods, and the border that does not change its mind; the six before that: the orbit in clear air at 48 bearings and heights for an hour, its drag, fixed and turning at 10 and 120 fps; every companion posed, the count, the named cats against the roster, the seed; the company on the road, by the fire and at any frame rate; every traveller, the druid's changes and the rogue's hiding; grand cities; fine models and budgets). Smoke adds: the orbit's drag, wheel, overhead, grass and a village at four bearings; six companions, none, the barbarian's brand, the druid there and back, the rogue unseen and back; a grand city before its gate, in its square at five bearings, on its drawbridge and from down the road at night. The original sixteen: the road never jumps or
+**Tests.** Unit (`tools/wayfarer.test.mjs`, 28; the fourth pass added the boughs over the deep forest's road, the bow's string, the company changing on the road and nobody spinning; the fifth, the walk to a fire and back, and wildlife; the sixth, wildlife seen (32 now); the third pass added the country chosen and honoured, autumn in the woods, and the border that does not change its mind; the six before that: the orbit in clear air at 48 bearings and heights for an hour, its drag, fixed and turning at 10 and 120 fps; every companion posed, the count, the named cats against the roster, the seed; the company on the road, by the fire and at any frame rate; every traveller, the druid's changes and the rogue's hiding; grand cities; fine models and budgets). Smoke adds: the orbit's drag, wheel, overhead, grass and a village at four bearings; six companions, none, the barbarian's brand, the druid there and back, the rogue unseen and back; a grand city before its gate, in its square at five bearings, on its drawbridge and from down the road at night. The original sixteen: the road never jumps or
 doubles back, is level across and no steeper than a third along; the
 ground is continuous and the road is never awash; every round has all
 the countries (nine now), never two stretches the same running, and every kind of place

@@ -2455,7 +2455,7 @@ const STAGE_CHECKS = {
             const back = await state();
             if (back.wild.parties !== some.wild.parties && Math.abs(back.z - some.z) < 1) record(`back at some: ${back.wild.parties} parties, ${some.wild.parties} before`);
             // Each country has its own, and enough kinds of them.
-            const lands = await evaluate("(() => { const L = WayLogic, out = {}; for (const biome of L.BIOMES) { const w = L.world(7, { biomes: [biome] }), kinds = new Set(); let strangers = 0; for (let cz = 1700; cz < 1760; cz++) for (const g of w.wildlife(cz)) { kinds.add(g.kind); if (!L.WILDLIFE[biome].includes(g.kind)) strangers++; } out[biome] = [kinds.size, strangers]; } return out; })()");
+            const lands = await evaluate("(() => { const L = WayLogic, out = {}; for (const biome of L.BIOMES) { const w = L.world(7, { biomes: [biome] }), kinds = new Set(); let strangers = 0; for (let cz = 1700; cz < 1760; cz++) for (const g of w.wildlife(cz)) { kinds.add(g.kind); if (!L.WILDLIFE[biome].includes(g.kind) && !L.WILD_SHOW[biome].includes(g.kind) && !g.town) strangers++; } out[biome] = [kinds.size, strangers]; } return out; })()");
             for (const [biome, [kinds, strangers]] of Object.entries(lands)) if (kinds < 4 || strangers) record(`${biome}: ${kinds} kinds, ${strangers} that do not belong`);
             return true;
         }],

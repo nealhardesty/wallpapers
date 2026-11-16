@@ -1035,13 +1035,14 @@ test('to a campfire and back to the road, everybody walks the way they face: nob
 test('wildlife: each country has its own, in the same places every time, off the road and out of town; they keep off the road whatever they do, and nobody slides or spins', () => {
     // Every kind has somebody to be drawn as, near and (if it is big enough to see) far.
     for (const [id, k] of Object.entries(L.WILD)) {
-        if (k.swarm || id === 'fish') continue;
+        assert.ok(k.tall > 0.05 && k.tall < 2, `${id}: how tall?`);
+        if (k.swarm || id === 'fish' || id === 'crab') continue;
         assert.ok(K.known(k.rig), `${id}: no rig ${k.rig}`);
         if (k.far) assert.ok((k.bird ? A.BIRDS : A.BEASTS)[k.far], `${id}: nobody stands in for it far off`);
         if (k.young) assert.ok(L.WILD[k.young[0]] && L.WILD[k.young[0]].act === 'follow');
     }
     assert.ok(['bear', 'stag', 'squirrel'].every(id => L.WILD[id]) && Object.keys(L.WILD).length >= 27);
-    for (const [biome, list] of Object.entries(L.WILDLIFE)) for (const id of list) assert.ok(L.WILD[id] && L.BIOMES.includes(biome), `${biome}: ${id}`);
+    for (const lists of [L.WILDLIFE, L.WILD_SHOW]) for (const [biome, list] of Object.entries(lists)) for (const id of list) assert.ok(L.WILD[id] && L.BIOMES.includes(biome), `${biome}: ${id}`);
     const seenAll = new Set();
     for (const biome of L.BIOMES) {
         const w = L.world(7, { biomes: [biome] }), again = L.world(7, { biomes: [biome] }), seen = new Set();
@@ -1056,7 +1057,7 @@ test('wildlife: each country has its own, in the same places every time, off the
                     const k = L.WILD[g.kind], r = w.at(g.z), d = Math.abs(w.lateral(g.x, g.z)), where = k.where || 'land';
                     parties++; some += g.roll < L.WILD_LEVELS.some; few += g.roll < L.WILD_LEVELS.few;
                     seen.add(g.kind); seenAll.add(g.kind);
-                    assert.ok(L.WILDLIFE[biome].includes(g.kind), `${g.kind} in ${biome}`);
+                    assert.ok(L.WILDLIFE[biome].includes(g.kind) || L.WILD_SHOW[biome].includes(g.kind) || g.town, `${g.kind} in ${biome}`);
                     assert.ok(g.n >= k.n[0] && g.n <= k.n[1] && g.roll >= 0 && g.roll < 1);
                     if (where !== 'air') {
                         assert.ok(d < 90, `${g.kind} ${d.toFixed(0)} m away`);
@@ -1071,7 +1072,7 @@ test('wildlife: each country has its own, in the same places every time, off the
             }
         }
         assert.ok(seen.size >= 4, `${biome}: only ${[...seen]}`);
-        assert.ok(some / squares > 0.6 && some / squares < 3.6 && parties > some * 1.3 && few < some * 0.6 && few > 0, `${biome}: ${(parties / squares).toFixed(2)} a square at most, ${(some / squares).toFixed(2)} at some, ${(few / squares).toFixed(2)} at few`);
+        assert.ok(some / squares > 0.6 && some / squares < 5 && parties > some * 1.3 && few < some * 0.6 && few > 0, `${biome}: ${(parties / squares).toFixed(2)} a square at most, ${(some / squares).toFixed(2)} at some, ${(few / squares).toFixed(2)} at few`);
         // Turned up, the setting adds to who is there: nobody moves.
         const cz = 1720, at = level => plain(w.wildlife(cz).filter(g => g.roll < L.WILD_LEVELS[level]));
         for (const g of at('few')) assert.ok(at('some').some(o => o.x === g.x && o.kind === g.kind) && at('plenty').some(o => o.x === g.x && o.kind === g.kind));
@@ -1088,7 +1089,7 @@ test('wildlife: each country has its own, in the same places every time, off the
     let fled = 0;
     for (const fps of [10, 30, 120]) for (const biome of ['forest', 'meadow', 'lake', 'moor']) {
         const w = L.world(7, { biomes: [biome] }), j = L.journeyStart(w, 360 * 300 + 60), dt = 1 / fps, squares = new Map(), moved = new Set();
-        let t = 0, seed = 1;
+        let t = 0, seed = 1, crossed = 0;
         const random = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
         for (let i = 0; i < 180 * fps; i++) {
             t += dt;
@@ -1105,6 +1106,13 @@ test('wildlife: each country has its own, in the same places every time, off the
                     const gone = Math.hypot(a.x - x0, a.z - z0), v = gone / dt, d = Math.abs(w.lateral(a.x, a.z));
                     if (v > 0.2) moved.add(a.kind);
                     if (a.state === 'flee' || a.state === 'fly') fled++;
+                    if (a.state === 'cross') {
+                        // Over the road well ahead of the traveller: never on it when they are near.
+                        crossed++;
+                        if (d < 4) assert.ok(Math.hypot(a.x - me.x, a.z - me.z) > 14, `${a.kind} is on the road ${Math.hypot(a.x - me.x, a.z - me.z).toFixed(0)} m from the traveller`);
+                        continue;
+                    }
+                    if (k.act === 'scuttle') continue;
                     // Off the road: those on the ground keep their distance, and a metre's grace for the young at heel.
                     if (where === 'land' && a.alt < 0.3) assert.ok(d > k.keep - 1.6, `${a.kind} is ${d.toFixed(1)} m from the road's middle (it keeps ${k.keep}), ${a.state}`);
                     if (where === 'land' && a.alt < 0.3 && k.act !== 'follow') {
@@ -1116,6 +1124,20 @@ test('wildlife: each country has its own, in the same places every time, off the
             }
         }
         assert.ok(moved.size >= 3, `${biome} at ${fps} fps: only ${[...moved]} stirred`);
+        if (biome === 'meadow' || biome === 'moor') assert.ok(crossed > 0, `${biome}: nobody crossed the road`);
     }
     assert.ok(fled > 0, 'nobody shy was ever startled');
+});
+
+test('wildlife is seen: with the camera behind the traveller, a wild animal is plainly in the picture most of the time on the open road, more of the time the more there is', async () => {
+    const { sight } = await import('./wayfarer-sight.mjs');
+    // (Measured 2026-11-16 over 2 km and two seeds: on the open road at some, 76% in the meadow, 89% on the moor, 53% in
+    // the forest, 59% over all countries; at plenty 83%, 94%, 65%, 71%. Held here a good way under that.)
+    for (const [land, some, plenty] of [[['meadow'], 0.55, 0.65], [['moor'], 0.7, 0.8], [['forest'], 0.35, 0.45], [null, 0.28, 0.38]]) {
+        const got = sight(land, 7, 1.5), share = level => got[level].openSeen / Math.max(1, got[level].open);
+        assert.ok(got.some.open > 40, `${land}: ${got.some.open} samples on the open road`);
+        assert.ok(share('some') >= some, `${land || 'all'}: somebody in ${(100 * share('some')).toFixed(0)}% of the pictures at some`);
+        assert.ok(share('plenty') >= plenty && share('plenty') >= share('some') && share('some') > share('few'), `${land || 'all'}: few ${(100 * share('few')).toFixed(0)}%, some ${(100 * share('some')).toFixed(0)}%, plenty ${(100 * share('plenty')).toFixed(0)}%`);
+        assert.ok(got.plenty.sum / got.plenty.n > got.some.sum / got.some.n);
+    }
 });

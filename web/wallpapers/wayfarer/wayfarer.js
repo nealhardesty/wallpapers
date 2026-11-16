@@ -860,7 +860,7 @@ class WayfarerAnimationManager {
             }
             if (!inView(x, z, 170)) continue;
             const p = rel(x, y, z);
-            WayCompanions.pose(k.id, out, st, p[0], p[1], p[2], { lite: this.detail === 0 || k.slot >= 6 || Math.hypot(p[0], p[2]) > (this.detail > 1 ? 16 : 6.5), yaw, gait: k.gait, moving: Math.min(1, k.speed / 1.2), rest: k.rest, down: k.down, alarm: k.alarm, alt: k.alt, wing: k.wing, bank: k.bank, t: t + k.slot * 3.7 }, fx);
+            WayCompanions.pose(k.id, out, st, p[0], p[1], p[2], { lite: this.detail === 0 || k.slot >= 6 || (this.party.length > 6 && k.slot >= 3) || Math.hypot(p[0], p[2]) > (this.detail > 1 ? 16 : 6.5), yaw, gait: k.gait, moving: Math.min(1, k.speed / 1.2), rest: k.rest, down: k.down, alarm: k.alarm, alt: k.alt, wing: k.wing, bank: k.bank, t: t + k.slot * 3.7 }, fx);
             if (k.kind.light && lit > 0.05) { const g = k.kind.light; this.lamps.push([p[0], p[1] + k.alt + 0.3, p[2], g[0] * lit, g[1] * lit, g[2] * lit, 10, 55]); }
             if (k.prey && k.role === 'chase') {
                 // What it is after: a butterfly, always a wingbeat ahead.
@@ -888,20 +888,24 @@ class WayfarerAnimationManager {
                         if (K.swarm === 'glow') { const blink = Math.max(0, Math.sin(u * 0.9 + i)) ** 2 * out2; this.glows.add(p[0] + Math.sin(i * 2.4 + u * 0.11) * 3.4, p[1] + 0.25 + 0.3 * Math.sin(u * 0.4 + i), p[2] + Math.cos(i * 1.7 + u * 0.09) * 3.4, 0.07, 0.7 * blink, blink, 0.35 * blink, 1); continue; }
                         if (K.swarm === 'butterfly') {
                             const bx = p[0] + Math.sin(u * 0.5 + i * 2.1) * 2.4, by = p[1] + 0.6 + 0.4 * Math.sin(u * 0.9 + i), bz = p[2] + Math.cos(u * 0.37 + i * 1.3) * 2.4;
-                            for (const side of [-1, 1]) { st.reset(bx, by, bz, u * 1.3 + i, 1.7 * out2).size(side, 1, 1).rz(0.9 * Math.sin(u * 22)); out.stamp(WayCompanions.butterfly(), st.top, null, 0, 0, 1); }
+                            for (const side of [-1, 1]) { st.reset(bx, by, bz, u * 1.3 + i, 2.6 * out2).size(side, 1, 1).rz(0.9 * Math.sin(u * 22)); out.stamp(WayCompanions.butterfly(), st.top, null, 0, 0, 1); }
                             continue;
                         }
                         const bat = K.swarm === 'bat', turn = u * (bat ? 0.9 : 1.3) * (i % 2 ? 1 : -1) + i * 2.4, wide = (bat ? 5 : 8) + 2.5 * Math.sin(u * 0.31 + i), bx = p[0] + Math.sin(turn) * wide, by = p[1] + (bat ? 4 : 7) + 1.6 * Math.sin(u * 0.7 + i * 1.9), bz = p[2] + Math.cos(turn) * wide;
-                        st.reset(bx, by, bz, turn + (i % 2 ? 1 : -1) * Math.PI / 2, 2.2 * out2);
+                        st.reset(bx, by, bz, turn + (i % 2 ? 1 : -1) * Math.PI / 2, 2.8 * out2);
                         out.stamp(WayCompanions.flyerBody(K.swarm), st.top, null, 0, 0, 1);
                         for (const side of [-1, 1]) { st.push().size(side, 1, 1).rz((bat ? 0.8 : 0.5) * Math.sin(u * (bat ? 26 : 17))); out.stamp(WayCompanions.flyer(K.swarm), st.top, null, 0, 0, 1); st.pop(); }
                     }
                     continue;
                 }
+                // (Nobody appears full size at the edge of sight: over the last of the distance they are small and grow.)
+                const grow = L.smooth(1, 0.82, away / ((K.see || 170) * reach));
                 if (a.kind === 'fish') { st.reset(p[0], p[1] + a.alt, p[2], a.yaw, 1).rx(-a.pitch); out.stamp(WayCompanions.fish(), st.top, null, 0, 0, 1); continue; }
-                if (away < fineR || !K.far) WayCompanions.pose(K.rig, out, st, p[0], p[1], p[2], { lite: true, size: K.size, yaw: a.yaw, gait: a.gait, moving: a.moving, rest: a.rest, down: a.down, alarm: a.alarm, alt: a.alt, wing: a.wing, bank: a.bank, pitch: a.pitch, t: t + a.v * 9 }, fx);
-                else if (K.bird) A.bird(out, st, K.far, p[0], p[1] + a.alt + 0.12, p[2], { yaw: a.yaw, fold: a.wing ? 0 : 1, flap: a.wing ? (K.act === 'soar' ? 0.12 : 0.7) * Math.sin(t * (K.act === 'soar' ? 1.5 : 11) + a.v * 9) : 0, roll: -(a.bank || 0) * 0.6 });
-                else A.beast(out, st, K.far, p[0], p[1], p[2], { yaw: a.yaw, gait: a.gait / 1.3, moving: a.moving, graze: a.down, t: t + a.v * 9, size: K.farSize || 1 }, K.farCoat || null);
+                if (a.kind === 'seal') { st.reset(p[0], p[1], p[2], a.yaw, (0.85 + 0.3 * a.v) * grow).rx(-0.05 - 0.14 * a.alert); out.stamp(WayCompanions.seal(), st.top, null, 0, 0, 1); continue; }
+                if (a.kind === 'crab') { st.reset(p[0], p[1] + 0.012 * Math.abs(Math.sin(a.gait * 30)), p[2], a.yaw, 1.5 * grow); out.stamp(WayCompanions.crab(), st.top, null, 0, 0, 1); continue; }
+                if (away < fineR || !K.far) WayCompanions.pose(K.rig, out, st, p[0], p[1], p[2], { lite: true, size: (K.size || 1) * grow, yaw: a.yaw, gait: a.gait, moving: a.moving, rest: a.rest, down: a.down, alarm: a.alarm, alt: a.alt, wing: a.wing, bank: a.bank, pitch: a.pitch, t: t + a.v * 9 }, fx);
+                else if (K.bird) A.bird(out, st, K.far, p[0], p[1] + a.alt + 0.12, p[2], { yaw: a.yaw, fold: a.wing ? 0 : 1, flap: a.wing ? (K.act === 'soar' ? 0.12 : 0.7) * Math.sin(t * (K.act === 'soar' ? 1.5 : 11) + a.v * 9) : 0, roll: -(a.bank || 0) * 0.6, size: grow });
+                else A.beast(out, st, K.far, p[0], p[1], p[2], { yaw: a.yaw, gait: a.gait / 1.3, moving: a.moving, graze: a.down, t: t + a.v * 9, size: (K.farSize || 1) * grow }, K.farCoat || null);
                 if (K.glow && lit > 0.05) this.glows.add(p[0], p[1] + 0.25, p[2], 0.8, K.glow[0] * lit, K.glow[1] * lit, K.glow[2] * lit, 1);
             }
             this.wildDrawn = Math.min(n, most);
