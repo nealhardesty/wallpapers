@@ -2067,7 +2067,7 @@ const STAGE_CHECKS = {
             return true;
         }],
         ['the four cameras, a drag to look round, and the keys: V steps and saves, T and X too, N goes on down the road', async () => {
-            if (!await stageWith('wayfarer', { configVersion: 1, time: 'day', weather: 'clear' }, '&seed=7')) return record('not ready');
+            if (!await stageWith('wayfarer', { configVersion: 2, time: 'day', weather: 'clear' }, '&seed=7')) return record('not ready');
             const where = () => evaluate('(m => ({ ...JSON.parse(JSON.stringify(m.debugState())), x: m.standing.x, z2: m.standing.z }))(WP.stage.manager)');
             const run = key => evaluate(`WP.entry('wayfarer').keys.find(k => k.keys.includes('${key}')).run(WP.stage.manager, {})`);
             const away = s => Math.hypot(s.cam.x - s.x, s.cam.z - s.z2);
@@ -2077,7 +2077,7 @@ const STAGE_CHECKS = {
             await drag([[900, 400], [760, 400], [620, 410], [480, 410]], 60);
             const turned = await evaluate('WP.stage.manager.glance.yaw');
             if (!(turned < -0.5)) record(`a drag across the screen turned the view ${turned} rad`);
-            if (await evaluate("localStorage.getItem('wp:wayfarer')") !== JSON.stringify({ configVersion: 1, time: 'day', weather: 'clear' })) record('looking round saved something');
+            if (await evaluate("localStorage.getItem('wp:wayfarer')") !== JSON.stringify({ configVersion: 2, time: 'day', weather: 'clear' })) record('looking round saved something');
             const said = [await run('v')];
             await sleep(1500);
             const o = await where();
@@ -2110,32 +2110,32 @@ const STAGE_CHECKS = {
             // Into the nearest town, where the windows are.
             const toTown = "(m => { let l = m.world.leg(Math.floor(m.journey.z / 360)); while (l.place !== 'village') l = m.world.leg(l.i + 1); m.journey.z = l.zc - 30; m.party.forEach(p => { p.x = null; }); m.stream(true); m.snap = true; })(WP.stage.manager)";
             const state = () => evaluate('(m => ({ ...JSON.parse(JSON.stringify(m.debugState())), tint: m.scene.fallTint, size: m.scene.dropSize, cold: m.cold, wetGround: m.scene.wet }))(WP.stage.manager)');
-            if (!await stageWith('wayfarer', { configVersion: 1, time: 'day', weather: 'clear', towns: 1.6 }, '&seed=7')) return record('midday: not ready');
+            if (!await stageWith('wayfarer', { configVersion: 2, time: 'day', weather: 'clear', towns: 1.6 }, '&seed=7')) return record('midday: not ready');
             await evaluate(toTown);
             await sleep(2500);
             const day = await evaluate(AVERAGE), noon = await state();
             if (noon.lit !== 0 || noon.stars !== 0 || noon.fall > 0.1) record(`midday: ${JSON.stringify({ lit: noon.lit, stars: noon.stars, fall: noon.fall })}`);
-            if (!await stageWith('wayfarer', { configVersion: 1, time: 'night', weather: 'clear', towns: 1.6 }, '&seed=7')) return record('night: not ready');
+            if (!await stageWith('wayfarer', { configVersion: 2, time: 'night', weather: 'clear', towns: 1.6 }, '&seed=7')) return record('night: not ready');
             await evaluate(toTown);
             await sleep(2500);
             const night = await evaluate(AVERAGE), n = await state();
             if (n.lit < 0.95 || n.stars < 0.9 || n.glows < 12 || n.lamps < 2) record(`night: ${JSON.stringify({ lit: n.lit, stars: n.stars, glows: n.glows, lamps: n.lamps })}`);
             if (night.reduce((a, b) => a + b) > day.reduce((a, b) => a + b) * 0.75) record(`night ${night} is hardly darker than midday ${day}`);
             await shoot('wayfarer-night');
-            if (!await stageWith('wayfarer', { configVersion: 1, time: 'day', weather: 'rain', season: 'summer' }, '&seed=7')) return record('rain: not ready');
+            if (!await stageWith('wayfarer', { configVersion: 2, time: 'day', weather: 'rain', season: 'summer' }, '&seed=7')) return record('rain: not ready');
             await sleep(1500);
             const r = await state();
             if (r.wet < 0.7 || r.cloud < 0.95 || r.fall < 0.5) record(`rain: ${JSON.stringify({ wet: r.wet, cloud: r.cloud, fall: r.fall })}`);
             if (r.cold < 0.5 ? (r.size > 0.03 || r.wetGround < 0.5) : (r.size < 0.03 || r.wetGround > 0.5)) record(`what falls where it is ${r.cold < 0.5 ? 'warm' : 'cold'}: ${JSON.stringify({ size: r.size, wet: r.wetGround })}`);
             await shoot('wayfarer-rain');
-            if (!await stageWith('wayfarer', { configVersion: 1, time: 'day', weather: 'rain', season: 'winter' }, '&seed=7')) return record('snow: not ready');
+            if (!await stageWith('wayfarer', { configVersion: 2, time: 'day', weather: 'rain', season: 'winter' }, '&seed=7')) return record('snow: not ready');
             await sleep(1500);
             const w = await state();
             if (w.cold !== 1 || w.size < 0.03 || w.wetGround > 0.01 || w.fall < 0.4) record(`winter rain is not snow: ${JSON.stringify({ cold: w.cold, size: w.size, wet: w.wetGround, fall: w.fall })}`);
             return true;
         }],
         ['orbit: a drag turns the camera about the traveller and it stays and is saved; the wheel moves it in and out; overhead and in the grass; in clear air in a town', async () => {
-            if (!await stageWith('wayfarer', { configVersion: 1, time: 'day', weather: 'clear', camera: 'orbit', rests: false }, '&seed=7')) return record('not ready');
+            if (!await stageWith('wayfarer', { configVersion: 2, time: 'day', weather: 'clear', camera: 'orbit', rests: false }, '&seed=7')) return record('not ready');
             const state = () => evaluate('(m => ({ ...JSON.parse(JSON.stringify(m.debugState())), x: m.standing.x, z2: m.standing.z, h: m.world.heading(m.journey.z), held: m.orbit.held }))(WP.stage.manager)');
             const saved = () => evaluate("JSON.parse(localStorage.getItem('wp:wayfarer'))");
             const a = await state();
@@ -2189,7 +2189,7 @@ const STAGE_CHECKS = {
         }],
         ['a company of six, each in its place; nobody; the barbarian with her brand after dark; the druid changes shape and back; the rogue goes unseen and returns', async () => {
             const six = ['moofy', 'hound', 'pony', 'raven', 'ibbie', 'lantern'];
-            if (!await stageWith('wayfarer', { configVersion: 1, time: 'day', weather: 'clear', companionPick: 'choose', companionChoice: six, rests: false, craft: 'never' }, '&seed=7')) return record('not ready');
+            if (!await stageWith('wayfarer', { configVersion: 2, time: 'day', weather: 'clear', companionPick: 'choose', companionChoice: six, rests: false, craft: 'never' }, '&seed=7')) return record('not ready');
             const state = () => evaluate('JSON.parse(JSON.stringify(WP.stage.manager.debugState()))');
             const apply = more => evaluate(`(m => m.applySettings({ ...m.config, ...${JSON.stringify(more)} }))(WP.stage.manager)`);
             const run = () => evaluate("WP.entry('wayfarer').keys.find(k => k.keys.includes('g')).run(WP.stage.manager, {})");
@@ -2203,16 +2203,21 @@ const STAGE_CHECKS = {
             if (!(a.party[3].alt > 1.5) || !(a.party[4].riding > 0.9) || !(a.party[5].alt > 1)) record(`the raven at ${a.party[3].alt} m, Ibbie riding ${a.party[4].riding}, the lantern at ${a.party[5].alt} m`);
             if (a.moving < 8000) record(`only ${a.moving} vertices of traveller and company`);
             await shoot('wayfarer-company');
-            await apply({ companionPick: 'cats', companions: 0 });
+            await apply({ companionPick: 'surprise', companions: 0 });
             await sleep(800);
+            // (They turn back down the road; once they are well behind, they are gone.)
+            const home = await evaluate('WP.stage.manager.leavers.length');
+            if (!(home >= 4)) record(`${home} of the six are on their way home`);
+            if (!await waitFor(() => evaluate('WP.stage.manager.leavers.length === 0'), 40000)) record('those sent home are still here');
             const alone = await state();
             if (alone.party.length || alone.moving > a.moving - 5000) record(`alone: ${alone.party.length} companions, ${alone.moving} vertices`);
-            // The old single companion is still a setting: whoever was chosen leads; 'none' is alone whatever else is set.
-            await apply({ companions: 3, companion: 'cat', companionPick: 'surprise' });
+            // Left to chance again: three, one of the named cats at their head.
+            await apply({ companions: 3, companionPick: 'surprise' });
             const led = await state();
-            await apply({ companion: 'none' });
-            const none = await state();
-            if (led.party.length !== 3 || led.party[0].id !== 'cat' || none.party.length) record(`first companion: ${JSON.stringify(led.party.map(p => p.id))}, then ${none.party.length}`);
+            if (led.party.length !== 3 || !['moofy', 'butters', 'waffles', 'ras', 'ibbie', 'maus', 'turkey', 'harry', 'kittytoes'].includes(led.party[0].id)) record(`surprise: ${JSON.stringify(led.party.map(p => p.id))}`);
+            // (Alone again for what follows: the traveller's own figure is what is counted.)
+            await apply({ companions: 0 });
+            if (!await waitFor(() => evaluate('WP.stage.manager.leavers.length === 0'), 40000)) record('those sent home are still here');
             // The barbarian: no cloak and no staff, and a brand in her hand after dark.
             await apply({ traveller: 'barbarian', time: 'night' });
             if (!await waitFor(() => evaluate('WP.stage.manager.light.lit > 0.9'), 30000)) record('night never fell');
@@ -2247,7 +2252,7 @@ const STAGE_CHECKS = {
             return true;
         }],
         ['a grand city: built whole about the gate and the square, the camera in clear air at every bearing, its lights carried a long way down the road at night', async () => {
-            if (!await stageWith('wayfarer', { configVersion: 1, time: 'day', weather: 'clear', camera: 'orbit', orbitElevation: 14, orbitDistance: 30, rests: false, towns: 1.6 }, '&seed=7')) return record('not ready');
+            if (!await stageWith('wayfarer', { configVersion: 2, time: 'day', weather: 'clear', camera: 'orbit', orbitElevation: 14, orbitDistance: 30, rests: false, towns: 1.6 }, '&seed=7')) return record('not ready');
             const state = () => evaluate('(m => ({ ...JSON.parse(JSON.stringify(m.debugState())), dz: m.world.at(m.journey.z).dz, beacons: m.active.far.reduce((n, sq) => n + sq.beacons.length, 0), side: m.world.at(m.journey.z).near.side }))(WP.stage.manager)');
             const apply = more => evaluate(`(m => m.applySettings({ ...m.config, ...${JSON.stringify(more)} }))(WP.stage.manager)`);
             const go = dz => evaluate(`(m => { let l = m.world.leg(Math.floor(m.journey.z / 360)); while (!l.grand) l = m.world.leg(l.i + 1); m.journey.z = l.zc + ${dz}; m.journey.mode = 'walk'; m.party.forEach(p => { p.x = null; }); m.traffic.length = 0; m.stream(true); m.snap = true; })(WP.stage.manager)`);
@@ -2282,7 +2287,7 @@ const STAGE_CHECKS = {
             return true;
         }],
         ['the country: only the deep forest when it alone is ticked, leaves falling in its autumn; another choice changes the land where she stands and the walk goes on; the air never steps', async () => {
-            if (!await stageWith('wayfarer', { configVersion: 1, time: 'day', weather: 'clear', season: 'autumn', biomePick: 'choose', biomeChoice: ['deepwood'], rests: false }, '&seed=7')) return record('not ready');
+            if (!await stageWith('wayfarer', { configVersion: 2, time: 'day', weather: 'clear', season: 'autumn', biomePick: 'choose', biomeChoice: ['deepwood'], rests: false }, '&seed=7')) return record('not ready');
             const state = () => evaluate('(m => ({ ...JSON.parse(JSON.stringify(m.debugState())), legs: [0, 1, 2, 3, 4, 5].map(k => m.world.leg(Math.floor(m.journey.z / 360) + k).biome), air: m.world.air(m.journey.z) }))(WP.stage.manager)');
             await sleep(2500);
             const a = await state();
@@ -2290,6 +2295,10 @@ const STAGE_CHECKS = {
             if (!(a.fall > 0.05) || !(a.leafy > 1.5) || !(a.tint[0] > a.tint[2] * 2) || a.wet > 0.05) record(`autumn in the deep forest: ${JSON.stringify({ fall: a.fall, leafy: a.leafy, tint: a.tint })}`);
             if (a.drawn.triangles < 30000) record(`drawn: ${JSON.stringify(a.drawn)}`);
             await shoot('wayfarer-deep-forest-autumn');
+            // Its boughs meet over the road; a camera above sees the traveller through them, and the one behind needs no such thing.
+            const roof = await evaluate("(m => { const w = m.world, z = m.journey.z, cz = Math.floor(z / 64), cx = Math.floor(w.roadX(z) / 64); let n = 0; for (const dz of [-1, 0, 1]) for (const dx of [-1, 0, 1]) n += w.scatter(cx + dx, cz + dz).filter(it => it.k === 'bough').length; const follow = m.scene.cut[3]; m.config.camera = 'orbit'; m.orbit = WayLogic.orbitStart(0.3, 1.4, 24); return new Promise(done => setTimeout(() => { const s = m.debugState(); done({ n, follow, orbit: m.scene.cut[3], above: m.view.y - m.standing.y, drawn: s.drawn.triangles }); m.config.camera = 'follow'; }, 1200)); })(WP.stage.manager)");
+            if (!(roof.n >= 20) || roof.follow !== 0 || roof.orbit !== 5 || !(roof.above > 2.5) || roof.drawn < 30000) record(`the roof over the road: ${JSON.stringify(roof)}`);
+            await sleep(600);
             // Summer: nothing falls but what the wind takes.
             await evaluate("(m => m.applySettings({ ...m.config, season: 'summer' }))(WP.stage.manager)");
             await sleep(1500);
@@ -2309,12 +2318,119 @@ const STAGE_CHECKS = {
             if (!(steps < 0.02)) record(`the air steps by ${steps} in half a metre at a border`);
             return true;
         }],
+        ['in the player, dragging the orbit (turning or fixed) and pressing its keys change the camera and nothing else: the same world, place, company and hour, and the stage is not rebuilt', async () => {
+            for (const orbitMode of ['turning', 'fixed']) {
+                await fresh(`${WEB}/index.html?w=wayfarer&tier=low`, { 'wp:wayfarer': { configVersion: 2, camera: 'orbit', orbitMode, rests: false } });
+                if (!await waitFor(() => inStage('WP.stage?.ready'), 20000)) return record('never ready');
+                await sleep(500);
+                // (A mark on the stage's own window: a stage that was rebuilt has lost it.)
+                const state = () => waitFor(() => inStage("(m => { if (!m || !m.journey || !WP.stage.ready) return null; window.wayMark = window.wayMark || 1 + Math.random(); const j = m.journey, w = m.world, cz = Math.floor(j.z / 64); return { mark: window.wayMark, seed: w.seed, z: j.z, distance: j.distance, biome: w.leg(Math.floor(j.z / 360)).biome, countries: w.biomes.join(), squares: [...m.near.keys()].sort().slice(0, 6).join(';'), row: [0, 1, 2].map(k => Math.floor(w.roadX((cz + k) * 64) / 64)).join(), party: m.party.map(p => p.kind.id).join(), day: m.day, weather: m.config.weather, az: m.orbit.az, saved: localStorage.getItem('wp:wayfarer') }; })(WP.stage?.manager)"), 20000);
+                const a = await state();
+                if (!a || !a.seed) return record(`no state: ${JSON.stringify(a)}`);
+                let before = a, turned = 0, saves = 0;
+                const same = (now, what) => {
+                    if (now.mark !== a.mark) return record(`${orbitMode}, ${what}: the stage was rebuilt`);
+                    if (now.seed !== a.seed || now.countries !== a.countries || now.party !== a.party || now.weather !== a.weather) record(`${orbitMode}, ${what}: ${JSON.stringify({ seed: [a.seed, now.seed], party: [a.party, now.party] })}`);
+                    if (!(now.z >= before.z) || now.z - before.z > 30 || !(now.distance >= before.distance) || Math.abs(now.day - before.day) > 0.01) record(`${orbitMode}, ${what}: the walk went from ${before.z.toFixed(1)} to ${now.z.toFixed(1)}, the day from ${before.day} to ${now.day}`);
+                };
+                for (let k = 0; k < 5; k++) {
+                    const y = 300 + 30 * k, from = k % 2 ? 300 : 900, by = (k % 2 ? 1 : -1) * (130 + 70 * k);
+                    await drag([[from, y], [from + by * 0.25, y + 5], [from + by * 0.5, y + 10], [from + by * 0.75, y + 15], [from + by, y + 20]], 40);
+                    // Long enough for the orbit to be saved (0.6 s after the hand is off it) and for a rebuild, were one to follow (0.4 s more).
+                    await sleep(2200);
+                    const now = await state();
+                    if (!now || !now.seed) return record(`${orbitMode}, drag ${k + 1}: no state (${JSON.stringify(now)})`);
+                    same(now, `drag ${k + 1}`);
+                    if (Math.abs(now.az - before.az) > 0.2) turned++;
+                    if (now.saved !== before.saved) saves++;
+                    before = now;
+                }
+                if (turned < 4 || saves < 3) record(`${orbitMode}: ${turned} of 5 drags turned the camera, ${saves} were saved`);
+                // The keys that save a setting from the stage: the hour and the weather change, and nothing else.
+                await press('t');
+                await sleep(1500);
+                const keyed = await state();
+                if (!keyed || keyed.mark !== a.mark || keyed.seed !== a.seed || keyed.party !== a.party || !(keyed.z >= before.z) || keyed.z - before.z > 30) record(`${orbitMode}, T: ${JSON.stringify(keyed && { mark: [a.mark, keyed.mark], seed: [a.seed, keyed.seed], z: [before.z, keyed.z] })}`);
+                if (keyed && keyed.saved === before.saved) record(`${orbitMode}: T saved nothing`);
+            }
+            // Settings changed from another page still reach it: that is a rebuild, and is meant to be.
+            const mark = await inStage('window.wayMark');
+            await evaluate(`window.dispatchEvent(new StorageEvent('storage', { key: 'wp:wayfarer', newValue: '{"configVersion":1,"camera":"follow"}', storageArea: localStorage }))`);
+            await sleep(2500);
+            if (!await waitFor(() => inStage('WP.stage?.ready'), 20000)) return record('never ready after a change from elsewhere');
+            if (await inStage('window.wayMark') === mark) record('a change from another page did not rebuild the stage');
+            return true;
+        }],
+        ['in the panel the company is one choice: surprise me (and how many, 0 to 12) or chips for everybody, where whoever is ticked walks, in the order ticked, the first twelve; each change shows on the road at once and the walk goes on', async () => {
+            await fresh(`${WEB}/index.html?w=wayfarer&tier=low&panel=open`, { 'wp:wayfarer': { configVersion: 2, rests: false, campfire: false } });
+            if (!await waitFor(() => inStage('WP.stage?.ready'), 20000)) return record('never ready');
+            if (!await waitFor(() => evaluate(`!!document.querySelector('#panel [data-key=companions] input')`), 5000)) return record('no panel');
+            const walking = () => inStage("(m => { window.wayMark = window.wayMark || 1 + Math.random(); return { mark: window.wayMark, seed: m.world.seed, z: m.journey.z, ids: m.party.map(p => p.id), groups: m.party.map(p => p.kind.group), leaving: m.leavers.map(p => p.id), behind: m.party.map(p => p.x === null ? null : Math.round((m.journey.z - p.z) * 10) / 10) }; })(WP.stage.manager)");
+            const select = (key, value) => evaluate(`(s => { s.selectedIndex = s.options_.findIndex(o => o[0] === ${JSON.stringify(value)}); s.dispatchEvent(new Event('change', { bubbles: true })); })(document.querySelector('#panel [data-key=${key}] select'))`);
+            const range = (key, value) => evaluate(`(i => { i.value = ${value}; i.dispatchEvent(new Event('input', { bubbles: true })); i.dispatchEvent(new Event('change', { bubbles: true })); })(document.querySelector('#panel [data-key=${key}] input'))`);
+            // (The chips are in five rows, one for each kind: the chip is found by what it says.)
+            const chip = id => evaluate(`(() => { const label = WP.schemaOf('wayfarer').filter(c => c.key === 'companionChoice').flatMap(c => c.options).find(o => o[0] === ${JSON.stringify(id)})[1]; [...document.querySelectorAll('#panel [data-key=companionChoice] .chip')].find(c => c.textContent === label).click(); })()`);
+            const shown = selector => evaluate(`(row => !!row && !row.hidden && row.offsetParent !== null)(document.querySelector('#panel ${selector}'))`);
+            const status = () => evaluate(`(document.querySelector('#panel .setting-status[data-name=company]') || {}).textContent`);
+            const first = await walking();
+            let before = first;
+            const after = async (what, check) => {
+                await sleep(700);
+                const now = await walking();
+                if (!now || now.mark !== first.mark || now.seed !== first.seed) return record(`${what}: the stage or the world was rebuilt`), now;
+                if (!(now.z >= before.z) || now.z - before.z > 30) record(`${what}: the walk went from ${before.z.toFixed(1)} to ${now.z.toFixed(1)}`);
+                const wrong = check(now);
+                if (wrong) record(`${what}: ${wrong} (${now.ids.join()})`);
+                before = now;
+                return now;
+            };
+            const controls = await evaluate(`[...document.querySelectorAll('#panel [data-key^=companion]')].map(row => row.dataset.key + (row.hidden ? ' hidden' : '')).join()`);
+            if (controls !== 'companionPick,companions,companionChoice hidden,companionChoice hidden,companionChoice hidden,companionChoice hidden,companionChoice hidden') record(`the company's controls: ${controls}`);
+            if (first.ids.length !== 3 || first.groups[0] !== 'cats') record(`it sets off with ${first.ids.join()}`);
+            // Surprise me, and how many: those already walking stay, the rest come from behind or turn back.
+            await range('companions', 6);
+            const six = await after('six', n => n.ids.length !== 6 && 'not six');
+            if (six && (six.ids.slice(0, 3).join() !== first.ids.join() || !(six.behind[5] > 2.5))) record(`six: the first three stay and the rest come from behind: ${six.ids.join()} at ${six.behind.join()}`);
+            await range('companions', 12);
+            await after('twelve', n => (n.ids.length !== 12 || new Set(n.ids).size !== 12) && 'not twelve different ones');
+            await range('companions', 0);
+            await after('none', n => (n.ids.length !== 0 && 'somebody still walks') || (n.leaving.length < 6 && `only ${n.leaving.length} are on their way home`));
+            await range('companions', 4);
+            const lucky = await after('four', n => n.ids.length !== 4 && 'not four');
+            // I will choose: the three ticked from the start, whatever the count says; the count is put away and the chips come out.
+            await select('companionPick', 'choose');
+            await after('chosen', n => n.ids.join() !== 'moofy,hound,raven' && 'not the three ticked');
+            if (await shown('[data-key=companions]') || !await shown('[data-key=companionChoice]')) record('choosing by hand should show the chips and put the count away');
+            if (!/^3 walk with you/.test(await status())) record(`the panel says "${await status()}" of three`);
+            for (const id of ['butters', 'fox', 'ras', 'snail']) await chip(id);
+            await after('seven ticked', n => n.ids.join() !== 'moofy,hound,raven,butters,fox,ras,snail' && 'not the seven ticked, in the order ticked');
+            await chip('hound');
+            await after('one unticked', n => (n.ids.join() !== 'moofy,raven,butters,fox,ras,snail' && 'not the six left') || (!n.leaving.includes('hound') && 'the hound is not on its way home'));
+            for (const id of ['maus', 'turkey', 'harry', 'kittytoes', 'cat', 'dog', 'hound', 'sheepdog']) await chip(id);
+            await after('fourteen ticked', n => n.ids.join() !== 'moofy,raven,butters,fox,ras,snail,maus,turkey,harry,kittytoes,cat,dog' && 'not the first twelve ticked');
+            if (!/^14 ticked: the first 12 walk/.test(await status())) record(`the panel says "${await status()}" of fourteen`);
+            for (const id of ['moofy', 'raven', 'butters', 'fox', 'ras', 'snail', 'maus', 'turkey', 'harry', 'kittytoes', 'cat', 'dog', 'hound', 'sheepdog']) await chip(id);
+            await after('none ticked', n => n.ids.length !== 0 && 'somebody still walks');
+            if (!/walking alone/.test(await status())) record(`the panel says "${await status()}" of nobody`);
+            await chip('snail');
+            await after('a snail', n => n.ids.join() !== 'snail' && 'no snail');
+            // Surprise again is the world's own company again: the same four.
+            await select('companionPick', 'surprise');
+            await after('surprise again', n => n.ids.join() !== lucky.ids.join() && `it was ${lucky.ids.join()}`);
+            if (await shown('[data-key=companionChoice]') || !await shown('[data-key=companions]')) record('surprise should put the chips away and show the count');
+            // Nobody who came is left behind, and nobody stays who was sent home.
+            await sleep(9000);
+            const settled = await walking();
+            if (settled.behind.some(b => !(Math.abs(b) < 20))) record(`left behind: ${settled.behind.join()}`);
+            if (settled.leaving.length) record(`still here: ${settled.leaving.join()}`);
+            return true;
+        }],
         ['without WebGL it walks on, painted flat: as far each second on Low as on High', async () => {
             const noGl = "(() => { const real = HTMLCanvasElement.prototype.getContext; HTMLCanvasElement.prototype.getContext = function (kind, ...rest) { return /^webgl/.test(kind) ? null : real.call(this, kind, ...rest); }; })()";
             const { identifier } = await cdp.send('Page.addScriptToEvaluateOnNewDocument', { source: noGl });
             try {
                 for (const tier of ['low', 'high']) {
-                    if (!await stageWith('wayfarer', { configVersion: 1, rests: false, campfire: false, time: 'day', towns: 0, life: 0 }, `&seed=7&tier=${tier}`)) return record(`${tier}: not ready without WebGL`);
+                    if (!await stageWith('wayfarer', { configVersion: 2, rests: false, campfire: false, time: 'day', towns: 0, life: 0 }, `&seed=7&tier=${tier}`)) return record(`${tier}: not ready without WebGL`);
                     await sleep(500);
                     const at = () => evaluate('(m => ({ flat: m.flat, d: m.journey.distance, t: performance.now(), n: WP.host.frames.count, y: m.standing.y, ground: m.world.surface(m.standing.x, m.standing.z) }))(WP.stage.manager)');
                     const a = await at();

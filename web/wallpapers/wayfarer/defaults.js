@@ -1,7 +1,7 @@
 // Default settings for Wayfarer. Saved settings store only what
 // differs from these (SPEC §4.1).
 WP.defaults('wayfarer', {
-    configVersion: 1,
+    configVersion: 2,
     camera: 'follow',      // follow, orbit, first, drift
     orbitMode: 'fixed',    // orbit: fixed (holds where you leave it) or turning (circles by itself)
     orbitAzimuth: 35,      // degrees round the traveller: 0 behind, 90 at their right hand, 180 in front
@@ -11,10 +11,9 @@ WP.defaults('wayfarer', {
     traveller: 'ranger',   // ranger, wizard, bard, knight, barbarian, northman, druid, archer, rogue
     warpaint: true,        // the barbarians' blue bars across the cheeks
     craft: 'sometimes',    // never, sometimes, often: how often the druid changes shape and the rogue goes unseen
-    companion: 'fox',      // the first of the company, who always comes: any of them, 'any' (nobody in particular) or 'none' (walk alone)
-    companions: 3,         // how many walk with the traveller, the first included (0 to 6)
-    companionPick: 'surprise',     // surprise (a named cat and one from each kind, by the world's seed), cats, dogs, farm, wild, fantastic, or choose
-    companionChoice: ['moofy', 'hound', 'raven'],      // who, when it is 'choose'
+    companions: 3,         // how many walk with the traveller, when it is left to chance (0 to 12)
+    companionPick: 'surprise',     // surprise (a named cat and then one from each kind by turns, by the world's seed) or choose
+    companionChoice: ['moofy', 'hound', 'raven'],      // who, when it is 'choose': everyone ticked, in the order ticked (the first 12 walk)
     rests: true,           // stops to look at a view
     campfire: true,        // sits by a fire a while at night
     time: 'cycle',         // cycle, clock, dawn, day, dusk, night

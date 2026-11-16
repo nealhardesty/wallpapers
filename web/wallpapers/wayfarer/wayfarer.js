@@ -22,11 +22,10 @@ const WAY_WEATHER_NAMES = { auto: 'comes and goes', clear: 'clear', fair: 'fair,
 const WAY_CAMERAS = ['follow', 'orbit', 'first', 'drift'];
 const WAY_CAMERA_NAMES = { follow: 'Behind the traveller', orbit: 'Orbit: drag to turn it about them', first: 'Through their eyes', drift: 'Cinematic' };
 const WAY_ORBITS = ['fixed', 'turning'];
-const WAY_PICKS = ['surprise', 'cats', 'dogs', 'farm', 'wild', 'fantastic', 'choose'];
+const WAY_PICKS = ['surprise', 'choose'];
 const WAY_CRAFT = ['never', 'sometimes', 'often'];
 // Which countries the road passes through: all of them, a kind of country, or the ones ticked.
 const WAY_COUNTRY = { all: null, woods: ['forest', 'deepwood', 'grove'], open: ['meadow', 'farm', 'moor'], shore: ['lake', 'coast', 'meadow'], high: ['pass', 'moor', 'forest'], choose: null };
-const WAY_FIRST = ['any', ...WayLogic.COMPANIONS.map(c => c.id), 'none'];
 const WAY_FORM_NAMES = { self: 'herself again', bear: 'a bear', owlbeast: 'an owl-beast', panther: 'a great black cat' };
 // What a struggling GPU gives up, in turn: shadows, then resolution, then the outer ring of detail.
 const WAY_GPU = [{ scale: 1, shadows: true }, { scale: 1, shadows: false }, { scale: 0.75, shadows: false }, { scale: 0.55, shadows: false, thin: true }, { scale: 0.4, shadows: false, thin: true }];
@@ -166,15 +165,23 @@ class WayfarerAnimationManager {
         this.weather = L.weatherStart(c.weather, Math.random);
         this.nextTraffic = this.journey.distance + 40 + 60 * Math.random();
         this.nextWonder = 20 + 40 * Math.random();
-        this.gather();
+        this.gather(true);
         this.shift = L.shiftStart(this.world.seed);
         this.stealth = L.stealthStart(this.world.seed);
     }
     countries(c) { return c.biomePick === 'choose' ? c.biomeChoice : WAY_COUNTRY[c.biomePick]; }
     // Who walks with the traveller: by the settings, and by this world's seed where it is left to chance.
-    gather() {
+    gather(fresh = false) {
         const c = this.config, L = WayLogic;
-        this.party = L.partyStart(L.party(this.world.seed, { count: c.companions, pick: c.companionPick, choice: c.companionChoice, first: c.companion }));
+        const ids = L.party(this.world.seed, { count: c.companions, pick: c.companionPick, choice: c.companionChoice });
+        // The panel says how many of those ticked are walking.
+        const ticked = c.companionChoice.length;
+        this.host.panel({ status: { company: ticked === 0 ? 'Nobody is ticked: walking alone' : ticked > ids.length ? `${ticked} ticked: the first ${ids.length} walk with you` : `${ids.length} walk${ids.length === 1 ? 's' : ''} with you` } });
+        // Setting off, the company is in its places. Changed on the road, newcomers run up from behind and the rest turn back.
+        if (fresh || !this.party) { this.party = L.partyStart(ids); this.leavers = []; return; }
+        const { party, leavers } = L.partyChange(this.party, ids, this.journey, this.world);
+        this.party = party;
+        this.leavers.push(...leavers);
     }
 
     // ---- Quality ----------------------------------------------------------------------
@@ -233,7 +240,7 @@ class WayfarerAnimationManager {
             this.journey.mode = 'walk';
             this.stream(true);
         }
-        if (before.companion !== config.companion || before.companions !== config.companions || before.companionPick !== config.companionPick || String(before.companionChoice) !== String(config.companionChoice)) this.gather();
+        if (before.companions !== config.companions || before.companionPick !== config.companionPick || String(before.companionChoice) !== String(config.companionChoice)) this.gather();
         if (before.traveller !== config.traveller) { this.shift = WayLogic.shiftStart(this.world.seed); this.stealth = WayLogic.stealthStart(this.world.seed); }
         if (before.camera !== config.camera) { this.cut = 0; this.shot.t = 0; this.shot.z0 = this.journey.z; this.snap = true; }
         if (!config.touch) this.glance.yaw = this.glance.pitch = 0;
@@ -286,6 +293,7 @@ class WayfarerAnimationManager {
         while (short(next) < j.z + 30) next = this.world.leg(next.i + 1);
         Object.assign(j, L.journeyStart(this.world, short(next)), { distance: j.distance, speed: L.WALK * this.config.pace, sinceRest: j.sinceRest, gazed: j.gazed });
         for (const p of this.party) p.x = null;
+        this.leavers.length = 0;
         this.traffic.length = 0;
         this.cut = 0;
         this.shot.t = 0;
@@ -616,6 +624,9 @@ class WayfarerAnimationManager {
             avoid: low ? { x: cam.x + Math.sin(cam.heading) * 1.1, z: cam.z + Math.cos(cam.heading) * 1.1, room: 1.4 } : null,
             pet: look.stealth && (j.mode === 'gaze' || j.mode === 'camp') ? this.party.find(p => p.kind.group === 'cats' && p.role !== 'ride') || null : null };
         for (const p of this.party) L.companionStep(p, dt, w, j, ctx);
+        // Those sent home walk back down the road until they are well behind.
+        for (const p of this.leavers) { L.companionStep(p, dt, w, j, ctx); p.gone = (p.gone || 0) + dt; }
+        if (this.leavers.length) this.leavers = this.leavers.filter(p => p.gone < 25 && Math.hypot(p.x - me.x, p.z - me.z) < 20);
     }
 
     // What crosses the sky, never close: geese, a dragon over the hills, an airship, a balloon.
@@ -673,6 +684,8 @@ class WayfarerAnimationManager {
         scene.time = this.seconds;
         scene.lit = light.lit;
         scene.wet = wet * (1 - this.cold);
+        // From the orbit, whatever leaves are between the eye and the traveller open about the line of sight.
+        { const me = this.standing; scene.cut = [me.x - view.x, me.y + 1.2 - view.y, me.z - view.z, orbiting ? 5 : 0]; scene.cutY = me.y + 3.4; }
         // The air: clear by day, soft at dawn, close in the rain; mist lies in the low ground.
         // (The air turns slowly from one country's to the next: WayLogic's air, never the nearest leg's at a step.)
         const b = w.biome(j.z), air = this.air = w.air(j.z), misty = air.mist;
@@ -760,9 +773,13 @@ class WayfarerAnimationManager {
             // At a rest: hands to the fire; at a view the archer sights along an arrow, the rogue tosses a knife.
             const petting = this.party.some(k => k.petted && k.rest > 0.5 && Math.hypot(k.x - me.x, k.z - me.z) < 0.9);
             const act = petting ? 'stroke' : j.sit > 0.6 ? (look.daggers ? 'flip' : 'warm') : j.mode === 'gaze' && j.speed < 0.3 ? (look.hand === 'bow' ? 'aim' : look.daggers ? 'flip' : '') : '';
+            // The bow comes up over a second and a half, and is down again before she walks on.
+            const aimDt = Math.max(0, Math.min(0.1, t - (this.aimT ?? t)));
+            this.aimT = t;
+            this.aim = Math.max(0, Math.min(1, (this.aim || 0) + (act === 'aim' && j.timer > 1.6 ? aimDt / 1.7 : -aimDt / 1.2)));
             // (On Low the four travellers there always were keep their plainer figure; the newer ones have no other.)
             const draw = (soup, form) => form === 'self'
-                ? ((this.detail === 0 || Math.hypot(p[0], p[2]) > (this.detail > 1 ? 45 : 22)) && !look.build ? A : WayPeople).person(soup, st, p[0], p[1], p[2], look, { yaw: me.heading, stride: j.stride, moving: j.moving, sit: j.sit, t, lantern, lit: true, act, head: j.look * 0.5, size: look.size, crouch: hide, vault: look.stealth ? L.vault(j, w) : 0 })
+                ? ((this.detail === 0 || Math.hypot(p[0], p[2]) > (this.detail > 1 ? 45 : 22)) && !look.build ? A : WayPeople).person(soup, st, p[0], p[1], p[2], look, { yaw: me.heading, stride: j.stride, moving: j.moving, sit: j.sit, t, lantern, lit: true, act, head: j.look * 0.5, aim: this.aim, aimAt: j.look * 0.6, size: look.size, crouch: hide, vault: look.stealth ? L.vault(j, w) : 0 })
                 : WayCompanions.pose(form, soup, st, p[0], p[1], p[2], { yaw: me.heading, gait: j.distance, moving: j.moving, rest: j.sit, t, head: j.look * 0.5 }, fx);
             if (look.shifts && shift.change < 1) {
                 // Between two shapes: one fades as the other comes, in a swirl of leaves and green-gold motes (no swirl for those who asked for calm).
@@ -791,7 +808,7 @@ class WayfarerAnimationManager {
         }
         // The company. Whoever rides is on the pack (the owl, by day, on a shoulder) until the fire is lit.
         const sinH = Math.sin(me.heading), cosH = Math.cos(me.heading), tall = look.size || 1, mount = changed || (look.shifts && shift.change < 1) ? { bear: [0, -0.3, 1.38], panther: [0, -0.25, 0.98], owlbeast: [0, -0.1, 2.02] }[shift.form === 'self' ? shift.to : shift.form] : null;
-        for (const k of this.party) {
+        for (const k of this.leavers.length ? [...this.party, ...this.leavers] : this.party) {
             if (k.x === null) continue;
             let x = k.x, y = k.y, z = k.z, yaw = k.yaw;
             if (k.riding > 0.02) {
@@ -803,7 +820,7 @@ class WayfarerAnimationManager {
             }
             if (!inView(x, z, 170)) continue;
             const p = rel(x, y, z);
-            WayCompanions.pose(k.id, out, st, p[0], p[1], p[2], { lite: this.detail === 0 || Math.hypot(p[0], p[2]) > (this.detail > 1 ? 16 : 6.5), yaw, gait: k.gait, moving: Math.min(1, k.speed / 1.2), rest: k.rest, down: k.down, alarm: k.alarm, alt: k.alt, wing: k.wing, bank: k.bank, t: t + k.slot * 3.7 }, fx);
+            WayCompanions.pose(k.id, out, st, p[0], p[1], p[2], { lite: this.detail === 0 || k.slot >= 6 || Math.hypot(p[0], p[2]) > (this.detail > 1 ? 16 : 6.5), yaw, gait: k.gait, moving: Math.min(1, k.speed / 1.2), rest: k.rest, down: k.down, alarm: k.alarm, alt: k.alt, wing: k.wing, bank: k.bank, t: t + k.slot * 3.7 }, fx);
             if (k.kind.light && lit > 0.05) { const g = k.kind.light; this.lamps.push([p[0], p[1] + k.alt + 0.3, p[2], g[0] * lit, g[1] * lit, g[2] * lit, 10, 55]); }
             if (k.prey && k.role === 'chase') {
                 // What it is after: a butterfly, always a wingbeat ahead.

@@ -273,6 +273,7 @@ building on it.
 | Direction | Message | Meaning |
 |---|---|---|
 | stage → player | `ready {id}` | booted and drawing; the player fades it in |
+| stage → player | `saved {value}` | a wallpaper with `applySettings` saved its own settings (a key, a drag): the player must not take the write for another page's and rebuild it |
 | stage → player | `key {key}` | a player key (`,` `[` `]` `f`) pressed while the stage has focus |
 | stage → player | `error {id, message}` | boot failed; the player shows a toast and the stage anyway |
 | player → stage | `settings` | open the wallpaper's settings |
@@ -520,6 +521,14 @@ settings directly (storage is shared) and tells the player to apply them:
     (keeps the world unless a world setting changed).
   - Any other wallpaper is rebuilt by the player behind a crossfade,
     debounced 400 ms so a slider drag rebuilds once.
+  - A stage's own `WP.settings.save` raises a `storage` event in the
+    player (another document on the same storage), which the player
+    takes for a change from another tab and answers with a rebuild. A
+    wallpaper that applies settings live says so (`saved {value}`, the
+    string it wrote) and the player lets that one write pass; found on
+    Wayfarer 2026-11-16, where every orbit drag and every V, T or X
+    started a new world (§10.38). Wallpapers without `applySettings` are
+    rebuilt after their own saves as before.
 - **Touch:**
   - Range sliders are `touch-action: pan-y`: a vertical swipe that starts
     on a slider scrolls the panel, only a sideways drag moves it.
@@ -856,7 +865,7 @@ and the commits.
 | sumo | — | The hall is one cached canvas (rebuilt on resize, tier and at dusk); a frame draws it, three jointed figures and a few marks. The crowd's rows and the cushions thrown follow density |
 | pocket-hockey | — | The canvas is the picture's own pixels (about 427 × 267 on a laptop, 206 × 458 on an upright phone; a pixel is 3 CSS px at 1280 × 800, in half steps below that), scaled up pixelated. The arena (ice, lines, boards, benches, a crowd of some thousands) is one bake a game; a working copy of it takes the skate marks and the resurfacer's stripes, so a frame is one blit of that, a dozen kept sprites, and lettering set once a line and kept. The round's other games are stepped 4 ms a frame. Hats, paper, spray, camera flashes and skate marks × density. Bench 2026-11-15 on a loaded machine (Snow beside it for scale: 20%, 24%, 60%): Low 14%, Medium 21%, High 44% |
 | baseball | — | The canvas is the picture's own pixels (about 3 CSS px each on a laptop), scaled up pixelated; the park (sky, stands, crowd, turf, fence) is one bake per game, size and light, with the crowd on its feet a second; the scoreboard and all the captions are two more canvases redrawn only when their words change; a frame blits those and draws about thirty men of a dozen rectangles each. The crowd, fireworks, confetti and rain follow density |
-| wayfarer | `shadows`, `mirror` (medium) | *(Upgraded 2026-11-15, §10.38: fine scenery within 18 m of the road in the 3×3 squares about the traveller on High, 9 m on Medium, none on Low; fine houses on High only; the finest figures for the traveller and the nearest four townsfolk on High, one on Medium, none on Low; lite animals beyond 16 m, 6.5 m on Medium, always on Low; townsfolk drawn to 160, 55 and 30 m; measured 427k/206k/71k triangles a frame on an open road and 447k/223k/101k at worst in a grand city's square; the deep forest, added 2026-11-16, 449k/224k/81k at worst.)* WebGL: the land as squares of triangles built on the main thread as the walk reaches them (in steps of a few things at a time, 3 ms of building a frame at most, so even a city's square never holds a frame up) and drawn in one call each. High: 7×7 near squares of 64 m inside 9×9 coarse 256 m squares, land drawn to 1040 m, shadows from a 2048² picture 110 m across. Medium: 5×5 inside 7×7, to 790 m, a fifth of the trees and a third of the small plants gone, shadows 1024² over 70 m. Low: 5×5 inside 5×5, to 530 m, half the trees and two thirds of the plants gone, the near ground 4 m to a cell instead of 2, a third fewer townsfolk, no shadows, no clouds in the water. Far squares carry houses with their trimmings left off and a third of the trees as four or ten triangles each. Everyone who moves and is in front of the camera is posed on the main thread into one buffer (2,000 to 12,000 triangles) and drawn in one call. The shadow picture holds only what stands on the ground in the squares its box touches, depth in three bytes, compiled out when shed (after fading). Triangles a frame, shadow pass included, at 1280×800 (forest at night / city by day / lake): High 307k / 278k / 204k, Medium 143k / 198k / 115k, Low 103k / 101k / 57k (on a software renderer; before the second pass it was 436k / 444k / 358k, 293k / 299k / 262k and 214k / 198k / 130k). The GPU is watched by the wallpaper itself (late frames give up shadows, then render scale to 0.4, then the outer rings of squares); software renderers start there. No WebGL: 30 slices of ground, the road and the nearest trees and houses as cut-outs, in 2D |
+| wayfarer | `shadows`, `mirror` (medium) | *(Upgraded 2026-11-15, §10.38: fine scenery within 18 m of the road in the 3×3 squares about the traveller on High, 9 m on Medium, none on Low; fine houses on High only; the finest figures for the traveller and the nearest four townsfolk on High, one on Medium, none on Low; lite animals beyond 16 m, 6.5 m on Medium, always on Low; townsfolk drawn to 160, 55 and 30 m; measured 427k/206k/71k triangles a frame on an open road and 447k/223k/101k at worst in a grand city's square; the deep forest, added 2026-11-16, 445k/216k/77k in a far orbit in autumn.)* WebGL: the land as squares of triangles built on the main thread as the walk reaches them (in steps of a few things at a time, 3 ms of building a frame at most, so even a city's square never holds a frame up) and drawn in one call each. High: 7×7 near squares of 64 m inside 9×9 coarse 256 m squares, land drawn to 1040 m, shadows from a 2048² picture 110 m across. Medium: 5×5 inside 7×7, to 790 m, a fifth of the trees and a third of the small plants gone, shadows 1024² over 70 m. Low: 5×5 inside 5×5, to 530 m, half the trees and two thirds of the plants gone, the near ground 4 m to a cell instead of 2, a third fewer townsfolk, no shadows, no clouds in the water. Far squares carry houses with their trimmings left off and a third of the trees as four or ten triangles each. Everyone who moves and is in front of the camera is posed on the main thread into one buffer (2,000 to 12,000 triangles) and drawn in one call. The shadow picture holds only what stands on the ground in the squares its box touches, depth in three bytes, compiled out when shed (after fading). Triangles a frame, shadow pass included, at 1280×800 (forest at night / city by day / lake): High 307k / 278k / 204k, Medium 143k / 198k / 115k, Low 103k / 101k / 57k (on a software renderer; before the second pass it was 436k / 444k / 358k, 293k / 299k / 262k and 214k / 198k / 130k). The GPU is watched by the wallpaper itself (late frames give up shadows, then render scale to 0.4, then the outer rings of squares); software renderers start there. No WebGL: 30 slices of ground, the road and the nearest trees and houses as cut-outs, in 2D |
 | ski-run | `shadows`, `sparkle` (medium) | WebGL with instancing: 61 chunks of ground mesh at four levels of detail, built one or two a frame as the run goes by; trees as instances of 15 models, sorted into batches and culled on the main thread each frame (a few thousand), their detail distances and far thinning × density; riders and the lift stamped into one soup; one shadow map (2048 High, 1024 Medium), compiled out when shed (after fading); spray and flakes × density. The ground's grid thins by tier (113, 69 or 49 columns); far riders are stamped from plainer parts; trees are re-batched every 2 to 4 frames. About 75, 230 and 420 thousand triangles a frame on Low, Medium and High in some 100 draw calls (§10.39). The GPU is watched by the wallpaper itself, as Ice Patrol's. No WebGL: some 550 strips of slope, the trees and the riders a frame in 2D |
 
 #### In the panel
@@ -4873,12 +4882,13 @@ creature, marking or design is taken from one.
     Low); a square is rebuilt finer as the walk reaches it and kept until it
     is left behind. In a grand city the back rows of houses are the far
     squares' plain shapes.
-- **Companions**: 46 kinds, any six at once. *First companion* always comes (see the second pass, below); *the rest of the company* is Surprise me (by
-  the world's seed: always one of the named cats, then one from each other
-  group), Cats, Dogs, From the farm, Wild things, Stranger things, or
-  "I will choose them", which shows chips for all 46 (the panel's `multi`
-  type; a count slider would have hidden who, and three selects would have
-  capped it at three). *How many* is 0 to 6, 3 by default.
+- **Companions**: 46 kinds, up to twelve at once (six until 2026-11-16).
+  *The company* is Surprise me (by the world's seed: one of the named
+  cats, then one from each other kind by turns) with *How many* (0 to 12,
+  3 by default), or "I will choose them", which shows chips for all 46 in
+  five rows by kind; whoever is ticked walks, in the order ticked. (Until
+  the fourth pass, below, there was also a "first companion" and a mode
+  for each kind.)
   - **The named cats** are the owner's own, from The Cat vs. the Ornament
     (§10.27) and Sky Island (§10.31), by the roster's names and coats (a
     unit test reads `CatOrnamentLogic.ROSTER` and checks each): **Moofy**
@@ -5010,7 +5020,8 @@ creature, marking or design is taken from one.
     (`WayLogic.vault`, only where `fenceAt` says the land has one) and,
     stopped, crouches with a hand down to the first cat of the company,
     which comes to it (`ctx.pet`).
-  - *The old single companion is kept*, not dropped: `companion` (default
+  - *(Superseded 2026-11-16: the key was removed with `configVersion` 2;
+    see the fourth pass.)* *The old single companion is kept*, not dropped: `companion` (default
     `fox`, as it always was) is now "First companion", who always comes and
     leads the company, with every kind to choose from, "Nobody in
     particular" and "Alone". So a saved `cat`, `dog`, `pony` or `wisp` is
@@ -5090,11 +5101,12 @@ creature, marking or design is taken from one.
     half as many leaves again drift down as anywhere else (the same pooled
     drops as rain, scaled by density), the ground under the trees turns to
     drifts of fallen leaves and leaves lie on it (`litter`), here and, more
-    thinly, in the forest. Measured (follow / 40 m orbit): High 415k /
-    439k in summer and 425k / 449k in autumn; Medium 200k / 219k and 204k /
-    224k (the autumn orbit is 2% over the 220k target); Low 72k / 80k and
-    73k / 81k. To hold that, fine trees and bushes there reach 0.42 of the
-    usual band from the road, and Medium and Low thin its trees a little
+    thinly, in the forest. Measured (follow / 40 m orbit), with the
+    boughs of the fourth pass: High 412k / 435k in summer and 421k / 445k
+    in autumn; Medium 193k / 212k and 197k / 216k; Low 69k / 76k and 70k /
+    77k (one spot beside a village measured 457k on High). To hold that,
+    its trees are never the fine models (its boughs are), fine bushes reach
+    0.42 of the usual band from the road, and Medium and Low thin its trees
     harder than other countries'.
   - *Faces.* Eyes stood a centimetre out of the head. They now lie in the
     face (a flat white a hair proud of the skin, a larger soft iris, a
@@ -5116,16 +5128,105 @@ creature, marking or design is taken from one.
   - *The women's figures* are fuller in the bust and hip and narrower in
     the waist (the trunks `f` and `c`), and the druid's feather mantle is a
     small collar so her bodice shows.
+- **A fourth pass (2026-11-16): a roof over the deep forest's road, and a real draw.**
+  - *The canopy.* The crowns stood back from the road and left sky over
+    it. Now a bough leans out from either side every 10 m, turn about
+    (`BOUGH`, scatter's `bough`: an old trunk 6 to 8 m from the road that
+    arches to just past its middle, with broad flat clumps of leaf 7 to
+    9 m up), so the road is a tunnel with the light at its far end, the
+    ground under it shaded with gaps. Far squares carry the same boughs as
+    one clump and a stick, so nothing appears as the walk arrives; each
+    bough takes its country from `world.share`, so they thin out with the
+    border; none stand on a place, a camp, a bridge or a bank. In snow they
+    are bare wood. Follow and first-person cameras are under it. From the
+    orbit, leaves more than 3.4 m above the traveller's feet that lie
+    within 5 m of the line from the eye to the traveller are dithered away
+    in the prop shader (`uCut`, `uCutY`; any tree's crown, not only the
+    boughs), so an overhead or distant orbit looks down a well in the
+    leaves at the traveller instead of at a roof; the wood stays, and so do
+    the shadows.
+  - *The draw.* The elf ranger's aim was two arm angles and a bow through
+    her forearm. `pose.aim` (0 to 1 and back, 1.7 s up, 1.2 s down, done
+    before she walks on) now drives a sequence: she turns side-on to the
+    mark, the bow comes up before her chest as the other hand goes to the
+    string, the bow arm goes out straight as the string comes back to the
+    corner of the jaw with the elbow high behind, and she holds; the head
+    looks along the arrow. Both arms are solved to their hands (`reach`, a
+    two-bone arm toward a pole). The bow is modelled with the hand at the
+    grip and the string behind it in 25 steps of draw (`P.bow(q, arrow)`):
+    the string is two straight lines from the limbs to the fingers, the
+    limbs bend and the nocks come in as it is drawn, and the arrow lies
+    from the string past the side of the grip. She lets down without
+    loosing.
+- **Also in the fourth pass: the world that changed under a drag, and the company that did not change.**
+  - *"The switch of biome is mostly when I drag the view in the orbit."*
+    The real cause of the third pass's first item, and not in Wayfarer:
+    0.6 s after a drag the orbit is saved (`WP.settings.save`); that write
+    raised a `storage` event in the player page, which took it for
+    another tab's and rebuilt the stage 0.4 s later; and a new Wayfarer
+    is a new seed: another world, place, company and hour. "Mostly"
+    because a drag that ends on the same whole degrees saves nothing. V,
+    T and X did the same. Fixed in the player (§4.1's `saved`, §4.4); the smoke
+    check drags five times in each orbit mode in the player page and
+    presses T, and fails on the old player at the first drag. The third
+    pass's changes (longer countries, a border that holds, air that turns
+    slowly) stand as improvements, but they were not what the owner saw.
+  - *Companions* ("changing companions doesn't seem to take… is there a
+    max?… why a first companion and the rest, wouldn't I just want
+    buttons for all of them?"). Every panel change did reach the walk;
+    what read as "doesn't take" was three rules nothing explained: chosen
+    by hand, a seventh tick (or any past the first six in the list's
+    order) was dropped; *First companion* set to *Alone* emptied the
+    company whatever was ticked; and *Surprise* is the world's own
+    choice, so choosing it again changes nothing (and, with the bug
+    above, the company changed by itself after any drag). The controls
+    are now one choice (`configVersion` 2, so settings saved before it
+    are dropped and Wayfarer starts from its defaults): **Surprise me**
+    with *How many* (0 to 12; one of the named cats, then one from each
+    kind by turns, by the world's seed), or **I will choose them**, which
+    shows a chip for every companion in five rows by kind (all the one
+    list, `companionChoice`, kept in the order ticked) and a line from
+    the wallpaper saying how many walk ("14 ticked: the first 12 walk
+    with you"). Whoever is ticked walks; nobody ticked walks alone. The
+    old `companion` key, the kinds as modes of `companionPick`, and
+    "nobody in particular" are gone. The cap was six because there were
+    six places (`STATIONS`, `HEARTH`) and a count clamped to match; there
+    are twelve now (`PARTY_MAX`), the seventh on drawn as their lite
+    models at any distance. Twelve cost about 17k triangles more than
+    three on High (13k on Low): in the deep forest in autumn from a far
+    orbit that is 460k on High and 229k on Medium, 2% and 4% over; with
+    six or fewer nothing changed. A change no longer rebuilds the company
+    in place: `partyChange` keeps whoever stays where they are walking,
+    starts newcomers 8 m and more back down the road (3 m for the slow
+    ones) to run up, and sends the rest back the way they came
+    (`leavers`, forgotten 20 m behind).
+  - *"Why does the pack mule rotate randomly."* Every walker faced the
+    place it was making for, and made for it at a speed that took no
+    account of that place moving with the walk. One whose place is ahead
+    of the traveller (the led pony and donkey, 2.7 m in front) is past
+    its place whenever the traveller slows or stops, so it turned round,
+    walked back, and turned again; two whose places overlapped pushed
+    each other off them and faced wherever the push left them; and a
+    turn was as fast as 19 rad/s. Now a walker keeps the walk's own
+    velocity and closes the gap on top of it (ahead of its place, it
+    slows), faces the way it has actually gone, takes a step or two back
+    or aside without turning, stands facing down the road when the walk
+    stops, and turns no faster than its size allows (`turnRate`: 1.7
+    rad/s for the pony and donkey, 2.6 for the middling, 4.5 for the
+    small; fliers 6). A unit test walks every ground companion through
+    slowing, stopping and a cart going by at 10, 30 and 120 fps; it
+    fails on the old mover.
 - **Settings added:** `orbitMode`, `orbitAzimuth`, `orbitElevation`,
   `orbitDistance`, `companions`, `companionPick`, `companionChoice`,
-  `warpaint`, `craft`, `biomePick`, `biomeChoice`; `companion` gained every
-  kind.
+  `warpaint`, `craft`, `biomePick`, `biomeChoice`. `companion` (the one
+  companion of the first version, then "the first") was removed on
+  2026-11-16 with `configVersion` 2.
 - **Not built:** pinch to zoom (no multi-touch in `host.gestures`: on a
   phone the distance is the slider); people on the castle's ramp. The 2D
   fallback draws every traveller as the same cut-out in their own colours,
   and none of the company.
 
-**Tests.** Unit (`tools/wayfarer.test.mjs`, 25; the third pass added the country chosen and honoured, autumn in the woods, and the border that does not change its mind; the six before that: the orbit in clear air at 48 bearings and heights for an hour, its drag, fixed and turning at 10 and 120 fps; every companion posed, the count, the named cats against the roster, the seed; the company on the road, by the fire and at any frame rate; every traveller, the druid's changes and the rogue's hiding; grand cities; fine models and budgets). Smoke adds: the orbit's drag, wheel, overhead, grass and a village at four bearings; six companions, none, the barbarian's brand, the druid there and back, the rogue unseen and back; a grand city before its gate, in its square at five bearings, on its drawbridge and from down the road at night. The original sixteen: the road never jumps or
+**Tests.** Unit (`tools/wayfarer.test.mjs`, 28; the fourth pass added the boughs over the deep forest's road, the bow's string, the company changing on the road and nobody spinning (29 now); the third pass added the country chosen and honoured, autumn in the woods, and the border that does not change its mind; the six before that: the orbit in clear air at 48 bearings and heights for an hour, its drag, fixed and turning at 10 and 120 fps; every companion posed, the count, the named cats against the roster, the seed; the company on the road, by the fire and at any frame rate; every traveller, the druid's changes and the rogue's hiding; grand cities; fine models and budgets). Smoke adds: the orbit's drag, wheel, overhead, grass and a village at four bearings; six companions, none, the barbarian's brand, the druid there and back, the rogue unseen and back; a grand city before its gate, in its square at five bearings, on its drawbridge and from down the road at night. The original sixteen: the road never jumps or
 doubles back, is level across and no steeper than a third along; the
 ground is continuous and the road is never awash; every round has all
 the countries (nine now), never two stretches the same running, and every kind of place

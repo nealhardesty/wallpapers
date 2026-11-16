@@ -308,6 +308,24 @@ const WayModels = (() => {
             }
         });
     }
+    // A bough over the road (the deep forest's): an old trunk that leans out and arches along +z to a little past the
+    // middle of the road, a branch off it to either hand, and its leaves in broad flat clumps above the walker's head.
+    // `how` is 'fine', 'lite' (fewer, plainer clumps), 'far' (one clump and a stick) or 'bare' (winter: the wood alone).
+    const bough = (how, variant) => model(`bough:${how}:${variant}`, s => {
+        const r = k => rnd(variant + 3, k + 60), far = how === 'far', lite = how === 'lite', sides = far || lite ? 3 : 4;
+        const arch = [[0, -0.5, 0, 0.5, 1], [0, 2.6, 0.25, 0.4, 1], [0, 5.0, 1.3, 0.32, 1], [0, 6.6, 3.2, 0.24, 1], [0, 7.3, 5.4, 0.16, 1], [0, 7.2, 7.6, 0.06, 1]];
+        s.paint(C.trunk, 2).fx(0).tube(far || lite ? [arch[0], arch[2], arch[3], arch[4], arch[5]] : arch, sides);
+        if (!far && !lite) for (const x of [-1, 1]) s.tube([[0, 5.0, 1.3, 0.2, 1], [x * 1.3, 6.3, 2.2 + r(x + 2), 0.13, 1], [x * 2.7, 6.9, 3.4 + r(x + 4), 0.04, 1]], 3);
+        if (how === 'bare') return;
+        const leaf = (x, y, z, rx, ry, rz, k) => s.paint(C.white, 1).fx(46 + 10 * k).blob(x, y, z, rx, ry, rz, { seed: variant + k * 0.41 + 0.2, segs: far || lite ? 5 : 6, bands: 2, lump: 0.22, under: 0.7 });
+        if (far) { leaf(0, 8.0, 5.0, 4.4, 1.5, 5.2, 1); return; }
+        if (lite) { leaf(0.3 * (r(1) - 0.5), 8.0, 3.6, 3.9, 1.3, 3.2, 1); leaf(-1.7 + 0.6 * r(2), 8.0, 6.6, 3.7, 1.2, 3.2, 2); leaf(1.9 - 0.6 * r(3), 7.8, 8.0, 3.4, 1.1, 2.9, 3); return; }
+        leaf(0.3 * (r(1) - 0.5), 8.1, 3.9, 3.5, 1.25, 3.0, 1);
+        leaf(-2.2 + 0.6 * r(2), 7.9, 6.4, 3.0, 1.1, 2.9, 2);
+        leaf(2.3 - 0.6 * r(3), 8.3, 6.1, 3.1, 1.15, 2.8, 3);
+        leaf(0.4 * (r(4) - 0.5), 7.7, 8.5, 2.9, 1.0, 2.5, 4);
+        leaf(-2.9 + 5.8 * (variant % 2), 7.4, 3.1, 2.0, 0.9, 2.0, 5);
+    });
     // Far trees: a few triangles with the same outline.
     const farTree = cone => model(`far:${cone}`, s => {
         if (cone) s.paint(C.white, 1).prism(4, 0, 0.6, 0, 3.0, 10.5, 0, { foot: 0.5 });
@@ -880,20 +898,29 @@ const WayModels = (() => {
             if (++done % 3 === 0) yield;
             const lx = item.x - x0, lz = item.z - z0, season = w.season(item.z), v = item.v || 0, phase = Math.floor(v * 255);
             if (item.k === 'tree') {
-                if (density < 1 && rnd(v, 11) > density + (item.b === 'deepwood' ? 0.03 : 0.15)) continue;     // (the deep forest has trees to spare)
+                if (density < 1 && rnd(v, 11) > density + (item.b === 'deepwood' ? -0.05 : 0.15)) continue;     // (the deep forest has trees to spare)
                 const cone = item.kind === 'fir', sc = item.s * (item.kind === 'shroom' ? 1.3 : 1.25);
                 TINT[1] = leafTint(item.kind, season, v);
                 TINT[2] = null;
                 TINT[3] = (BLOOM[item.kind] || BLOOM.apple)[season.t > 0.5 ? season.next : season.index];
                 const bare = item.kind === 'snag' || (season.snow > 0.5 && !cone && item.kind !== 'pine' && item.kind !== 'shroom' && item.kind !== 'glade');
                 if (far && bare) continue;          // a bare tree is nothing at a distance
-                const close = !far && detail > 0 && Math.abs(w.lateral(item.x, item.z)) < (item.b === 'deepwood' ? band * 0.42 : band);
+                const close = !far && detail > 0 && item.b !== 'deepwood' && Math.abs(w.lateral(item.x, item.z)) < band;        // (the deep forest's fine work is its boughs)
                 const m = far ? farTree(cone || item.kind === 'poplar') : (close ? WayDetail.tree : tree)(bare ? 'snag' : item.kind, Math.floor(v * 3));
                 props.stamp(m, place(lx, item.y - 0.1, lz, item.yaw, far ? sc * 1.3 : sc, far ? sc * 1.2 : sc * (0.9 + 0.3 * rnd(v, 5))), TINT, Math.max(season.snow, w.cold(item.z)) * 0.6, phase);
                 if (!far) { darken(item.x, item.z, 3.4 * sc, 0.34); if (item.kind === 'glade' || item.kind === 'shroom') lights.push([item.x, item.y + 3.5 * sc, item.z, 5, 0.3, 0.9, 0.8, 1]); }
                 continue;
             }
             const snow = Math.max(season.snow, w.cold(item.z)) * 0.9;
+            if (item.k === 'bough') {
+                TINT[1] = leafTint('oak', season, v); TINT[2] = TINT[3] = null;
+                const bare = season.snow > 0.5;
+                if (far && bare) continue;
+                props.stamp(bough(far ? 'far' : bare ? 'bare' : detail > 1 ? 'fine' : 'lite', Math.floor(v * 3)), place(lx, item.y, lz, item.yaw, item.s, item.s * (0.94 + 0.14 * rnd(v, 5))), TINT, snow * 0.6, phase);
+                // Under it the road is in shade, with the light coming through between one bough's leaves and the next's.
+                if (!far && !bare) darken(item.x + Math.sin(item.yaw) * 5.4 * item.s, item.z + Math.cos(item.yaw) * 5.4 * item.s, 4.6, 0.3);
+                continue;
+            }
             if (item.k === 'house' || item.k === 'hut' || item.k === 'barn') {
                 temp.clear();
                 // Far off, and in the back rows of a grand city, a house is its shape, its roof and its lit windows; by the road it is trimmed.

@@ -382,16 +382,26 @@ test('settings: the panel offers what the code knows, and the keys are declared'
     assert.deepEqual(options('time'), constant('WAY_TIME_ORDER'));
     assert.deepEqual(options('weather'), constant('WAY_WEATHER_ORDER'));
     assert.deepEqual(options('companionPick'), constant('WAY_PICKS'));
-    assert.deepEqual(options('companion'), constant('WAY_FIRST'));
-    assert.equal(context.WP.defaultsOf('wayfarer').companion, 'fox', 'the old single companion is still a setting, and still a fox');
-    assert.deepEqual(options('companionChoice'), plain(L.COMPANIONS.map(c => c.id)));
-    assert.deepEqual(plain(schema.find(c => c.key === 'companionChoice').options.map(o => o[1])), plain(L.COMPANIONS.map(c => c.label)), 'the chips name them as the code does');
+    // One row of chips for each kind, all the one setting: between them everybody, named as the code names them.
+    const rows = schema.filter(c => c.key === 'companionChoice'), chips = rows.flatMap(c => c.options);
+    assert.deepEqual(plain(rows.map(c => c.options.map(o => L.COMPANION[o[0]].group)).map(g => [...new Set(g)].join())), plain(L.GROUPS));
+    assert.deepEqual(plain(chips.map(o => o[0])), plain(L.COMPANIONS.map(c => c.id)));
+    assert.deepEqual(plain(chips.map(o => o[1])), plain(L.COMPANIONS.map(c => c.label)), 'the chips name them as the code does');
+    // A tick goes on the end and an untick leaves the rest in their order, whichever row it is in.
+    const dogs = rows[1], wild = rows[3];
+    let chosen = { companionChoice: ['moofy', 'hound', 'raven'] };
+    assert.deepEqual(plain(dogs.get(chosen)), ['hound']);
+    chosen = wild.set(chosen, [...wild.get(chosen), 'fox']);
+    assert.deepEqual(plain(chosen.companionChoice), ['moofy', 'hound', 'raven', 'fox']);
+    chosen = dogs.set(chosen, ['pup']);
+    assert.deepEqual(plain(chosen.companionChoice), ['moofy', 'raven', 'fox', 'pup']);
+    assert.ok(!('companion' in context.WP.defaultsOf('wayfarer')) && !schema.some(c => c.key === 'companion'), 'the old first companion is gone');
+    assert.equal(context.WP.defaultsOf('wayfarer').configVersion, 2);
     assert.deepEqual(options('orbitMode'), constant('WAY_ORBITS'));
     assert.deepEqual(options('biomePick'), Object.keys(constant('WAY_COUNTRY')));
     assert.deepEqual(options('biomeChoice').sort(), plain(L.BIOMES).sort());
     for (const [pick, list] of Object.entries(constant('WAY_COUNTRY'))) for (const b of list || []) assert.ok(L.BIOMES.includes(b), `${pick}: ${b}`);
     assert.deepEqual(options('craft'), constant('WAY_CRAFT'));
-    assert.deepEqual(plain(L.GROUPS), constant('WAY_PICKS').slice(1, -1));
     assert.deepEqual(options('traveller'), Object.keys(A.LOOKS));
     assert.deepEqual(options('season'), ['journey', ...L.SEASONS]);
     for (const mode of constant('WAY_WEATHER_ORDER')) assert.ok(mode === 'auto' || L.WEATHER[mode], mode);
@@ -519,33 +529,25 @@ test('the company: every kind can be posed, the count is honoured, the named cat
     // Their coats are painted on: black Moofy and white Waffles are not the same colour, and Ras has white socks.
     const tone = id => { out.clear(); K.pose(id, out, st, 0, 0, 0, { yaw: 0, gait: 0, t: 0 }, fx); let sum = 0, light = 0; for (let i = 0; i < out.n; i++) { const v = out.B[i * 24 + 16] + out.B[i * 24 + 17] + out.B[i * 24 + 18]; sum += v; light += v > 600; } return [sum / out.n / 3, light / out.n]; };
     assert.ok(tone('moofy')[0] < 80 && tone('waffles')[0] > 150 && tone('waffles')[1] < 0.9 && tone('ras')[1] > 0.04 && tone('ras')[0] < 110 && tone('butters')[0] > 150 && tone('kittytoes')[0] > 110, `${tone('moofy')}, ${tone('waffles')}, ${tone('ras')}`);
-    // Who comes: the count, the pick, the choice, the seed.
-    for (const pick of ['surprise', ...L.GROUPS]) for (let count = 0; count <= 6; count++) {
-        const party = L.party(11, { count, pick });
-        assert.equal(party.length, count, `${pick} × ${count}: ${party}`);
-        assert.deepEqual(plain(party), plain(L.party(11, { count, pick })));
-        for (const id of party) assert.ok(L.COMPANION[id] && (pick === 'surprise' || L.COMPANION[id].group === pick), `${id} in ${pick}`);
-        assert.equal(new Set(party.filter(id => L.COMPANION[id].cat)).size, party.filter(id => L.COMPANION[id].cat).length, 'a named cat twice');
-        if (pick === 'surprise' && count) assert.ok(L.COMPANION[party[0]].from, 'surprise brings one of the named cats');
-        if (pick === 'surprise' && count >= 5) assert.equal(new Set(party.map(id => L.COMPANION[id].group)).size, 5, 'and one from each kind');
+    // Who comes. Left to chance: the count, and the world's seed.
+    for (let count = 0; count <= 12; count++) {
+        const party = L.party(11, { count });
+        assert.equal(party.length, count, `${count}: ${party}`);
+        assert.deepEqual(plain(party), plain(L.party(11, { count, pick: 'surprise', choice: ['snail'] })));
+        assert.equal(new Set(party).size, party.length, 'somebody twice');
+        if (count) assert.ok(L.COMPANION[party[0]].from, 'surprise brings one of the named cats');
+        if (count >= 5) assert.equal(new Set(party.map(id => L.COMPANION[id].group)).size, 5, 'and one from each kind');
+        assert.ok(party.filter(id => L.COMPANION[id].role === 'led').length <= 1 && party.filter(id => L.COMPANION[id].role === 'ride').length <= 1);
     }
     const seen = new Set();
     for (let seed = 1; seed < 400; seed++) for (const id of L.party(seed, { count: 6 })) seen.add(id);
     assert.equal(seen.size, L.COMPANIONS.length, 'every kind turns up, given enough worlds');
     assert.notDeepEqual(plain(L.party(11, { count: 3 })), plain(L.party(12, { count: 3 })));
-    assert.deepEqual(plain(L.party(1, { pick: 'choose', choice: ['moofy', 'nobody', 'hawk', 'snail'] })), ['moofy', 'hawk', 'snail']);
-    assert.equal(L.party(1, { pick: 'choose', choice: L.COMPANIONS.map(c => c.id) }).length, 6);
-    assert.deepEqual(plain(L.party(1, { pick: 'choose', choice: [] })), []);
-    // The first companion (the old single choice, kept): it leads and counts; 'none' is alone, whatever else is set.
-    for (const first of ['fox', 'dog', 'pony', 'cat', 'wisp', 'moofy', 'snail']) for (const pick of ['surprise', ...L.GROUPS]) {
-        const party = L.party(11, { count: 3, pick, first });
-        assert.ok(party.length === 3 && party[0] === first && new Set(party).size === 3, `${first} first of ${pick}: ${party}`);
-        assert.deepEqual(plain(L.party(11, { count: 1, pick, first })), [first]);
-    }
-    assert.ok(L.COMPANION[L.party(11, { count: 3, first: 'fox' })[1]].from, 'a named cat comes second');
-    assert.deepEqual(plain(L.party(11, { count: 6, first: 'none' })), []);
-    assert.deepEqual(plain(L.party(11, { count: 0, first: 'fox' })), []);
-    assert.equal(L.party(11, { count: 4, first: 'any' }).length, 4);
+    assert.equal(L.party(5, { count: 40 }).length, L.PARTY_MAX);
+    // Chosen by hand: the ones ticked, in the order ticked, the first twelve; the count has no say.
+    assert.deepEqual(plain(L.party(1, { pick: 'choose', choice: ['snail', 'moofy', 'nobody', 'hawk', 'snail'], count: 0 })), ['snail', 'moofy', 'hawk']);
+    assert.deepEqual(plain(L.party(1, { pick: 'choose', choice: L.COMPANIONS.map(c => c.id).reverse() })), plain(L.COMPANIONS.map(c => c.id).reverse().slice(0, L.PARTY_MAX)));
+    assert.deepEqual(plain(L.party(1, { pick: 'choose', choice: [], count: 6 })), []);
 });
 
 test('the company on the road: out of one another\'s way and the traveller\'s, on the road, round the fire at night, the same at 10 fps as at 120', () => {
@@ -879,4 +881,110 @@ test('one country gives way to the next over a wandering border, in the same pla
     let off = 0, m = 0;
     for (let j = 1; j < 17; j++) for (let i = 1; i < 17; i++) { const fx = far.x0 + (i - 1) * 16, fz = far.z0 + (j - 1) * 16; if (fx < first.x0 || fx >= first.x0 + 64 || fz < first.z0 || fz >= first.z0 + 64) continue; const ni = (fx - first.x0) / 2 + 1, nj = (fz - first.z0) / 2 + 1, a = (j * 19 + i) * 24, b = (nj * 35 + ni) * 24; for (let k = 16; k < 19; k++) off = Math.max(off, Math.abs(far.ground.B[a + k] - first.ground.B[b + k])); m++; }
     assert.ok(m >= 9 && off <= 40, `far and near ground differ by ${off} of 255 at ${m} shared points`);
+});
+
+test('the deep forest closes over the road: boughs from both sides all along it, leaves over the middle, the same far off as near, and thinning out with the border', () => {
+    const deep = L.world(7, { biomes: ['deepwood'], season: 'summer' });
+    const along = (w, far) => { const out = []; for (let cz = 1700; cz < 1740; cz++) { const cx = Math.floor(w.roadX(cz * 64 + 32) / 64); for (const dx of [-1, 0, 1]) for (const it of w.scatter(cx + dx, cz, far)) if (it.k === 'bough') out.push(it); } return out; };
+    const near = along(deep, false), far = along(deep, true), left = near.filter(it => it.side < 0).length;
+    assert.ok(near.length > 300, `${near.length} boughs along 2.5 km`);
+    assert.ok(left > near.length * 0.4 && left < near.length * 0.6, `${left} of ${near.length} from the left`);
+    for (const it of near) { const d = deep.lateral(it.x, it.z); assert.ok(Math.sign(d) === it.side && Math.abs(d) > 6 && Math.abs(d) < 8, `a bough ${d.toFixed(1)} m from the road`); }
+    assert.deepEqual(far.map(it => [it.x, it.z]), near.map(it => [it.x, it.z]), 'a far square has the boughs its near squares will have: nothing appears as the walk reaches it');
+    // No gap in the roof longer than a place or a stream takes.
+    const zs = near.map(it => it.z).sort((a, b) => a - b);
+    let gaps = 0;
+    for (let i = 1; i < zs.length; i++) if (zs[i] - zs[i - 1] > 12) gaps++;
+    assert.ok(gaps < 14, `${gaps} gaps in the roof`);
+    assert.equal(along(L.world(7, { biomes: ['forest'] })).length, 0, 'the forest has none');
+    // Built: leaves above the middle of the road, higher than a camera that follows the walker.
+    let over = 0, low = 0;
+    for (const cz of [1705, 1706, 1707]) {
+        const cx = Math.floor(deep.roadX(cz * 64 + 32) / 64), sq = M.square(deep, cx, cz, 64, 32, false, 1, 2), at = new Float32Array(sq.props.B.buffer, sq.props.B.byteOffset, sq.props.n * 6);
+        for (let i = 0; i < sq.props.n; i++) {
+            const x = sq.x0 + at[i * 6], y = at[i * 6 + 1], z = sq.z0 + at[i * 6 + 2];
+            if (Math.abs(deep.lateral(x, z)) > 2) continue;
+            const up = y - deep.ground(x, z);
+            if (up > 5.5 && up < 12) over++; else if (up > 1 && up <= 5.5) low++;
+        }
+    }
+    assert.ok(over > 600 && low === 0, `${over} vertices of leaf and limb over the road, ${low} where the walker and the camera go`);
+    // At a border the boughs belong to the deep forest's side of it, and thin out as it does.
+    const two = L.world(7, { biomes: ['deepwood', 'meadow'] });
+    let inDeep = 0, inMeadow = 0, n = 0;
+    for (const it of along(two, false)) { const sh = two.share(two.roadX(it.z), it.z), r = two.at(it.z), mine = r.a.biome === 'deepwood' ? 1 - sh : r.b.biome === 'deepwood' ? sh : 0; n++; if (mine > 0.9) inDeep++; if (mine < 0.1) inMeadow++; }
+    assert.ok(n > 100 && inMeadow === 0 && inDeep > n * 0.7 && inDeep < n, `${n} boughs: ${inDeep} deep in the forest, ${inMeadow} in the meadow`);
+});
+
+test('the bow: its string is as long as the pose pulls it, and the limbs bend as it comes back', () => {
+    const span = m => { const at = new Float32Array(m.B.buffer, m.B.byteOffset, m.n * 6); let back = 0, top = 0; for (let i = 0; i < m.n; i++) { back = Math.min(back, at[i * 6 + 2]); top = Math.max(top, at[i * 6 + 1]); } return { back, top }; };
+    const rest = span(P.P.bow()), half = span(P.P.bow(12, true)), full = span(P.P.bow(24, true));
+    assert.ok(rest.back > -0.14 && rest.back < -0.1, `at rest the string is ${-rest.back} m behind the grip`);
+    assert.ok(Math.abs(full.back + 0.75) < 0.03 && half.back < rest.back - 0.25 && full.back < half.back - 0.25, `drawn: ${half.back}, ${full.back}`);
+    assert.ok(full.top < rest.top - 0.04, 'the nocks come in as the limbs bend');
+});
+
+test('the company changes on the road: who stays keeps walking, newcomers run up from behind, the rest turn back; twelve have twelve places', () => {
+    const w = world, j = L.journeyStart(w, 360 * 300 + 60), opts = { pace: 1, night: 0, camps: false, rests: false };
+    let party = L.partyStart(['fox', 'moofy', 'hound']), leavers = [], t = 0;
+    const ctx = () => ({ t, night: 0, passing: false, others: party, scare: null, random: () => 0.5, avoid: null, pet: null });
+    const run = secs => { for (let i = 0; i < secs * 20; i++) { t += 0.05; L.journeyStep(j, 0.05, w, opts); for (const c of [...party, ...leavers]) L.companionStep(c, 0.05, w, j, ctx()); } };
+    run(8);
+    const fox = party[0], foxAt = [fox.x, fox.z];
+    ({ party, leavers } = L.partyChange(party, ['fox', 'raven', 'goat', 'moofy', 'pup'], j, w));
+    assert.deepEqual(plain(party.map(c => c.id)), ['fox', 'raven', 'goat', 'moofy', 'pup']);
+    assert.deepEqual(plain(party.map(c => c.slot)), [0, 1, 2, 3, 4]);
+    assert.ok(party[0] === fox && fox.x === foxAt[0] && fox.z === foxAt[1], 'the fox is where it was');
+    assert.deepEqual(plain(leavers.map(c => c.id)), ['hound']);
+    const me = () => L.standing(j, w), behind = c => (j.z - c.z);
+    for (const id of ['raven', 'goat', 'pup']) { const c = party.find(p => p.id === id); assert.ok(c.x !== null && behind(c) > 2.5 && behind(c) < 16, `${id} starts ${behind(c).toFixed(1)} m back`); }
+    const goat = party.find(p => p.id === 'goat'), hound = leavers[0], start = behind(goat);
+    let step = 0, last = [goat.x, goat.z];
+    for (let i = 0; i < 12 * 20; i++) { run(0.05); step = Math.max(step, Math.hypot(goat.x - last[0], goat.z - last[1])); last = [goat.x, goat.z]; }
+    assert.ok(step < 0.5, `nobody jumps: ${step.toFixed(2)} m in a twentieth of a second`);
+    assert.ok(Math.hypot(goat.x - me().x, goat.z - me().z) < 6 && behind(goat) < start, 'the goat has caught up');
+    assert.ok(behind(hound) > 12 && hound.leaving, `the hound is ${behind(hound).toFixed(1)} m behind`);
+    // Twelve: each with a place of its own on the road, by the road and by the fire.
+    const places = (L.partyStart(L.party(3, { count: 12 }))).map(c => c.slot);
+    assert.deepEqual(plain(places), [...Array(12).keys()]);
+    party = L.partyStart(['fox', 'hound', 'cat', 'dog', 'pup', 'fawn', 'lamb', 'hen', 'sheepdog', 'badger', 'cub', 'goat'].filter(id => L.COMPANION[id]));
+    leavers = [];
+    run(25);
+    for (let a = 0; a < party.length; a++) {
+        assert.ok(Math.abs(w.lateral(party[a].x, party[a].z)) < 2.6, `${party[a].id} is off the road`);
+        for (let b = 0; b < a; b++) assert.ok(Math.hypot(party[a].x - party[b].x, party[a].z - party[b].z) > 0.35, `${party[a].id} and ${party[b].id} stand in one place`);
+    }
+});
+
+test('nobody spins: every companion turns no faster than its size allows, walks facing its way, and faces down the road when the walk slows or stops', () => {
+    const w = world, wrap = a => { a %= 2 * Math.PI; if (a > Math.PI) a -= 2 * Math.PI; if (a < -Math.PI) a += 2 * Math.PI; return a; };
+    const walkers = L.COMPANIONS.filter(c => !['fly', 'soar', 'hover', 'flit', 'ride'].includes(c.role)).map(c => c.id);
+    for (const fps of [10, 30, 120]) for (let from = 0; from < walkers.length; from += 6) {
+        const ids = walkers.slice(from, from + 6), party = L.partyStart(ids), j = L.journeyStart(w, 360 * 300 + 60 + from * 400), dt = 1 / fps;
+        const last = party.map(() => null), turned = party.map(() => 0), away = party.map(() => 0);
+        let t = 0, seed = 1;
+        const random = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+        for (let i = 0; i < 150 * fps; i++) {
+            t += dt;
+            // The walk as it goes: on, slower for a while, stopped for a while, on again; a cart goes by now and then.
+            const phase = t % 50, pace = phase < 24 ? 1 : phase < 30 ? 0.35 : phase < 38 ? 0 : 1;
+            if (pace) L.journeyStep(j, dt * pace, w, { pace: 1, night: 0, camps: false, rests: false }); else j.speed = 0;
+            if (pace) j.speed = L.WALK * pace;
+            party.forEach((c, k) => {
+                L.companionStep(c, dt, w, j, { t, night: 0, passing: Math.floor(t / 20) % 3 === 2, others: party, scare: null, random, avoid: null, pet: null });
+                if (last[k] !== null && t > 6) {
+                    const rate = Math.abs(wrap(c.yaw - last[k])) / dt, most = c.kind.big > 0.9 ? 1.7 : c.kind.big > 0.55 ? 2.6 : 4.5;
+                    assert.ok(rate <= most + 1e-6, `${c.id} turns at ${rate.toFixed(1)} rad/s (${most} is its most) at ${fps} fps, t ${t.toFixed(1)}`);
+                    turned[k] += rate * dt;
+                    // The big steady ones (led, plodding, at heel) never face back up the road.
+                    if (c.kind.big > 0.55 && ['heel', 'led', 'plod'].includes(c.role)) away[k] = Math.max(away[k], Math.abs(wrap(c.yaw - w.heading(c.z))));
+                }
+                last[k] = c.yaw;
+            });
+        }
+        party.forEach((c, k) => {
+            if (c.kind.big > 0.55 && ['heel', 'led', 'plod'].includes(c.role)) assert.ok(away[k] < 1.3 && turned[k] < 30, `${c.id} (${c.role}) faced ${away[k].toFixed(2)} rad off the road and turned ${turned[k].toFixed(0)} rad in 150 s at ${fps} fps`);
+            assert.ok(Math.hypot(c.x - L.standing(j, w).x, c.z - L.standing(j, w).z) < 12, `${c.id} was left behind`);
+        });
+    }
 });

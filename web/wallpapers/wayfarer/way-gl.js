@@ -185,6 +185,8 @@ varying float vGloss;
 uniform vec4 uHole;
 uniform float uLit, uWet, uTime, uRound;
 uniform vec2 uGhost;       // drawn half there: how solid, and how much of a shimmer (the rest of the time 0, 0)
+uniform vec4 uCut;         // leaves between the eye and the traveller are cut away: the traveller from the eye, and how wide (0: nothing is)
+uniform float uCutY;       // ...those higher than this (so not the bushes at their feet)
 ${WAY_GLSL.common}
 ${WAY_GLSL.lamps}
 ${WAY_GLSL.shadow(shadows)}
@@ -198,6 +200,11 @@ void main() {
     float dab = texture2D(uPaint, uv / 4.0).g, wash = texture2D(uPaint, uv / 16.0).r;
     // Leaves get the heavier brush: clumps of light and shade.
     float leafy = step(0.05, vExtra.x), fade = exp(-dist / 90.0);
+    if (uCut.w > 0.0 && leafy > 0.5 && vAt.y > uCutY) {
+        // A crown or a bough over the walker's head never hides them from a camera above: it opens round the line of sight.
+        float along = clamp(dot(vRel, uCut.xyz) / dot(uCut.xyz, uCut.xyz), 0.0, 1.15), wide = uCut.w * (0.4 + 0.6 * along);
+        if (fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453) > smoothstep(wide * 0.62, wide, length(vRel - uCut.xyz * along))) discard;
+    }
     vec3 albedo = vColour.rgb * (1.0 + ((dab - 0.5) * 0.26 + (wash - 0.5) * 0.2) * fade * (1.0 - 0.8 * uRound));        // (the brush is for scenery: skin and fur are painted in their models)
     albedo *= mix(vec3(1.0), mix(vec3(0.72, 0.8, 0.9), vec3(1.24, 1.18, 0.92), smoothstep(0.4, 0.6, dab * 0.6 + wash * 0.4)), 0.6 * leafy * (0.3 + 0.7 * fade));
     albedo = mix(albedo, albedo * vec3(0.72, 0.74, 0.8), uWet);
@@ -647,6 +654,8 @@ class WayRenderer {
         gl.uniform1f(p.u('uLit'), lit);
         gl.uniform1f(p.u('uRound'), 0);
         gl.uniform2f(p.u('uGhost'), 0, 0);
+        gl.uniform4fv(p.u('uCut'), scene.cut);
+        gl.uniform1f(p.u('uCutY'), scene.cutY);
         gl.uniform1f(p.u('uTime'), scene.time);
         gl.uniform4fv(p.u('uLampAt[0]'), this.lampAt);
         gl.uniform4fv(p.u('uLampCol[0]'), this.lampCol);

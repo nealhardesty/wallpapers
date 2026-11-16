@@ -37,6 +37,7 @@ const WayLogic = (() => {
 
     const SLOT = 360;       // metres of road to a leg
     const CHUNK = 64;       // metres to a side of the ground's near squares
+    const BOUGH = 10;       // metres between one bough over the road and the next on the same side, in the deep forest
     // The countries, and what each does to the land: hills by the road (m),
     // how high the valley's sides climb, how much lower or higher it lies,
     // and how wooded it is.
@@ -642,6 +643,17 @@ const WayLogic = (() => {
                     out.push({ k: 'tree', kind, x, z, y, yaw: roll * 40, s: (0.75 + 0.6 * w.hash(gi, gj, 36)) * (b.biome === 'deepwood' ? 1.55 : 1), v: w.hash(gi, gj, 37), b: b.biome });
                 }
             }
+            // In the deep forest great boughs lean out over the road from either side and meet above it: one a side every
+            // BOUGH metres, turn about. Where another country begins they thin out with the border (the same share).
+            for (let k = Math.ceil(z0 / (BOUGH / 2) - 1); k * (BOUGH / 2) < z0 + CHUNK + BOUGH; k++) {
+                const side = k % 2 === 0 ? 1 : -1, z = (k + 0.6 * (w.hash(k, 3, 52) - 0.5)) * (BOUGH / 2), r = w.at(z), b = w.hash(k, 3, 50) < w.share(r.x, z) ? r.b : r.a;
+                if (b.biome !== 'deepwood') continue;
+                const d = side * (6.3 + 1.3 * w.hash(k, 3, 51)), x = r.x + d / r.cos, p = r.near;
+                if (!inside(x, z) || (p.radius && Math.hypot(d, r.dz) < p.radius * 1.12 + 6) || (p.place !== 'none' && !p.radius && Math.abs(r.dz) < 24) || onCamp(x, z, 12)) continue;
+                const y = w.ground(x, z);
+                if (y < w.water(x, z) + 0.5 || w.bridge(z) !== null && w.bridge(z) !== undefined || Math.abs(y - r.y) > 2.5) continue;
+                out.push({ k: 'bough', x, z, y, yaw: w.heading(z) - side * Math.PI / 2 + 0.5 * (w.hash(k, 3, 53) - 0.5), s: 0.92 + 0.22 * w.hash(k, 3, 54), v: w.hash(k, 3, 55), b: 'deepwood', side });
+            }
             // What a place put here.
             const li = Math.floor((z0 + CHUNK / 2) / SLOT);
             for (const i of [li - 1, li, li + 1]) {
@@ -660,7 +672,7 @@ const WayLogic = (() => {
                     if (pick > 0.5) continue;
                     const x = (gi + w.hash(gi, gj, 41)) * FINE, z = (gj + w.hash(gi, gj, 42)) * FINE;
                     const r = w.at(z), d = (x - r.x) * r.cos, ad = Math.abs(d), b = w.hash(gi, gj, 43) < w.share(x, z) ? r.b : r.a;
-                    if (ad < 2.5 || pick > 0.5 * (1 - smooth(14, 60, ad) * (b.biome === 'deepwood' ? 0.86 : 1)) + 0.05) continue;
+                    if (ad < 2.5 || pick > 0.5 * (1 - smooth(14, 60, ad) * (b.biome === 'deepwood' ? 0.9 : 1)) + 0.05) continue;
                     if ((r.near.radius && Math.hypot(d, r.dz) < r.near.radius && !(r.near.grand && beyondWall(d, r.dz) > 2)) || onCamp(x, z, 4.6)) continue;
                     const town = r.a.grand ? r.a : r.b.grand ? r.b : null;
                     if (town && Math.abs(z - town.zc) < GRAND.A + 100 && ad < 22 && Math.abs(z - town.zc) > GRAND.A) continue;
@@ -758,6 +770,7 @@ const WayLogic = (() => {
                 else if (k === 'markethall') box(out, it, 7.4, 5.4, y - 1, y + 9.5);
                 else if (k === 'mill') drum(out, it.x, it.z, 8.4, y - 1, y + 19);
                 else if (k === 'lighthouse') drum(out, it.x, it.z, 3.9, y - 2, y + 23);
+                else if (k === 'bough') drum(out, it.x, it.z, 0.7 * it.s, y - 1, y + 4.5 * it.s);
                 else if (k === 'elder') { drum(out, it.x, it.z, 3.6, y - 1, y + 10); drum(out, it.x, it.z, 9.6, y + 6.5, y + 19.5); }
                 else if (k === 'ruin' || k === 'abbey') box(out, it, 10.5, 3.4, y - 1, y + (k === 'ruin' ? 13 : 7.5));
                 else if (k === 'stone') drum(out, it.x, it.z, 1.4, y - 1, y + 1.2 + (it.flat ? 0.6 : 1.7 * it.h));
@@ -1016,35 +1029,31 @@ const WayLogic = (() => {
     ];
     const COMPANION = Object.fromEntries(COMPANIONS.map(c => [c.id, c]));
     const GROUPS = ['cats', 'dogs', 'farm', 'wild', 'fantastic'];
-    // Who comes along. options: { count (0 to 6), pick: 'surprise', one of GROUPS, or 'choose', choice: [ids] }.
-    // The same seed is the same party. Surprise always brings one of the named cats, then one from each other
-    // group in turn; a group smaller than the count doubles up (two hounds), but never the named cats.
+    // Who comes along. options: { pick: 'surprise' or 'choose', count (0 to PARTY_MAX, for surprise), choice: [ids] }.
+    // Surprise is one of the named cats and then one from each kind by turns, settled by the world's seed; chosen
+    // by hand it is the ones ticked, in the order ticked, and nothing else has a say.
     function party(seed, options = {}) {
-        const count = clamp(Math.round(options.count ?? 3), 0, 6), pick = options.pick || 'surprise';
-        // first: one who always comes (it leads the company and counts toward it); 'none' is nobody at all.
-        if (options.first === 'none') return [];
-        if (pick === 'choose') return (options.choice || []).filter(id => COMPANION[id]).slice(0, 6);
+        if (options.pick === 'choose') return (options.choice || []).filter((id, i, all) => COMPANION[id] && all.indexOf(id) === i).slice(0, PARTY_MAX);
+        const count = clamp(Math.round(options.count ?? 3), 0, PARTY_MAX), out = [];
         const shuffled = (list, salt) => list.map((c, i) => [hash(seed, i * 31 + salt, 9173), c]).sort((a, b) => a[0] - b[0]).map(e => e[1]);
-        const out = COMPANION[options.first] && count ? [options.first] : [], has = fn => out.some(id => fn(COMPANION[id]));
         // Not two on a rope, nor two on the pack, when it is left to chance.
-        const fits = c => !(c.role === 'led' && has(o => o.role === 'led')) && !(c.role === 'ride' && has(o => o.role === 'ride'));
-        if (GROUPS.includes(pick)) {
-            const pool = shuffled(COMPANIONS.filter(c => c.group === pick), 1);
-            for (const c of pool) if (out.length < count && fits(c) && !out.includes(c.id)) out.push(c.id);
-            for (let lap = 0; out.length < count && lap < 6; lap++) for (const c of pool) if (out.length < count && !c.cat) out.push(c.id);
-            return out;
-        }
+        const has = fn => out.some(id => fn(COMPANION[id])), fits = c => !(c.role === 'led' && has(o => o.role === 'led')) && !(c.role === 'ride' && has(o => o.role === 'ride'));
         const order = [COMPANIONS.filter(c => c.group === 'cats'), ...shuffled(GROUPS.slice(1), 2).map(g => COMPANIONS.filter(c => c.group === g))];
-        for (let k = has(c => c.cat) ? 1 : 0; out.length < count; k++) { const pool = shuffled(order[k % order.length], 3 + k).filter(c => !out.includes(c.id) && fits(c) && (k || c.cat)); if (pool.length) out.push(pool[0].id); }
+        for (let k = 0; out.length < count && k < 400; k++) { const pool = shuffled(order[k % order.length], 3 + k).filter(c => !out.includes(c.id) && fits(c) && (k || c.cat)); if (pool.length) out.push(pool[0].id); }
         return out;
     }
 
     // Each has a place about the traveller, in the road's own terms: metres ahead and metres to their right. Kept
     // on the road's own width (the verge is full of fences, lamps and bushes) and out of the middle of the picture.
-    const STATIONS = [[2.5, -1.5], [1.2, 1.7], [-1.7, -1.6], [3.9, 1.0], [-3.0, -0.8], [0.3, -2.3]];
+    // (The first six are the company there always was; six more places behind and before them, for a company of twelve.)
+    const PARTY_MAX = 12;
+    const STATIONS = [[2.5, -1.5], [1.2, 1.7], [-1.7, -1.6], [3.9, 1.0], [-3.0, -0.8], [0.3, -2.3], [-4.3, 1.4], [5.4, -0.7], [-5.6, -1.7], [-2.6, 2.1], [6.8, 1.3], [-7.0, 0.4]];
     // And a place by the fire: metres along the road from it, and metres beyond it (away from the road, where the traveller looks).
-    const HEARTH = [[1.6, 0.5], [0.3, 1.8], [-1.3, 1.3], [2.1, -1.0], [-2.4, -0.4], [1.2, -2.3]];
-    const turnTo = (yaw, to, k) => { let turn = (to - yaw) % TAU; if (turn > Math.PI) turn -= TAU; if (turn < -Math.PI) turn += TAU; return yaw + turn * Math.min(1, k); };
+    const HEARTH = [[1.6, 0.5], [0.3, 1.8], [-1.3, 1.3], [2.1, -1.0], [-2.4, -0.4], [1.2, -2.3], [3.2, 1.6], [-3.4, 1.4], [0.2, 3.3], [3.6, -0.6], [-1.6, 3.0], [1.9, 3.0]];
+    // (`most`: no more than this much of a turn in one step, so nothing spins.)
+    const turnTo = (yaw, to, k, most = Infinity) => { let turn = (to - yaw) % TAU; if (turn > Math.PI) turn -= TAU; if (turn < -Math.PI) turn += TAU; return yaw + clamp(turn * Math.min(1, k), -most, most); };
+    // How fast each may turn, radians a second: the big ones come round slowly.
+    const turnRate = kind => kind.big > 0.9 ? 1.7 : kind.big > 0.55 ? 2.6 : 4.5;
     function companionStart(id, slot) {
         const kind = COMPANION[id];
         return { id, kind, slot, role: kind.role, x: null, z: 0, y: 0, yaw: 0, speed: 0, gait: 0, rest: 0, down: 0, alt: 0, wing: 0, riding: 0, alarm: 0, bank: 0, mode: 'go', timer: 4 + 3 * slot, since: 0, prey: null, turn: slot * 2.1, cool: 0, still: 0 };
@@ -1055,6 +1064,29 @@ const WayLogic = (() => {
         let riders = 0, led = 0;
         for (const c of out) { if (c.role === 'ride' && riders++) c.role = 'heel'; if (c.role === 'led' && led++) c.led2 = true; }
         return out;
+    }
+    // The company changes on the road (the settings): whoever stays keeps walking where they were, in their new
+    // place; newcomers start a little way back down the road and run up; the rest turn back the way they came
+    // (`leaving`: the caller steps them until they are well behind, then forgets them).
+    function partyChange(old, ids, j, w) {
+        const spare = old.slice(), row = w.at(j.z), newcomers = [];
+        const party = ids.map((id, slot) => {
+            const at = spare.findIndex(c => c.id === id);
+            if (at >= 0) { const c = spare.splice(at, 1)[0]; c.slot = slot; c.role = c.kind.role; c.led2 = false; return c; }
+            const c = companionStart(id, slot);
+            newcomers.push(c);
+            return c;
+        });
+        let riders = 0, led = 0;
+        for (const c of party) { if (c.role === 'ride' && riders++) c.role = 'heel'; if (c.role === 'led' && led++) c.led2 = true; }
+        newcomers.forEach((c, k) => {
+            // (The slow ones start nearer: a snail would never catch up.)
+            const back = (c.kind.top < WALK * 1.6 ? 3 : 8) + 1.6 * k, z = j.z - back * row.cos, [x] = w.place(z, clamp(j.d + (k % 2 ? 1.3 : -1.3), -2.2, 2.2));
+            Object.assign(c, { x, z, y: w.surface(x, z), yaw: w.heading(z) });
+        });
+        const leavers = spare.filter(c => c.x !== null);
+        for (const c of leavers) { c.leaving = true; c.riding = 0; if (c.role === 'ride') c.role = 'heel'; c.mode = 'go'; c.prey = null; }
+        return { party, leavers };
     }
     // One step of one companion's own small life. ctx: { t (seconds), night (0 to 1), passing (somebody is coming the
     // other way), others (the party), scare ({ x, z } of a deer or a rabbit near by, or null), random }.
@@ -1123,6 +1155,8 @@ const WayLogic = (() => {
         // Somebody who likes cats has stopped: the first cat of the company comes to her hand.
         c.petted = !!ctx.pet && stopped && ctx.pet === c;
         if (c.petted) { tx = me.x + Math.cos(me.heading) * 0.42 + Math.sin(me.heading) * 0.3; tz = me.z - Math.sin(me.heading) * 0.42 + Math.cos(me.heading) * 0.3; spot = { x: tx, z: tz, face: me.heading + 2.4 }; rest = Math.hypot(c.x - tx, c.z - tz) < 0.5 ? 1 : 0; haste = 1.4; }
+        // Sent home: back down the road, at a walk.
+        if (c.leaving) { tz = j.z - 40 * r.cos; tx = w.place(tz, clamp(lateralOf(w, c), -2.3, 2.45))[0]; spot = null; rest = 0; down = 0; haste = 1; c.petted = false; }
         const air = role === 'fly' || role === 'soar' || role === 'hover' || role === 'flit';
         if (c.x === null || Math.hypot(c.x - me.x, c.z - me.z) > 45) { c.x = tx; c.z = tz; c.yaw = me.heading; c.y = w.surface(tx, tz); c.mode = 'go'; c.prey = null; }
         if (role === 'ride') {
@@ -1139,9 +1173,9 @@ const WayLogic = (() => {
             const wide = role === 'soar' ? 15 : role === 'fly' ? 6 + c.slot : role === 'flit' ? 2.6 : kind.high ? 0.5 : 1.15, rate = role === 'soar' ? 0.35 : role === 'fly' ? 0.75 : role === 'flit' ? 1.3 : 0.6;
             c.turn += dt * rate * (c.slot % 2 ? -1 : 1);
             high = landed ? 0 : role === 'soar' ? 19 + 3 * Math.sin(ctx.t / 13) : role === 'fly' ? 5 + 1.6 * Math.sin(ctx.t / 5 + c.slot) : role === 'flit' ? 1.5 + 0.5 * Math.sin(ctx.t / 2) : (kind.high || 1.75) + 0.16 * Math.sin(ctx.t * 1.3 + c.slot);
-            const ox = landed ? tx : me.x + Math.sin(me.heading) * (role === 'hover' ? 0.2 : 3) + Math.sin(c.turn) * wide, oz = landed ? tz : me.z + Math.cos(me.heading) * (role === 'hover' ? 0.2 : 3) + Math.cos(c.turn) * wide;
+            const ox = landed || c.leaving ? tx : me.x + Math.sin(me.heading) * (role === 'hover' ? 0.2 : 3) + Math.sin(c.turn) * wide, oz = landed || c.leaving ? tz : me.z + Math.cos(me.heading) * (role === 'hover' ? 0.2 : 3) + Math.cos(c.turn) * wide;
             const k = 1 - Math.exp(-dt / (role === 'hover' ? 0.45 : 0.9)), nx = c.x + (ox - c.x) * k, nz = c.z + (oz - c.z) * k, moved = Math.hypot(nx - c.x, nz - c.z);
-            if (moved > 1e-4) { const to = Math.atan2(nx - c.x, nz - c.z); c.bank = ease(c.bank, clamp((((to - c.yaw) % TAU) + TAU + Math.PI) % TAU - Math.PI, -1, 1) * (landed ? 0 : 0.9), 0.4); c.yaw = turnTo(c.yaw, role === 'hover' && moved / Math.max(dt, 1e-3) < 0.6 ? me.heading : to, dt * 5); }
+            if (moved > 1e-4) { const to = Math.atan2(nx - c.x, nz - c.z); c.bank = ease(c.bank, clamp((((to - c.yaw) % TAU) + TAU + Math.PI) % TAU - Math.PI, -1, 1) * (landed ? 0 : 0.9), 0.4); c.yaw = turnTo(c.yaw, role === 'hover' && moved / Math.max(dt, 1e-3) < 0.6 ? me.heading : to, dt * 5, dt * 6); }
             c.speed = moved / Math.max(dt, 1e-3);
             c.x = nx; c.z = nz;
             c.alt = ease(c.alt, high, landed ? 0.7 : 1.1);
@@ -1150,19 +1184,29 @@ const WayLogic = (() => {
             fly = 1;
         }
         if (!fly && c.riding < 0.5) {
-            const dx = tx - c.x, dz = tz - c.z, gap = Math.hypot(dx, dz), want = (stopped || camping) && gap < 0.45 ? 0 : Math.min(gap * 1.6 * haste, kind.top);
+            const dx = tx - c.x, dz = tz - c.z, gap = Math.hypot(dx, dz);
+            // The place it makes for moves with the walk. It keeps the walk's pace and closes the gap on top of that: one
+            // that finds itself a little ahead of its place slows down, where it used to turn round and come back (the
+            // pack animals, whose place is ahead of the traveller, did it every time the traveller slowed).
+            // (Only a place in the company moves so: not a place by the fire, nor where it stopped to sniff or wait, nor the way home.)
+            const keeps = !camping && !c.leaving && !c.petted && !(c.mode === 'sniff' || c.mode === 'wait'), fx = keeps ? Math.sin(me.heading) * j.speed : 0, fz = keeps ? Math.cos(me.heading) * j.speed : 0;
+            const settle = (stopped || camping) && gap < 0.45, close = Math.min(gap * 1.6 * haste, kind.top);
+            let vx = settle ? 0 : fx + (gap > 1e-4 ? dx / gap * close : 0), vz = settle ? 0 : fz + (gap > 1e-4 ? dz / gap * close : 0), want = Math.hypot(vx, vz);
+            if (want > kind.top) { vx *= kind.top / want; vz *= kind.top / want; want = kind.top; }
             c.speed += (want - c.speed) * Math.min(1, dt * 4);
-            if (gap > 0.05 && c.speed > 0.05) {
-                c.yaw = turnTo(c.yaw, Math.atan2(dx, dz), dt * 6);
-                const step = Math.min(c.speed * dt, gap);
-                c.x += Math.sin(c.yaw) * step; c.z += Math.cos(c.yaw) * step;
-            } else if (spot && rest > 0.5) c.yaw = turnTo(c.yaw, spot.face, dt * 3);
+            const most = turnRate(kind) * dt, ahead0 = w.heading(c.z), x0 = c.x, z0 = c.z;
+            if (want > 0.05 && c.speed > 0.05) { const step = Math.min(c.speed * dt, gap + Math.hypot(fx, fz) * dt); c.x += vx / want * step; c.z += vz / want * step; }
             // Nobody walks through anybody: later ones step round earlier ones, and everyone round the traveller.
             const apart = (ox, oz, room) => { const ax = c.x - ox, az = c.z - oz, a = Math.hypot(ax, az); if (a < room && a > 1e-4) { const push = Math.min(room - a, dt * 3) / a; c.x += ax * push; c.z += az * push; } };
             apart(me.x, me.z, c.petted ? 0.3 : 0.42 + kind.big * 0.6);
             if (ctx.avoid) apart(ctx.avoid.x, ctx.avoid.z, ctx.avoid.room + kind.big);           // nobody stands in front of a low camera
             for (const o of others) { if (o === c) break; if (o.x !== null && o.alt < 0.8 && o.riding < 0.5) apart(o.x, o.z, (kind.big + o.kind.big) * 0.62 + 0.12); }
-            c.gait += c.speed * dt;
+            // It faces the way it has actually gone (its own steps and whoever it stepped round), no faster than its size
+            // lets it turn. A step or two back or aside is taken as it stands, facing down the road; and so it stands when the walk stops.
+            const gone = dt > 1e-4 ? Math.hypot(c.x - x0, c.z - z0) / dt : 0, to = Math.atan2(c.x - x0, c.z - z0), off = Math.abs(turnTo(0, to - c.yaw, 1));
+            if (gone > 0.35 && !(off > 1.6 && gone < 1.8 && gap < 1.6)) c.yaw = turnTo(c.yaw, to, dt * 6, most);
+            else c.yaw = turnTo(c.yaw, spot && rest > 0.5 ? spot.face : c.mode === 'go' && !camping ? ahead0 : c.yaw, dt * 3, most);
+            c.gait += Math.min(gone, kind.top) * dt;
             c.alt = ease(c.alt, 0, 0.3); c.wing = ease(c.wing, 0, 0.3);
             if (c.speed > 0.3) rest = 0;
         }
@@ -1333,7 +1377,7 @@ const WayLogic = (() => {
         RAD, TAU, SLOT, CHUNK, RUN, BIOMES, LAND, SEASONS, ROAD, GRAND, WEATHER, WALK, SHOTS, beyondWall,
         clamp, mix, mix3, smooth, hash, noise1, noise2,
         world, camp, nextCamp, bodies, light, weatherStart, weatherStep,
-        COMPANIONS, COMPANION, GROUPS, party, partyStart, companionStart, companionStep, FORMS, SHIFT, shiftStart, shiftStep, stealthStart, stealthStep, spook, fenceAt, vault,
+        COMPANIONS, COMPANION, GROUPS, PARTY_MAX, party, partyStart, partyChange, companionStart, companionStep, FORMS, SHIFT, shiftStart, shiftStep, stealthStart, stealthStep, spook, fenceAt, vault,
         journeyStart, journeyStep, standing, sight, camera, ORBIT, orbitStart, orbitGrab, orbitDrag, orbitStep, orbitCamera, sightline, inOpen, wrapPi,
     };
 })();

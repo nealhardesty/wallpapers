@@ -6,7 +6,7 @@
 //
 // The player talks to the stage only through postMessage, because file://
 // frames can't reach into each other. Messages carry a `wp` field:
-//   stage → player  ready {id}, key {key}, rebuild, corner {near},
+//   stage → player  ready {id}, key {key}, rebuild, saved {value}, corner {near},
 //                   toast {text, ms}, error {message}, panel {feed}
 //                   quality {quality, rung, of}, stats {fps, ms, label, rung, of, tier}
 //                   luma {value}, pointer {x, y}   (for the clock overlay, SPEC §4.9)
@@ -193,7 +193,14 @@
     WP.settings = {
         defaults: () => WP.mergeSettings(own(), null),
         load: () => WP.mergeSettings(own(), read(`wp:${id}`)),
-        save: config => { if (!params.thumb) write(`wp:${id}`, WP.diffSettings(own(), config)); },
+        // A wallpaper that takes settings live already has what it saves (a key it handled, a camera it was dragged
+        // to): it tells the player so, or the player would take the write for another page's and build it again.
+        save: config => {
+            if (params.thumb) return;
+            const kept = WP.diffSettings(own(), config);
+            write(`wp:${id}`, kept);
+            if (WP.stage.manager?.applySettings) tell({ type: 'saved', value: kept === null || kept === undefined ? null : JSON.stringify(kept) });
+        },
         reset: () => write(`wp:${id}`, null),
     };
 

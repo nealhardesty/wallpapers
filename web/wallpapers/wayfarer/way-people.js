@@ -180,22 +180,27 @@ const WayPeople = (() => {
             for (let i = 0; i < 5; i++) { const x = -0.035 + i * 0.018, z = 0.02 * (i % 2 ? 1 : -1); s.paint([120, 88, 60], 0).tube([[x, 0.28, z, 0.006, 1], [x * 1.3, 0.5, z, 0.006, 1]], 4); for (const a of [0, 1.05, 2.1]) s.paint(i % 2 ? [236, 232, 224] : [190, 60, 50], 0).quad([x * 1.3, 0.4, z], [x * 1.3 + Math.cos(a) * 0.022, 0.41, z + Math.sin(a) * 0.022], [x * 1.3 + Math.cos(a) * 0.022, 0.49, z + Math.sin(a) * 0.022], [x * 1.3, 0.5, z], [-Math.sin(a), 0, Math.cos(a)]); }
             s.at(null).paint(LEATHER, 0).tube([[0.1, 0.56, 0.04, 0.013, 1], [0, 0.4, 0.15, 0.013, 1], [-0.13, 0.2, 0.1, 0.013, 1]], 4);
         }),
-        // A longbow, as tall as she is: held by its grip (the origin), strung; `drawn` with the string back and an arrow on it.
-        bow: drawn => part('bow:' + drawn, s => {
-            const limb = [];
-            // A recurve: the limbs belly toward the archer and their ends turn away again; flat and broad in the limb,
-            // round at the grip, nocked in horn. Drawn, they bend in and the nocks come back.
-            const bend = drawn ? 1.5 : 1, shape = u => 0.11 - 0.3 * bend * u * u + (0.3 * bend - 0.08) * Math.pow(Math.abs(u), 5) + (drawn ? -0.06 * u * u : 0);
-            for (let i = -12; i <= 12; i++) { const u = i / 12, a = Math.abs(u); limb.push([0, u * (drawn ? 0.74 : 0.82), shape(u), a < 0.12 ? 0.02 : 0.0125 - 0.004 * a, a < 0.12 ? 0.9 : 2.3 - 0.9 * a]); }
+        // A recurve bow, as tall as she is, held by its grip (the hand is at the origin, the target along +z). The limbs
+        // come back toward the archer and their ends turn away again; flat and broad in the limb, round at the wrapped
+        // grip, nocked in horn. The string runs straight from the limbs to where the fingers hold it, `q` steps of 24
+        // back from its rest; the further, the more the limbs bend. With `arrow`, one is on the string, lying past the grip.
+        bow: (q = 0, arrow = false) => part('bow:' + q + ':' + arrow, s => {
+            const p = q / BOW.steps, tipY = 0.82 - 0.07 * p, limb = [];
+            const shape = u => 0.05 - (0.34 + 0.14 * p) * u * u + 0.2 * (1 - 0.45 * p) * Math.pow(Math.abs(u), 6);
+            for (let i = -12; i <= 12; i++) { const u = i / 12, a = Math.abs(u); limb.push([0, u * tipY, shape(u), a < 0.12 ? 0.02 : 0.0125 - 0.004 * a, a < 0.12 ? 0.9 : 2.3 - 0.9 * a]); }
             s.paint([132, 88, 54], 0).fx(0).tube(limb, 6, { ref: [1, 0, 0], k: (i, k) => (0.9 + 0.12 * noise(i, k)) * (i % 4 === 0 ? 0.82 : 1) });
-            s.paint(LEATHER, 0).tube([[0, -0.085, shape(0.1), 0.024, 0.86], [0, 0, 0.112, 0.026, 0.86], [0, 0.085, shape(0.1), 0.024, 0.86]], 8, { ref: [1, 0, 0], k: (i, k) => k % 2 ? 0.78 : 1 });
-            s.paint(GOLD, 0).box(0.02, 0.1, 0.105, 0.01, 0.006, 0.02, 1);
-            const tipY = drawn ? 0.74 : 0.82, tipZ = shape(1), pull = drawn ? -0.46 : tipZ;
-            for (const y of [-tipY, tipY]) s.paint(BONE, 0).blob(0, y, tipZ, 0.012, 0.02, 0.014, { segs: 6, bands: 3, lump: 0 });
-            s.paint([240, 236, 224], 0).tube([[0, tipY, tipZ, 0.0045, 1], [0, 0.02, pull, 0.0045, 1], [0, -tipY, tipZ, 0.0045, 1]], 4, { ref: [1, 0, 0] });
-            if (drawn) {
-                s.paint([120, 88, 60], 0).tube([[0, 0.03, -0.46, 0.007, 1], [0, 0.03, 0.3, 0.007, 1]], 4).paint(STEEL, 0).tube([[0, 0.03, 0.3, 0.016, 0.4], [0, 0.03, 0.37, 0, 1]], 4);
-                for (const a of [0, 2.1, 4.2]) s.paint([236, 232, 224], 0).quad([0, 0.03, -0.44], [Math.cos(a) * 0.025, 0.03 + Math.sin(a) * 0.025, -0.44], [Math.cos(a) * 0.025, 0.03 + Math.sin(a) * 0.025, -0.34], [0, 0.03, -0.34], [-Math.sin(a), Math.cos(a), 0]);
+            s.paint(LEATHER, 0).tube([[0, -0.085, shape(0.1), 0.024, 0.86], [0, 0, 0.052, 0.026, 0.86], [0, 0.085, shape(0.1), 0.024, 0.86]], 8, { ref: [1, 0, 0], k: (i, k) => k % 2 ? 0.78 : 1 });
+            s.paint(GOLD, 0).box(0.02, 0.1, 0.045, 0.01, 0.006, 0.02, 1);
+            for (const y of [-tipY, tipY]) s.paint(BONE, 0).blob(0, y, shape(1), 0.012, 0.02, 0.014, { segs: 6, bands: 3, lump: 0 });
+            // At rest the string lies along the turned ends of the limbs; drawn, it lifts off them and leaves from the nocks.
+            const us = L.mix(0.868, 1, Math.min(1, p * 4)), sy = us * tipY, sz = shape(us), ny = arrow ? 0.03 : 0;
+            s.paint([240, 236, 224], 0).tube([[0, sy, sz, 0.0045, 1], [0, ny, -L_(p), 0.0045, 1], [0, -sy, sz, 0.0045, 1]], 4, { ref: [1, 0, 0] });
+            if (us < 1) for (const y of [-1, 1]) s.tube([[0, y * sy, sz, 0.0045, 1], [0, y * tipY, shape(1), 0.0045, 1]], 4, { ref: [1, 0, 0] });
+            if (arrow) {
+                // Nocked on the string, lying on the hand beside the grip, its point toward the mark.
+                const z0 = -L_(p), gx = -0.034, gz = 0.05, k = 0.84 / Math.hypot(gx, gz - z0), tx = gx * k, tz = z0 + (gz - z0) * k;
+                s.paint([120, 88, 60], 0).tube([[0, 0.03, z0, 0.007, 1], [tx, 0.03, tz, 0.007, 1]], 4).paint(STEEL, 0).tube([[tx, 0.03, tz, 0.016, 0.4], [tx * 1.08, 0.03, tz + 0.07, 0, 1]], 4);
+                for (const a of [0.5, 2.6, 4.7]) s.paint([236, 232, 224], 0).quad([0, 0.03, z0 + 0.02], [Math.cos(a) * 0.025, 0.03 + Math.sin(a) * 0.025, z0 + 0.02], [Math.cos(a) * 0.025 + tx * 0.12, 0.03 + Math.sin(a) * 0.025, z0 + 0.12], [tx * 0.12, 0.03, z0 + 0.12], [-Math.sin(a), Math.cos(a), 0]);
             }
         }),
         // A staff grown, not cut: two stems twisted about one another, opening at the top round a bud that glows.
@@ -481,6 +486,31 @@ const WayPeople = (() => {
         return k;
     }
 
+    // The bow's string: how far behind the grip the fingers hold it, at rest and at full draw, and in how many steps.
+    const BOW = { brace: 0.12, pull: 0.63, steps: 24 }, L_ = p => BOW.brace + BOW.pull * p;
+    const clamp1 = v => Math.max(-1, Math.min(1, v));
+    // An arm from a shoulder to a point in the body's frame, bent so the elbow goes toward `pole`: the upper arm, the
+    // forearm and the hand, the fingers at the point (or as near as the arm is long).
+    function reach(st, put, K, S, T, pole) {
+        const l1 = 0.3, l2 = 0.34;
+        let dx = T[0] - S[0], dy = T[1] - S[1], dz = T[2] - S[2];
+        const far = Math.hypot(dx, dy, dz) || 1e-6, len = Math.min(far, l1 + l2 - 0.004);
+        dx /= far; dy /= far; dz /= far;
+        const a = (l1 * l1 - l2 * l2 + len * len) / (2 * len), h = Math.sqrt(Math.max(0, l1 * l1 - a * a)), dot = pole[0] * dx + pole[1] * dy + pole[2] * dz;
+        let px = pole[0] - dot * dx, py = pole[1] - dot * dy, pz = pole[2] - dot * dz;
+        const pl = Math.hypot(px, py, pz) || 1; px /= pl; py /= pl; pz /= pl;
+        const ux = (dx * a + px * h) / l1, uy = (dy * a + py * h) / l1, uz = (dz * a + pz * h) / l1;
+        const fx = (dx * len - ux * l1) / l2, fy = (dy * len - uy * l1) / l2, fz = (dz * len - uz * l1) / l2;
+        const b = -Math.acos(clamp1(-uy)), ya = Math.atan2(ux, uz), cb = Math.cos(b), sb = Math.sin(b), ca = Math.cos(ya), sa = Math.sin(ya);
+        const lx = fx * ca - fz * sa, ly = fx * sb * sa + fy * cb + fz * sb * ca, lz = fx * cb * sa - fy * sb + fz * cb * ca;
+        st.push().move(S[0], S[1], S[2]).ry(ya).rx(b);
+        put(K.upper);
+        st.move(0, -0.3, 0).ry(Math.atan2(lx, lz)).rx(-Math.acos(clamp1(-ly)));
+        put(K.fore);
+        st.pop();
+    }
+    const mix3 = (a, b, t) => [L.mix(a[0], b[0], t), L.mix(a[1], b[1], t), L.mix(a[2], b[2], t)];
+
     const tints = new Array(8).fill(null);
     // The same call as WayActors.person, and the same poses.
     function person(out, st, x, y, z, look, pose) {
@@ -490,7 +520,10 @@ const WayPeople = (() => {
         // crouch: a stalking walk, low, the knees bent and the back forward.
         // vault: over a fence, a hand on the rail, the knees drawn up.
         const vault = pose.vault || 0, act0 = pose.act || '', crouch = Math.max(pose.crouch || 0, act0 === 'stroke' ? 0.75 : 0, vault * 0.6) * (1 - sit), bob = 0.028 * Math.cos(tau * 2) * mv, hip = 0.88 - 0.44 * sit - 0.17 * crouch + bob + 0.95 * vault;
-        st.reset(x, y, z, pose.yaw, size).move(0, hip, 0).rx(0.05 * mv + 0.12 * sit);
+        // Drawing a bow (pose.aim, 0 to 1 and back): she turns side-on to the mark (pose.aimAt, an angle from straight
+        // ahead), raises the bow as her other hand comes to the string, draws to the corner of the jaw, and holds.
+        const aim = look.hand === 'bow' && !sit ? pose.aim || 0 : 0, raise = L.smooth(0, 0.42, aim), pull = L.smooth(0.42, 0.92, aim);
+        st.reset(x, y, z, pose.yaw, size).ry(((pose.aimAt || 0) - 1.5) * raise).move(0, hip, 0).rx(0.05 * mv + 0.12 * sit);
         for (const side of [-1, 1]) {
             const ph = tau + (side > 0 ? Math.PI : 0), swing = 0.55 * Math.sin(ph) * mv, knee = 0.85 * Math.max(0, Math.cos(ph)) * mv;
             st.push().move(side * K.hips, 0, 0).rx((-swing * (1 - sit) - 1.45 * sit - 0.05 * mv) * (1 - vault) - 0.62 * crouch - 0.9 * vault).rz(side * 0.25 * vault);
@@ -510,7 +543,25 @@ const WayPeople = (() => {
         if (look.lamp && pose.lantern) put(P.beltlamp());
         if (look.back) { st.push(); if (look.cape === 'short') st.move(0, 0, -0.1); put(P[look.back]()); st.pop(); }      // (a quiver rides outside a cape)
         const act = pose.act || '', torch = !!(pose.lantern && look.torch && sit < 0.5);
-        for (const side of [-1, 1]) {
+        if (aim > 0) {
+            // In the body's frame the mark is along +x. The bow hand goes from where it carries the bow, by way of a
+            // place before the chest where the string hand can reach the string, out to the full length of the arm;
+            // the string hand from her side to the string, and back with it to the jaw, the elbow high behind.
+            const SB = [K.shoulder, 0.47, 0], SD = [-K.shoulder, 0.47, 0];
+            const carry = [K.shoulder + 0.034, 0.134, 0.446], ready = [K.shoulder + 0.25, 0.47, 0.27], out2 = [K.shoulder + 0.585, 0.615, 0.125], jaw = [0.075, 0.648, 0.125];
+            const B = mix3(mix3(carry, ready, raise), out2, pull);
+            // The arrow's line: from the fingers to the bow hand at full draw; before that, round from straight ahead.
+            const full = Math.hypot(out2[0] - jaw[0], out2[2] - jaw[2]), turn = L.mix(0, Math.atan2(out2[0] - jaw[0], out2[2] - jaw[2]), raise), tip = L.mix(0, -Math.asin((out2[1] + 0.03 - jaw[1]) / full), raise);
+            const q = Math.round(L.mix(0, Math.min(1, (full - BOW.brace) / BOW.pull), pull) * BOW.steps), back = L_(q / BOW.steps), ct = Math.cos(tip);
+            const onString = [B[0] - Math.sin(turn) * ct * back, B[1] + 0.03 + Math.sin(tip) * back, B[2] - Math.cos(turn) * ct * back];
+            const D = mix3([-K.shoulder - 0.03, -0.12, 0.07], onString, L.smooth(0.15, 0.95, raise));
+            reach(st, put, K, SB, B, [0.2, -1, -0.5 + 0.5 * pull]);
+            reach(st, put, K, SD, D, [-1, -0.6 + 0.45 * pull, -0.7 * raise]);
+            st.push().move(B[0], B[1], B[2]).rz(0.1 * (1 - raise)).ry(turn).rx(tip).rz(-0.12 * raise);
+            put(P.bow(q, raise > 0.94));
+            st.pop();
+        }
+        else for (const side of [-1, 1]) {
             const ph = tau + (side > 0 ? 0 : Math.PI), holds = side > 0 && look.hand, brand = side < 0 && torch;
             let shoulder = 0.42 * Math.sin(ph) * mv, elbow = -0.25 - 0.2 * mv, out2 = 0.1;
             if (holds) { shoulder = -0.55 + 0.22 * Math.sin(tau + 0.6) * mv; elbow = -0.75; }
@@ -521,8 +572,6 @@ const WayPeople = (() => {
             if (act === 'hoe') { shoulder = -0.9 + 0.5 * Math.sin(t * 2.4); elbow = -0.7; }
             if (act === 'fish') { shoulder = -0.75; elbow = -0.5; }
             if (act === 'warm') { shoulder = -1.05 + 0.04 * Math.sin(t * 1.7 + side); elbow = -0.35; }
-            // Sighting along an arrow: the bow arm out straight, the other hand back at the cheek.
-            if (act === 'aim') { if (side > 0) { shoulder = -1.5; elbow = -0.06; out2 = 0.34; } else { shoulder = -1.35; elbow = -2.0; out2 = 0.5; } }
             // Tossing a knife and catching it.
             if (act === 'flip' && side > 0) { shoulder = -0.45; elbow = -1.25 + 0.12 * Math.sin(t * 3.1); out2 = 0.2; }
             if (crouch) { shoulder -= 0.4 * crouch; elbow -= 0.5 * crouch; }
@@ -543,13 +592,13 @@ const WayPeople = (() => {
                 else if (act === 'fish') put(P.rod());
                 else if (look.hand === 'spear') put(P.spear());
                 else if (look.hand === 'longaxe') put(P.longaxe());
-                else if (look.hand === 'bow') { st.rx(act === 'aim' ? 0.02 : -0.1); put(P.bow(act === 'aim')); }
+                else if (look.hand === 'bow') { st.rx(-0.1); put(P.bow()); }
                 else if (look.hand === 'budstaff') put(P.budstaff());
                 else { put(P.staff()); put(look.hand === 'crystal' ? P.crystal() : P.crook()); if (look.hand !== 'crystal' && pose.lantern) put(P.lantern()); }
             }
             st.pop();
         }
-        st.move(0, 0.63, 0).ry(pose.head || 0).rx(act === 'fish' || sit > 0.5 ? 0.12 : -0.03);
+        st.move(0, 0.63, 0).ry(L.mix(pose.head || 0, 1.42, raise)).rz(-0.07 * pull).rx(act === 'fish' || sit > 0.5 ? 0.12 : -0.03);
         put(K.face);
         // A blink every few seconds (each in their own time).
         if (((t * 0.23 + (look.v || 0.37) * 7) % 1) < 0.03) put(P.blink(K.build !== 'm'));
