@@ -31,6 +31,8 @@
     let clockOverride = WP.clockParam(params.clock);
     let stats = null;   // the stage's latest, once a second
     let rebuildTimer = null;
+    // What the stage last saved of its own settings, and a write to them still waiting to be explained (see 'saved').
+    let ownSave, unexplained;
 
     const resolve = id => id === 'seasonal' ? WP.seasonalFor(new Date()) : id;
     const usable = id => WP.entry(id) && !WP.entry(id).disabled;
@@ -70,6 +72,7 @@
         frame.src = stageUrl(id);
         document.body.prepend(frame);
         const mounted = stage = { id, frame, ready: false, feed: null };
+        ownSave = unexplained = undefined;
         app?.setAccent(WP.entry(id).accent || '#000000');
 
         const reveal = () => {
@@ -228,7 +231,8 @@
             const saved = WP.store.get(event.key);
             if (saved && saved !== choice && usable(saved)) show(saved);
         } else if (event.key === `wp:${stage.id}`) {
-            rebuild();
+            // (Not the stage's own save: it has those already, and a rebuild would start its scene again.)
+            if (event.newValue !== ownSave) { unexplained = event.newValue; rebuild(); }
         } else if (event.key === WP.LOCATION_KEY) {
             relocate();
         } else if (event.key === 'wp:clock') {
@@ -354,6 +358,11 @@
             WP.clockface?.view?.onLuma(message.value);
         } else if (message.wp === 'pointer') {
             WP.clockface?.view?.onPointer(message.x, message.y);
+        } else if (message.wp === 'saved') {
+            // The stage wrote its own settings. Whichever arrives first, this or the storage event, nothing is rebuilt for it.
+            ownSave = message.value;
+            if (unexplained === ownSave) clearTimeout(rebuildTimer);
+            unexplained = undefined;
         } else if (message.wp === 'rebuild') {
             rebuild();
         } else if (message.wp === 'corner') {

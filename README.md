@@ -187,18 +187,32 @@ panel only, or none), `R` the radar's range. It is one of the three wallpapers d
 WebGL, so it wants a GPU; without one it carries on as paper-cut ridgelines.
 
 **Wayfarer** 🥾 is a walk that never ends, through a cosy fantasy world of
-its own. A hooded traveller with a staff and a pack, and a fox trotting
-ahead, follows a road that wanders on for ever: through deep forest and
-flowering meadow, along a lake's shore and round a bay of the sea, over a
+its own. A traveller and their company follow a road that wanders on for
+ever (nine travellers to choose from: a hooded ranger, a wizard, a bard, a
+knight, a barbarian woman and man in furs, an antlered elf druid who turns
+into a bear, an owl-beast or a great black cat for a stretch, an elf ranger
+with a recurve bow, and a rogue who slips past the guards unseen, vaults a fence and stops to
+stroke the cat; and a company of up to twelve of 46 companions, left to
+chance or ticked one by one, from a hound, a donkey and a goose to a dragon whelp, a
+paper-lantern spirit and a snail with a lit window, with Moofy, Butters,
+Waffles, Ras The Destroyer, Ibbie, Maus, Turkey, Harry and Kitty Toes among
+them): through forest and the deep forest, where the crowns close over the
+road and the leaves come down in autumn, flowering meadow, along a lake's shore and along a coast road above the sea, over a
 mountain pass with snow on the firs, across the moors, past farms with a
 windmill turning, and through an enchanted grove of giant mushrooms that
-glows after dark. Every few minutes the road arrives somewhere: a
+glows after dark. Which of the nine countries the road passes through is
+yours to say (all of them, the woods, open country, the shore, the high
+country, or the ones you tick). Every few minutes the road arrives somewhere: a
 timber-framed village with smoking chimneys, bunting over the street, a
 well, market stalls and people who wave; a walled city with gate towers, a
-market square and fountain, a keep and a spire; or a landmark: standing
+market square and fountain, a keep and a spire; now and then a grand city
+behind a moat and a drawbridge, with a cathedral, a guildhall and a castle
+on a rock above the roofs; or a landmark: standing
 stones, a castle on its hill, a ruined abbey, a lighthouse, an elder tree
 with a door in it, a fairy ring. Streams are crossed on stone bridges.
-Sheep and cows graze, deer bolt as you come near, crows fly up from the
+Each country has its wild things (a setting says how many): a bear well back
+among the trunks, stags, squirrels on the boughs, hares boxing, herons and
+swans, ibex in the pass, bats and glow-worms after dark. Sheep and cows graze, deer bolt as you come near, crows fly up from the
 ruins, carts and riders pass on the road, geese cross the sky, and now and
 then, far off, a dragon, an airship or a balloon. The day goes round: golden
 mornings and evenings with long shadows, then a blue night with two moons,
@@ -668,7 +682,7 @@ you tick it, then seven, with the rest folded away:
   this one (or let it go), `V` another island passes, `O` a small one comes to orbit, `B` a balloon, `W` weather, `S` season, `H` holiday · Weather `V` next view (days, hours, now), `U` °C or °F,
   `R` refresh now · World Clock `V` next view (map, faces, board), `M` centre
   the map on the next place, `L` next map look · Orrery `=`/`+` faster, `-` slower,
-  `0` back to now, `L` look, `S` scale, `V` from above or tilted · Matrix `R` the code comes down again, `L` next look (the 1999 film, the sequels, Resurrections), `H` next colour · Cherry Blossoms `G` a gust, `B` shake the bough, `N` a new tree, `S` next sky, `W` next ground · Sumo Championship `N` to the finish or the next bout, `B` the ranking sheet · The Never-Ending Baseball Season `N` the next half-inning (Shift: the end of the game), `S` the standings and the leaders · Pocket Hockey `N` to the end of the period (or past whatever is showing), `G` to the final horn, `B` the table, then the scorers, `X` throw something on the ice, `W` a wave · Ice Patrol `W` `A` `S` `D` or arrows fly it, `Q`/`E` throttle, `X` weather, `T` time of day, `V` view, `R` radar range · Wayfarer `V` camera, `T` time of day, `X` weather, `N` on to the next place · Fresh Tracks `A` `D` or arrows carve, `J` or up sends a jump (Shift+`J` botches it), `V` camera, `T` time of day, `X` weather, `G` skis or a board · Fireplace `L` a log burns through and a fresh one lands, `W` the wood laid again.
+  `0` back to now, `L` look, `S` scale, `V` from above or tilted · Matrix `R` the code comes down again, `L` next look (the 1999 film, the sequels, Resurrections), `H` next colour · Cherry Blossoms `G` a gust, `B` shake the bough, `N` a new tree, `S` next sky, `W` next ground · Sumo Championship `N` to the finish or the next bout, `B` the ranking sheet · The Never-Ending Baseball Season `N` the next half-inning (Shift: the end of the game), `S` the standings and the leaders · Pocket Hockey `N` to the end of the period (or past whatever is showing), `G` to the final horn, `B` the table, then the scorers, `X` throw something on the ice, `W` a wave · Ice Patrol `W` `A` `S` `D` or arrows fly it, `Q`/`E` throttle, `X` weather, `T` time of day, `V` view, `R` radar range · Wayfarer `V` camera (behind, orbit, their eyes, cinematic), `T` time of day, `X` weather, `N` on to the next place, `G` the druid changes shape or the rogue goes unseen · Fresh Tracks `A` `D` or arrows carve, `J` or up sends a jump (Shift+`J` botches it), `V` camera, `T` time of day, `X` weather, `G` skis or a board · Fireplace `L` a log burns through and a fresh one lands, `W` the wood laid again.
 
 **Touch and drag:** tap or drag on Zen Garden (rake), Koi Pond (ripples;
 feed them in settings), Murmuration (you're the falcon), Lantern Festival,
@@ -677,7 +691,7 @@ Harvest Valley (shake an apple tree; tap the scarecrow, or the sky for geese),
 The Cat vs. the Ornament (a laser dot for the cats), The Last Bulb on the
 Strand (jiggle a bulb), Frost on the Glass (draw in it; tap to breathe), A Very Small Christmas (the tree
 jingles, the train goes round, the floor is where it moves to), Sky Island (a cat comes, a person
-waves, the lake jumps a fish, a house at night switches its lights, the sky sends a bird), Wayfarer (drag to look around),
+waves, the lake jumps a fish, a house at night switches its lights, the sky sends a bird), Wayfarer (drag to look around; with the Orbit camera a drag turns it about the traveller and it stays, and the wheel moves it in and out),
 Satellites (what's that one?), Matrix (a splash of code), Cherry Blossoms (tap the bough to shake it, the air for a puff of wind; drag to push the air along), Weather (a day's hours; tap outside to go back),
 Pocket Hockey (the ice: something is thrown onto it; the seats: a wave), Fresh Tracks (drag to carve, tap to jump),
 World Clock (a city becomes home, and the map turns to it; tap it again to go back), Sumo Championship (a cushion), The Never-Ending Baseball Season (a wave, a beach ball, a hot dog) and
@@ -830,6 +844,7 @@ Run `make` to list every target.
 | `make open` | Open `web/index.html` in your default browser (from `file://`, no server needed), or bring its tab forward if it's already open (macOS, Chrome and Safari). `make open PAGE='?w=harvest'` opens a particular wallpaper |
 | `make bench` | Every wallpaper at every tier on a simulated phone (4× slower CPU), then the clock overlay's cost; checks the budgets, writes `bench/results.json` and the ⚡ badges |
 | `make bench-clock` | Just the clock overlay's cost: a bouncing clock with seconds against none |
+| `make wayfarer-sight` | Wayfarer: how often a wild animal is plainly in the picture behind the traveller, by country and wildlife setting (`node tools/wayfarer-sight.mjs --water`: how often the sea or a lake is) |
 | `make jellyfin-media` | Generate made-up test videos (patterns, tones, subtitles in several kinds) into `.jellyfin/media/`; needs `ffmpeg` |
 | `make jellyfin-dev` | Run a throwaway Jellyfin in Docker at http://localhost:8096 on that media, set up on first start (user `wallpapers`, password `wallpapers`, a playlist) |
 | `make jellyfin-stop` | Stop and remove that container (`.jellyfin/` stays; delete it to start over) |

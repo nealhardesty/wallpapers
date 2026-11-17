@@ -102,16 +102,28 @@ const WayActors = (() => {
         hoe: () => part('hoe', s => s.paint([120, 88, 60], 0).fx(0).prism(4, 0, -0.5, 0, 0.02, 0.9, 0.02).paint(C.iron, 0).box(0, 0.9, 0.08, 0.06, 0.015, 0.09, 1)),
         rod: () => part('rod', s => { s.paint([120, 88, 60], 0).fx(0).prism(3, 0, -0.2, 0, 0.014, 2.4, 0.006); s.paint([230, 230, 230], 0).prism(3, 0, 2.4, 0, 0.004, 2.41, 0.004, { dz: 0.0 }); }),
     };
-    const SKIN = [[236, 190, 156], [214, 160, 124], [176, 122, 90], [130, 88, 64], [246, 208, 180]];
-    const HAIR = [[70, 50, 38], [36, 30, 30], [170, 120, 60], [210, 190, 150], [150, 70, 40], [200, 200, 204]];
+    const SKIN = [[236, 190, 156], [214, 160, 124], [176, 122, 90], [130, 88, 64], [246, 208, 180], [198, 180, 214], [176, 172, 212]];
+    const HAIR = [[70, 50, 38], [36, 30, 30], [170, 120, 60], [210, 190, 150], [150, 70, 40], [200, 200, 204], [64, 150, 142], [216, 222, 236]];
     const CLOTH = [[150, 60, 54], [60, 96, 150], [200, 160, 70], [84, 130, 84], [130, 84, 140], [176, 120, 80], [90, 120, 130], [200, 196, 180]];
     // The traveller's looks: tunic, legs, cloak, hat, what is on their back and in their hand.
     const LOOKS = {
         ranger: { tunic: [112, 96, 70], legs: [84, 70, 56], cloak: [58, 104, 72], hat: 'hood', hatCol: null, back: 'pack', hand: 'crook', skin: 0, hair: 0 },
-        wizard: { tunic: [70, 84, 150], legs: [56, 60, 110], cloak: [56, 66, 132], hat: 'wizard', hatCol: [64, 72, 150], back: 'pack', hand: 'crystal', skin: 4, hair: 5, robe: true },
-        bard: { tunic: [196, 150, 70], legs: [100, 60, 60], cloak: [170, 56, 60], hat: 'cap', hatCol: [150, 50, 56], back: 'lute', hand: 'crook', skin: 1, hair: 2 },
-        knight: { tunic: [150, 154, 164], legs: [110, 114, 124], cloak: [60, 80, 150], hat: 'helm', hatCol: null, back: 'shield', hand: 'spear', skin: 2, hair: 1 },
+        wizard: { tunic: [70, 84, 150], legs: [56, 60, 110], cloak: [56, 66, 132], hat: 'wizard', hatCol: [64, 72, 150], back: 'pack', hand: 'crystal', skin: 4, hair: 5, robe: true, hairStyle: 'long', beard: 'long' },
+        bard: { tunic: [196, 150, 70], legs: [100, 60, 60], cloak: [170, 56, 60], hat: 'cap', hatCol: [150, 50, 56], back: 'lute', hand: 'crook', skin: 1, hair: 2, hairStyle: 'short' },
+        knight: { tunic: [150, 154, 164], legs: [110, 114, 124], cloak: [60, 80, 150], hat: 'helm', hatCol: null, back: 'shield', hand: 'spear', skin: 2, hair: 1, torch: true },
+        // No cloak, hood or staff: furs, leather and steel. They walk with a spear or a long axe, and carry a brand after dark.
+        barbarian: { tunic: [156, 118, 82], legs: [156, 118, 82], cloak: null, hat: null, hatCol: null, back: 'axe', hand: 'spear', skin: 1, hair: 4, build: 'f', garb: 'fur', hairStyle: 'braid', paint: true, torch: true, size: 0.97 },
+        northman: { tunic: [124, 104, 88], legs: [124, 104, 88], cloak: null, hat: null, hatCol: null, back: 'sword', hand: 'longaxe', skin: 0, hair: 2, build: 'm', garb: 'hide', hairStyle: 'mane', beard: 'short', paint: true, torch: true, size: 1.04 },
     };
+    // The Evenfolk: a tall, long-eared people of the twilight woods, lilac-skinned, with eyes that hold a light and
+    // three pale stars along each cheekbone. The druid wears a helm with a stag's antlers and, now and then, another shape.
+    Object.assign(LOOKS, {
+        druid: { tunic: [70, 124, 84], legs: [70, 60, 50], cloak: [150, 190, 120], cape: false, hat: 'antlers', hatCol: [112, 84, 60], back: null, hand: 'budstaff', skin: 5, hair: 6, build: 'c', garb: 'leaf', arms: 'bare', hairStyle: 'flow', face: 'e1', size: 1.06, shifts: true },
+        archer: { tunic: [104, 84, 60], legs: [66, 74, 62], cloak: [62, 96, 86], cape: 'short', hat: null, hatCol: null, back: 'quiver', hand: 'bow', skin: 6, hair: 7, build: 'f', garb: 'leathers', arms: 'bracer', hairStyle: 'tail', face: 'e2', size: 1.05, lamp: true },
+        rogue: { tunic: [58, 54, 66], legs: [46, 44, 54], cloak: [44, 42, 54], cape: false, hat: 'cowl', hatCol: [52, 48, 62], back: null, hand: null, skin: 0, hair: 1, build: 'f', garb: 'leathers', arms: 'bracer', face: 'f-', size: 0.98, lamp: true, daggers: true, stealth: true },
+    });
+    // Where the light they carry at night hangs: metres to their right, ahead and up. A staff's lantern, or a brand in the left hand.
+    const lightAt = look => look.lamp ? [-0.26, 0.1, 0.9] : look.torch ? [-0.46, 0.42, 1.72] : [0.35, 0.3, 1.75];
     const tints = new Array(8).fill(null);
 
     // Draw a person. at: { x, y, z } of their feet from the camera; pose: {
@@ -138,7 +150,7 @@ const WayActors = (() => {
         put(P.torso());
         if (look.apron) put(P.apron());
         if (look.cloak && look.cape !== false) { st.push().rx(0.06 + 0.14 * mv + 0.05 * Math.sin(tau * 2) * mv - 0.06 * sit).rz(0.035 * Math.sin(tau) * mv); put(P.cloak()); st.pop(); }
-        if (look.back) { st.push(); put(P[look.back]()); st.pop(); }
+        if (look.back && P[look.back]) { st.push(); put(P[look.back]()); st.pop(); }
         // Arms: the left swings (or does what the role wants); the right holds whatever is carried.
         const act = pose.act || '';
         for (const side of [-1, 1]) {
@@ -168,7 +180,7 @@ const WayActors = (() => {
         }
         st.move(0, 0.63, 0).ry(pose.head || 0).rx(act === 'fish' || sit > 0.5 ? 0.12 : -0.03);
         put(P.head());
-        if (look.hat) put(P[look.hat]());
+        if (look.hat && P[look.hat]) put(P[look.hat]());
     }
     // Somebody from the towns, made up from a number between 0 and 1.
     function townsfolk(v, role) {
@@ -177,7 +189,7 @@ const WayActors = (() => {
             tunic: guard ? [150, 154, 164] : CLOTH[Math.floor(r(2) * 7.99)], legs: guard ? [96, 100, 112] : [[84, 70, 56], [70, 70, 84], [110, 90, 66]][Math.floor(r(3) * 2.99)],
             cloak: guard ? [60, 80, 150] : CLOTH[Math.floor(r(4) * 7.99)], cape: guard || r(5) < 0.2, skin: Math.floor(r(6) * 4.99), hair: Math.floor(r(7) * 5.99),
             hat: guard ? 'helm' : child ? null : role === 'hoe' ? 'straw' : woman ? (r(8) < 0.5 ? 'kerchief' : null) : r(8) < 0.35 ? 'cap' : r(8) < 0.5 ? 'straw' : r(8) < 0.6 ? 'hood' : null,
-            hatCol: CLOTH[Math.floor(r(9) * 7.99)], skirt: woman && !guard, apron: !guard && r(10) < 0.3, hand: guard ? 'spear' : null, size: child ? 0.6 : 0.94 + 0.12 * r(11),
+            hatCol: CLOTH[Math.floor(r(9) * 7.99)], skirt: woman && !guard, apron: !guard && r(10) < 0.3, hand: guard ? 'spear' : null, size: child ? 0.6 : 0.94 + 0.12 * r(11), v: r(12),
         };
     }
 
@@ -193,6 +205,13 @@ const WayActors = (() => {
         dog: { len: 0.72, tall: 0.5, girth: 0.17, neck: [0.2, 0.7], head: 0.13, coat: [170, 130, 90], face: [170, 130, 90], legs: [170, 130, 90], tail: 0.34, tailUp: 0.9, ears: 0.9, snout: 1 },
         fox: { len: 0.66, tall: 0.36, girth: 0.14, neck: [0.16, 0.7], head: 0.12, coat: [222, 120, 50], face: [222, 120, 50], legs: [60, 44, 40], tail: 0.5, tailUp: 0.15, brush: [250, 244, 232], ears: 1.5, snout: 1, bib: [250, 244, 232] },
         cat: { len: 0.42, tall: 0.25, girth: 0.1, neck: [0.08, 0.8], head: 0.09, coat: [60, 56, 60], face: [60, 56, 60], legs: [60, 56, 60], tail: 0.34, tailUp: 1.3, ears: 1.3 },
+        // (The wild ones, far off: WayLogic.WILD says which of these stands in for whom.)
+        bear: { len: 1.75, tall: 1.04, girth: 0.5, neck: [0.34, 0.3], head: 0.27, coat: [104, 76, 56], face: [124, 92, 66], legs: [84, 62, 48], tail: 0.08, ears: 0.5, snout: 1 },
+        stag: { len: 1.58, tall: 1.22, girth: 0.3, neck: [0.66, 1.0], head: 0.17, coat: [150, 104, 70], face: [150, 104, 70], legs: [110, 78, 56], antlers: 1.0, tail: 0.12, ears: 1, rump: [226, 214, 196] },
+        boar: { len: 1.0, tall: 0.52, girth: 0.3, neck: [0.14, 0.2], head: 0.17, coat: [84, 66, 56], face: [70, 56, 48], legs: [50, 42, 38], tail: 0.12, ears: 0.7, snout: 1 },
+        wildpony: { len: 1.25, tall: 0.97, girth: 0.34, neck: [0.46, 0.8], head: 0.19, coat: [112, 84, 64], face: [112, 84, 64], legs: [60, 48, 42], mane: [44, 36, 34], tail: 0.7, ears: 0.5 },
+        ibex: { len: 1.05, tall: 0.78, girth: 0.28, neck: [0.32, 0.8], head: 0.14, coat: [206, 196, 180], face: [206, 196, 180], legs: [90, 80, 72], horns: 0.44, tail: 0.1, ears: 0.6 },
+        seal: { len: 1.5, tall: 0.3, girth: 0.3, neck: [0.3, 0.5], head: 0.19, coat: [120, 124, 134], face: [120, 124, 134], legs: [100, 104, 114], tail: 0.3, ears: 0 },
         rabbit: { len: 0.3, tall: 0.16, girth: 0.09, neck: [0.05, 0.8], head: 0.075, coat: [176, 150, 120], face: [176, 150, 120], legs: [176, 150, 120], tail: 0.05, brush: [250, 250, 250], ears: 3 },
     };
     function beastParts(kind) {
@@ -260,6 +279,8 @@ const WayActors = (() => {
         pigeon: { size: 0.3, body: [150, 156, 170], wing: [120, 126, 140], span: 0.7 }, goose: { size: 0.7, body: [150, 140, 130], wing: [120, 112, 104], span: 1.6 },
         duck: { size: 0.36, body: [150, 110, 76], wing: [120, 90, 66], span: 0.6, head: [40, 110, 76] }, hen: { size: 0.3, body: [200, 120, 70], wing: [176, 100, 60], span: 0.4, head: [200, 120, 70], comb: true },
         dragon: { size: 9, body: [150, 50, 44], wing: [196, 110, 60], span: 2.6, dragon: true },
+        swan: { size: 0.8, body: [250, 250, 250], wing: [240, 240, 244], span: 1.5 }, heron: { size: 0.7, body: [150, 160, 176], wing: [110, 120, 140], span: 1.6 }, eagle: { size: 0.95, body: [84, 62, 48], wing: [66, 50, 42], span: 2.0 },
+        kestrel: { size: 0.36, body: [176, 110, 70], wing: [140, 90, 62], span: 1.3 }, owl: { size: 0.4, body: [150, 118, 84], wing: [124, 96, 70], span: 1.2 }, pheasant: { size: 0.42, body: [176, 100, 50], wing: [140, 84, 50], span: 0.6 }, woodpecker: { size: 0.22, body: [34, 32, 36], wing: [230, 230, 226], span: 0.7 },
     };
     function birdParts(kind) {
         const b = BIRDS[kind], k = 'bird:' + kind;
@@ -323,5 +344,5 @@ const WayActors = (() => {
         s.fx(0);
     });
 
-    return { WayStack, P, LOOKS, BEASTS, BIRDS, CLOTH, person, townsfolk, beast, bird, wagon, airship, balloon };
+    return { WayStack, P, LOOKS, SKIN, HAIR, BEASTS, BIRDS, CLOTH, lightAt, person, townsfolk, beast, bird, wagon, airship, balloon };
 })();

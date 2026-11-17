@@ -16,7 +16,7 @@ DOTNET ?= $(shell command -v dotnet 2>/dev/null || echo $(HOME)/.dotnet/dotnet)
 DOTNET_FOUND := $(shell command -v $(DOTNET) 2>/dev/null)
 export DOTNET
 
-.PHONY: help hooks open serve serve-https cert bing-json thumbnails world-land icons screenshots extension site android-build android-install android-logcat android-emulator android-release android-keystore android-bench jellyfin-media jellyfin-fixtures jellyfin-dev jellyfin-stop jellyfin-mock mac-build mac-run mac-dev mac-test mac-install mac-uninstall mac-release mac-saver-test mac-saver-live mac-saver-log win-build win-release win-sign win-sign-tools win-unit win-ci win-run win-dev win-reload win-test win-test-zip win-install win-uninstall win-saver win-log docker-build docker-run lint audit audit-staged audit-history test smoke smoke-clock smoke-live bench bench-clock ci clean
+.PHONY: help wayfarer-sight hooks open serve serve-https cert bing-json thumbnails world-land icons screenshots extension site android-build android-install android-logcat android-emulator android-release android-keystore android-bench jellyfin-media jellyfin-fixtures jellyfin-dev jellyfin-stop jellyfin-mock mac-build mac-run mac-dev mac-test mac-install mac-uninstall mac-release mac-saver-test mac-saver-live mac-saver-log win-build win-release win-sign win-sign-tools win-unit win-ci win-run win-dev win-reload win-test win-test-zip win-install win-uninstall win-saver win-log docker-build docker-run lint audit audit-staged audit-history test smoke smoke-clock smoke-live bench bench-clock ci clean
 
 help: ## List every target
 	@awk 'BEGIN {FS = ":.*## "} /^[a-zA-Z0-9_-]+:.*## / {printf "  \033[36m%-17s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -194,6 +194,9 @@ bench: ## Every wallpaper at every tier on a simulated phone (4× slower CPU): b
 
 bench-clock: ## Just the clock overlay's cost: a bouncing clock with seconds against none (SPEC §4.9)
 	@node tools/bench.mjs clock
+
+wayfarer-sight: ## Wayfarer: how often a wild animal is plainly in the follow camera's picture, by country and setting (SPEC §10.38)
+	node tools/wayfarer-sight.mjs
 
 android-bench: ## Each wallpaper at each tier on the connected device: frame times and battery (SPEC §4.8)
 	@ADB="$(ADB)" node tools/android-bench.mjs

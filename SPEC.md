@@ -161,7 +161,7 @@ Added for Christmas, drawn in code (designs in §10.27–§10.30):
 | `sumo` | sumo-logic.js, sumo-art.js, sumo.js | ~1.3k lines | No network; a league of invented wrestlers kept in `host.storage`, written in Japanese with an English gloss (§10.35); bouts and tournaments pure and seeded (`SumoLogic`), unit-tested; interactive (a tap throws a cushion); evening by `host.now()`; keys N, B |
 | `pocket-hockey` | hockey-logic.js, hockey-art.js, pocket-hockey.js | ~2.4k lines | No network; an invented league of eight clubs and the game in progress kept in `host.storage` (§10.35); the league, the 60 Hz game (physics, steering, signature moves) and the seasons pure and seeded (`HockeyLogic`), unit-tested; top-down pixel art at its own resolution, scaled up pixelated, with its own 5×7 font; interactive (a tap throws something on the ice, or starts a wave); keys N, G, B, X, W |
 | `baseball` | baseball-logic.js, baseball-league.js, baseball-talk.js, baseball-art.js, baseball.js | ~2.4k lines | No network; a league of eight invented clubs kept in `host.storage` (§10.37); every pitch, ball in play and box score pure and seeded (`BaseballLogic`, `BaseballLeague`), unit-tested; 16-bit pixel art at its own resolution with its own lettering, scaled up pixelated; interactive (a tap starts a wave); day, dusk and night by `host.now()`; keys N, S |
-| `wayfarer` | way-logic.js, way-models.js, way-actors.js, way-gl.js, wayfarer.js | ~3.6k lines | The second on WebGL (§10.38): an endless road through eight kinds of country with villages, walled cities and landmarks along it, all a pure function of a seed (`WayLogic`), unit-tested; every shape modelled in code as triangles (`WayModels`, `WayActors`); built a 64 m square at a time as the walk reaches it; three cameras; day, night, weather and seasons; a flat 2D fallback without WebGL; its own watch on the GPU; interactive (drag to look around); keys V, T, X, N |
+| `wayfarer` | way-logic.js, way-models.js, way-detail.js, way-actors.js, way-people.js, way-companions.js, way-gl.js, wayfarer.js | ~6.6k lines | The second on WebGL (§10.38): an endless road through nine kinds of country (which of them is a setting) with villages, walled cities, grand cities under a castle and landmarks along it, all a pure function of a seed (`WayLogic`), unit-tested; every shape modelled in code as triangles (`WayModels`, `WayActors`); built a 64 m square at a time as the walk reaches it, finer near the traveller; four cameras, one of them an orbit a drag turns; nine travellers (one changes shape, one goes unseen) and 46 companions, six at once, the named cats among them; day, night, weather and seasons; a flat 2D fallback without WebGL; its own watch on the GPU; interactive (drag to look around, or to turn the orbit); keys V, T, X, N, G |
 | `ski-run` | ski-logic.js, ski-models.js, ski-gl.js, ski-run.js | ~3.7k lines | The third on WebGL (§10.39), with instancing: an endless ski run stitched from eleven kinds of section, one `height(x, z)` for the riders and the mesh (`SkiLogic`), riders, tricks, wipeouts, cameras and a ski school all pure and unit-tested; trees, figures and props modelled in code (`SkiModels`); a flat 2D fallback without WebGL; its own watch on the GPU; interactive (carve by keys or a drag, tap to jump; the riders take it back after 4 s); keys A, D, arrows, J, V, T, X, G |
 
 About 1.7 MB of JavaScript in total. **Not imported:** links, weather, clocks,
@@ -273,6 +273,7 @@ building on it.
 | Direction | Message | Meaning |
 |---|---|---|
 | stage → player | `ready {id}` | booted and drawing; the player fades it in |
+| stage → player | `saved {value}` | a wallpaper with `applySettings` saved its own settings (a key, a drag): the player must not take the write for another page's and rebuild it |
 | stage → player | `key {key}` | a player key (`,` `[` `]` `f`) pressed while the stage has focus |
 | stage → player | `error {id, message}` | boot failed; the player shows a toast and the stage anyway |
 | player → stage | `settings` | open the wallpaper's settings |
@@ -520,6 +521,14 @@ settings directly (storage is shared) and tells the player to apply them:
     (keeps the world unless a world setting changed).
   - Any other wallpaper is rebuilt by the player behind a crossfade,
     debounced 400 ms so a slider drag rebuilds once.
+  - A stage's own `WP.settings.save` raises a `storage` event in the
+    player (another document on the same storage), which the player
+    takes for a change from another tab and answers with a rebuild. A
+    wallpaper that applies settings live says so (`saved {value}`, the
+    string it wrote) and the player lets that one write pass; found on
+    Wayfarer 2026-11-16, where every orbit drag and every V, T or X
+    started a new world (§10.38). Wallpapers without `applySettings` are
+    rebuilt after their own saves as before.
 - **Touch:**
   - Range sliders are `touch-action: pan-y`: a vertical swipe that starts
     on a slider scrolls the panel, only a sideways drag moves it.
@@ -856,7 +865,7 @@ and the commits.
 | sumo | — | The hall is one cached canvas (rebuilt on resize, tier and at dusk); a frame draws it, three jointed figures and a few marks. The crowd's rows and the cushions thrown follow density |
 | pocket-hockey | — | The canvas is the picture's own pixels (about 427 × 267 on a laptop, 206 × 458 on an upright phone; a pixel is 3 CSS px at 1280 × 800, in half steps below that), scaled up pixelated. The arena (ice, lines, boards, benches, a crowd of some thousands) is one bake a game; a working copy of it takes the skate marks and the resurfacer's stripes, so a frame is one blit of that, a dozen kept sprites, and lettering set once a line and kept. The round's other games are stepped 4 ms a frame. Hats, paper, spray, camera flashes and skate marks × density. Bench 2026-11-15 on a loaded machine (Snow beside it for scale: 20%, 24%, 60%): Low 14%, Medium 21%, High 44% |
 | baseball | — | The canvas is the picture's own pixels (about 3 CSS px each on a laptop), scaled up pixelated; the park (sky, stands, crowd, turf, fence) is one bake per game, size and light, with the crowd on its feet a second; the scoreboard and all the captions are two more canvases redrawn only when their words change; a frame blits those and draws about thirty men of a dozen rectangles each. The crowd, fireworks, confetti and rain follow density |
-| wayfarer | `shadows`, `mirror` (medium) | WebGL: the land as squares of triangles built on the main thread as the walk reaches them (in steps of a few things at a time, 3 ms of building a frame at most, so even a city's square never holds a frame up) and drawn in one call each. High: 7×7 near squares of 64 m inside 9×9 coarse 256 m squares, land drawn to 1040 m, shadows from a 2048² picture 110 m across. Medium: 5×5 inside 7×7, to 790 m, a fifth of the trees and a third of the small plants gone, shadows 1024² over 70 m. Low: 5×5 inside 5×5, to 530 m, half the trees and two thirds of the plants gone, the near ground 4 m to a cell instead of 2, a third fewer townsfolk, no shadows, no clouds in the water. Far squares carry houses with their trimmings left off and a third of the trees as four or ten triangles each. Everyone who moves and is in front of the camera is posed on the main thread into one buffer (2,000 to 12,000 triangles) and drawn in one call. The shadow picture holds only what stands on the ground in the squares its box touches, depth in three bytes, compiled out when shed (after fading). Triangles a frame, shadow pass included, at 1280×800 (forest at night / city by day / lake): High 307k / 278k / 204k, Medium 143k / 198k / 115k, Low 103k / 101k / 57k (on a software renderer; before the second pass it was 436k / 444k / 358k, 293k / 299k / 262k and 214k / 198k / 130k). The GPU is watched by the wallpaper itself (late frames give up shadows, then render scale to 0.4, then the outer rings of squares); software renderers start there. No WebGL: 30 slices of ground, the road and the nearest trees and houses as cut-outs, in 2D |
+| wayfarer | `shadows`, `mirror` (medium) | *(Upgraded 2026-11-15, §10.38: fine scenery within 18 m of the road in the 3×3 squares about the traveller on High, 9 m on Medium, none on Low; fine houses on High only; the finest figures for the traveller and the nearest four townsfolk on High, one on Medium, none on Low; lite animals beyond 16 m, 6.5 m on Medium, always on Low; townsfolk drawn to 160, 55 and 30 m; measured 427k/206k/71k triangles a frame on an open road and 447k/223k/101k at worst in a grand city's square; the deep forest, added 2026-11-16, 445k/216k/77k in a far orbit in autumn.)* WebGL: the land as squares of triangles built on the main thread as the walk reaches them (in steps of a few things at a time, 3 ms of building a frame at most, so even a city's square never holds a frame up) and drawn in one call each. High: 7×7 near squares of 64 m inside 9×9 coarse 256 m squares, land drawn to 1040 m, shadows from a 2048² picture 110 m across. Medium: 5×5 inside 7×7, to 790 m, a fifth of the trees and a third of the small plants gone, shadows 1024² over 70 m. Low: 5×5 inside 5×5, to 530 m, half the trees and two thirds of the plants gone, the near ground 4 m to a cell instead of 2, a third fewer townsfolk, no shadows, no clouds in the water. Far squares carry houses with their trimmings left off and a third of the trees as four or ten triangles each. Everyone who moves and is in front of the camera is posed on the main thread into one buffer (2,000 to 12,000 triangles) and drawn in one call. The shadow picture holds only what stands on the ground in the squares its box touches, depth in three bytes, compiled out when shed (after fading). Triangles a frame, shadow pass included, at 1280×800 (forest at night / city by day / lake): High 307k / 278k / 204k, Medium 143k / 198k / 115k, Low 103k / 101k / 57k (on a software renderer; before the second pass it was 436k / 444k / 358k, 293k / 299k / 262k and 214k / 198k / 130k). The GPU is watched by the wallpaper itself (late frames give up shadows, then render scale to 0.4, then the outer rings of squares); software renderers start there. No WebGL: 30 slices of ground, the road and the nearest trees and houses as cut-outs, in 2D |
 | ski-run | `shadows`, `sparkle` (medium) | WebGL with instancing: 61 chunks of ground mesh at four levels of detail, built one or two a frame as the run goes by; trees as instances of 15 models, sorted into batches and culled on the main thread each frame (a few thousand), their detail distances and far thinning × density; riders and the lift stamped into one soup; one shadow map (2048 High, 1024 Medium), compiled out when shed (after fading); spray and flakes × density. The ground's grid thins by tier (113, 69 or 49 columns); far riders are stamped from plainer parts; trees are re-batched every 2 to 4 frames. About 75, 230 and 420 thousand triangles a frame on Low, Medium and High in some 100 draw calls (§10.39). The GPU is watched by the wallpaper itself, as Ice Patrol's. No WebGL: some 550 strips of slope, the trees and the riders a frame in 2D |
 
 #### In the panel
@@ -4653,7 +4662,8 @@ shaders (unchanged on a WebGL 2 context), no extensions.
   of the seed and of where you ask: nothing is stored, nothing repeats, and
   the hashes take whole numbers of any size, so three million kilometres
   out is the same kind of world (a test walks there).
-- **Eight countries**: meadow, forest, lake, pass, farm, moor, coast and
+- **Nine countries** (eight at first; the deep forest came with the third
+  pass, below, as did two legs to a stretch): meadow, forest, lake, pass, farm, moor, coast and
   grove (the enchanted one: giant mushrooms, teal trees with glowing
   motes, wisps). Each run of eight legs is a shuffle of all eight, so the
   walk always arrives somewhere new and never meets the same country twice
@@ -4799,10 +4809,589 @@ each start. A software renderer starts at the lightest step.
   (windows lit at night), and the traveller. It is what the smoke test
   times.
 
-**Tests.** Unit (`tools/wayfarer.test.mjs`, 16): the road never jumps or
+**The upgrades (owner request, 2026-11-15).** "Make this happen smartly. Be
+extra creative." Five asks, then three more travellers; nothing was to be
+dropped. Still our own world: no game is named anywhere, and no name, people,
+creature, marking or design is taken from one.
+
+- **The orbiting camera** (`orbit`, a fourth camera; `V` steps through all
+  four). It looks at the traveller from any bearing (0° behind them, 90° at
+  their right hand, 180° in front, measured from the way the road is going,
+  so it keeps its side of them as the road turns) and any height from 2° in
+  the grass to 90° straight overhead, 2.5 to 60 m out. A drag sets bearing
+  and height directly (60% of a turn across the screen, 0.62π down it) and
+  it **stays**; the wheel moves it in and out (`host.gestures` has no pinch,
+  so on a phone the distance is the slider). *The orbit* is `fixed` (holds)
+  or `turning` (a turn every 75 s with the height swaying ±9°; a hand on it
+  takes over, and it carries on from there after 4 s; reduced motion holds).
+  Where it is left goes into the settings on the sliders' steps
+  (`orbitAzimuth`, `orbitElevation`, `orbitDistance`, saved 0.6 s after the
+  hand is off it), so it survives a reload and can be set from the panel.
+  Android's pages turn it about the traveller.
+  - *It is the one camera that leaves the road*, so it is the one that knows
+    what it might be inside. `WayLogic.sightline` sweeps from the traveller
+    out toward the camera against the ground, the water and `world.solids`
+    (per 64 m square, cached: every tree as a drum for its trunk and one for
+    its crown, every house as a box to its ridge, walls, towers, gates with
+    the arch left open, keeps, the castle's rock, stalls, wells); the camera
+    comes in at once to just short of the first thing met and goes out again
+    at 7 m/s when it has gone; the place itself is then checked (`inOpen`)
+    and lifted clear of the ground. The near-lens fade still thins whatever
+    comes within two paces.
+  - The squares were always built all round the traveller, not ahead, and
+    the sky, the ranges and the fog are functions of direction, so looking
+    back and down needed no new land. Nothing is back-face culled. The
+    cloak got an inside. Who is posed no longer depends on being in front
+    of the eye when the eye looks steeply down.
+  - Without WebGL, orbit is the follow camera.
+- **Fidelity.** A new primitive, `WaySoup.tube` (rings along a path, smooth
+  round, swelling and narrowing, with painted folds, ragged hems and caps),
+  `mark` (a colour painted by where a vertex is: stripes, patches, socks),
+  `gloss` (metal, glass and eyes catch the light; it rides in the colour's
+  fourth byte) and `course` (the shaders lay coursed stone, flags or lapped
+  tiles; it rides in the sign of the occlusion byte). In the shaders: whoever
+  moves is lit across the whole of a limb instead of in steps, with a rim of
+  the sun's own light; a specular term; masonry and roof tiles.
+  - *People* (`way-people.js`): the same skeleton, hung with limbs on real
+    joints, hands with a thumb, a face (brow, nose, jaw, ears, eyes that
+    shine, a mouth), hair with weight (short, long, a bun, braids, a mane, a
+    high tail, loose to the waist), tunics with folds and a skirt, belts
+    with a buckle, a pouch and a knife, a pack with a flap, pockets, a
+    bedroll, a pan and a coil of rope, a cloak that is one sheet with a
+    lining. About 3,000 to 3,500 triangles a traveller. The traveller is
+    always this; townsfolk and walkers within 10 m of the eye (7 m on
+    Medium) are; further off and on Low they are `WayActors`' figures.
+  - *Animals* (`way-companions.js`): one four-legged rig (a body that swells
+    from rump to chest, legs on two joints with paws or hooves, a neck, a
+    head with a muzzle, a nose, ears of five kinds and eyes, tails of nine
+    kinds, seven gaits, and sitting, lying, curling, belly-up and tucked)
+    and one bird rig (a neck and head, a beak, two-length feathered wings
+    that fold, legs with toes, a walk, a perch and a tuck). The roadside's
+    sheep, cows, goats, deer, rabbits, cats, hens, ducks, crows and horses
+    are these within 24 m.
+  - *Scenery* (`way-detail.js`): trees with roots, boughs and foliage in
+    clumps (firs in ragged tiers, willows with a curtain of withies, birches
+    with marked bark), boulders in facets with moss, a well with its bucket
+    and windlass, fences of round posts, signposts, spoked wheels; houses
+    near the road get window frames with crossbars and lintels, doors in
+    planks with strap hinges and a ring, corner posts in the round; stone
+    is coursed and roofs are tiled everywhere.
+  - *Level of detail* is where a thing stands, so nothing pops as the eye
+    moves: the fine models are built only in the 3×3 squares about the
+    traveller and only within 26 m of the road (13 m on Medium, never on
+    Low); a square is rebuilt finer as the walk reaches it and kept until it
+    is left behind. In a grand city the back rows of houses are the far
+    squares' plain shapes.
+- **Companions**: 46 kinds, up to twelve at once (six until 2026-11-16).
+  *The company* is Surprise me (by the world's seed: one of the named
+  cats, then one from each other kind by turns) with *How many* (0 to 12,
+  3 by default), or "I will choose them", which shows chips for all 46 in
+  five rows by kind; whoever is ticked walks, in the order ticked. (Until
+  the fourth pass, below, there was also a "first companion" and a mode
+  for each kind.)
+  - **The named cats** are the owner's own, from The Cat vs. the Ornament
+    (§10.27) and Sky Island (§10.31), by the roster's names and coats (a
+    unit test reads `CatOrnamentLogic.ROSTER` and checks each): **Moofy**
+    (black and fluffy, with the white grin; lags and lurks), **Butters**
+    (chunky buff tabby; at the heel, belly-up by the fire), **Waffles**
+    (white with black patches; scouts ahead), **Ras The Destroyer** (a
+    tuxedo; chases butterflies), **Ibbie** (grey tabby; asleep on the
+    pack), **Maus** (tortie, half her face brown; the zoomies), **Turkey**
+    (big mottled grey; plods, belly-up at rest), **Harry** (orange and
+    white; chases), **Kitty Toes** (a fluffy blue Persian with orange
+    eyes; walks a little apart). And a stray tabby.
+  - Dogs: a brown dog, a long-eared hound (nose down, then a run to catch
+    up), a sheepdog (weaves about behind, herding), a terrier pup. Farm: a
+    pack pony and a donkey with panniers (led), a goat with a bell, a pig, a
+    lamb, a goose, a hen (rides the pack), a duck with three ducklings in a
+    line. Wild: a fox, a badger, an otter, a hedgehog (rides), a snow hare,
+    a spotted fawn, a bear cub, a red squirrel (rides), a moss-backed
+    tortoise with a toadstool on its shell, a frog, a raven and a hawk
+    (circling overhead), an owl (asleep on a shoulder by day, flying at
+    night). Stranger: a wisp, a paper-lantern spirit with a face, a dragon
+    whelp (flies low, then walks; breathes a little smoke at rest), a
+    clockwork beetle whose key turns, a brass automaton with a stovepipe, a
+    mushroom-folk child, a small cloud that rains on nobody, a spellbook
+    that flaps, a moon moth, a great snail with a lit window in its shell,
+    a boulderling.
+  - `WayLogic.companionStep` (pure): each has a place about the traveller
+    in the road's own terms, on the road's width and out of the middle of
+    the picture; later ones step round earlier ones and everyone round the
+    traveller; they keep right while a cart passes; scouts run ahead and
+    sit to wait; laggers sniff and catch up; chasers go after a butterfly
+    that is drawn; fliers circle and come down when the walk stops; by the
+    fire each has its own place round it, settled its own way (the big ones
+    graze a little way off); a deer near the road makes the dogs point and
+    the timid hide behind the traveller's legs.
+- **Travellers**: nine. The hooded ranger (default, as before), wizard, bard
+  and knight; and
+  - **the barbarian woman**: athletic, in a fur top tied at the neck, a
+    ragged fur kilt over fur trunks, fur boots bound with thongs, bracers,
+    gold arm rings, a necklace of teeth, a baldric, a braid down her back
+    and two in front, blue warpaint (a toggle), a bearded axe on her back
+    and a spear to walk with. No cloak, hood or staff: after dark she holds
+    up a burning brand (and puts it by when she sits at the fire). Clothed
+    as a swimmer is; nothing more.
+  - **the barbarian man**, in a pelt and kilt with a sword and a long axe.
+  - **The Evenfolk** are our own tall, long-eared people of the twilight
+    woods: lilac-skinned, with eyes that hold a light and three pale stars
+    along each cheekbone. **The druid** (full-figured, in a laced bodice
+    and two lengths of leaf skirts, a feather mantle, teal hair to the
+    waist, a helm of bark and bronze with a stag's antlers, a staff of two
+    twisted stems round a glowing bud) **changes shape**: a bear, an
+    owl-beast (our own: round, barred, upright, with tufts, lamp eyes and
+    stubby wings) or a great black cat, each keeping her antlers, a collar
+    of leaves and her glowing marks. `WayLogic.shiftStep` (pure, by the
+    seed and elapsed time): Now and then is 80 to 230 s herself and 35 to
+    120 s changed, Often about a third of that, Never only at the key; the
+    bear is likelier in forest and pass, the owl-beast in the grove, the
+    cat at night; a change takes 1.7 s (one shape fades as the other comes,
+    in a swirl of leaves and green-gold motes; reduced motion gets the fade
+    without the swirl) and never begins at a rest (it waits for the road),
+    though she may sit by the fire in the shape she has. The cats in the
+    company bristle and drop back when the bear appears. **The ranger**
+    (id `archer`: lean, silver hair tied high, leathers, a short cape, a
+    quiver, a longbow in her hand) sights along an arrow at a view stop;
+    nothing is ever shot.
+  - **the rogue**: dark leathers, a cowl and a scarf over the nose, belts
+    and pouches, a dagger strapped to each thigh. `WayLogic.stealthStep`
+    (pure): she goes unseen past the guards at a city's gate, into a town
+    after dark and while somebody is coming up the road (and, on Often, for
+    a stretch now and then), walking low; never at a rest, where she tosses
+    a knife instead. Unseen she is drawn apart, see-through: an outline of
+    the sky's light, with no flicker. `G` does either craft now.
+  - The archer and the rogue carry a horn lantern at the belt after dark.
+- **Grand cities.** In meadow and farm country about one place in sixteen is
+  a grand city (never two running): a curtain wall 284 m by 224 m with a
+  tower at every joint, round and square by turns, a moat all round it, and
+  at each end a gatehouse (two drums under cones, a gallery on corbels, the
+  portcullis half up, banners) with a drawbridge on chains. Inside: the high
+  street between four-storey houses, three streets across and two lanes
+  each side, a market square 46 m across with a fountain, a pillar, a ring
+  of stalls and a roofed market hall, a guild quarter with a belfried hall,
+  a cathedral (two west towers under spires, a round window, buttresses, a
+  spire over the crossing), and on a 16 m rock against the wall the castle:
+  an inner wall of eight towers, a gate at the head of a ramp on arches, a
+  great keep with four turrets, a great tower 40 m high under a 13 m spire,
+  a watch tower, a hall and a chapel. Outside each gate: shacks, a barn,
+  stalls, carts, a windmill, and three times the traffic. It lies level
+  from gate to gate (its height is halfway between its neighbours', and the
+  road does its climbing outside), and the woods stand back from the road
+  for 400 m so the towers are seen coming. The far squares carry all of it
+  in plainer builds with the windows lit, and keep a handful of lights
+  (`beacons`) that are drawn as glows from as far as the land is. The
+  traveller stops 34 m short of the gate to look, turned toward the castle.
+- **A second pass (same day, after review): rounder, and nothing left out.**
+  - *People* were still dolls. The near figure is now 7,500 to 9,000
+    triangles: limbs in twelve sides with a calf, a thigh, a forearm and an
+    upper arm that swell and narrow, caps over the knee, elbow, ankle and
+    heel so no joint shows a gap, a deltoid that slopes into the arm, a
+    trunk in ten or eleven rings (ribs, waist, hips; a man's, a woman's with
+    a narrow waist, a bust and slight shoulders, and the druid's hourglass),
+    collarbones, a hand with four fingers that curl and a thumb across
+    them. The head is one form (chin, jaw, cheek, brow, cranium) with eyes
+    set under lids (white, iris, pupil, a point of light), brows, a nose
+    with a bridge and wings, two lips and the line between, ears; hair is a
+    cap in locks with a fringe and side locks under whatever else it does.
+    Women's limbs are 84% as thick and their shoulders 45 mm narrower a
+    side. Fur is tufts standing out of every edge (`tufts`), the
+    barbarians' kilts in two lengths; a toned belly is painted on the bare
+    ones. The shaders' brushwork is turned down on whoever moves (it made
+    faces blotchy).
+  - *Animals*: bodies in sixteen sides and some twenty rings (so stripes,
+    patches, socks and bibs have somewhere to be painted: the named cats
+    are told apart by their coats), a shoulder and a haunch each side, legs
+    with a cap at the joint and paws with toes, a neck that roots in the
+    chest, tufts at the chest and cheeks, tails that curve; birds and the
+    owl-beast feathered in rows. About 3,500 triangles; a `lite` build of
+    the same animal (a third of that) stands in beyond 16 m (6.5 m on
+    Medium) and on Low.
+  - *Scenery*: tree trunks in ridged bark with boughs, foliage clumps
+    broken at the edge by sprays of leaves; bushes as huddles of clumps on
+    stems; tufts of thirteen blades and flowers with petals within 9 m of
+    the road; boulders in beds of stone with moss and grass at the foot;
+    fine carts (stakes, rails, shafts, an axle, sacks, a lantern), stalls
+    (turned posts, a scalloped valance, a scale), slatted benches, lamp
+    posts (a stepped foot, a fluted post, a scrolled bracket, four panes
+    under a cap) and bridges (the arch's ring of stones with its keystone,
+    a coping, cutwaters); gulls on the bird rig; the far-off dragon is the
+    whelp's own kind, grown.
+  - *The rogue* goes over a fence between the road and a fire
+    (`WayLogic.vault`, only where `fenceAt` says the land has one) and,
+    stopped, crouches with a hand down to the first cat of the company,
+    which comes to it (`ctx.pet`).
+  - *(Superseded 2026-11-16: the key was removed with `configVersion` 2;
+    see the fourth pass.)* *The old single companion is kept*, not dropped: `companion` (default
+    `fox`, as it always was) is now "First companion", who always comes and
+    leads the company, with every kind to choose from, "Nobody in
+    particular" and "Alone". So a saved `cat`, `dog`, `pony` or `wisp` is
+    still there and a saved `none` still walks alone. The settings system
+    has no migrations (§4.1: overrides from another `configVersion` are
+    dropped whole), so keeping the key and its meaning *is* the migration,
+    and `configVersion` stays 1.
+  - *Night was not brighter*: the same snowy village rendered by the old
+    code and the new averaged 155 and 153 of 255 (`dist/shots/sheet-night.png`).
+    The smoke check failed because the nearest town to its start is now a
+    grand city, lamp-lit and cobbled. Street lamps were over-bright before
+    and after, so their pools and their reach are now a quarter less, and
+    the check (in a village) is back to 0.75 of noon.
+  - *A grand city is seen coming*: its rock is 25 m high (the castle's
+    spire tops out some 80 m over the road); the leg before it is never a
+    town, a forest or a pass; the woods stand back; the traveller stops
+    215 m short for a first sight, turned toward the castle, and again at
+    the gate; the lights the far squares keep are three times as strong.
+  - *The company keeps out of a low camera's way* (`ctx.avoid`), as the
+    townsfolk do; the dissolve is for accidents.
+- **Measured** (triangles a frame, shadow pass included, software renderer;
+  follow camera / an orbit from 40 m). Targets: High 450k, Medium 220k,
+  Low 100k.
+
+  | | High | Medium | Low |
+  |---|---|---|---|
+  | Open forest road | 427k / 369k | 206k / 198k | 71k / 68k |
+  | A village | 239k / 303k | 134k / 141k | 47k / 59k |
+  | Before a grand city's gate | 328k / 283k | 185k / 149k | 78k / 57k |
+  | Its market square | 386k / 447k | 206k / 223k | 85k / 101k |
+
+  Within target everywhere but the grand square seen from a 40 m orbit on
+  Medium (223k) and Low (101k), which are one percent over. Draw calls are
+  the squares in view: 44 to 119. What pays for it: fine scenery only
+  within 18 m of the road (9 m on Medium) in the 3×3 squares about the
+  traveller; fine houses on High only; at most four fine townsfolk (one on
+  Medium, none on Low); lite animals with distance; on Low the four
+  original travellers keep their plainer figure, and townsfolk are drawn
+  to 30 m (55 m on Medium, 160 m on High); a grand city's towers, walls and
+  great buildings in their far builds outside those 3×3 squares.
+- **A third pass (2026-11-16, the owner on a real GPU): faces, the country, the deep forest, and why the land seemed to switch.**
+  - *"Sometimes the biomes randomly seem to switch."* Nothing was ever
+    rebuilt as another country: a square built twice is the same square to
+    the byte (now a unit test, after the world's caches have been flushed,
+    at every detail and tier, and against the far squares' colours). What
+    the owner saw was three true things. (1) The country changed every
+    360 m, three and a half minutes, so "meadow" was gone almost as soon as
+    it had begun. (2) Where two met, each tree and plant chose its country
+    by a coin weighted by distance along the road, over 160 m: a
+    salt-and-pepper of firs among mushrooms with no edge to it, which reads
+    as the land not knowing what it is. (3) The air (how misty, whether
+    leaves or the grove's motes are falling, fireflies) was the nearest
+    leg's, and stepped at the midpoint between two legs. Fixed: a country
+    now lasts two legs (`RUN`, 720 m, seven minutes); `world.share(x, z)`
+    says which country a point belongs to, a border that wanders forty
+    metres either way with tongues of each into the other and a narrow
+    edge where they mingle, and the trees, the plants and the ground's
+    colour all ask it; `world.air(z)` turns the air's weights over 140 m.
+    (Looking for it also found a cliff where a bay's shore closes: its
+    distance is now measured across the shore, not along the road.)
+  - *The country is a setting.* `biomePick` (`all`, the default; `woods`,
+    `open`, `shore`, `high`; or `choose`) and `biomeChoice` (chips for the
+    nine; none ticked is all of them). A round visits each allowed country
+    once, in a shuffled order, never the same in two stretches running;
+    two countries go by turns; one never ends. Grand cities still need
+    meadow or farmland and walled cities open country, so a road through
+    the woods alone has villages, hamlets and landmarks only. Changing it
+    takes effect at once: the land where the traveller stands is rebuilt as
+    the new world's (same seed, same road), and the walk, the company and
+    the hour go on.
+  - *The deep forest* (`deepwood`, the ninth country): trees half as big
+    again and a third more of them, crowding the road so the crowns close
+    over it, ferns, mushrooms, bushes, mossy rocks and fallen logs under
+    them, deer, rabbits and wisps, an elder tree or a ruin for its
+    landmark, the thickest mist and the most fireflies. Seasons were there
+    already (they turn along the road, or `season` fixes one): in autumn
+    half as many leaves again drift down as anywhere else (the same pooled
+    drops as rain, scaled by density), the ground under the trees turns to
+    drifts of fallen leaves and leaves lie on it (`litter`), here and, more
+    thinly, in the forest. Measured (follow / 40 m orbit), with the
+    boughs of the fourth pass: High 412k / 435k in summer and 421k / 445k
+    in autumn; Medium 193k / 212k and 197k / 216k; Low 69k / 76k and 70k /
+    77k (one spot beside a village measured 457k on High). To hold that,
+    its trees are never the fine models (its boughs are), fine bushes reach
+    0.42 of the usual band from the road, and Medium and Low thin its trees
+    harder than other countries'.
+  - *Faces.* Eyes stood a centimetre out of the head. They now lie in the
+    face (a flat white a hair proud of the skin, a larger soft iris, a
+    pupil, a point of light, a line of lashes), and everyone blinks every
+    four seconds or so. The rogue's scarf sits below her eyes.
+  - *The druid's helm*: a cap of bark plates bound in bronze, a brow piece
+    to a point with a stone in it, leaf cheek-guards, a crest of bronze
+    leaves, and a rack whose beams sweep back, out and up with five curved
+    tines a side, moss on them, a charm of beads and a feather from each, a
+    sprig of blossom, a light at every tip after dark and four fireflies
+    about them at night. Her other shapes wear the same rack, and the
+    animals' eyes lie flatter in their heads too.
+  - *The elf ranger's bow* is a recurve (limbs that belly and turn away at
+    the ends, flat in the limb, a wrapped grip, horn nocks, a taut string;
+    drawn, the limbs bend and the nocks come back); capes have a hem with a
+    band of trim, gathered shoulders, a clasp on a chain, swing a beat
+    behind the stride, and a quiver rides outside one. The hooded
+    wanderer's cloak is the same cloth and got the same.
+  - *The women's figures* are fuller in the bust and hip and narrower in
+    the waist (the trunks `f` and `c`), and the druid's feather mantle is a
+    small collar so her bodice shows.
+- **A fourth pass (2026-11-16): a roof over the deep forest's road, and a real draw.**
+  - *The canopy.* The crowns stood back from the road and left sky over
+    it. Now a bough leans out from either side every 10 m, turn about
+    (`BOUGH`, scatter's `bough`: an old trunk 6 to 8 m from the road that
+    arches to just past its middle, with broad flat clumps of leaf 7 to
+    9 m up), so the road is a tunnel with the light at its far end, the
+    ground under it shaded with gaps. Far squares carry the same boughs as
+    one clump and a stick, so nothing appears as the walk arrives; each
+    bough takes its country from `world.share`, so they thin out with the
+    border; none stand on a place, a camp, a bridge or a bank. In snow they
+    are bare wood. Follow and first-person cameras are under it. From the
+    orbit, leaves more than 3.4 m above the traveller's feet that lie
+    within 5 m of the line from the eye to the traveller are dithered away
+    in the prop shader (`uCut`, `uCutY`; any tree's crown, not only the
+    boughs), so an overhead or distant orbit looks down a well in the
+    leaves at the traveller instead of at a roof; the wood stays, and so do
+    the shadows.
+  - *The draw.* The elf ranger's aim was two arm angles and a bow through
+    her forearm. `pose.aim` (0 to 1 and back, 1.7 s up, 1.2 s down, done
+    before she walks on) now drives a sequence: she turns side-on to the
+    mark, the bow comes up before her chest as the other hand goes to the
+    string, the bow arm goes out straight as the string comes back to the
+    corner of the jaw with the elbow high behind, and she holds; the head
+    looks along the arrow. Both arms are solved to their hands (`reach`, a
+    two-bone arm toward a pole). The bow is modelled with the hand at the
+    grip and the string behind it in 25 steps of draw (`P.bow(q, arrow)`):
+    the string is two straight lines from the limbs to the fingers, the
+    limbs bend and the nocks come in as it is drawn, and the arrow lies
+    from the string past the side of the grip. She lets down without
+    loosing.
+- **Also in the fourth pass: the world that changed under a drag, and the company that did not change.**
+  - *"The switch of biome is mostly when I drag the view in the orbit."*
+    The real cause of the third pass's first item, and not in Wayfarer:
+    0.6 s after a drag the orbit is saved (`WP.settings.save`); that write
+    raised a `storage` event in the player page, which took it for
+    another tab's and rebuilt the stage 0.4 s later; and a new Wayfarer
+    is a new seed: another world, place, company and hour. "Mostly"
+    because a drag that ends on the same whole degrees saves nothing. V,
+    T and X did the same. Fixed in the player (§4.1's `saved`, §4.4); the smoke
+    check drags five times in each orbit mode in the player page and
+    presses T, and fails on the old player at the first drag. The third
+    pass's changes (longer countries, a border that holds, air that turns
+    slowly) stand as improvements, but they were not what the owner saw.
+  - *Companions* ("changing companions doesn't seem to take… is there a
+    max?… why a first companion and the rest, wouldn't I just want
+    buttons for all of them?"). Every panel change did reach the walk;
+    what read as "doesn't take" was three rules nothing explained: chosen
+    by hand, a seventh tick (or any past the first six in the list's
+    order) was dropped; *First companion* set to *Alone* emptied the
+    company whatever was ticked; and *Surprise* is the world's own
+    choice, so choosing it again changes nothing (and, with the bug
+    above, the company changed by itself after any drag). The controls
+    are now one choice (`configVersion` 2, so settings saved before it
+    are dropped and Wayfarer starts from its defaults): **Surprise me**
+    with *How many* (0 to 12; one of the named cats, then one from each
+    kind by turns, by the world's seed), or **I will choose them**, which
+    shows a chip for every companion in five rows by kind (all the one
+    list, `companionChoice`, kept in the order ticked) and a line from
+    the wallpaper saying how many walk ("14 ticked: the first 12 walk
+    with you"). Whoever is ticked walks; nobody ticked walks alone. The
+    old `companion` key, the kinds as modes of `companionPick`, and
+    "nobody in particular" are gone. The cap was six because there were
+    six places (`STATIONS`, `HEARTH`) and a count clamped to match; there
+    are twelve now (`PARTY_MAX`), the seventh on drawn as their lite
+    models at any distance. Twelve cost about 17k triangles more than
+    three on High (13k on Low): in the deep forest in autumn from a far
+    orbit that is 460k on High and 229k on Medium, 2% and 4% over; with
+    six or fewer nothing changed. A change no longer rebuilds the company
+    in place: `partyChange` keeps whoever stays where they are walking,
+    starts newcomers 8 m and more back down the road (3 m for the slow
+    ones) to run up, and sends the rest back the way they came
+    (`leavers`, forgotten 20 m behind).
+  - *"Why does the pack mule rotate randomly."* Every walker faced the
+    place it was making for, and made for it at a speed that took no
+    account of that place moving with the walk. One whose place is ahead
+    of the traveller (the led pony and donkey, 2.7 m in front) is past
+    its place whenever the traveller slows or stops, so it turned round,
+    walked back, and turned again; two whose places overlapped pushed
+    each other off them and faced wherever the push left them; and a
+    turn was as fast as 19 rad/s. Now a walker keeps the walk's own
+    velocity and closes the gap on top of it (ahead of its place, it
+    slows), faces the way it has actually gone, takes a step or two back
+    or aside without turning, stands facing down the road when the walk
+    stops, and turns no faster than its size allows (`turnRate`: 1.7
+    rad/s for the pony and donkey, 2.6 for the middling, 4.5 for the
+    small; fliers 6). A unit test walks every ground companion through
+    slowing, stopping and a cart going by at 10, 30 and 120 fps; it
+    fails on the old mover.
+- **A fifth pass (2026-11-16): "approaching a campfire, it's like they are sliding sideways".**
+  The traveller was the worst of it: their place is a distance along the
+  road and a distance to its right, and on the way to a fire the second
+  was eased across while they went on facing down the road (and for the
+  last of it only the second moved: a pure slide); the same on the way
+  back. Of 35 m walked about a camp, 20 m was sideways. The company slid
+  less, for two reasons: since the fourth pass they moved toward their
+  place whichever way they faced, with the turn limited, and anyone in
+  another's way was pushed aside at up to 3 m/s. Now the traveller has a
+  way they walk (`j.face`, an angle from the road's line, turned at no
+  more than 2.6 rad/s) and walks along it: to the place by the fire in a
+  straight line from where they left the road, sat turned to the fire,
+  and back onto the road on a curve; `standing()` gives `travel` as well
+  as `heading`. A companion going anywhere walks the way it faces and
+  turns toward where it means to go, slowing while it is turned away;
+  going round somebody is part of where it means to go, and only a small
+  nudge is left of the push; a slow step back or aside to keep its place
+  is still taken as it stands. Nothing else pulls anybody off the road's
+  line: at a view and before a gate the traveller stops on the road and
+  turns their head. A unit test walks to two fires and back at 10, 30
+  and 120 fps and measures how far each went across the way it faced
+  (the old code: 21 m for the traveller).
+- **Also in the fifth pass: wildlife** ("more background creatures, and more often, maybe controllable: bears, elk, squirrels").
+  - *Who.* 27 kinds at first, 31 after the sixth pass (`WayLogic.WILD`), each country its own
+    (`WILDLIFE`): forest and deep forest have the bear, stags, squirrels
+    (up trunks, and in the deep forest out along the boughs over the
+    road), a boar with piglets, fox cubs, badgers, hedgehogs, a woodpecker
+    and an owl; meadow and farmland hares that box, pheasants, fox cubs,
+    hedgehogs, a kestrel hanging on the wind, butterflies and swallows;
+    lake and coast herons, swans with cygnets, otters, a fish that jumps,
+    seals on the shore; the moor wild ponies, stags, hares, marmots, a
+    kestrel and an eagle; the pass ibex, marmots, an eagle and now and
+    then a bear; the grove moon-hares that glow and mushlings; after dark
+    bats and glow-worms, and the owl goes round on the wing. The herds and
+    flocks there were before (sheep, cows, deer, rabbits, goats, ducks,
+    gulls, crows, wisps) are still there.
+  - *Where.* `world.wildlife(cz)` gives up to six parties to each 64 m of
+    road, within about forty metres of it (where they are seen), the same
+    whenever it is asked; each has a `roll`, and the setting lets out those
+    under its share (`WILD_LEVELS`: none 0, few 0.15, some 0.6, plenty
+    0.96; six places to a stretch at first, eight with the sixth pass), so turning it up adds animals and moves none. Every kind keeps
+    a distance from the road's middle (`keep`: 6 m at the least, 20 m for
+    the bear), in where it starts, where it wanders and where it runs to;
+    none are placed in a town, at a landmark or a camp. The manager holds
+    those within three stretches (192 m and more: beyond where any is
+    drawn).
+  - *What they do* (`wildStep`): graze and look up as the traveller
+    nears; the shy ones bound away from the traveller and from the road
+    (a heron and a pheasant get up and fly), and settle where they stop;
+    the young follow the first of their party; climbers go up and down;
+    swimmers go round; fliers circle or hang. Those on the ground walk the
+    way they face, with the turn limited.
+  - *How they are drawn.* Within 13 m (8 m on Medium, never on Low) the
+    companions' lite rig; beyond it WayActors' plain beasts and birds
+    stand in (new entries for the bear, stag, boar, wild pony, ibex, seal,
+    swan, heron, eagle, kestrel, owl, pheasant and woodpecker; the small
+    ones borrow a cat or a rabbit in their own coat); the nearest 44, 26
+    or 14 by the tier; swarms are a few triangles each or only lights.
+    The orbit's cutaway takes leaves only, so it never takes an animal.
+  - *The setting.* `wildlife`: `none`, `few`, `some` (the default) or
+    `plenty`; it takes effect at once and leaves the walk alone. It
+    governs the herds and flocks too (×0, 0.6, 1, 1.5), which `life` used
+    to: `life` is now folk and traffic only.
+  - *Cost.* Worst case measured (plenty, twelve companions, the deep
+    forest in autumn, a far orbit): High 463k (455k without wildlife),
+    Medium 227k (227k), Low 89k (89k).
+- **A sixth pass (2026-11-16): the wildlife was there and was not seen.**
+  - *Measured.* `make wayfarer-sight` (`tools/wayfarer-sight.mjs`,
+    `WayLogic.wildSeen`) walks each country behind the follow camera and,
+    every four seconds, counts the wild animals in the picture: on the
+    screen, 12 px tall or more at 1080p, with nothing between (the ground,
+    a trunk, a wall). As the fifth pass left it, at `some`: 12% of samples
+    over all countries (1% in the forest, 30% on the moor). They were too
+    few, too far from the road, behind the trees, and mostly out to the
+    side of what the camera sees.
+  - *Changed.* Every 64 m of road now has two places for a party of the
+    country's big animals (`WILD_SHOW`: stags in herds of three to six,
+    wild ponies, ibex, a heron, a bear now and then, a white stag in the
+    grove), on the verge 7 to 12 m from the road, one each side, somewhere
+    with a clear line from the road forty metres back; they keep to that
+    strip and hold their ground until the traveller is within nine metres
+    or so. Small and bold kinds are placed 6 to 14 m off. More than half
+    the parties with dry ground opposite cross the road, once, when the
+    traveller is 40 to 62 m short of them, at a walk (and at a run if the
+    traveller is within 32 m while they are on it; a unit test holds them
+    14 m clear). Swallows by day and bats by night are about the roofs in
+    a town. Butterflies and swallows are drawn half as big again. Nobody
+    appears at full size at the edge of sight: they grow over the last of
+    the distance. New: the bear fishing at a lake's edge and scratching
+    its back on a tree, crabs on the shore, a seal with a seal's body, the
+    white stag.
+  - *Now* (3 km, three seeds, day; night is the same within two points).
+    Share of samples with an animal plainly in the picture, whole walk
+    and (on the open road, away from towns, which are 21 to 39% of a
+    walk and have people, cats and hens but no wild animals):
+
+    | country | few | some | plenty | mean at some |
+    |---|---|---|---|---|
+    | meadow | 34% (51%) | 55% (76%) | 61% (79%) | 3.1 |
+    | forest | 24% (33%) | 51% (64%) | 62% (75%) | 1.9 |
+    | deep forest | 16% (20%) | 40% (45%) | 51% (55%) | 1.0 |
+    | lake | 28% (33%) | 52% (59%) | 63% (70%) | 2.1 |
+    | pass | 29% (32%) | 60% (64%) | 72% (77%) | 1.8 |
+    | farm | 31% (47%) | 56% (77%) | 64% (83%) | 4.0 |
+    | moor | 50% (71%) | 70% (89%) | 78% (93%) | 6.3 |
+    | coast | 28% (35%) | 45% (52%) | 61% (67%) | 1.6 |
+    | grove | 45% (63%) | 65% (83%) | 75% (89%) | 3.2 |
+    | all | 25% (33%) | 49% (61%) | 59% (71%) | 2.2 |
+
+    The aim was 70% at `some` and 90% at `plenty` over the whole walk; it
+    is met on the open road in open country and not in the woods (the
+    deep forest's own boughs stand in a row between the road and anything
+    behind them) nor on the coast (the shore is far from the road), and
+    not anywhere once the towns are counted. A unit test holds the
+    open-road figures a good way under these.
+  - *Budget.* A road through one country had never been measured: the
+    forest alone was 486k triangles on High and the grove 581k, with or
+    without wildlife. The causes were fine trees in a wide band where the
+    trees stand thick, and in the grove every little mushroom drawn as
+    the giant one (some 200 triangles each, a couple of dozen to a
+    square). Now: half the band in the forest, none in the grove (nor the
+    deep forest); a toadstool of its own; a third fewer of the grove's
+    flowers and ferns; the grove's trees thinned on Medium and Low as the
+    deep forest's are. With three companions and `some`, every
+    single-country road and the mixed one is inside target on every tier
+    (the worst: deep forest 445k on High, grove 202k on Medium after the
+    thinning, grove 82k on Low). With `plenty` and twelve companions the
+    worst is 458k on High (2% over), 214k on Medium, 95k on Low; with
+    more than six companions, those from the fourth on are the lite
+    models.
+- **A seventh pass (2026-11-16): "how come in coast I rarely see the coast?"**
+  - *Why.* Three things. Each coast leg had a bay of its own, on its own
+    side, closed by headlands before the leg ended: the shore was within
+    fifty metres of the road for some sixty metres either side of the
+    leg's middle and hundreds of metres off for the rest. The water lay
+    1.6 m below level ground that ran flat out to its brink, so from a
+    camera 2.5 m up the brink hid it. And the seaward side was as wooded
+    as the landward. Measured (`node tools/wayfarer-sight.mjs --water`,
+    `WayLogic.waterSeen`: rays through the follow camera's picture, each
+    to the first thing it meets; a sample counts when open water is 3% of
+    the picture or more): 0% of samples over 3 km and three seeds, and 1%
+    for the lake, which had the same fault.
+  - *Now the coast is one coast.* The sea is on the same hand all the way
+    (by the world's seed) and at one level; the road runs 4.5 to 11.5 m
+    above it and 11 to 20 m from the tideline; the land falls from the
+    road's verge to the shore (a bluff where the road is high, a bank
+    where it is low: no brink), under a village only at its quay; the
+    seaward side keeps one tree in ten; rocks stand out of the sea. A
+    headland closes it, and the road turns inland, only where the next
+    leg is another country (`sea.open`). The lake is a long one with its
+    near shore along the road for most of its leg, 4.6 m below it, its
+    bank falling to it the same way and mostly clear of trees.
+  - *Measured after:* the sea is in the picture in 65% of all samples and
+    81% of those on the open road (a mean of 5.4% of the picture); a lake
+    in 32% and 42%. A unit test holds 62% and 22% on the open road, and
+    that the sea keeps its side and its level, the road is dry, and the
+    shore is 9 to 30 m from it. Coast alone draws 216k / 239k triangles
+    on High (follow / far orbit), 111k / 123k on Medium, 37k / 39k on Low.
+  - *Not done:* surf and foam, wet sand, a causeway or sea bridge, a
+    harbour, a wreck, beach huts: the sea is the water there was (the
+    mirror on Medium and High), nearer and in sight. The lighthouse, the
+    boats and the gulls were there already.
+- **Settings added:** `orbitMode`, `orbitAzimuth`, `orbitElevation`,
+  `orbitDistance`, `companions`, `companionPick`, `companionChoice`,
+  `warpaint`, `craft`, `biomePick`, `biomeChoice`, `wildlife`. `companion` (the one
+  companion of the first version, then "the first") was removed on
+  2026-11-16 with `configVersion` 2.
+- **Not built:** pinch to zoom (no multi-touch in `host.gestures`: on a
+  phone the distance is the slider); people on the castle's ramp. The 2D
+  fallback draws every traveller as the same cut-out in their own colours,
+  and none of the company.
+
+**Tests.** Unit (`tools/wayfarer.test.mjs`, 28; the fourth pass added the boughs over the deep forest's road, the bow's string, the company changing on the road and nobody spinning; the fifth, the walk to a fire and back, and wildlife; the sixth, wildlife seen; the seventh, the coast (33 now); the third pass added the country chosen and honoured, autumn in the woods, and the border that does not change its mind; the six before that: the orbit in clear air at 48 bearings and heights for an hour, its drag, fixed and turning at 10 and 120 fps; every companion posed, the count, the named cats against the roster, the seed; the company on the road, by the fire and at any frame rate; every traveller, the druid's changes and the rogue's hiding; grand cities; fine models and budgets). Smoke adds: the orbit's drag, wheel, overhead, grass and a village at four bearings; six companions, none, the barbarian's brand, the druid there and back, the rogue unseen and back; a grand city before its gate, in its square at five bearings, on its drawbridge and from down the road at night. The original sixteen: the road never jumps or
 doubles back, is level across and no steeper than a third along; the
 ground is continuous and the road is never awash; every round has all
-eight countries, never two the same running, and every kind of place
+the countries (nine now), never two stretches the same running, and every kind of place
 turns up; the towns setting scales settlements and leaves the road alone;
 the same seed is the same world; it all holds 3 × 10⁹ m from home; a
 village lines its street and a city stands inside its walls with nothing
@@ -4997,9 +5586,30 @@ New questions go here, each with a recommendation.
   ring (5×5 to 3×3 squares) and the second is thinner trees.
 - **Wayfarer in Seasonal?** It has every season in it and no month of its
   own. *Recommendation:* the owner's call; it isn't in `WP.SEASONS`.
-- **Wayfarer's name and looks.** "Wayfarer", the ranger and the fox are my
-  choices. *Recommendation:* the owner may prefer another name (one string
-  in the catalog) or another default traveller or companion (two defaults).
+- **Wayfarer's name and looks.** "Wayfarer", the ranger and a company of
+  three by the seed are my choices. *Recommendation:* the owner may prefer
+  another name (one string in the catalog) or another default traveller or
+  company (three defaults).
+- **Wayfarer's upgrades, unwatched.** The orbit's feel under a hand, every
+  gait, the druid's change and the rogue's shimmer were judged from stills
+  on a software renderer. Medium runs over its triangle target in a grand
+  city's square from a far orbit, by a percent. *Recommendation:* watch each
+  traveller and a party of six for a minute on a real GPU; if Medium
+  struggles in a grand city, the lever is `sight` (how far off townsfolk are
+  drawn) in `drawLife`.
+- **Wayfarer's third pass, unwatched.** The owner's report that the
+  countries "randomly switch" could not be reproduced here (software
+  renderer, stills); the fix is to the three things the code showed could
+  read that way (§10.38). One remains by design: far squares carry a third
+  of the trees, so a wood thickens as the walk reaches it. Faces, the helm,
+  the bow, the capes and the women's figures were judged from stills; the
+  blink, the cape's swing and the fireflies have not been watched moving.
+  *Recommendation:* walk a border between the deep forest and a meadow on a
+  real GPU; if the land still seems to switch, note the place (`?seed=`,
+  the distance in the HUD) and what changed.
+- **The Evenfolk and the owl-beast** are names and designs of mine, as are
+  the ids `archer` (the elf ranger; `ranger` was taken) and the key `G`
+  (`F` is fullscreen). *Recommendation:* the owner's call.
 - **Ice Patrol in Seasonal?** It would suit January to April beside Snow.
   *Recommendation:* the owner's call; it isn't in `WP.SEASONS` yet.
 - **Fresh Tracks on real devices.** As Ice Patrol below, and heavier: a

@@ -45,7 +45,7 @@ const OVERRIDES = {
     // A clear dawn, the long shadows out, a little higher for the view.
     'ice-patrol': { configVersion: 1, time: 'dawn', weather: 'clear', clearance: 40 },
     // An autumn evening, the village's chimneys smoking ahead.
-    wayfarer: { configVersion: 1, time: 'dusk', weather: 'fair', season: 'autumn' },
+    wayfarer: { configVersion: 2, time: 'dusk', weather: 'fair', season: 'autumn' },
     // A clear morning, a little closer in, so the rider and the trees read in a tile.
     'ski-run': { configVersion: 1, time: 'day', weather: 'clear', zoom: 1.2 },
 };
