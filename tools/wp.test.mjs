@@ -386,6 +386,13 @@ test('jellyfin: the client version it reports is the manifest\'s', () => {
     assert.equal(source.match(/static VERSION = '([^']+)'/)?.[1], manifest.version);
 });
 
+test('the version the panel shows is the manifest\'s', () => {
+    const manifest = JSON.parse(readFileSync(join(WEB, 'manifest.json'), 'utf8'));
+    const source = readFileSync(join(WEB, 'core/wp.js'), 'utf8');
+    assert.equal(source.match(/WP\.VERSION = '([^']+)'/)?.[1], manifest.version);
+    assert.match(readFileSync(join(WEB, 'core/panel.js'), 'utf8'), /Wallpapers \$\{WP\.VERSION\}/);
+});
+
 test('extension: host_permissions are exactly the catalog\'s network hosts', () => {
     const manifest = JSON.parse(readFileSync(join(WEB, 'manifest.json'), 'utf8'));
     const hosts = [...new Set(WP.catalog.flatMap(e => Array.isArray(e.network) ? e.network : []))].sort();

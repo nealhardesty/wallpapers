@@ -1412,7 +1412,9 @@ spec has a stated price:
     48, 128 for the extension; 192, 512 for the web app); they're
     committed, since the extension can't use an SVG.
   - Version: `manifest.json`'s `version`, bumped by hand when a build is
-    worth telling apart (0.5.0 for Phase 5).
+    worth telling apart (0.5.0 for Phase 5). `WP.VERSION` (`core/wp.js`)
+    and Jellyfin's `VERSION` are bumped with it; the tests keep all three
+    equal. The panel's last line shows it ("Wallpapers 0.19.0").
   - Known Chrome behaviour: a new tab puts keyboard focus in the omnibox,
     so `,` only works after a click on the page. This is documented in the
     README, and the corner hot zone works with a mouse too.
