@@ -2098,13 +2098,15 @@ const STAGE_CHECKS = {
             if (Math.hypot(d.cam.x - c.cam.x, d.cam.y - c.cam.y, d.cam.z - c.cam.z) < 3 || !(d.clear > 0.4)) record(`the cut left the camera where it was: ${JSON.stringify(d.cam)}`);
             if (!/Orbit/.test(said[0]) || !/eyes/.test(said[1]) || !/Cinematic/.test(said[2])) record(`V said ${JSON.stringify(said)}`);
             const t = await run('t'), x = await run('x'), n = await run('n');
-            // The new land is built a few milliseconds a frame behind the veil: wait for it, however slow the frames are.
-            await waitFor(() => evaluate('!WP.stage.manager.queue.length && !WP.stage.manager.building && !WP.stage.manager.pending'), 20000);
-            await sleep(400);
+            // The new land is built a few milliseconds a frame and swapped in whole: wait until the land in use is the
+            // land about the traveller, however slow the frames are. (The queue itself proves nothing: a change of
+            // quality or the next square along fills it again, with the old land drawn meanwhile.)
+            const whole = "(() => { const m = WP.stage.manager, me = WayLogic.standing(m.journey, m.world), h = m.active.hole; return !!h && me.x >= h[0] && me.z >= h[1] && me.x < h[2] && me.z < h[3]; })()";
+            if (!await waitFor(() => evaluate(whole), 30000)) record('N: the land about the traveller was never whole');
             const after = await where(), saved = await evaluate("JSON.parse(localStorage.getItem('wp:wayfarer'))");
             if (saved.camera !== 'drift' || saved.time !== 'dusk' || saved.weather !== 'fair') record(`the keys saved ${JSON.stringify(saved)}`);
             if (!/dusk/.test(t) || !/fair/.test(x) || !/^On to /.test(n)) record(`the keys said ${JSON.stringify([t, x, n])}`);
-            if (!(after.z > d.z + 60) || after.near < 25 || after.queue || Math.abs(after.y - after.ground) > 0.01) record(`N: from ${d.z.toFixed(0)} to ${after.z.toFixed(0)}, ${after.near} squares, ${after.queue} to build`);
+            if (!(after.z > d.z + 60) || after.near < 25 || Math.abs(after.y - after.ground) > 0.01) record(`N: from ${d.z.toFixed(0)} to ${after.z.toFixed(0)}, ${after.near} squares`);
             await shoot('wayfarer-cinematic');
             return true;
         }],
