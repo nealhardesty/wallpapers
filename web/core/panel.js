@@ -83,7 +83,8 @@
                 h('p', { class: 'keys' },
                     h('span', {}, h('kbd', {}, '←'), ' ', h('kbd', {}, '→'), ' switch'),
                     h('span', {}, h('kbd', {}, '?'), ' all keys'),
-                    h('span', {}, h('kbd', {}, 'Esc'), ' close'))));
+                    h('span', {}, h('kbd', {}, 'Esc'), ' close')),
+                h('p', { class: 'about' }, `Wallpapers ${WP.VERSION}`)));
         // A vertical wheel scrolls the filmstrip sideways.
         picker.addEventListener('wheel', event => {
             if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;

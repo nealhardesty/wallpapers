@@ -230,6 +230,7 @@
 .action.primary { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 22%, transparent); color: var(--ink); }
 .action.confirm { border-color: var(--accent); color: var(--ink); }
 .keys { margin: 0; color: var(--ink-faint); font-size: 12px; display: flex; flex-wrap: wrap; gap: 4px 12px; }
+.about { margin: 0; color: var(--ink-faint); font-size: 12px; user-select: text; }
 .panel kbd, .help kbd {
     display: inline-block;
     min-width: 1.6em;
