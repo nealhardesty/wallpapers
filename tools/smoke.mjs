@@ -2098,6 +2098,8 @@ const STAGE_CHECKS = {
             if (Math.hypot(d.cam.x - c.cam.x, d.cam.y - c.cam.y, d.cam.z - c.cam.z) < 3 || !(d.clear > 0.4)) record(`the cut left the camera where it was: ${JSON.stringify(d.cam)}`);
             if (!/Orbit/.test(said[0]) || !/eyes/.test(said[1]) || !/Cinematic/.test(said[2])) record(`V said ${JSON.stringify(said)}`);
             const t = await run('t'), x = await run('x'), n = await run('n');
+            // The new land is built a few milliseconds a frame behind the veil: wait for it, however slow the frames are.
+            await waitFor(() => evaluate('!WP.stage.manager.queue.length && !WP.stage.manager.building && !WP.stage.manager.pending'), 20000);
             await sleep(400);
             const after = await where(), saved = await evaluate("JSON.parse(localStorage.getItem('wp:wayfarer'))");
             if (saved.camera !== 'drift' || saved.time !== 'dusk' || saved.weather !== 'fair') record(`the keys saved ${JSON.stringify(saved)}`);
