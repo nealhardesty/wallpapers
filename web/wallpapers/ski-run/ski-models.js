@@ -375,21 +375,57 @@ const SkiModels = (() => {
             out.stamp(board ? P.board() : P.ski(), st.top, tints);
         }
     }
+    // The last skier posed, for the tests, in the figure's own frame before its size (x to its right, y off the snow, z ahead):
+    // for the left leg and then the right, the hip joint, the knee and the ankle (x, y, z each); then how far the torso
+    // leans from the snow's normal (radians, to its right), and how far the hips are from between the feet; then the tip of
+    // the left pole and of the right (x, y, z each, in the skis' own frame: y is off the snow), when the arms are worked out too.
+    // For a snowboarder the frame is the rider's own on the board (x along the board to their right hand, y off the snow, z the way
+    // their toes point, across it) and the legs are as above; [18] is how far the torso is tipped towards the toes from the snow's
+    // normal and [19] how far the board is rolled (radians, towards the toes: the tilt, as the rider has it); then, from [26], the
+    // middle of the hips, of the chest and of the head, and the left hand and the right (x, y, z each).
+    const BONES = new Float64Array(41), THIGH = 0.45, SHIN = 0.43, ANKLE = 0.1, HIPS = 0.12, UPPER = 0.3, FORE = 0.3, POLE = 1.12;
+    // A board: half as wide as it is, how far each binding is from its middle, and how far an ankle is above its base.
+    const EDGE = 0.135, BIND = 0.26, BOOT = 0.11, SQUARE = Math.PI / 2;
+    // How far the skis or the board are tipped on to an edge (radians, to their own right): what is across them of the turn's tilt,
+    // and of the braking (in g), when they are turned `skid` from the way they are going. The snow they throw goes by it too.
+    const tipped = (tilt, skid, brake) => skid ? clamp(Math.atan(Math.tan(tilt) * Math.cos(skid) + (brake || 0) * Math.sin(skid)), -1.1, 1.1) : tilt;
+    // The skis' frame on the stack, and points in it: a shoulder, and what the old arms would have done (elbow, hand, pole's tip).
+    const ROOT = new Float64Array(12), PT = new Float64Array(12);
+    const within = (m, o) => {
+        const s2 = ROOT[0] * ROOT[0] + ROOT[4] * ROOT[4] + ROOT[8] * ROOT[8], dx = m[3] - ROOT[3], dy = m[7] - ROOT[7], dz = m[11] - ROOT[11];
+        PT[o] = (ROOT[0] * dx + ROOT[4] * dy + ROOT[8] * dz) / s2; PT[o + 1] = (ROOT[1] * dx + ROOT[5] * dy + ROOT[9] * dz) / s2; PT[o + 2] = (ROOT[2] * dx + ROOT[6] * dy + ROOT[10] * dz) / s2;
+    };
+    // A part that hangs down its own y, put at a point of the skis' frame and run along a direction in it.
+    const along = (st, x, y, z, dx, dy, dz) => { st.top.set(ROOT); return st.move(x, y, z).rx(Math.atan2(-dz, -dy)).rz(Math.asin(clamp(dx, -1, 1))); };
     // Draw a rider with their skis or board at (x, y, z) from the camera, feet on y.
-    // pose: { yaw (travel), pitch and bank (the snow under them), lean (-1 to 1,
-    // into a turn), crouch, tuck, air, grab, spread, twist, spin [yaw, pitch,
+    // pose: { yaw (travel), pitch and bank (the snow under them), tilt (radians from the snow's normal that the line
+    // from feet to hips is tipped into a turn, to their right; without it, lean, -1 to 1, stands in), press (the load
+    // on the legs, in g), skid (radians the skis or board are turned to the right of the travel), brake (how hard the
+    // edges are slowing them, in g), face (radians the chest is turned to the right of the travel), plant and plantSide
+    // (0 to 1: that pole's tip, 1 the right, on the snow by its ski's tip), crouch, tuck, air, grab, spread, twist, spin [yaw, pitch,
     // roll], phase (of the turn), stop, sit (on a chair), plough, fall, t, size,
-    // walk (the stride's angle, on foot), drink (0 to 1: a mug from the table to the mouth) }.
+    // walk (the stride's angle, on foot), drink (0 to 1: a mug from the table to the mouth), sw (on a board: riding switch,
+    // the other foot forward and the toes to the left of the way they are going), sink (metres the skis are down in the snow:
+    // y is then that far under its surface, the skis are held together, and the hands and the poles' tips clear the surface, not
+    // the skis), reach (metres come since a planted pole's tip went in: it stays there, and the hand goes over it), wide (metres
+    // further apart each ski is stood) and upright (0 to 1: how much less the back is bent), for who skis so }.
     function figure(out, st, x, y, z, who, p) {
         const board = who.kind === 'board', afoot = who.kind === 'none', size = (p.size || 1) * (who.woman ? 0.95 : 1), t = p.t || 0;
         tints[1] = who.jacket; tints[2] = who.pants; tints[3] = who.helmet; tints[4] = who.skin; tints[5] = who.gear; tints[6] = who.hair; tints[7] = who.trim;
         const put = m => out.stamp(m, st.top, tints), Q = p.lo ? PL : P;
-        const fall = p.fall, lean = fall ? 0 : clamp(p.lean || 0, -1, 1), air = p.air ? 1 : 0, grab = p.grab || 0, spread = p.spread || 0;
-        let sit = p.sit || 0, stop = p.stop || 0, lie = 0, tumble = 0, shake = 0;
+        const fall = p.fall, air = p.air ? 1 : 0, grab = p.grab || 0, spread = p.spread || 0;
+        // How far into the turn, and how far of that the body over the hips goes: the harder the turn, the more upright against it.
+        // The skis may be turned off the way they are going: then what tips them is what is across them, of the turn and of the
+        // braking; and the chest may be turned less than the skis (or not at all), the hips between the two.
+        const tilt = fall || afoot || p.sit ? 0 : clamp(p.tilt ?? (p.lean || 0) * 0.62, -1.1, 1.1), sk = fall || afoot || p.sit ? 0 : p.skid || 0;
+        const tip = tipped(tilt, sk, p.brake), lean = clamp(tip / 0.62, -1, 1), tor = tip * clamp(0.625 - 0.25 * Math.abs(tip), 0.35, 0.62);
+        const chest = board || fall || afoot || p.sit ? 0 : clamp((p.face || 0) - sk, -1.1, 1.1), pv = chest * 0.5, sP = Math.sin(pv), cP = Math.cos(pv);
+        let sit = p.sit || 0, stop = p.stop || 0, lie = 0, tumble = 0, shake = 0, flail = 1;
         if (fall) {
             const k = fall.t / (L.FALL[fall.phase] || 1);
             if (fall.phase === 'tumble') tumble = fall.roll;
-            else if (fall.phase === 'lie') lie = 1;
+            // (Come to rest the right way up, they go over on to their back: what the tumble was doing with them eases off as they do.)
+            else if (fall.phase === 'lie') { lie = smooth(0, 0.9, k); flail = 1 - lie; tumble = flail > 0 ? fall.roll : 0; sit = lie; }
             else if (fall.phase === 'sit') { lie = 1 - smooth(0, 0.6, k); sit = 1; } else if (fall.phase === 'shake') { sit = 1; shake = Math.sin(t * 26) * (1 - k * 0.5); } else sit = 1 - smooth(0, 1, k);
             if (lie || tumble) sit = Math.max(sit, 0.7);
             stop = 0;
@@ -397,6 +433,11 @@ const SkiModels = (() => {
         // A boarder who has stopped sits down to wait.
         if (board && !fall && !p.sit) sit = Math.max(sit, smooth(0.6, 1, stop) * 0.9);
         const ground = sit && !p.sit;           // sitting in the snow, not on a chair
+        // On a board, strapped in: the legs are worked out from the board (below). Which way the toes point across it (1: to the right
+        // of the way the nose points; -1 riding switch); how far they are down in the snow, and whether on their knees (they stopped on
+        // the toe edge, facing up the hill) or sat back behind the heel edge.
+        const riding = board && !p.sit, toes = p.sw ? -1 : 1, seat = !ground || !riding ? 0 : fall ? Math.max(sit, lie) : smooth(0.6, 1, stop), kneel = riding && !fall ? smooth(0.2, 0.6, toes * Math.sin(sk)) : 0;
+        let roll = 0, nod = 0, open = 0;
         // Legs: how far the thigh comes forward and the shin goes back, each from upright.
         let th = mix(0.45, 1.05, p.crouch || 0) + 0.4 * (p.tuck || 0), ps = mix(0.36, 0.66, p.crouch || 0) + 0.16 * (p.tuck || 0);
         th = mix(th, 0.2, stop); ps = mix(ps, 0.14, stop);
@@ -406,42 +447,165 @@ const SkiModels = (() => {
         const hip = 0.1 + 0.43 * Math.cos(ps) + 0.45 * Math.cos(th), fore = (0.45 * Math.sin(th) - 0.43 * Math.sin(ps));
 
         st.reset(x, y, z, p.yaw, size);
-        if (!air) st.rx(-(p.pitch || 0)).rz(-(p.bank || 0));
+        // (rz tips +x up: snow that is higher on their right lifts their right; a lean to the right is the other way.)
+        if (!air) st.rx(-(p.pitch || 0)).rz(p.bank || 0);
         else st.rx(-(p.pitch || 0) * 0.6);
-        if (tumble) st.move(0, 0.5, 0).rx(tumble).rz(Math.sin(tumble * 0.7) * 0.6 * (fall.turn || 1)).move(0, -0.5, 0);
+        if (tumble) st.move(0, 0.5, 0).rx(tumble).rz(Math.sin(tumble * 0.7) * 0.6 * (fall.turn || 1) * flail).move(0, -0.5, 0);
         if (p.spin && (p.spin[0] || p.spin[1] || p.spin[2])) st.move(0, 0.8, 0).rz(p.spin[2]).rx(p.spin[1]).ry(p.spin[0]).move(0, -0.8, 0);
-        // Into the turn, from the edges up.
-        st.rz(lean * 0.62);
-        if (ground) st.move(0, -hip + 0.2 + 0.12 * lie, 0).rx(-1.25 * lie);
+        // Into the turn, from the edges up: the skis or the board stay on the snow, and the legs work it out below.
+        if (board) st.ry(sk);
+        if (ground && !riding) st.move(0, -hip + 0.2 + 0.12 * lie, 0).rx(-1.25 * lie);
 
         // What they stand on. A board lies along the way they are going; they stand across it.
         const stance = board ? (p.sw ? -1 : 1) * 1.28 : 0;
-        if (board && !p.sit) { st.push(); if (ground) st.move(0, hip - 0.2, 0.55).rx(-0.5).move(0, -0.1, 0); put(Q.board()); st.pop(); }
-        st.ry(stance + (p.twist || 0) * 0.5);
-        st.move(0, hip, -fore * 0.55);
-        // Legs.
-        for (const side of [-1, 1]) {
-            const inside = side * lean > 0 ? Math.abs(lean) : 0, stride = p.walk ? Math.sin(p.walk + (side > 0 ? 0 : Math.PI)) : 0;
-            const a = th + 0.4 * inside - 0.08 * (1 - inside) * Math.abs(lean) + 0.5 * stride, b = ps + 0.22 * inside + (p.walk ? 0.45 * Math.max(0, Math.cos(p.walk + (side > 0 ? 0 : Math.PI))) : 0);
-            st.push().move(side * (board ? 0.13 : 0.12), 0, 0).rz(side * ((board ? 0.3 : 0.11) + 0.55 * spread + (p.plough ? 0.12 : 0))).rx(-a);
-            put(Q.thigh());
-            st.move(0, -0.45, 0).rx(a + b);
-            put(Q.shin());
-            if (!board && !afoot) {
-                st.move(0, -0.43, 0).rx(-b - (p.sit ? 0.25 + 0.12 * Math.sin(t * 1.7 + side) : 0)).rz(-side * (0.11 + 0.55 * spread)).ry(p.plough ? -side * 0.32 : -spread * side * 0.5);
-                st.move(0, -0.1, 0.05);
-                put(Q.ski());
-            }
+        st.ry(riding ? toes * SQUARE : stance + (p.twist || 0) * 0.5 + (board ? 0 : sk));
+        if (riding) {
+            // On a board both feet are strapped to it, across the way it goes, so a turn is a lean on to the toes or back on to the
+            // heels, and the two are not the same shape. The board rolls on to that edge, which stays on the snow. The weight goes
+            // on the line the tilt gives from that edge. On the heels they sit into a chair: legs short, hips low and back, and the
+            // chest tipped forward over the board to balance them. On the toes the hips go forward over the edge and the knees
+            // down towards the snow: legs long, the back straight along the line. Between the two, upright with the knees bent.
+            const B = BONES, crouch = p.crouch || 0, tuck = p.tuck || 0, tucked = Math.max(grab, air * 0.45);
+            // (Stood still across the hill, they rest on the edge that is up it. And a board that is sliding across its way is rolled
+            // further on to that edge than the rider leans, from the ankles: the other edge must stay clear of the snow.)
+            const ts = toes * clamp(tip + 0.12 * Math.sin(sk) * stop, -1.1, 1.1), ride = clamp(ts + toes * 0.3 * Math.sin(sk), -1.1, 1.1), sT = Math.sin(ts), cT = Math.cos(ts), toe = smooth(0.05, 0.6, ts), heel = smooth(0.05, 0.6, -ts);
+            const reach = clamp(mix(mix(mix(0.86, 0.56, crouch) + 0.1 * toe - 0.1 * heel + 0.16 * smooth(0.45, 0.9, -ts) + 0.06 * smooth(0.6, 1, ts) - Math.min(0.15, 0.25 * Math.max(0, (p.press ?? 1 / cT) - 1.1)) - 0.1 * tuck, 0.5, tucked), 0.84, spread), 0.44, 0.86);
+            nod = ts + (0.55 * mix(mix(0.34, 0.75, crouch), 1.15, tuck) * (1 - stop * 0.75) + 0.35 * grab - 0.3 * spread) * (1 - 0.85 * toe) - 0.06 * Math.max(ts, 0) + 0.9 * Math.max(-ts, 0) * (1 - 0.75 * smooth(0.5, 1.1, -ts));
+            // The ankles, over the bindings on the rolled board. The hips: where the hips, the chest and the head between them
+            // (three, five and two parts in ten) are on the line from the edge, and the legs as long as they should be.
+            const side0 = ride < 0 ? -EDGE : EDGE, y0 = BOOT * Math.cos(ride) + side0 * Math.sin(ride), z0 = side0 + BOOT * Math.sin(ride) - side0 * Math.cos(ride), from = EDGE * (2 * smooth(-0.15, 0.15, ride) - 1);
+            const qy = -0.27 * Math.cos(nod) - 0.024 * Math.cos(nod * 0.45), qz = from - 0.27 * Math.sin(nod) - 0.024 * Math.sin(nod * 0.45), nq = cT * (qy - y0) + sT * (qz - z0);
+            const up = -nq + Math.sqrt(Math.max(0, nq * nq - (qy - y0) * (qy - y0) - (qz - z0) * (qz - z0) - (BIND - HIPS) * (BIND - HIPS) + reach * reach));
+            let py = qy + up * cT, pz = qz + up * sT;
+            roll = ride;
+            // Down in the snow: sat behind the board, which stands on its heel edge, knees up; or knelt in front of it; or on their back.
+            if (seat) { py = mix(py, mix(0.2, 0.46, kneel), seat); pz = mix(pz, mix(-0.52, 0.3, kneel), seat); nod = mix(nod, mix(mix(0.25, 0.1, kneel), -1.35, lie), seat); roll = mix(roll, mix(-0.55, 1, kneel), seat); }
+            const pivot = roll < 0 ? -EDGE : EDGE, sR = Math.sin(roll), cR = Math.cos(roll), ay = BOOT * cR + pivot * sR, az = pivot + BOOT * sR - pivot * cR;
+            // (Which way the knees go: towards the toes, as the body is tipped; up, sat down; down, on their knees.)
+            const lift = 0.35 - 0.9 * kneel * seat, tipK = (ts < 0 ? ts : 0.5 * ts) * (1 - seat), ky = lift * Math.cos(tipK) - Math.sin(tipK), kz = lift * Math.sin(tipK) + Math.cos(tipK);
+            ROOT.set(st.top);
+            st.push().move(0, 0, pivot).rx(roll).move(0, 0, -pivot).ry(-toes * SQUARE);
+            put(Q.board());
             st.pop();
+            for (const side of [-1, 1]) {
+                // Two bones from hip to ankle: the knee is off the line between them, towards the toes and a little out.
+                const o = side < 0 ? 0 : 9, hx = side * HIPS;
+                let dx = side * BIND - hx, dy = ay - py, dz = az - pz;
+                const far = Math.hypot(dx, dy, dz) || 1, d = clamp(far, 0.12, THIGH + SHIN - 0.004);
+                dx /= far; dy /= far; dz /= far;
+                const part = (THIGH * THIGH - SHIN * SHIN + d * d) / (2 * d), off = Math.sqrt(Math.max(0, THIGH * THIGH - part * part)), dot = side * 0.4 * dx + ky * dy + kz * dz;
+                let bx = side * 0.4 - dot * dx, by = ky - dot * dy, bz = kz - dot * dz;
+                const bl = Math.hypot(bx, by, bz) || 1;
+                bx /= bl; by /= bl; bz /= bl;
+                const tx = (dx * part + bx * off) / THIGH, ty = (dy * part + by * off) / THIGH, tz = (dz * part + bz * off) / THIGH;
+                const sx = (dx * d - tx * THIGH) / SHIN, sy = (dy * d - ty * THIGH) / SHIN, sz = (dz * d - tz * THIGH) / SHIN;
+                B[o] = hx; B[o + 1] = py; B[o + 2] = pz;
+                B[o + 3] = hx + tx * THIGH; B[o + 4] = py + ty * THIGH; B[o + 5] = pz + tz * THIGH;
+                B[o + 6] = B[o + 3] + sx * SHIN; B[o + 7] = B[o + 4] + sy * SHIN; B[o + 8] = B[o + 5] + sz * SHIN;
+                along(st, hx, py, pz, tx, ty, tz);
+                put(Q.thigh());
+                // (Feet a little apart at the toes, as the bindings are set.)
+                along(st, B[o + 3], B[o + 4], B[o + 5], sx, sy, sz).ry(side * 0.3);
+                put(Q.shin());
+            }
+            st.top.set(ROOT);
+            st.move(0, py, pz);
+            B[18] = nod; B[19] = roll;
+            B[26] = 0; B[27] = py; B[28] = pz;
+            B[29] = 0; B[30] = py + 0.3 * Math.cos(nod); B[31] = pz + 0.3 * Math.sin(nod);
+            B[32] = 0; B[33] = py + 0.6 * Math.cos(nod) + 0.12 * Math.cos(nod * 0.45); B[34] = pz + 0.6 * Math.sin(nod) + 0.12 * Math.sin(nod * 0.45);
+        } else if (board || afoot) {
+            st.move(0, hip, -fore * 0.55);
+            for (const side of [-1, 1]) {
+                const inside = side * lean > 0 ? Math.abs(lean) : 0, stride = p.walk ? Math.sin(p.walk + (side > 0 ? 0 : Math.PI)) : 0;
+                const a = th + 0.4 * inside - 0.08 * (1 - inside) * Math.abs(lean) + 0.5 * stride, b = ps + 0.22 * inside + (p.walk ? 0.45 * Math.max(0, Math.cos(p.walk + (side > 0 ? 0 : Math.PI))) : 0);
+                st.push().move(side * (board ? 0.13 : 0.12), 0, 0).rz(side * ((board ? 0.3 : 0.11) + 0.55 * spread + (p.plough ? 0.12 : 0))).rx(-a);
+                put(Q.thigh());
+                st.move(0, -THIGH, 0).rx(a + b);
+                put(Q.shin());
+                st.pop();
+            }
+        } else {
+            // On skis the legs are worked out from where things must be. The skis stay on the snow, a hip's width apart and
+            // wider in a carve, each rolled on to its edge. The hips go inside, along the line the tilt gives, as far from
+            // the feet as the outside leg is long: long as the turn builds, shorter again as the load on it peaks. Then each
+            // leg is bent to fit, knee forward: the inside one comes out short, its knee high, with nothing said about it.
+            // (Down in deep snow the skis are kept together, as one platform; whoever skis warily stands wider.)
+            const sT = Math.sin(tip), cT = Math.cos(tip), at = Math.abs(tip), deep = smooth(0.06, 0.16, p.sink || 0), wide = 0.08 * smooth(0.15, 0.8, at) * (1 - deep) - 0.4 * HIPS * deep + (p.wide || 0), zP = -fore * 0.55, B = BONES;
+            const press = p.press ?? 1 / cT, cR = cT, sR = sT, outer = tip < 0 ? 1 : -1;
+            let reach = 0;
+            for (const side of [-1, 1]) {
+                const o = side < 0 ? 0 : 9, step = p.walk ? p.walk + (side > 0 ? 0 : Math.PI) : 0;
+                const a = th + (p.walk ? 0.5 * Math.sin(step) : 0), b = ps + (p.walk ? 0.45 * Math.max(0, Math.cos(step)) : 0), splay = side * (0.55 * spread + (p.plough ? 0.12 : 0));
+                const down = THIGH * Math.cos(a) + SHIN * Math.cos(b), ahead = THIGH * Math.sin(a) - SHIN * Math.sin(b);
+                // The ankle: over the middle of its ski, which stands on its inside edge. The inside ski leads a little.
+                B[o + 6] = side * (HIPS + wide) + Math.sin(splay) * down + ANKLE * sT;
+                B[o + 7] = hip - Math.cos(splay) * down - ANKLE + 0.045 * Math.abs(sT) + ANKLE * cT;
+                B[o + 8] = zP + ahead + (side !== outer ? 0.08 * Math.abs(sT) : 0);
+                if (side === outer) reach = Math.min(0.875, Math.hypot(down, ahead) + 0.12 * smooth(0.05, 0.45, at) - 0.25 * Math.max(0, press - 1.1));
+            }
+            // How far up the tilted line the hips are, for the outside leg to be that long.
+            const oo = outer < 0 ? 0 : 9, qx = outer * HIPS * cR * cP - B[oo + 6], qy = -outer * HIPS * sR * cP - B[oo + 7], qz = zP - outer * HIPS * sP - B[oo + 8], nq = sT * qx + cT * qy;
+            ROOT.set(st.top);
+            const up = -nq + Math.sqrt(Math.max(0, nq * nq - qx * qx - qy * qy - qz * qz + reach * reach));
+            B[18] = tor; B[19] = up;
+            for (const side of [-1, 1]) {
+                const o = side < 0 ? 0 : 9, hx = up * sT + side * HIPS * cR * cP, hy = up * cT - side * HIPS * sR * cP, hz = zP - side * HIPS * sP;
+                B[o] = hx; B[o + 1] = hy; B[o + 2] = hz;
+                // Two bones between hip and ankle: the knee is off the line between them, forwards and a little into the turn
+                // (and round with the hips, where they are turned off the skis).
+                let dx = B[o + 6] - hx, dy = B[o + 7] - hy, dz = B[o + 8] - hz;
+                const far = Math.hypot(dx, dy, dz) || 1, d = clamp(far, 0.12, THIGH + SHIN - 0.004);
+                dx /= far; dy /= far; dz /= far;
+                const part = (THIGH * THIGH - SHIN * SHIN + d * d) / (2 * d), off = Math.sqrt(Math.max(0, THIGH * THIGH - part * part)), kx = 0.3 * sT + 0.6 * sP, dot = kx * dx + dz;
+                let bx = kx - dot * dx, by = -dot * dy, bz = 1 - dot * dz;
+                const bl = Math.hypot(bx, by, bz) || 1;
+                bx /= bl; by /= bl; bz /= bl;
+                // The thigh, from the hip to the knee; the shin, from there to the ankle (or as near as the leg reaches).
+                const tx = (dx * part + bx * off) / THIGH, ty = (dy * part + by * off) / THIGH, tz = (dz * part + bz * off) / THIGH;
+                const sx = (dx * d - tx * THIGH) / SHIN, sy = (dy * d - ty * THIGH) / SHIN, sz = (dz * d - tz * THIGH) / SHIN;
+                B[o + 3] = hx + tx * THIGH; B[o + 4] = hy + ty * THIGH; B[o + 5] = hz + tz * THIGH;
+                // (A thigh may point above level, sat in the snow; a shin never does.)
+                const over = ty > 0 ? -1 : 1, s1 = Math.atan2(tx * over, -ty * over), a1 = Math.atan2(tz, Math.hypot(tx, ty) * over), s2 = Math.atan2(sx, -sy), b2 = Math.atan2(-sz, Math.hypot(sx, sy));
+                st.push().move(hx, hy, hz).rz(s1).rx(-a1);
+                put(Q.thigh());
+                st.move(0, -THIGH, 0).rx(a1).rz(s2 - s1).rx(b2);
+                put(Q.shin());
+                // The ski: level along the snow whatever the shin does, turned for a plough or a spread, and on its edge.
+                st.move(0, -SHIN, 0).rx(-b2 - (p.sit ? 0.25 + 0.12 * Math.sin(t * 1.7 + side) : 0)).rz(-s2).ry(p.plough ? -side * 0.32 : -spread * side * 0.5).rz((p.plough ? side * 0.12 : 0) - tip);
+                st.move(0, -ANKLE, 0.05);
+                put(Q.ski());
+                st.pop();
+            }
+            st.move(up * sT, up * cT, zP);
         }
         // Hips, and the body over them: upright against the lean, folded forward in a tuck.
-        const bend = mix(mix(0.34, 0.75, p.crouch || 0), 1.15, p.tuck || 0) * (1 - stop * 0.75) * (1 - 0.8 * (p.sit ? 1 : 0)) + 0.35 * grab - (ground ? 0.55 * sit : 0) - 0.3 * spread;
-        st.rz(-lean * 0.3).ry(-(p.twist || 0) * 0.9);
-        put(Q.hips());
-        st.rx(board ? bend * 0.55 : bend).size(who.woman ? 0.9 : 1.04, 1, 1);
+        const bend = mix(mix(0.34, 0.75, p.crouch || 0), 1.15, p.tuck || 0) * (1 - stop * 0.75) * (1 - 0.8 * (p.sit ? 1 : 0)) * (1 - 0.3 * (p.upright || 0)) + 0.35 * grab - (ground ? 0.55 * sit : 0) - 0.3 * spread;
+        if (riding) {
+            // Hips and shoulders near the board's line, a little open to the way it is going. (The head goes on from here, below.)
+            open = -toes * 0.29 - 0.4 * (p.twist || 0);
+            st.push().rx(nod * 0.5).ry(open * 0.5);
+            put(Q.hips());
+            st.pop().push().rx(nod).ry(open).size(who.woman ? 0.9 : 1.04, 1, 1);
+        } else {
+            st.rz((board ? tip : 0) - tor).ry(-(p.twist || 0) * 0.9 + pv);
+            put(Q.hips());
+            st.ry(chest - pv).rx(board ? bend * 0.55 : bend).size(who.woman ? 0.9 : 1.04, 1, 1);
+        }
         put(Q.torso());
         if (who.pack) put(Q.pack());
-        // Arms.
+        // Arms. A skier riding has its hands where they are wanted, and its arms and poles are worked out from them (below);
+        // tucked, in the air, stopped (`old`, 0 to 1) the arms are posed as they always were, and the hands go between the two.
+        // A boarder's hands are quiet too: the front one out along the board ahead, the other trailing, both low; forward over the board
+        // on the heels, and the trailing one down by the snow hard over on the toes.
+        const hands = riding || !board && !afoot && !p.plough && !fall && !sit && !p.walk && (p.drink === undefined || p.drink === null);
+        const old = riding ? clamp(Math.max(air, grab, spread, seat, tumble || shake || p.wave ? 1 : 0), 0, 1) : hands ? clamp(Math.max(p.tuck || 0, air, grab, spread, stop), 0, 1) : 1;
+        let fx = 0, fz = 1;
+        if (old < 1 && !board) {
+            // The way the chest faces along the snow, in the skis' frame: from the way its right is.
+            const m = st.top, ax = ROOT[0] * m[0] + ROOT[4] * m[4] + ROOT[8] * m[8], az = ROOT[2] * m[0] + ROOT[6] * m[4] + ROOT[10] * m[8], l = Math.hypot(ax, az) || 1;
+            fx = -az / l; fz = ax / l;
+        }
         for (const side of [-1, 1]) {
             const swing = Math.sin((p.phase || 0) + (side > 0 ? 0 : Math.PI)), reach = side > 0 ? grab : 0;
             let sh = -0.95 - 0.25 * swing * (1 - stop), outw = 0.8, el = -0.9;
@@ -451,14 +615,66 @@ const SkiModels = (() => {
             if (reach) { sh = mix(sh, 0.55, reach); el = mix(el, -0.15, reach); outw = mix(outw, 0.2, reach); }
             if (spread) { outw = mix(outw, 2.3, spread); el = mix(el, -0.1, spread); }
             if (stop && !board) { sh = mix(sh, -0.35, stop); el = mix(el, -0.6, stop); }
-            if (ground) { sh = mix(sh, 0.5, sit); outw = mix(outw, 0.5, sit); el = mix(el, -0.2, sit); }
+            if (ground) { sh = mix(sh, 0.5 - kneel, sit); outw = mix(outw, 0.5, sit); el = mix(el, -0.2, sit); }
             if (shake) { sh = -1.9 + 0.5 * shake * side; el = -1.7; outw = 0.3; }
             if (p.wave && side < 0) { sh = -2.7 + 0.3 * Math.sin(t * 9); el = -0.4; outw = 0.5; }
-            if (tumble) { sh = -1.5 + Math.sin(tumble * 1.3 + side) * 1.2; outw = 1.2; el = -0.4; }
+            if (tumble) { sh = mix(sh, -1.5 + Math.sin(tumble * 1.3 + side) * 1.2, flail); outw = mix(outw, 1.2, flail); el = mix(el, -0.4, flail); }
             if (p.walk) sh += 0.45 * Math.sin(p.walk + (side > 0 ? Math.PI : 0));
             // At the table: forearms on it, and one hand bringing the mug up.
             const mug = p.drink !== undefined && p.drink !== null;
             if (mug) { const up = side > 0 ? p.drink : 0; sh = mix(-0.7, -1.2, up); el = mix(-1.0, -1.95, up); outw = mix(0.3, 0.12, up); }
+            const poleX = -(sh + el) - bend + mix(1.0 + 0.25 * swing, 1.5, p.tuck || 0) - 0.9 * stop + 0.8 * spread, poleZ = -side * (outw - 0.1);
+            if (old < 1) {
+                // The shoulder; and the elbow, the hand and the pole's tip as the old arm would have them.
+                st.push().move(side * 0.245, 0.47, 0);
+                within(st.top, 0);
+                if (old > 0) { st.rz(side * outw).rx(sh).move(0, -UPPER, 0); within(st.top, 3); st.rx(el).move(0, -FORE, 0); within(st.top, 6); st.rx(poleX).rz(poleZ).move(0, -POLE, 0); within(st.top, 9); }
+                const sx = PT[0], sy = PT[1], sz = PT[2], o = side < 0 ? 0 : 9, pl = p.plantSide === side ? p.plant || 0 : 0;
+                // Hands forward and a little out, between hip and chest; the pole back from there along the skis, its tip clear of the
+                // snow and a forearm's length outside its own foot, wherever the lean has put the shoulders (not out to the side, like
+                // an outrigger). In a plant the tip is on the snow beside the tip of that ski, and the hand over it, forward and down;
+                // and there on the snow it stays as they go by (`reach`), until it is beside the boot and comes out.
+                const snow = p.sink || 0;
+                let hx = sx + side * 0.1 * fz + (0.36 + 0.06 * pl) * fx, hy = Math.max(0.5 + snow, sy - 0.36 + 0.06 * pl), hz = sz - side * 0.1 * fx + (0.36 + 0.06 * pl) * fz;
+                // (Hard over, the outside hand is carried out over its ski, as far as the arm goes, for the pole to get there.)
+                const back = Math.sqrt(Math.max(0, POLE * POLE - (hy - 0.16 - snow) * (hy - 0.16 - snow))), need = BONES[o + 6] + side * 0.4 - hx, out = clamp(need, -0.55 * back, 0.55 * back);
+                hx += 0.9 * (need - out);
+                let tx = mix(hx + out, BONES[o + 6] + side * 0.32, pl), ty = snow + 0.16 * (1 - pl), tz = mix(hz - Math.sqrt(back * back - out * out), BONES[o + 8] + 0.7 - Math.min(p.reach || 0, 1.3), pl);
+                // (The hand is a pole's length from where its tip is.)
+                let dx = hx - tx, dy = hy - ty, dz = hz - tz, l = POLE / (Math.hypot(dx, dy, dz) || 1);
+                hx = tx + dx * l; hy = ty + dy * l; hz = tz + dz * l;
+                if (board) {
+                    const front = side * toes < 0, heel = smooth(0.05, 0.6, -roll);
+                    hx = sx + side * (front ? 0.36 : 0.3); hy = Math.max(0.1, mix(sy - 0.3 - 0.06 * heel, 0.1, front ? 0 : smooth(0.5, 1, roll))); hz = sz + 0.12 + 0.2 * heel + (front ? 0 : 0.1 * smooth(0.05, 0.6, roll));
+                }
+                // The elbow is off the line from shoulder to hand: down, out and a little back.
+                let ex = side * 0.5 * fz - 0.3 * fx, ey = -1, ez = -side * 0.5 * fx - 0.3 * fz;
+                if (old > 0) {
+                    hx = mix(hx, PT[6], old); hy = mix(hy, PT[7], old); hz = mix(hz, PT[8], old);
+                    tx = mix(tx, PT[9], old); ty = Math.max(0.03 + snow, mix(ty, PT[10], old)); tz = mix(tz, PT[11], old);
+                    ex = mix(ex, PT[3] - sx, old); ey = mix(ey, PT[4] - sy, old); ez = mix(ez, PT[5] - sz, old);
+                }
+                dx = hx - sx; dy = hy - sy; dz = hz - sz;
+                const far = Math.hypot(dx, dy, dz) || 1, d = clamp(far, 0.08, UPPER + FORE - 0.004), bow = Math.sqrt(Math.max(0, UPPER * UPPER - d * d / 4));
+                dx /= far; dy /= far; dz /= far;
+                const dot = ex * dx + ey * dy + ez * dz;
+                ex -= dot * dx; ey -= dot * dy; ez -= dot * dz;
+                l = bow / (Math.hypot(ex, ey, ez) || 1);
+                // Upper arm from the shoulder to the elbow; forearm from there to the hand (or as near as the arm reaches); the pole from the hand.
+                const kx = sx + dx * d / 2 + ex * l, ky = sy + dy * d / 2 + ey * l, kz = sz + dz * d / 2 + ez * l;
+                hx = sx + dx * d; hy = sy + dy * d; hz = sz + dz * d;
+                along(st, sx, sy, sz, (kx - sx) / UPPER, (ky - sy) / UPPER, (kz - sz) / UPPER);
+                put(Q.upper());
+                along(st, kx, ky, kz, (hx - kx) / FORE, (hy - ky) / FORE, (hz - kz) / FORE);
+                put(Q.fore());
+                if (board) { BONES[o ? 38 : 35] = hx; BONES[o ? 39 : 36] = hy; BONES[o ? 40 : 37] = hz; st.pop(); continue; }
+                dx = tx - hx; dy = ty - hy; dz = tz - hz; l = 1 / (Math.hypot(dx, dy, dz) || 1);
+                along(st, hx, hy, hz, dx * l, dy * l, dz * l);
+                put(Q.pole());
+                BONES[o ? 23 : 20] = hx + dx * l * POLE; BONES[o ? 24 : 21] = hy + dy * l * POLE; BONES[o ? 25 : 22] = hz + dz * l * POLE;
+                st.pop();
+                continue;
+            }
             st.push().move(side * 0.245, 0.47, 0).rz(side * outw).rx(sh);
             put(Q.upper());
             st.move(0, -0.3, 0).rx(el);
@@ -466,12 +682,14 @@ const SkiModels = (() => {
             if (mug && side > 0) { st.push().move(0, -0.36, 0.05).rx(-(sh + el)); put(mugOf()); st.pop(); }
             if (!board && !afoot && !p.plough && !tumble && !lie) {
                 // Poles trail behind, and come up under the arms in a tuck.
-                st.move(0, -0.3, 0).rx(-(sh + el) - bend + mix(1.0 + 0.25 * swing, 1.5, p.tuck || 0) - 0.9 * stop + 0.8 * spread).rz(-side * (outw - 0.1));
+                st.move(0, -0.3, 0).rx(poleX).rz(poleZ);
                 put(Q.pole());
             }
             st.pop();
         }
-        st.move(0, 0.6, 0).rx(-bend * (board ? 0.4 : 0.8) + 0.1).ry(-stance * 0.8 + (shake ? shake * 0.7 : 0) + (p.head || 0));
+        // The head: more upright than the back, and turned to look where they are going.
+        if (riding) st.pop().rx(nod).move(0, 0.6, 0).rx(nod * -0.55).ry(-toes * 1.315 - 0.4 * (p.twist || 0) + (shake ? shake * 0.7 : 0) + (p.head || 0));
+        else st.move(0, 0.6, 0).rz(board ? 0 : tor * 0.85).rx(-bend * (board ? 0.4 : 0.8) + 0.1).ry(-stance * 0.8 + (shake ? shake * 0.7 : 0) + (p.head || 0));
         put(Q.head());
         if (who.woman) put(Q.tail());
     }
@@ -847,5 +1065,5 @@ const SkiModels = (() => {
         return { soup, lamps };
     }
 
-    return { C, COLS, ROWS, GRIDS, ROWSETS, GROUND_BYTES, KITS, KIT_ORDER, place, move, model, tree, figure, gear, look, anyone, hut, lodge, tower, station, chair, pole, flag, mast, rail, arch, sign, groomer, creature, eagle, ground, gridIndices, props };
+    return { C, COLS, ROWS, GRIDS, ROWSETS, GROUND_BYTES, KITS, KIT_ORDER, place, move, model, tree, figure, BONES, tipped, gear, look, anyone, hut, lodge, tower, station, chair, pole, flag, mast, rail, arch, sign, groomer, creature, eagle, ground, gridIndices, props };
 })();
