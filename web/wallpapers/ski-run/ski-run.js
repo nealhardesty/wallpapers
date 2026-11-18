@@ -333,7 +333,7 @@ class SkiRunAnimationManager {
             t.seen = this.seconds;
             if (Math.hypot(r.x - t.last[0], r.z - t.last[1]) < 0.55) continue;
             const dx = r.x - t.last[0], dz = r.z - t.last[1], l = Math.hypot(dx, dz) || 1, s = C.find(r.z), down = r.fall && r.fall.phase === 'tumble';
-            const on = !r.air && (!r.fall || down) && !(r.rail && r.y > C.height(r.x, r.z) + 0.1);
+            const on = !r.air && !r.afoot && (!r.fall || down) && !(r.rail && r.y > C.height(r.x, r.z) + 0.1);
             // Deep in powder, faint on a groomed piste, hardly there on ice; wider and deeper through a turn.
             const depth = (s.type === 'lake' ? 0.14 : 0.3 + 0.32 * s.T.rough) + 0.22 * Math.abs(r.lean);
             const pt = { x: r.x, y: r.y, z: r.z, rx: dz / l, rz: -dx / l, w: down ? 0.55 : t.board ? 0.2 + 0.22 * Math.abs(r.lean) : (r.size ? 0.2 : 0.26) + 0.06 * Math.abs(r.lean), a: on ? Math.min(0.85, depth) * (r.size ? 0.7 : 1) * (down ? 0.5 : 1) * (1 - 0.45 * (this.air ? this.air.overcast : 0)) : 0 };
@@ -369,7 +369,7 @@ class SkiRunAnimationManager {
             if (r.air || r.v < 3 || Math.hypot(r.x - cam.x, r.z - cam.z) > 170) continue;
             const s = C.find(r.z), powder = 0.5 + 1.3 * s.T.rough, down = r.fall && r.fall.phase === 'tumble', sh = Math.sin(r.heading), ch = Math.cos(r.heading);
             // Off the edges in a turn, thrown to its outside; a cloud round anyone tumbling; a plume behind in deep snow.
-            const rate = (down ? 70 : (Math.abs(r.lean) ** 1.3 * 46 + 6 * s.T.rough) * powder * r.v / 14) * q * (r.size || 1);
+            const rate = (down ? 70 : (Math.abs(r.lean) ** 1.3 * 46 + 6 * s.T.rough + 60 * (r.scrub || 0)) * powder * r.v / 14) * q * (r.size || 1);
             let n = rate * dt;
             n = Math.floor(n) + (R() < n % 1 ? 1 : 0);
             const out = r.lean > 0 ? -1 : 1, kick = 1.5 + 3.5 * Math.abs(r.lean);
@@ -393,6 +393,7 @@ class SkiRunAnimationManager {
             }
         }
         // Smoke from the hut's chimney.
+        for (const l of this.lodges || []) for (const sg of [-1, 1]) if (R() < dt * 5) { const p = l.at(sg * 7.5, 17, -2); this.puff(p[0], p[1], p[2], 0.4 + this.wind[0] * 0.08, 1.5, this.wind[2] * 0.08, 5 + 2 * R(), 0.6, 0.6, 0.3, 1); }
         for (const h of this.huts || []) if (R() < dt * 5) this.puff(h.x, h.y, h.z, 0.4 + this.wind[0] * 0.08, 1.4, this.wind[2] * 0.08, 4 + 2 * R(), 0.45, 0.55, 0.3, 1);
         // Everything in the air drifts, slows, falls a little and thins.
         for (let i = 0; i < p.n; i++) {
@@ -421,6 +422,8 @@ class SkiRunAnimationManager {
             for (let k = kc - SKI_BEHIND; k <= kc + SKI_AHEAD; k++) if (!this.chunks.has(k)) this.chunks.set(k, { k, x: C.centre(k * SkiLogic.CHUNK), y: C.elev(k * SkiLogic.CHUNK), z: k * SkiLogic.CHUNK, mesh: null, trees: null, props: null, lamps: [], glGround: null, glProps: null });
             this.masts = C.masts(this.cam.z - 300, this.cam.z + 1300);
             this.huts = [];
+            // Lodges in sight: where each stands, and the lamp over its terrace.
+            this.lodges = C.sections.filter(s => s.type === 'lodge' && s.zs > this.cam.z - 320 && s.zs < this.cam.z + 700).map(s => { const l = C.lodge(s), p = l.at(0, 4.2, 12.5); l.lamp ??= { x: p[0], y: p[1], z: p[2], warm: true }; l.i = s.i; return l; });
         }
         // The nearest chunk that is missing something gets it; on the first frame, all of them do.
         let budget = first ? Infinity : 2;
@@ -563,19 +566,30 @@ class SkiRunAnimationManager {
     // Everyone and everything that moves, posed and stamped into one soup, already placed from the camera.
     pose(scene, view) {
         const W = this.world, C = W.course, cam = scene.cam, out = this.moving.clear(), st = this.stack, t = this.seconds, f = view.f;
-        const where = { yaw: 0, pitch: 0, bank: 0, lean: 0, crouch: 0, tuck: 0, air: 0, grab: 0, spread: 0, twist: 0, spin: null, phase: 0, stop: 0, sit: 0, plough: 0, fall: null, t: 0, size: 1, sw: false, wave: 0, head: 0 };
+        const where = { yaw: 0, pitch: 0, bank: 0, lean: 0, crouch: 0, tuck: 0, air: 0, grab: 0, spread: 0, twist: 0, spin: null, phase: 0, stop: 0, sit: 0, plough: 0, fall: null, t: 0, size: 1, sw: false, wave: 0, head: 0, walk: 0, drink: null };
+        // A sip now and then: the mug up for a second in every five or so, each in their own time.
+        const sip = k => SkiLogic.smooth(0.72, 0.9, Math.sin(t * 1.2 + k * 2.4)) * (0.8 + 0.2 * Math.sin(t * 7 + k));
         const lead = W.riders[0];
         for (const r of this.everyone()) {
             const x = r.x - cam.x, y = r.y - cam.y, z = r.z - cam.z, dist = Math.hypot(x, z);
             if (dist > 420 || x * f[0] + y * f[1] + z * f[2] < -4) continue;
             Object.assign(where, {
-                yaw: r.heading, pitch: r.pitch, bank: r.bank || 0, lean: r.lean, crouch: SkiLogic.clamp(0.46 + 0.4 * Math.abs(r.lean) + 0.7 * (r.impact || 0) / 8 + (r.pipe ? 0.25 : 0), 0, 1), tuck: r.tuck || 0,
+                yaw: r.heading, pitch: r.pitch, bank: r.bank || 0, lean: r.lean, crouch: SkiLogic.clamp(0.46 + 0.4 * Math.abs(r.lean) + 0.7 * (r.impact || 0) / 8 + (r.pipe ? 0.25 : 0) + 0.45 * (r.load || 0) + 0.3 * (r.absorb || 0), 0, 1), tuck: r.tuck || 0,
                 air: r.air && r.lift > 0.25 ? 1 : 0, grab: r.grab, spread: r.spread, twist: r.twist, spin: r.spin, phase: r.phase, stop: r.stop, sit: 0, plough: r.role === 'kid' ? 1 : 0, fall: r.fall, t: t + r.id, size: r.size || 1, sw: r.sw,
                 lo: dist > this.figNear, wave: r.parked && r.role === 'stranger' && Math.abs(lead.z - r.z) < 14 ? 1 : 0, head: r !== lead && r.stop > 0.5 && lead.fall ? 2.4 : 0,
+                walk: 0, drink: null,
             });
-            SkiModels.figure(out, st, x, y, z, this.lookOf(r), where);
+            let who = this.lookOf(r);
+            // In for a drink: on foot, their skis or board left standing in the snow by the piste.
+            const a = r.afoot;
+            if (a && a.gear) {
+                SkiModels.gear(out, st, a.path[0][0] - cam.x, a.path[0][1] - cam.y, a.path[0][2] - cam.z, a.face + 0.3 * Math.sin(r.id * 2.1), who);
+                who = r.onFoot ??= { ...who, kind: 'none' };
+                Object.assign(where, { sit: a.seated, walk: a.walk * 3.3, drink: a.seated ? sip(r.id) : null, crouch: 0 });
+            }
+            SkiModels.figure(out, st, x, y, z, who, where);
         }
-        Object.assign(where, { pitch: 0, bank: 0, lean: 0, crouch: 0, tuck: 0, air: 0, grab: 0, spread: 0, twist: 0, spin: null, stop: 1, plough: 0, fall: null, size: 1, sw: false, head: 0 });
+        Object.assign(where, { walk: 0, drink: null, pitch: 0, bank: 0, lean: 0, crouch: 0, tuck: 0, air: 0, grab: 0, spread: 0, twist: 0, spin: null, stop: 1, plough: 0, fall: null, size: 1, sw: false, head: 0 });
         // Folk on the hut's terrace.
         for (const h of this.huts) {
             const l = h.lamp, s = C.find(l.hz), side = l.side, hx = l.hx - cam.x, hy = l.hy - cam.y, hz = l.hz - cam.z;
@@ -586,6 +600,19 @@ class SkiRunAnimationManager {
                 SkiModels.figure(out, st, hx - side * pz, hy + (i === 2 ? 2.2 : 1.5), hz + side * px, { ...SkiModels.anyone(v + s.i * 0.07), kind: 'none' }, where);
             });
         }
+        // Other people's afternoons on the lodge's terrace: at the tables, by the fire, at the rail.
+        for (const l of this.lodges) {
+            if (Math.hypot(l.x - cam.x, l.z - cam.z) > 300) continue;
+            const D = SkiLogic.LODGE.deck, lo = Math.hypot(l.x - cam.x, l.z - cam.z) > this.figNear + 14, near = Math.abs(lead.z - l.z) < 40 && !lead.afoot;
+            // [lx, lz, facing (0 the piste, 1 the lodge, 2 and 3 along the terrace), seated, waves]
+            [[-5.0, 11.85, 1, 1, 0], [-6.0, 10.15, 0, 1, 0], [-5.4, 10.15, 0, 1, 0], [10.2, 11.85, 1, 1, 0], [10.9, 10.15, 0, 1, 0], [-10.0, 11.85, 1, 1, 0], [-11.0, 11.85, 1, 1, 0], [-10.5, 10.15, 0, 1, 0],
+                [-8.2, 13.9, 0, 0, 1], [9.0, 13.9, 0, 0, 0], [-4.9, 8.4, 2, 0, 0], [-2.4, 8.9, 3, 0, 0], [1.2, 8.2, 0, 0, 0]].forEach(([lx, lz, facing, seated, wave], i) => {
+                const p = l.at(lx, D, lz), dir = [[0, 1], [0, -1], [1, 0], [-1, 0]][facing];
+                Object.assign(where, { lo, yaw: Math.atan2(-l.side * dir[1], l.side * dir[0]) + (seated ? 0 : 0.35 * Math.sin(i * 1.7)), sit: seated, stop: 1, drink: seated || i > 9 ? sip(i * 1.3 + l.i) : null, wave: wave && near ? 1 : 0, t: t + i });
+                SkiModels.figure(out, st, p[0] - cam.x, p[1] - cam.y, p[2] - cam.z, (l.folk ??= [])[i] ??= { ...SkiModels.anyone(0.11 + i * 0.137 + l.i * 0.07), kind: 'none' }, where);
+            });
+        }
+        Object.assign(where, { drink: null });
         // The chairlift: cables from tower to tower, chairs going round, people riding up.
         Object.assign(where, { sit: 1, wave: 0, stop: 0 });
         for (const lift of C.lifts) {
@@ -671,7 +698,7 @@ class SkiRunAnimationManager {
         }
         scene.lamps.length = 0;
         if (lit > 0.03) {
-            const lamps = this.masts.map(m => ({ x: m.x - m.side * 0.4, y: m.y + 8.3, z: m.z })).concat(this.huts.map(h => h.lamp));
+            const lamps = this.masts.map(m => ({ x: m.x - m.side * 0.4, y: m.y + 8.3, z: m.z })).concat(this.huts.map(h => h.lamp), this.lodges.map(l => l.lamp));
             for (const l of lamps) {
                 const x = l.x - cam.x, y = l.y - cam.y, z = l.z - cam.z;
                 l.d = Math.hypot(l.x - lead.x, l.z - lead.z);
@@ -732,11 +759,23 @@ class SkiRunAnimationManager {
             }
         }
         for (const rider of this.everyone()) { const p = project(rider.x, rider.y, rider.z); if (p[2] > 1) things.push([p, 0, rider]); }
+        for (const l of this.lodges) { const p = project(l.x, l.y, l.z); if (p[2] > 8 && p[2] < 700) things.push([p, -1, l]); }
         things.sort((a, b) => b[0][2] - a[0][2]);
         const green = tone(SkiLogic.mix3(shade, [0.01, 0.07, 0.03], 0.88)), white = tone(snow);
         for (const [p, tall, what] of things) {
             const s = k / p[2];
-            if (tall) {
+            if (tall < 0) {
+                // A lodge, flat on: timber on stone, a roof of snow, the great gable's glass (lit at night).
+                const [x, y] = p, glass = scene.lit > 0.3 ? 'rgb(255,226,170)' : tone(SkiLogic.mix3(shade, [0.1, 0.2, 0.4], 0.6));
+                ctx.fillStyle = tone(SkiLogic.mix3(shade, [0.3, 0.3, 0.3], 0.5)); ctx.fillRect(x - 13.6 * s, y - 4.2 * s, 27.2 * s, 5.2 * s);
+                ctx.fillStyle = tone(SkiLogic.mix3(shade, [0.26, 0.14, 0.07], 0.75)); ctx.fillRect(x - 13.2 * s, y - 9.2 * s, 26.4 * s, 5 * s);
+                ctx.fillStyle = white;
+                ctx.beginPath(); ctx.moveTo(x - 14.7 * s, y - 9 * s); ctx.lineTo(x - 12 * s, y - 15.5 * s); ctx.lineTo(x + 12 * s, y - 15.5 * s); ctx.lineTo(x + 14.7 * s, y - 9 * s); ctx.fill();
+                ctx.beginPath(); ctx.moveTo(x - 6.5 * s, y - 8.6 * s); ctx.lineTo(x, y - 14.8 * s); ctx.lineTo(x + 6.5 * s, y - 8.6 * s); ctx.fill();
+                ctx.fillStyle = glass;
+                ctx.beginPath(); ctx.moveTo(x - 3.9 * s, y - 4.2 * s); ctx.lineTo(x - 3.9 * s, y - 8.8 * s); ctx.lineTo(x, y - 12.4 * s); ctx.lineTo(x + 3.9 * s, y - 8.8 * s); ctx.lineTo(x + 3.9 * s, y - 4.2 * s); ctx.fill();
+                for (const sg of [-1, 1]) for (const wx of [6.9, 9.1, 11.3]) for (const wy of [2.8, 5.6, 7.9]) ctx.fillRect(x + (sg * wx - 0.6) * s, y - (wy + 0.6) * s, 1.2 * s, 1.2 * s);
+            } else if (tall) {
                 const th = tall * s, tw = th * (what === 5 ? 0.6 : 0.17);
                 ctx.fillStyle = what > 2 ? white : green;
                 ctx.beginPath(); ctx.moveTo(p[0] - tw, p[1]); ctx.lineTo(p[0], p[1] - th); ctx.lineTo(p[0] + tw, p[1]); ctx.fill();

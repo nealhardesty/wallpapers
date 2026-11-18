@@ -176,13 +176,25 @@ const SkiLogic = (() => {
         cliff: { len: [150, 180], w: [26, 32], grade: 0.3, drift: 0.2, wig: 0.3, rough: 0.8, trees: 0.6, groom: 0, pace: 0.95, weight: 1 },
         gully: { len: [220, 300], w: [4.2, 5], grade: 0.31, drift: 0.2, wig: 1.2, rough: 0.4, trees: 0.35, groom: 0, pace: 0.78, single: true, weight: 1.2 },
         cattrack: { len: [260, 340], w: [5, 6], grade: 0.075, drift: 0.8, wig: 0.15, rough: 0.08, trees: 0.9, groom: 1, pace: 0.85, single: true, weight: 1.2 },
-        hut: { len: [150, 170], w: [30, 34], grade: 0.1, drift: 0.1, wig: 0.2, rough: 0.08, trees: 0.8, groom: 1, pace: 0.8, open: true, weight: 0.7 },
+        hut: { len: [150, 170], w: [30, 34], grade: 0.1, drift: 0.1, wig: 0.2, rough: 0.08, trees: 0.8, groom: 1, pace: 0.8, open: true, weight: 0.7, stop: true },
+        lodge: { len: [210, 240], w: [34, 40], grade: 0.08, drift: 0.05, wig: 0, rough: 0.08, trees: 0.8, groom: 1, pace: 0.8, open: true, weight: 0.7, stop: true },
     };
+    // The grand lodge, in its own metres: lx along its front (down the mountain
+    // on one side of the run, up it on the other), lz out from its middle
+    // towards the piste, whose edge is `out` away. It stands on a level pad;
+    // its terrace is `deck` above that, between the front wall and the steps.
+    const LODGE = {
+        out: 24, deck: 1, steps: [14.6, 16.6], table: [5.5, 11], bench: 0.85, seatY: 0.45,
+        // Four places at the friends' table, two a side: [lx, lz, which way they face along lz].
+        seat: i => [LODGE.table[0] + (i & 1 ? 0.55 : -0.55), LODGE.table[1] + (i < 2 ? LODGE.bench : -LODGE.bench), i < 2 ? -1 : 1],
+    };
+    // In for a drink: seconds getting out of the skis, on foot to the table (and back), and sitting over it.
+    const APRES = { off: 1.2, walk: 7.5, sit: 16 };
     const ORDER = Object.keys(TYPES);
     const CHUNK = 32;                 // metres of course to a square of mesh, and to a batch of trees
     const BLEND = 40;                 // metres over which one section's shape becomes the next's
     const SLOTS = 4;                  // lines abreast down the piste
-    const PIPE = { flat: 3.2, wall: 4.3 };
+    const PIPE = { flat: 3.2, wall: 4.3, speed: 10.5 };      // speed: across the flat, metres a second
     const slotU = (slot, wu) => (-0.75 + 0.5 * slot) * wu;
     const win = t => smooth(0.06, 0.16, t) * (1 - smooth(0.84, 0.94, t));
 
@@ -210,7 +222,7 @@ const SkiLogic = (() => {
             let type = allowed.includes('groomer') ? 'groomer' : allowed[0];
             if (p) {
                 // Never two alike in a row, nor two narrow ones, nor straight off the wide lake into a narrow place.
-                let pool = allowed.filter(t => t !== p.type && !(TYPES[t].single && (p.T.single || p.type === 'lake')) && !(t === 'hut' && i < 3));
+                let pool = allowed.filter(t => t !== p.type && !(TYPES[t].single && (p.T.single || p.type === 'lake')) && !(TYPES[t].stop && (i < 3 || p.T.stop)));
                 if (!pool.length) pool = allowed;
                 let total = 0;
                 for (const t of pool) total += TYPES[t].weight;
@@ -242,7 +254,7 @@ const SkiLogic = (() => {
                 s.kickers.push({ z: s.z0 + mix(0.35, 0.65, r()) * len, u: slotU(slot, wu), slot, h: 1.5, run: 11, land: 15, half: 4.5, natural: true });
             } else if (type === 'rollers') s.lam = mix(20, 26, r());
             else if (type === 'cliff') { s.drop = mix(5, 6.4, r()); s.zc = s.z0 + 0.5 * len; s.half = 11; }
-            else if (type === 'hut') s.zs = s.z0 + 0.5 * len;
+            else if (T.stop) s.zs = s.z0 + 0.5 * len;
             else if (type === 'glade') s.lanes = [0, 1, 2, 3].map(() => ({ a: mix(0.5, 1, r()), lam: mix(70, 110, r()), ph: r() * TAU }));
             else if (type === 'cattrack') s.side = k > 0 ? 1 : -1;       // the hill rises on the side the track bears to
             // A way off the piste, through the trees and back.
@@ -388,6 +400,20 @@ const SkiLogic = (() => {
             }
         }
 
+        // Where the lodge stands, and anything in its own metres put into the world's.
+        function lodge(s) {
+            if (!s.lodge) {
+                const side = s.side, d = s.zs - s.z0, x = centreIn(s, d) + side * (s.W + LODGE.out), y = elevIn(s, d), z = s.zs;
+                s.lodge = { x, y, z, side, yaw: -side * Math.PI / 2, at: (lx, ly, lz) => [x - side * lz, y + ly, z + side * lx] };
+            }
+            return s.lodge;
+        }
+        // How much of the lodge's level pad is under (u, z): all of it under the building and its terrace, none by the piste's edge.
+        function pad(s, u, z) {
+            const out = s.side * u - s.W, dx = Math.max(0, Math.abs(z - s.zs) - 15), dz = Math.max(0, 6.5 - out, out - 32);
+            return dx > 6 || dz > 6 ? 0 : 1 - smooth(0, 6, Math.hypot(dx, dz));
+        }
+
         function shape(s, u, d, x, z) {
             const f = blend(s, d), w = s.wp + (s.W - s.wp) * f, a = Math.abs(u), out = a - w;
             const rough = s.rp + (s.T.rough - s.rp) * f, off = out <= -4 ? 0 : out >= 14 ? 1 : sq((out + 4) / 18);
@@ -398,6 +424,7 @@ const SkiLogic = (() => {
                 const sg = u > 0 ? 1 : -1, far = smooth(25, 280, out);
                 const side = (na(z, sg * 5000, 800) - 0.38) * 1.6 * 230 * (1 - Math.exp(-out / 230)) * out / (out + 25) + far * ((sample(B, N, x / 1300, z / 1300) - 0.35) * 150 + (na(x, z + 500, 310) - 0.5) * 40);
                 h += side > 0 ? side * (1 - smooth(450, 690, out)) : side;
+                if (s.type === 'lodge') { const m = pad(s, u, z); if (m > 0) h = mix(h, elevIn(s, s.zs - s.z0) - elevIn(s, d), m); }
             }
             return h + feature(s, u, d, w, x, z);
         }
@@ -423,6 +450,7 @@ const SkiLogic = (() => {
             if (s.type === 'pipe') m = Math.min(m, a - w - 22);
             if (s.type === 'gully') m = Math.min(m, a - w - 5);
             if (s.type === 'hut') m = Math.min(m, Math.hypot(u - s.side * (w + 11), z - s.zs - 8) - 15);
+            if (s.type === 'lodge') m = Math.min(m, Math.max(Math.abs(z - s.zs) - 20, Math.abs(s.side * u - s.W - 18) - 20));
             for (const l of lifts) if (z > l.za - 8 && z < l.zb + 8) m = Math.min(m, Math.abs(x - l.x(z)) - 4.5);
             return m;
         }
@@ -479,7 +507,7 @@ const SkiLogic = (() => {
         }
 
         ensure(z00);
-        return { seed, steep, sections, lifts, fields, find, ensure, trim, centre, centreIn, elev, elevIn, width, widthIn, slope, height, room, trees, masts, laneU, cutU, na };
+        return { seed, steep, sections, lifts, fields, find, ensure, trim, centre, centreIn, elev, elevIn, width, widthIn, slope, height, room, lodge, trees, masts, laneU, cutU, na };
     }
 
     // ---- Riders -------------------------------------------------------------------
@@ -496,6 +524,15 @@ const SkiLogic = (() => {
         { name: 'cork 720', T: 1.3, yaw: 2, tilt: 0.6, grab: 1, hard: 1 },
     ];
     const FALL = { lie: 0.7, sit: 1.3, shake: 1.2, rise: 0.8 };
+    // What moves a rider is the hill: gravity down the snow under it, less the
+    // snow's drag (more in powder than on ice) and the air's (less in a tuck).
+    // All a rider adds is a skate to get going and the scrub of its edges, and
+    // no edge holds more than GRIP, across the hill or against it.
+    const DRAG = 0.003, GRIP = 0.7 * G, SIDE = 6, POP = { load: 0.2, vy: 4 };
+    const snowDrag = rough => (0.025 + 0.04 * rough) * G;
+    // A turn's shape, for sin: rounder at its apex and quicker from edge to edge, as carved arcs are.
+    const B3 = 1 / 27;
+    const wave = p => (Math.sin(p) + B3 * Math.sin(3 * p)) / (1 - B3), waveD = p => (Math.cos(p) + 3 * B3 * Math.cos(3 * p)) / (1 - B3);
     const HAND = { back: 4, speed: 7 };       // seconds hands-off before the lines are the riders' own again; metres a second a held key moves the lead across
 
     // cfg: { speed, tricks (0 to 2), wipeouts, friends (1 to 3), others (0 to 2), kinds: ['ski' | 'board', …] }
@@ -508,6 +545,7 @@ const SkiLogic = (() => {
         for (let i = 0; i <= 3; i++) {
             const r = rider(W, i === 0 ? 'lead' : 'friend', starts[i][0], z + starts[i][1], { kind: cfg.kinds?.[i] || 'ski', pace: 1 });
             r.v = CRUISE * cfg.speed;
+            settle(W, r);
             W.riders.push(r);
         }
         W.riders.length = 1 + clamp(Math.round(cfg.friends ?? 2), 0, 3);
@@ -516,12 +554,20 @@ const SkiLogic = (() => {
 
     function rider(W, role, slot, z, o = {}) {
         const C = W.course, wu = Math.max(1.2, C.width(z) - 1.5), u = o.u ?? slotU(slot, wu), x = C.centre(z) + u, random = W.rng;
-        return {
+        return settle(W, {
             id: W.nextId++, role, slot, kind: o.kind || 'ski', z, u, x, y: C.height(x, z), vy: 0, vyG: 0, v: o.v || 0, vu: 0, vx: 0, vz: 0,
             c: u, a: 0, phase: random() * TAU, lam: o.lam ?? 44 + 26 * random(), ampPref: o.amp ?? 4.5 + 2.5 * random(), pace: o.pace ?? 1, paceP: random() * TAU,
             lane0: o.lane ?? 0, lean: 0, bank: 0, heading: 0, pitch: 0, air: false, airT: 0, lift: 0, trick: null, spin: [0, 0, 0], grab: 0, spread: 0, twist: 0,
-            sw: false, fall: null, stop: 0, parked: false, pipe: 0, rail: null, pop: 0, manual: 0, tuck: 0, edge: 0, dist: 0, lane: false, impact: 0,
-        };
+            sw: false, fall: null, stop: 0, parked: false, pipe: 0, rail: null, pop: 0, popT: 0, manual: 0, tuck: 0, edge: 0, dist: 0, lane: false, impact: 0,
+            cv: 0, pw: 0, sl: 0, psi: 0, scrub: 0, load: 0, absorb: 0, vyS: 0,
+        });
+    }
+
+    // On the snow from the first step, at the speed it has: the snow is falling away under it just so fast.
+    function settle(W, r) {
+        r.sl = W.course.elev(r.z + 0.5) - W.course.elev(r.z - 0.5);
+        r.vyG = r.vyS = r.sl * r.v;
+        return r;
     }
 
     // Will this rider take that jump? The same answer every time it is asked.
@@ -538,7 +584,7 @@ const SkiLogic = (() => {
     // it swings and over what length, and whether it is a lane between trees.
     function line(W, r, z) {
         // Where the piste is about to narrow, the line is already drawing in.
-        const C = W.course, s = C.find(z), d = z - s.z0, t = d / s.len, w = C.widthIn(s, d), wu = Math.max(1.2, Math.min(w, C.width(z + 25), C.width(z + 55), C.width(z + 85), C.width(z + 115)) - 1.5);
+        const C = W.course, s = C.find(z), d = z - s.z0, t = d / s.len, w = C.widthIn(s, d), far = Math.max(1, r.v / CRUISE), wu = Math.max(1.2, Math.min(w, C.width(z + 25 * far), C.width(z + 55 * far), C.width(z + 85 * far), C.width(z + 115 * far)) - 1.5);
         const out = { c: 0, a: 0, lam: r.lam, lane: false, wu, w, s, tuck: 0 };
         if (r.role === 'stranger' || r.role === 'school') {
             // They only ski the open pistes, so the piste as it is here is all they need.
@@ -548,7 +594,8 @@ const SkiLogic = (() => {
             return out;
         }
         out.c = slotU(r.slot, wu);
-        out.a = Math.max(0.3, Math.min(r.ampPref, 0.25 * wu - 0.5));
+        // The steeper it is, the rounder the turns: that is how speed is kept in hand.
+        out.a = Math.max(0.3, Math.min(r.ampPref * clamp(0.35 + 0.65 * s.g / 0.25, 0.5, 1.3), 0.25 * wu - 0.5));
         const next = C.find(z + 34);
         if (next.type === 'glade' || next.type === 'pipe' || next.type === 'cattrack') out.a = Math.min(out.a, 0.5);
         switch (s.type) {
@@ -560,6 +607,12 @@ const SkiLogic = (() => {
             case 'rollers': out.a *= 0.4; break;
             case 'cliff': if (r.slot === 1 || r.slot === 2) out.a = mix(out.a, 0.3, smooth(45, 25, Math.abs(z - s.zc + 5))); break;
             default: break;
+        }
+        // Pulling in at the lodge: over to its side of the piste, one beside the next, by the steps.
+        if (s.type === 'lodge' && W.group.done !== s.i && z > s.zs - 120 && z < s.zs + 6) {
+            const near = smooth(s.zs - 120, s.zs - 45, z), rank = s.side > 0 ? SLOTS - 1 - r.slot : r.slot;
+            out.c = mix(out.c, s.side * (wu - 1.2 - rank * 1.5), near);
+            out.a *= 1 - near;
         }
         if (r.cutOn === s.i) {
             const c = C.cutU(s, d, w);
@@ -607,6 +660,10 @@ const SkiLogic = (() => {
         r.airT = 0;
         r.vy = vy;
         r.trick = null;
+        r.load = 0;
+        // Through the air at the speed it left the snow with, whichever way it was squared up.
+        const vh = Math.hypot(r.vx, r.vz);
+        if (vh > 1 && !r.pipe) { r.vx *= r.v / vh; r.vz *= r.v / vh; }
         const C = W.course, cfg = W.cfg, T = r.T = airtime(W, r), random = W.rng;
         if (r.role !== 'lead' && r.role !== 'friend') return;
         const s = C.find(r.z + r.vz * T), open = s.T.open || s.type === 'park' || s.type === 'cliff';
@@ -634,8 +691,12 @@ const SkiLogic = (() => {
         r.vyG = rate;
         r.lift = 0;
         r.impact = impact;
+        // What it was doing along the snow it keeps; what it was doing into the snow is gone.
+        const vh = r.v;
+        if (vh > 1) { const m = clamp(rate / vh, -1, 1); r.v = clamp((vh + r.vy * m) / (1 + m * m), 0.7 * vh, Math.max(vh, Math.min(vh * (1 + 0.1 * smooth(0.3, 1, r.airT)), 1.4 * CRUISE * W.cfg.speed))); r.vyG = rate * r.v / vh; }
+        if (r.pipe) r.pw = r.vu = r.pipe * clamp(0.5 * impact, 0.55, 4);
         // Back on its line, from wherever it came down.
-        r.c = r.u - r.a * Math.sin(r.phase);
+        r.c = r.u - r.a * wave(r.phase);
         W.events.push({ type: 'land', id: r.id, x: r.x, y: g, z: r.z, power: clamp(impact / 8, 0.15, 1.5) * (r.airT > 0.25 ? 1 : 0.3) });
         const k = r.trick;
         if (k) {
@@ -662,7 +723,8 @@ const SkiLogic = (() => {
         const f = r.fall, C = W.course;
         f.t += dt;
         if (f.phase === 'tumble') {
-            r.v *= Math.exp(-dt / 0.85);
+            // Sliding and rolling: further where it is steep.
+            r.v = Math.max(0, r.v - Math.max(1.5, 4 + 0.5 * r.v - G * (C.elev(r.z - 0.5) - C.elev(r.z + 0.5))) * dt);
             r.vu *= Math.exp(-dt / 0.4);
             const w = C.width(r.z);
             r.z += r.v / Math.hypot(1, C.slope(r.z)) * dt;
@@ -673,13 +735,49 @@ const SkiLogic = (() => {
             f.t = 0;
             if (f.phase === 'lie') f.phase = 'sit';
             else if (f.phase === 'sit') { f.phase = 'shake'; W.events.push({ type: 'shake', id: r.id, x: r.x, y: r.y, z: r.z }); } else if (f.phase === 'shake') f.phase = 'rise';
-            else { r.fall = null; r.c = r.u; r.a = 0; r.phase = 0; }
+            else { r.fall = null; r.c = r.u; r.a = 0; r.phase = 0; r.cv = 0; }
         }
         r.x = C.centre(r.z) + r.u;
         r.y = C.height(r.x, r.z);
         r.vy = r.vyG = 0;
         r.lean *= Math.exp(-dt / 0.2);
-        r.tuck = 0;
+        r.tuck = r.scrub = r.load = r.absorb = 0;
+    }
+
+    // Out of the skis and across the terrace to a place at the table; a drink; and back the way they came.
+    function walkIn(W, r, s, i) {
+        // (Each has a width of the steps to themselves, and sets off a moment after the last, so nobody walks through anybody.)
+        const C = W.course, at = C.lodge(s).at, seat = LODGE.seat(i), [tx, tz] = LODGE.table, lane = [0.4, 1.3, -1.4, -0.5][i], foot = at(lane, 0, LODGE.steps[1] + 0.4);
+        foot[1] = C.height(foot[0], foot[2]);
+        // Round the end of the table for the far bench.
+        const by = seat[2] < 0 ? [seat[0], tz + LODGE.bench + 0.9] : [tx + (i & 1 ? 1.7 : -1.7), tz - 0.3];
+        const path = [[r.x, r.y, r.z], foot, at(lane, LODGE.deck, LODGE.steps[0] - 0.4), at(by[0], LODGE.deck, by[1]), at(seat[0], LODGE.deck, seat[1])], len = [0];
+        for (let j = 1; j < path.length; j++) len.push(len[j - 1] + Math.hypot(path[j][0] - path[j - 1][0], path[j][2] - path[j - 1][2]));
+        // (face: the way the lodge is from the piste, and sat: the way this place at the table looks.)
+        return { t: -0.7 * [1, 0, 3, 2][i], path, len, gear: false, seated: 0, walk: 0, face: Math.atan2(s.side, 0), sat: Math.atan2(-s.side * seat[2], 0), heading0: r.heading };
+    }
+    function afootStep(W, r, dt) {
+        const a = r.afoot, C = W.course, T = APRES, total = 2 * T.off + 2 * T.walk + T.sit, t = Math.max(0, a.t += dt), back = t > T.off + T.walk + T.sit;
+        const k = t < T.off ? 0 : t < T.off + T.walk ? sq((t - T.off) / T.walk) : !back ? 1 : t < total - T.off ? 1 - sq((t - T.off - T.walk - T.sit) / T.walk) : 0;
+        const far = k * a.len[a.len.length - 1];
+        let j = 1;
+        while (j < a.len.length - 1 && a.len[j] < far) j++;
+        const p = a.path[j - 1], q = a.path[j], f = clamp((far - a.len[j - 1]) / Math.max(1e-6, a.len[j] - a.len[j - 1]), 0, 1);
+        r.x = mix(p[0], q[0], f); r.z = mix(p[2], q[2], f);
+        // Over the snow to the steps, and up them.
+        r.y = j === 1 ? C.height(r.x, r.z) : j === 2 ? Math.max(mix(p[1], q[1], f), C.height(r.x, r.z)) : q[1];
+        r.u = r.x - C.centre(r.z);
+        a.gear = t > 0.5 * T.off && t < total - 0.5 * T.off;
+        a.seated = k >= 1 ? 1 : 0;
+        a.walk = k > 0 && k < 1 ? far : 0;
+        // Facing the way they walk; at the table, the table; back at the skis, down the hill again.
+        let want = k <= 0 ? (back ? a.heading0 : r.heading) : k >= 1 ? a.sat : Math.atan2(q[0] - p[0], q[2] - p[2]) + (back ? Math.PI : 0);
+        want -= r.heading;
+        want -= TAU * Math.round(want / TAU);
+        r.heading += want * (1 - Math.exp(-dt / 0.2));
+        r.v = r.vx = r.vz = r.vu = r.vy = r.cv = r.manual = r.lean = r.pitch = r.bank = r.tuck = r.scrub = r.load = r.absorb = r.impact = 0;
+        r.stop = 1;
+        if (t >= total) { r.afoot = null; r.c = r.u; r.a = 0; r.phase = 0; settle(W, r); }
     }
 
     // Everything a rider must give room to this step: { z0, z1, lo, hi, v, id }.
@@ -687,7 +785,7 @@ const SkiLogic = (() => {
         const list = [];
         const add = r => {
             const wide = r.pipe || r.fall ? 2.2 : r.a + 0.55, mid = r.pipe || r.fall ? r.u : r.c;
-            list.push({ z0: r.z - 1.2, z1: r.z + 1.2, lo: mid - wide, hi: mid + wide, v: r.v, id: r.id, z: r.z, u: r.u, air: r.air, parked: r.parked || !!r.fall });
+            list.push({ z0: r.z - 1.2, z1: r.z + 1.2, lo: mid - wide, hi: mid + wide, v: r.v, id: r.id, z: r.z, u: r.u, air: r.air, parked: r.parked || !!r.fall || !!r.afoot });
         };
         for (const r of W.riders) { add(r); list[list.length - 1].mate = true; }
         for (const r of W.others) add(r);
@@ -740,6 +838,7 @@ const SkiLogic = (() => {
     function riderStep(W, r, dt, list, steer) {
         const C = W.course, cfg = W.cfg;
         if (r.fall) { fallStep(W, r, dt); return; }
+        if (r.afoot) { afootStep(W, r, dt); return; }
         const s = C.find(r.z), d = r.z - s.z0, t = d / s.len, group = r.role === 'lead' || r.role === 'friend', lead = W.riders[0];
         const L = line(W, r, r.z), wu = L.wu, dC = C.slope(r.z);
 
@@ -755,12 +854,12 @@ const SkiLogic = (() => {
         }
         let brake = false;
         const limit = v => { if (v < V) { V = Math.max(0, v); brake = true; } };
-        // Friends pull up together at a hut.
-        const hut = group ? (s.type === 'hut' ? s : C.find(r.z + 70).type === 'hut' ? C.find(r.z + 70) : null) : null;
+        // Friends pull up together at a hut, and at a lodge.
+        const hut = group ? (s.T.stop ? s : C.find(r.z + 70).T.stop ? C.find(r.z + 70) : null) : null;
         let resting = false;
         if (hut && W.group.done !== hut.i) {
             const zs = hut.zs + (r.slot - 1.5) * 1.3;
-            if (r.z < zs + 4) { limit(W.group.phase === 'rest' ? 0 : Math.sqrt(2 * 2.2 * Math.max(0, zs - r.z))); resting = true; }
+            if (r.z < zs + 4) { limit(W.group.phase === 'rest' || W.group.phase === 'apres' ? 0 : Math.sqrt(2 * 2.2 * Math.max(0, zs - r.z))); resting = true; }
         }
         // One at a time through the narrow places.
         const narrow = s.T.single || C.find(r.z + 120).T.single;
@@ -801,22 +900,41 @@ const SkiLogic = (() => {
             a = got.a;
             if (got.wait && !L.kicker && !ghost) limit(got.wait.v + (got.wait.z0 - r.z - 6) * 0.9);
         }
-        r.v += (V - r.v) * (1 - Math.exp(-dt / (brake || V < r.v ? 0.4 : 1.5)));
+        // ---- How fast it is really going: the hill gives, the snow and the air take, and its edges scrub off what it does not want.
+        let scrub = 0;
+        if (!r.air) {
+            const sl = inPipe ? C.elev(r.z + 0.5) - C.elev(r.z - 0.5) : r.sl;
+            const drive = -G * sl - (r.v > 0.05 ? snowDrag(mix(prev.T.rough, s.T.rough, f)) + DRAG * (1 - 0.45 * r.tuck) * (r.v / Math.max(0.3, cfg.speed)) ** 2 : 0);
+            let acc;
+            if (r.v > V) {
+                // Checked hardest coming across the hill, least in the fall line; all at once only to give way or to stop.
+                const hard = brake || V < r.v - 3, across = Math.abs(Math.cos(r.phase));
+                scrub = Math.min(GRIP, ((r.v - V) / (hard ? 0.4 : 0.9) + Math.max(0, drive)) * (hard || r.a < 0.6 ? 1 : 0.3 + 1.1 * across));
+                acc = Math.max(drive - scrub, (V - r.v) / Math.max(dt, 1e-6));
+            } else {
+                // A skate or a push of the poles from a standstill, and no more.
+                acc = Math.min(drive + 3.2 * (1 - smooth(2.5, 8, r.v)), (V - r.v) / 0.3);
+            }
+            r.v = Math.max(0, r.v + acc * dt);
+        }
+        r.scrub += (scrub / GRIP - r.scrub) * (1 - Math.exp(-dt / 0.15));
         if (r.v < 0.02) r.v = 0;
         r.stop += ((r.v < 1.2 ? 1 : 0) - r.stop) * (1 - Math.exp(-dt / 0.35));
         r.tuck += (L.tuck - r.tuck) * (1 - Math.exp(-dt / 0.6));
 
-        const vz = r.v / Math.hypot(1, dC), z = r.z + vz * dt, x0 = r.x, zWas = r.z;
+        // Down the mountain it makes only what its line leaves it: least while it is coming across.
+        const vz = r.air ? r.vz : r.v / Math.hypot(1, dC + (inPipe ? 0 : r.a * TAU / L.lam * waveD(r.phase))), z = r.z + vz * dt, x0 = r.x, zWas = r.z;
         let u = r.u, x;
         // The piste's edge, for anyone not on a lane through the trees; whoever is past it comes back in.
         const edge = L.lane ? Infinity : Math.max(s.type === 'gully' ? L.w + 1.8 : Math.max(0.5, L.w - 0.8), Math.abs(r.u) - 5 * dt);
-        if (!inPipe && r.pipe && !r.air) { r.pipe = 0; r.c = r.u; r.a = 0; r.phase = 0; }
+        if (!inPipe && r.pipe && !r.air) { r.pipe = 0; r.c = r.u; r.a = 0; r.phase = 0; r.cv = 0; }
         if (L.lane) {
             // A lane between trees is kept to, on the snow or off it.
             r.c += clamp(c - r.c, -12 * dt, 12 * dt) * (r.want ? 1 : Math.min(1, r.v / 2));
             r.a += (a - r.a) * (1 - Math.exp(-dt / 0.5));
             r.phase += TAU * vz * dt / L.lam;
-            u = r.c + r.a * Math.sin(r.phase);
+            u = r.c + r.a * wave(r.phase);
+            r.cv = 0;
             x = C.centre(z) + u;
             r.vu = dt > 0 ? (u - r.u) / dt : 0;
             if (r.air) r.vx = dt > 0 ? (x - x0) / dt : 0;
@@ -826,16 +944,24 @@ const SkiLogic = (() => {
             x = C.centre(z) + u;
         } else if (inPipe) {
             // Wall to wall: across the flat, up the transition, and off the lip.
-            if (!r.pipe) { r.pipe = r.slot & 1 ? 1 : -1; r.vu = r.vu || 0; }
-            r.vu += (r.pipe * 6.6 - r.vu) * (1 - Math.exp(-dt / 0.3));
+            // Pumped across the flat, and then the wall takes it back: fast at the bottom, slow at the lip.
+            // (pw is its speed along the wall's own curve, so what it has at the bottom less the climb is what it has at the lip.)
+            if (!r.pipe) { r.pipe = r.slot & 1 ? 1 : -1; r.pw = r.vu || 0; }
+            const hu = (C.height(r.x + 0.3, r.z) - C.height(r.x - 0.3, r.z)) / 0.6, steep = Math.hypot(1, hu), flat = 1 - smooth(0.05, 0.5, Math.abs(hu));
+            r.pw += (flat * (r.pipe * PIPE.speed - r.pw) / 0.35 - G * hu / steep) * dt;
+            if (r.pipe * r.pw < 1.5) r.pw = r.pipe * 1.5;      // never stalled on a wall
+            r.vu = r.pw / steep;
             u += r.vu * dt;
             x = C.centre(z) + u;
         } else {
             const go = r.want ? 1 : Math.min(1, r.v / 2);     // stopped where it means to be, nobody slides sideways
-            r.c += clamp((c - r.c) * (1 - Math.exp(-dt / 0.6)), -6.5 * dt, 6.5 * dt) * go;
+            // A line moves across as a body can: it takes time to get going sideways, and room to stop.
+            const off = c - r.c, far = Math.abs(off), cv = Math.sign(off) * Math.min(far / 0.6, 6.5, Math.sqrt(2 * SIDE * far)) * go;
+            r.cv += clamp(cv - r.cv, -(Math.abs(cv) < Math.abs(r.cv) ? 2 : 1) * SIDE * dt, SIDE * dt * (Math.abs(cv) < Math.abs(r.cv) ? 2 : 1));
+            r.c += r.cv * dt;
             r.a += (a - r.a) * (1 - Math.exp(-dt / 0.5));
             r.phase += TAU * vz * dt / L.lam;
-            u = clamp(r.c + r.a * Math.sin(r.phase), -edge, edge);
+            u = clamp(r.c + r.a * wave(r.phase), -edge, edge);
             x = C.centre(z) + u;
             r.vu = dt > 0 ? (u - r.u) / dt : 0;
         }
@@ -844,7 +970,7 @@ const SkiLogic = (() => {
         if (r.rail && z > r.rail.z + r.rail.len) r.rail = null;
 
         // ---- Up and down: on the snow until it falls away faster than a fall.
-        const g = support(W, r, x, z);
+        const g = support(W, r, x, z), yWas = r.y;
         if (!r.air) {
             const rate = dt > 0 ? (g - r.y) / dt : 0;
             if (inPipe && r.pipe * u > s.W - 0.3 && r.pipe * r.vu > 0) {
@@ -852,18 +978,21 @@ const SkiLogic = (() => {
                 r.vx = dC * vz - r.pipe * 0.55;
                 r.vz = vz;
                 r.x = x; r.z = z; r.u = u; r.y = g;
-                takeOff(W, r, clamp(Math.max(rate, 0) * 0.4 + 4.4, 4.2, 6.4));
+                // What it has left at the lip all goes up.
+                takeOff(W, r, clamp(Math.abs(r.pw), 3.8, 6.4));
                 r.vu = -r.pipe * 0.55;
                 r.pipe = -r.pipe;
                 r.y += r.vy * dt;
-            } else if (r.pop && r.v > 4 && !L.lane && !s.T.single && !r.parked) {
+            } else if (r.pop && r.popT >= POP.load) {
+                // Down, and up: as much of a spring as legs have.
                 r.vx = dC * vz + clamp(r.vu, -2.5, 2.5);
                 r.vz = vz;
                 r.x = x; r.z = z; r.u = u; r.y = g;
                 r.forced = r.pop;
-                r.pop = 0;
-                takeOff(W, r, rate + 5.4);
-            } else if (r.vyG - G * dt > rate + 0.7 && r.v > 3) {
+                r.pop = r.popT = 0;
+                takeOff(W, r, rate + POP.vy);
+            } else if (r.vyG - G * dt > rate + 1.2 && r.v > 3) {
+                // (The 1.2 m/s is what legs take up: over less than that they reach down and stay on the snow.)
                 r.vx = dC * vz + clamp(r.vu, -2.5, 2.5);     // squared up for the air
                 r.vz = vz;
                 r.x = x; r.z = z; r.u = u;
@@ -874,8 +1003,19 @@ const SkiLogic = (() => {
                 r.vyG = clamp(rate, -30, 9);
                 r.vx = dt > 0 ? (x - x0) / dt : 0;
                 r.vz = vz;
+                // The snow it is on, for the next step: up or down, along the way it is going.
+                const ds = Math.hypot(x - x0, z - zWas);
+                r.sl = ds > 0.02 ? clamp((g - yWas) / ds, -0.8, 0.8) : C.elev(z + 0.5) - C.elev(z - 0.5);
+                // Legs take up what the snow does under them: folded over a crest, long in a hollow.
+                r.vyS += (r.vyG - r.vyS) * (1 - Math.exp(-dt / 0.15));
+                r.absorb = clamp(r.absorb * Math.exp(-dt / 0.3) + (r.vyG - r.vyS) * dt / 0.3, -1, 1);
             }
-            r.pop = 0;
+            // A jump by hand waits for the crouch before it; it is off where nobody may jump.
+            if (r.pop && !r.air) { if (r.v > 4 && !L.lane && !s.T.single && !r.parked) r.popT += dt; else r.pop = r.popT = 0; }
+            // Down before a lip that is theirs, to spring off it.
+            const lip = L.kicker ? L.kicker.z - z : -1;
+            r.load += ((r.pop || lip > 0 && lip < 0.45 * r.v ? 1 : 0) - r.load) * (1 - Math.exp(-dt / 0.1));
+            if (r.air) r.load = 0;
         } else {
             r.vy -= G * dt;
             r.y += r.vy * dt;
@@ -893,23 +1033,29 @@ const SkiLogic = (() => {
 
         // ---- How it holds itself.
         const speed = Math.hypot(r.vx, r.vz);
+        let swing = 0;
         if (speed > 0.5) {
-            let turn = Math.atan2(r.vx, r.vz) - r.heading;
+            // How hard it is really turning: what it leans against.
+            const psi = Math.atan2(r.vx, r.vz);
+            if (dt > 0) swing = clamp(speed * (psi - r.psi) / dt, -GRIP * 1.4, GRIP * 1.4);
+            r.psi = psi;
+            let turn = psi - r.heading;
             turn -= TAU * Math.round(turn / TAU);
             r.heading += turn * (1 - Math.exp(-dt / (r.air ? 0.3 : 0.08)));
             if (!r.air) r.pitch += (Math.atan2(r.vyG, speed) - r.pitch) * (1 - Math.exp(-dt / 0.08));
             else r.pitch += (Math.atan2(r.vy, speed) * 0.5 - r.pitch) * (1 - Math.exp(-dt / 0.25));
         }
-        // The lean into a turn, from how hard the line is curving.
-        const omega = TAU * vz / L.lam, lean = r.air || inPipe || r.pipe ? 0 : clamp(-r.a * omega * omega * Math.sin(r.phase) / 8.5, -1, 1);
-        r.lean += (lean - r.lean) * (1 - Math.exp(-dt / 0.12));
+        // The lean into a turn, from how hard it is turning: its own swing, a dodge or a hand on it alike.
+        const lean = r.air || inPipe || r.pipe ? 0 : clamp(swing / 8.5, -1, 1);
+        r.lean += (lean - r.lean) * (1 - Math.exp(-dt / 0.15));
         if (!r.air) {
             const ch = Math.cos(r.heading), sh = Math.sin(r.heading);
             r.bank = Math.atan((C.height(x + ch * 0.5, z - sh * 0.5) - C.height(x - ch * 0.5, z + sh * 0.5)));
         }
         const k = r.trick;
         if (r.air && k) {
-            const p = clamp(r.airT / k.T, 0, 1), e = sq(p) * k.off, arc = Math.sin(Math.PI * p) ** 0.6;
+            // Set spinning at the lip and spinning at one rate, but for the pull of a tuck in the middle; round before the snow comes up.
+            const p = clamp(r.airT / k.T, 0, 1), q = Math.min(1, p / 0.92), e = (q - 0.3 / TAU * Math.sin(TAU * q)) * k.off, arc = Math.sin(Math.PI * p) ** 0.6;
             r.spin[0] = TAU * (k.yaw || 0) * k.sign * e;
             r.spin[1] = TAU * (k.pitch || 0) * e;
             r.spin[2] = (k.tilt || 0) * arc * k.sign;
@@ -993,11 +1139,20 @@ const SkiLogic = (() => {
     // The friends as a group: pulling up at a hut, and changing lines.
     function groupStep(W, dt) {
         const C = W.course, g = W.group, lead = W.riders[0], s = C.find(lead.z);
-        if (s.type === 'hut' && g.done !== s.i) {
+        if (s.T.stop && g.done !== s.i) {
             const there = W.riders.every(r => r.v < 0.3 || r.fall || r.z < lead.z - 60);
             if (g.phase === 'ride' && lead.v < 0.3 && lead.z > s.zs - 6) { g.phase = 'gather'; g.timer = 0; }
-            if (g.phase === 'gather') { g.timer += dt; if (there || g.timer > 12) { g.phase = 'rest'; g.timer = 0; } }
+            if (g.phase === 'gather') {
+                g.timer += dt;
+                if (there || g.timer > 12) {
+                    g.phase = s.type === 'lodge' ? 'apres' : 'rest';
+                    g.timer = 0;
+                    // At a lodge, whoever has pulled up goes in; anyone still on the way waits by the skis.
+                    if (g.phase === 'apres') W.riders.forEach((r, i) => { if (r.v < 0.3 && !r.fall && !r.air && Math.abs(r.z - s.zs) < 30) r.afoot = walkIn(W, r, s, i); });
+                }
+            }
             if (g.phase === 'rest') { g.timer += dt; if (g.timer > 5) { g.phase = 'ride'; g.done = s.i; } }
+            if (g.phase === 'apres') { g.timer += dt; if (!W.riders.some(r => r.afoot)) { g.phase = 'ride'; g.done = s.i; } }
         } else if (g.phase !== 'ride') { g.phase = 'ride'; }
         // Two of them change lines when they are well apart, so nobody crosses anybody.
         g.swap -= dt;
@@ -1033,18 +1188,20 @@ const SkiLogic = (() => {
             riderStep(W, r, dt, list, r === W.riders[0] && input ? clamp(input.steer || 0, -1, 1) : 0);
             // The last word: nobody ends a step inside somebody else.
             // Held up for seconds by something that will not move: slip by it (it should never come to this).
+            // (Four of them: setting off from a stop, the last of four abreast waits that long for room.)
             r.stuck = r.want && !r.fall && r.v < 0.3 ? (r.stuck || 0) + dt : 0;
-            if (r.stuck > 2.5) { r.ghost = 2; r.stuck = 0; W.ghosts++; }
-            if (!r.air && !r.fall && !r.ghost) {
+            if (r.stuck > 4) { r.ghost = 2; r.stuck = 0; W.ghosts++; }
+            if (!r.air && !r.fall && !r.ghost && !r.afoot) {
                 for (const o of solid) {
                     const dz = Math.abs(o.z - r.z), du = Math.abs(o.u - r.u);
-                    if (o === r || o.air || dz > 1.4 || du > 1.1 || (dz >= Math.abs(o.z - z0) && du >= Math.abs(o.u - u0))) continue;
+                    if (o === r || o.air || o.afoot || dz > 1.4 || du > 1.1 || (dz >= Math.abs(o.z - z0) && du >= Math.abs(o.u - u0))) continue;
                     // Whoever is behind gives way; alongside, it only keeps its distance.
                     if (o.z >= r.z) { r.z = z0; r.v = Math.min(r.v, o.v * 0.8); }
                     r.u = u0;
                     r.x = W.course.centre(r.z) + u0;
                     r.y = W.course.height(r.x, r.z);
-                    r.c = u0 - r.a * Math.sin(r.phase);
+                    r.c = u0 - r.a * wave(r.phase);
+                    r.cv = 0;
                     break;
                 }
             }
@@ -1076,6 +1233,7 @@ const SkiLogic = (() => {
             for (const r of W.riders) z = Math.min(z, r.z - 14);
             const r = rider(W, 'friend', slot, z, { kind: kinds?.[W.riders.length] || 'ski' });
             r.v = lead.v;
+            settle(W, r);
             W.riders.push(r);
         }
     }
@@ -1083,7 +1241,7 @@ const SkiLogic = (() => {
     // Send it: the lead jumps where it stands (and with `badly`, comes down in a heap).
     function sendIt(W, badly = false) {
         const r = W.riders[0], s = W.course.find(r.z);
-        if (r.air || r.fall || r.v < 4 || r.lane || s.T.single || r.parked) return false;
+        if (r.air || r.fall || r.afoot || r.v < 4 || r.lane || s.T.single || r.parked) return false;
         r.pop = badly ? 2 : 1;
         return true;
     }
@@ -1107,6 +1265,12 @@ const SkiLogic = (() => {
     // The director: follows, and cuts to the side of a jump, to the front, up high, to a camera left by the piste.
     function direct(cam, W, dt) {
         const C = W.course, r = W.riders[0], s = C.find(r.z);
+        // In for a drink: the whole lodge, from out on the piste, until they are back in their skis.
+        if (r.afoot) {
+            if (cam.shot !== 'lodge') { const l = C.lodge(s); cam.fix = l.at(-14, 4, LODGE.out + 30); cam.fix[1] = Math.max(cam.fix[1], C.height(cam.fix[0], cam.fix[2]) + 2.2); cam.look = l.at(2, 4.2, 8); }
+            return 'lodge';
+        }
+        if (cam.shot === 'lodge') { cam.base = 'follow'; cam.hold = 8 + W.rng() * 6; return 'follow'; }
         if (cam.shot === 'side') {
             if (r.z > cam.until || r.fall && r.fall.phase !== 'tumble') { cam.base = 'follow'; cam.hold = 6 + W.rng() * 6; return 'follow'; }
             return 'side';
@@ -1142,7 +1306,8 @@ const SkiLogic = (() => {
         const shot = mode === 'auto' ? (still ? 'follow' : direct(cam, W, dt)) : mode;
         cam.cut = shot !== cam.shot;
         cam.shot = shot;
-        let way = Math.atan(C.slope(r.z)) * 0.6 + r.heading * 0.4 - cam.h;
+        // On foot at a lodge, the camera that follows stands on the piste side and looks at the lodge.
+        let way = (r.afoot ? r.afoot.face : Math.atan(C.slope(r.z)) * 0.6 + r.heading * 0.4) - cam.h;
         way -= TAU * Math.round(way / TAU);
         cam.h += cam.cut ? way : way * (1 - Math.exp(-dt / 1.1));
         const sh = Math.sin(cam.h), ch = Math.cos(cam.h);
@@ -1158,14 +1323,20 @@ const SkiLogic = (() => {
             // From the side that falls away, so the hill is not in the way.
             const lo = C.height(r.x - 15, r.z - 15), hi = C.height(r.x + 15, r.z - 15);
             if ((hi - lo) * cam.side > 3) cam.side = -cam.side;
+            if (r.afoot) cam.side = -C.find(r.z).side;        // and never from inside the lodge
             cam.lat = cam.cut || cam.lat === undefined ? cam.side : cam.lat + (cam.side - cam.lat) * (1 - Math.exp(-dt / 1.5));
             px = r.x + cam.lat * 15;
             pz = r.z - 15;
             py = Math.max(r.y + 17 - r.lift * 0.5, C.height(px, pz) + 12);
             tz = r.z + 4;
             ty = r.y - r.lift * 0.5;
-            tan = 0.42;
+            tan = 0.36;
             ease = 0.4;
+        } else if (shot === 'lodge') {
+            [px, py, pz] = cam.fix;
+            [tx, ty, tz] = cam.look;
+            tan = 0.36;
+            ease = 0;
         } else if (shot === 'side') {
             [px, py, pz] = cam.fix;
             tan = clamp(7 / Math.hypot(px - r.x, pz - r.z, py - r.y), 0.12, 0.62);
@@ -1288,8 +1459,8 @@ const SkiLogic = (() => {
 
     return {
         clamp, smooth, mix, mix3, RAD, TAU, G, hash, rng,
-        bake, pack, sample, TYPES, ORDER, CHUNK, SLOTS, PIPE, slotU, win, kicker, course,
-        CRUISE, TRICKS, FALL, HAND, world, rider, setFriends, hits, cuts, line, support, railEnds, airtime, tumble, riderStep, worldStep, worldAdvance, sendIt, obstacles,
+        bake, pack, sample, TYPES, ORDER, CHUNK, SLOTS, PIPE, LODGE, APRES, slotU, win, kicker, course,
+        CRUISE, TRICKS, FALL, HAND, POP, GRIP, wave, world, rider, setFriends, hits, cuts, line, support, railEnds, airtime, tumble, riderStep, worldStep, worldAdvance, sendIt, obstacles,
         CAMERAS, camera, cameraStep, nextJump, bodies, light, LIGHT, WEATHER, weatherStart, weatherStep, air,
     };
 })();

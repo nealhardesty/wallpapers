@@ -365,10 +365,21 @@ const SkiModels = (() => {
     const anyone = v => look(rnd(v, 4) < 0.35 ? 'board' : 'ski', rnd(v, 5) < 0.5, KIT_ORDER[Math.floor(rnd(v, 6) * KIT_ORDER.length)], v);
 
     const tints = new Array(8).fill(null);
+    const mugOf = () => model('mug', s => s.paint(C.white).fx(0).prism(6, 0, -0.05, 0, 0.04, 0.06, 0.045, { cap: true }).paint([120, 70, 40]).tri([-0.03, 0.062, -0.02], [0.03, 0.062, -0.02], [0, 0.062, 0.035], [0, 1, 0]));
+    // What a rider leaves standing in the snow when they go in: a pair of skis, or a board, tails down.
+    function gear(out, st, x, y, z, yaw, who) {
+        tints[5] = who.gear;
+        const board = who.kind === 'board';
+        for (const side of board ? [0] : [-1, 1]) {
+            st.reset(x, y, z, yaw).move(side * 0.07, board ? 0.62 : 0.72, 0).rz(side * 0.05).rx(-1.45);
+            out.stamp(board ? P.board() : P.ski(), st.top, tints);
+        }
+    }
     // Draw a rider with their skis or board at (x, y, z) from the camera, feet on y.
     // pose: { yaw (travel), pitch and bank (the snow under them), lean (-1 to 1,
     // into a turn), crouch, tuck, air, grab, spread, twist, spin [yaw, pitch,
-    // roll], phase (of the turn), stop, sit (on a chair), plough, fall, t, size }.
+    // roll], phase (of the turn), stop, sit (on a chair), plough, fall, t, size,
+    // walk (the stride's angle, on foot), drink (0 to 1: a mug from the table to the mouth) }.
     function figure(out, st, x, y, z, who, p) {
         const board = who.kind === 'board', afoot = who.kind === 'none', size = (p.size || 1) * (who.woman ? 0.95 : 1), t = p.t || 0;
         tints[1] = who.jacket; tints[2] = who.pants; tints[3] = who.helmet; tints[4] = who.skin; tints[5] = who.gear; tints[6] = who.hair; tints[7] = who.trim;
@@ -410,7 +421,8 @@ const SkiModels = (() => {
         st.move(0, hip, -fore * 0.55);
         // Legs.
         for (const side of [-1, 1]) {
-            const inside = side * lean > 0 ? Math.abs(lean) : 0, a = th + 0.4 * inside - 0.08 * (1 - inside) * Math.abs(lean), b = ps + 0.22 * inside;
+            const inside = side * lean > 0 ? Math.abs(lean) : 0, stride = p.walk ? Math.sin(p.walk + (side > 0 ? 0 : Math.PI)) : 0;
+            const a = th + 0.4 * inside - 0.08 * (1 - inside) * Math.abs(lean) + 0.5 * stride, b = ps + 0.22 * inside + (p.walk ? 0.45 * Math.max(0, Math.cos(p.walk + (side > 0 ? 0 : Math.PI))) : 0);
             st.push().move(side * (board ? 0.13 : 0.12), 0, 0).rz(side * ((board ? 0.3 : 0.11) + 0.55 * spread + (p.plough ? 0.12 : 0))).rx(-a);
             put(Q.thigh());
             st.move(0, -0.45, 0).rx(a + b);
@@ -443,10 +455,15 @@ const SkiModels = (() => {
             if (shake) { sh = -1.9 + 0.5 * shake * side; el = -1.7; outw = 0.3; }
             if (p.wave && side < 0) { sh = -2.7 + 0.3 * Math.sin(t * 9); el = -0.4; outw = 0.5; }
             if (tumble) { sh = -1.5 + Math.sin(tumble * 1.3 + side) * 1.2; outw = 1.2; el = -0.4; }
+            if (p.walk) sh += 0.45 * Math.sin(p.walk + (side > 0 ? Math.PI : 0));
+            // At the table: forearms on it, and one hand bringing the mug up.
+            const mug = p.drink !== undefined && p.drink !== null;
+            if (mug) { const up = side > 0 ? p.drink : 0; sh = mix(-0.7, -1.2, up); el = mix(-1.0, -1.95, up); outw = mix(0.3, 0.12, up); }
             st.push().move(side * 0.245, 0.47, 0).rz(side * outw).rx(sh);
             put(Q.upper());
             st.move(0, -0.3, 0).rx(el);
             put(Q.fore());
+            if (mug && side > 0) { st.push().move(0, -0.36, 0.05).rx(-(sh + el)); put(mugOf()); st.pop(); }
             if (!board && !afoot && !p.plough && !tumble && !lie) {
                 // Poles trail behind, and come up under the arms in a tuck.
                 st.move(0, -0.3, 0).rx(-(sh + el) - bend + mix(1.0 + 0.25 * swing, 1.5, p.tuck || 0) - 0.9 * stop + 0.8 * spread).rz(-side * (outw - 0.1));
@@ -498,6 +515,91 @@ const SkiModels = (() => {
         // A flag on a pole.
         s.paint(C.steel).prism(5, 4.9, 1.4, 7.0, 0.04, 6.4, 0.03);
         s.paint(C.red).fx(0, 0, 255).quad([4.93, 6.3, 7.0], [4.93, 5.5, 7.0], [6.2, 5.6, 7.0], [6.2, 6.2, 7.0], [0, 0, 1]).fx(0);
+    });
+    // The grand lodge (L.LODGE has its plan): three floors on a stone plinth, a
+    // great hall's gable of glass facing the piste (+z), and a terrace of
+    // tables in front of it, steps down to the snow. y = 0 is its level pad.
+    const lodge = () => prop('lodge', s => {
+        const D = L.LODGE.deck, [T0, T1] = L.LODGE.steps, glass = (x, y, z, hx, hy, hz) => s.paint(C.glass).fx(0, 255).box(x, y, z, hx, hy, hz, 1).fx(0).paint(C.timber);
+        // The plinth, down into the hill, and the terrace on it.
+        s.paint(C.stone).fx(0).box(0, -0.75, 0, 13.6, 1.75, 6.0, 0.7);
+        s.box(0, -0.8, 10.2, 13.6, 1.7, T0 - 10.2, 0.7);
+        s.paint(C.timber).box(0, D - 0.05, 10.2, 13.6, 0.05, T0 - 10.2, 1, [150, 116, 84]);
+        // A stone ground floor, and two of timber a little proud of it.
+        s.paint(C.stone).box(0, 2.6, 0, 13, 1.6, 5.5, 0.8);
+        s.paint(C.log).box(0, 6.7, 0, 13.25, 2.5, 5.75, 0.85);
+        for (let i = 0; i < 10; i++) s.paint(C.timber).box(0, 4.45 + i * 0.5, 5.76, 13.26, 0.02, 0.02, 1);
+        // The roof: its ridge along the front, and a slab of snow lying on it.
+        for (const sg of [-1, 1]) {
+            const n = [0, 0.77, sg * 0.64];
+            s.paint(C.timber).quad([-14.4, 8.8, sg * 7.4], [14.4, 8.8, sg * 7.4], [14.4, 15, 0], [-14.4, 15, 0], n);
+            s.paint(C.snow).quad([-14.7, 9.05, sg * 7.65], [14.7, 9.05, sg * 7.65], [14.7, 15.5, 0], [-14.7, 15.5, 0], n);
+            s.paint(C.shade).quad([-14.7, 9.05, sg * 7.65], [14.7, 9.05, sg * 7.65], [14.4, 8.8, sg * 7.4], [-14.4, 8.8, sg * 7.4], [0, -0.64, sg * 0.77]);
+            for (const e of [-1, 1]) {
+                s.paint(C.log).tri([e * 13.25, 9.2, sg * 5.75], [e * 13.25, 15, 0], [e * 13.25, 9.2, 0], [e, 0, 0]);
+                s.paint(C.shade).quad([e * 14.7, 9.05, sg * 7.65], [e * 14.7, 15.5, 0], [e * 14.4, 15, 0], [e * 14.4, 8.8, sg * 7.4], [e, 0, 0]);
+            }
+        }
+        // The great hall: a bay out to the front under its own gable, all glass.
+        s.paint(C.stone).box(0, 2.6, 6.35, 5, 1.6, 0.85, 0.8);
+        s.paint(C.log).box(0, 6.6, 6.35, 5, 2.4, 0.85, 0.85);
+        for (const sg of [-1, 1]) {
+            const n = [sg * 0.72, 0.69, 0];
+            s.paint(C.timber).quad([sg * 6.2, 8.4, 0], [sg * 6.2, 8.4, 8.3], [0, 14.3, 8.3], [0, 14.3, 0], n);
+            s.paint(C.snow).quad([sg * 6.5, 8.62, 0], [sg * 6.5, 8.62, 8.6], [0, 14.8, 8.6], [0, 14.8, 0], n);
+            s.paint(C.shade).quad([sg * 6.5, 8.62, 8.6], [0, 14.8, 8.6], [0, 14.3, 8.3], [sg * 6.2, 8.4, 8.3], [0, 0, 1]);
+            s.paint(C.log).tri([sg * 5, 9, 7.2], [0, 13.6, 7.2], [0, 9, 7.2], [0, 0, 1]);
+            // Posts and a brace under the gable's eaves.
+            s.paint(C.timber).box(sg * 5.6, 4.7, 8.0, 0.16, 3.7, 0.16, 0.8).box(sg * 2.8, 11.3, 8.1, 0.12, 0.12, 0.12, 1);
+        }
+        glass(0, 6.4, 7.22, 3.9, 2.2, 0.03);
+        s.paint(C.glass).fx(0, 255).tri([-3.5, 9.15, 7.23], [3.5, 9.15, 7.23], [0, 12.3, 7.23], [0, 0, 1]).fx(0).paint(C.timber);
+        for (const x of [-3.9, -1.95, 0, 1.95, 3.9]) s.box(x, 6.4, 7.27, 0.09, 2.25, 0.05, 1);
+        s.box(0, 8.8, 7.27, 4.3, 0.16, 0.07, 1).box(0, 6.4, 7.27, 3.95, 0.06, 0.05, 1).box(0, 10.6, 7.27, 0.09, 1.65, 0.05, 1);
+        // The doors, a porch over them, and the bay's own ground-floor windows.
+        s.box(0, 2.25, 7.22, 1.3, 1.25, 0.05, 0.8);
+        for (const x of [-0.62, 0.62]) glass(x, 2.6, 7.26, 0.4, 0.6, 0.02);
+        for (const x of [-3.4, 3.4]) glass(x, 2.7, 7.22, 0.9, 0.7, 0.03);
+        s.box(0, 3.75, 7.9, 1.9, 0.07, 0.75, 1, C.snow);
+        for (const x of [-1.75, 1.75]) s.box(x, 2.35, 8.5, 0.09, 1.35, 0.09, 0.8);
+        // The wings: windows on every floor, a balcony along the first, dormers in the roof.
+        for (const sg of [-1, 1]) {
+            for (const x of [6.9, 9.1, 11.3]) {
+                glass(sg * x, 2.8, 5.52, 0.7, 0.75, 0.03);
+                for (const y of [5.6, 7.9]) { glass(sg * x, y, 5.77, 0.6, 0.6, 0.03); s.box(sg * x, y - 0.68, 5.85, 0.72, 0.05, 0.1, 1, C.snow); }
+            }
+            s.box(sg * 9.25, 4.3, 6.25, 4.0, 0.07, 0.5, 0.8, C.snow).box(sg * 9.25, 5.3, 6.72, 4.0, 0.05, 0.05, 1, C.snow);
+            for (let x = 5.3; x <= 13.3; x += 1) s.box(sg * x, 4.8, 6.72, 0.04, 0.5, 0.04, 1);
+            for (const x of [8, 11.3]) { s.paint(C.log).box(sg * x, 11.2, 4.4, 0.85, 0.9, 1.5, 0.9, C.snow); glass(sg * x, 11.25, 5.92, 0.5, 0.5, 0.03); }
+            // The ends, and a few at the back.
+            for (const z of [-3, 0, 3]) { glass(sg * 13.02, 2.8, z, 0.03, 0.75, 0.7); for (const y of [5.6, 7.9]) glass(sg * 13.27, y, z, 0.03, 0.6, 0.6); }
+            glass(sg * 13.27, 11.3, 0, 0.03, 0.7, 0.6);
+            for (const x of [2.5, 6.9, 11.3]) for (const y of [5.6, 7.9]) glass(sg * x, y, -5.77, 0.6, 0.6, 0.03);
+            // Two great chimneys, each with its cap of snow.
+            s.paint(C.stone).box(sg * 7.5, 14.6, -2, 0.75, 2.2, 0.75, 0.8, C.snow).paint(C.timber);
+            // The terrace's rail, with a gap for the steps; tall posts and a string of lamps along the front.
+            for (let x = 2.4; x <= 13.5; x += 1.85) s.box(sg * x, D + 0.5, T0 - 0.1, 0.06, 0.5, 0.06, 0.8);
+            s.box(sg * 7.95, D + 1.0, T0 - 0.1, 5.6, 0.05, 0.07, 1, C.snow);
+            for (let z = 6.2; z < T0 - 0.2; z += 2.05) s.box(sg * 13.5, D + 0.5, z, 0.06, 0.5, 0.06, 0.8);
+            s.box(sg * 13.5, D + 1.0, 10.2, 0.07, 0.05, T0 - 10.25, 1, C.snow);
+            for (const x of [2.4, 13.5]) s.box(sg * x, D + 1.45, T0 - 0.1, 0.05, 1.45, 0.05, 0.9);
+            for (let i = 1; i < 14; i++) { const f = i / 14; s.paint(C.lamp).fx(0, 255).box(sg * mix(2.4, 13.5, f), D + 2.85 - 0.45 * Math.sin(Math.PI * f), T0 - 0.1, 0.06, 0.06, 0.06, 1).fx(0).paint(C.timber); }
+            // Tables and benches (the friends' own is L.LODGE.table).
+            for (const x of [5.5, 10.5]) {
+                s.box(sg * x, D + 0.75, 11, 1.0, 0.04, 0.4, 1, C.log).box(sg * x, D + 0.37, 11, 0.06, 0.36, 0.3, 0.8);
+                for (const e of [-1, 1]) s.box(sg * x, D + L.LODGE.seatY - 0.03, 11 + e * L.LODGE.bench, 1.0, 0.03, 0.17, 1).box(sg * x, D + 0.2, 11 + e * L.LODGE.bench, 0.7, 0.2, 0.04, 0.8);
+            }
+            // Racks of skis either side of the steps, and flags at the corners.
+            s.box(sg * 5, 0.5, T1 + 0.3, 1.5, 0.5, 0.05, 0.7).box(sg * 5, 1.02, T1 + 0.3, 1.6, 0.04, 0.08, 1, C.snow);
+            [C.red, C.yellow, C.blue, C.orange, [80, 200, 190], C.white].forEach((c, i) => s.paint(c).box(sg * (3.9 + i * 0.44), 0.86, T1 + 0.42, 0.045, 0.86, 0.012, 0.8));
+            s.paint(C.steel).prism(5, sg * 13.4, D, T0 + 0.3, 0.05, D + 6.2, 0.03);
+            s.paint(sg > 0 ? C.red : C.blue).fx(0, 0, 255).quad([sg * 13.4 + 0.03, D + 6.1, T0 + 0.3], [sg * 13.4 + 0.03, D + 5.2, T0 + 0.3], [sg * 13.4 + 1.5, D + 5.3, T0 + 0.3], [sg * 13.4 + 1.5, D + 6.0, T0 + 0.3], [0, 0, 1]).fx(0).paint(C.timber);
+        }
+        // Steps down to the snow.
+        for (let i = 0; i < 4; i++) { const top = D * (3.5 - i) / 4; s.paint(C.stone).box(0, (top - 1.5) / 2, T0 + (i + 0.5) * (T1 - T0) / 4, 2.4, (top + 1.5) / 2, (T1 - T0) / 8, 0.7, C.snow); }
+        // A fire in a ring of stones.
+        s.paint(C.stone).prism(8, -3.6, D, 8.6, 0.8, D + 0.4, 0.7, { cap: true });
+        s.paint(C.orange).fx(0, 255).prism(5, -3.6, D + 0.38, 8.6, 0.38, D + 1.05, 0).fx(0);
     });
     const tower = top => prop('tower:' + top, s => {
         s.paint(C.steel).fx(0).prism(8, 0, -0.5, 0, 0.3, top, 0.2, { foot: 0.6 });
@@ -731,6 +833,7 @@ const SkiModels = (() => {
                 soup.stamp(groomer(), place(x - ox + s.side * 1.5, course.height(x + s.side * 1.5, z - 14) - oy, z - 14 - z0, 0.2 * s.side));
                 lamps.push({ x: x - s.side * 6, y: y + 3.2, z, warm: true, side: s.side, hx: x, hy: y, hz: z });
             }
+            if (s.type === 'lodge' && s.zs >= z0 && s.zs < z1) { const l = course.lodge(s); soup.stamp(lodge(), place(l.x - ox, l.y - oy, l.z - z0, l.yaw)); }
         }
         for (const lift of course.lifts) {
             if (lift.zb < z0 || lift.za > z1) continue;
@@ -744,5 +847,5 @@ const SkiModels = (() => {
         return { soup, lamps };
     }
 
-    return { C, COLS, ROWS, GRIDS, ROWSETS, GROUND_BYTES, KITS, KIT_ORDER, place, move, model, tree, figure, look, anyone, hut, tower, station, chair, pole, flag, mast, rail, arch, sign, groomer, creature, eagle, ground, gridIndices, props };
+    return { C, COLS, ROWS, GRIDS, ROWSETS, GROUND_BYTES, KITS, KIT_ORDER, place, move, model, tree, figure, gear, look, anyone, hut, lodge, tower, station, chair, pole, flag, mast, rail, arch, sign, groomer, creature, eagle, ground, gridIndices, props };
 })();
