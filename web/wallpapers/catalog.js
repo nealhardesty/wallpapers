@@ -353,8 +353,9 @@
           make: host => new SkiRunAnimationManager(host), cost: 'high', interactive: true,
           effects: [['shadows', 'medium'], ['sparkle', 'medium']],
           keys: [
-              { keys: ['a', 'd', 'ArrowLeft', 'ArrowRight'], label: 'Carve it yourself: move the lead rider across the piste. They take their own line again 4 seconds after you let go', run: (run, { key }) => run.nudge(key) },
-              { keys: ['j', 'ArrowUp'], label: 'Send it: the lead jumps, here and now (with Shift, and lands in a heap)', run: (run, { shift }) => run.sendIt(shift) },
+              { keys: ['a', 'd', 'ArrowLeft', 'ArrowRight'], label: 'Carve it yourself: move the lead rider across the piste; in the air, spin. They take their own line again 4 seconds after you let go', run: (run, { key }) => run.nudge(key) },
+              { keys: ['w', 's', 'ArrowUp', 'ArrowDown'], label: 'Tuck and run (up), or check your speed, held to a stop (down); in the air, a front flip or a backflip. Land it round, or go down', run: (run, { key }) => run.nudge(key) },
+              { keys: ['j', ' '], label: 'Send it: the lead jumps, higher the longer you hold it; in the air, grab (with Shift, and lands in a heap)', run: (run, { shift }) => run.jumpKey(shift) },
               { keys: ['v'], label: 'Next camera (behind, in front, from on high, the director)', run: run => run.nextCamera() },
               { keys: ['t'], label: 'Next time of day (goes round, your clock, dawn, midday, dusk, night)', run: run => run.nextTime() },
               { keys: ['x'], label: 'Next weather (comes and goes, clear, flurries, snow, fog)', run: run => run.nextWeather() },

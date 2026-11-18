@@ -976,6 +976,108 @@ test('a tumble ends the right way up and goes over on to its back: no jump from 
     }
 });
 
+test('a hand on the lead: tuck to run, brake to a stop, a longer press for a bigger jump, and the air is yours to spin, flip and grab', () => {
+    const cfg = { ...CFG, friends: 2, others: 0, wildlife: false };
+    const go = (W, steps, input) => { const events = []; for (let i = 0; i < steps; i++) { L.worldStep(W, 1 / 60, typeof input === 'function' ? input(i, W.riders[0]) : input); events.push(...W.events); W.events.length = 0; } return events; };
+    const fresh = () => { const W = L.world(7, cfg, { sections: ['groomer'] }); go(W, 8 * 60, null); return W; };
+    // Tucked, it runs straighter and faster than it would.
+    {
+        const free = fresh(), tucked = fresh();
+        let v0 = 0, v1 = 0, a0 = 0, a1 = 0;
+        for (let i = 0; i < 1200; i++) {
+            L.worldStep(free, 1 / 60, null);
+            L.worldStep(tucked, 1 / 60, { tuck: 1 });
+            free.events.length = tucked.events.length = 0;
+            v0 += free.riders[0].v; v1 += tucked.riders[0].v; a0 += free.riders[0].a; a1 += tucked.riders[0].a;
+        }
+        assert.ok(v1 > v0 * 1.2, `tucked ${(v1 / 1200).toFixed(1)} m/s against ${(v0 / 1200).toFixed(1)}`);
+        assert.ok(a1 < a0 * 0.3, `tucked, a swing of ${(a1 / 1200).toFixed(2)} m against ${(a0 / 1200).toFixed(2)}`);
+        assert.ok(tucked.riders[0].tuck > 0.9);
+    }
+    // Held on, the brake is a hockey stop: down from cruise within five seconds, skis across the hill; the friends wait; let go, away again.
+    {
+        const W = fresh(), r = W.riders[0];
+        let steps = 0, across = 0;
+        for (; steps < 600 && r.v > 0.3; steps++) { L.worldStep(W, 1 / 60, { brake: 1 }); W.events.length = 0; across = Math.max(across, Math.abs(r.skid)); }
+        assert.ok(steps < 5 * 60, `stopped in ${(steps / 60).toFixed(1)} s`);
+        assert.ok(across > 1.1, `skis ${(across * 57.3).toFixed(0)}° across`);
+        go(W, 10 * 60, { brake: 1 });
+        assert.ok(r.v < 0.3 && r.halt, 'held, it stays stopped');
+        for (const f of W.riders.slice(1)) assert.ok(Math.abs(f.z - r.z) < 70 && f.v < 1, `a friend ${(f.z - r.z).toFixed(0)} m off at ${f.v.toFixed(1)} m/s`);
+        assert.equal(W.ghosts, 0, 'nobody stuck behind a stop by hand');
+        go(W, 5 * 60, null);
+        assert.ok(r.v > 8, `away again at ${r.v.toFixed(1)} m/s`);
+    }
+    // A press is the usual jump; held, a deeper crouch and a bigger one, up to HAND.charge of it.
+    {
+        const airOf = hold => { const W = fresh(), r = W.riders[0]; for (let i = 0; i < 200 && !r.air; i++) { L.worldStep(W, 1 / 60, i < hold ? { jump: true } : {}); W.events.length = 0; } return r.T; };
+        const tap = airOf(1), held = airOf(60);
+        assert.ok(tap > 0.6 && tap < 1, `a press: ${tap.toFixed(2)} s in the air`);
+        assert.ok(held > tap * 1.35, `held: ${held.toFixed(2)} s against ${tap.toFixed(2)}`);
+    }
+    // In the air: let go in time and it comes round and is stomped; hold on too long and it lands short and goes down.
+    {
+        const trick = (input, cfgOver = {}) => {
+            const W = L.world(7, { ...cfg, ...cfgOver }, { sections: ['groomer'] }), r = W.riders[0];
+            go(W, 8 * 60, null);
+            let up = 0;
+            // (Until it is up: the jump held, and whatever the hand is carrying into it.)
+            const before = input.into ? input(0) : {};
+            const events = go(W, 400, (i, lead) => { if (lead.air) up++; return lead.air ? input(lead.airT) : up ? null : i < 45 ? { jump: true, ...before } : before; });
+            return { stomp: events.find(e => e.type === 'stomp'), wipe: events.some(e => e.type === 'wipe'), r };
+        };
+        const early = trick(t => t < 0.2 ? { steer: 1 } : {});
+        assert.ok(early.stomp && early.stomp.clean && early.stomp.name === '360' && !early.wipe, JSON.stringify(early.stomp));
+        assert.ok(Math.abs(early.r.spin[0]) < 1e-9, 'still spinning on the snow');
+        const late = trick(() => ({ steer: 1 }));
+        assert.ok(late.stomp && !late.stomp.clean && late.stomp.down && late.wipe, `held to the snow: ${JSON.stringify(late.stomp)}`);
+        const tame = trick(() => ({ steer: 1 }), { wipeouts: false });
+        assert.ok(tame.stomp && !tame.stomp.clean && !tame.stomp.down && !tame.wipe && !tame.r.fall, 'with wipeouts off, it lands anyway');
+        const flip = trick(t => t < 0.25 ? { brake: 1, jump: true } : { jump: true });
+        assert.equal(flip.stomp?.name, 'Backflip grab');
+        assert.ok(flip.stomp.clean);
+        // Carving or tucking into the jump and still holding it: nothing turns up there until it is let go and pressed again.
+        const held = () => ({ steer: 1, tuck: 1 });
+        held.into = true;
+        const into = trick(held);
+        assert.ok(!into.stomp && !into.wipe && !into.r.fall, `held from the snow: ${JSON.stringify(into.stomp)}`);
+        // On a board a half turn is enough: it rides away switch.
+        const board = trick(t => t < 0.08 ? { steer: -1 } : {}, { kinds: ['board', 'ski', 'ski'] });
+        assert.ok(board.stomp?.clean && board.stomp.name === '180' && board.r.sw, `a board's 180: ${JSON.stringify(board.stomp)}`);
+        // Without a hand on it the air is the riders' own, as ever: no trick is ever called out.
+        const own = ski(7, 3, cfg);
+        assert.ok(own.stats.tricks.size > 0);
+    }
+    // Five minutes of a restless hand on two mountains: never under the snow, off the piste, into a tree or into anybody.
+    for (const seed of [7, 11]) {
+        let x = seed * 9301 + 49297;
+        const roll = () => (x = (x * 9301 + 49297) % 233280) / 233280;
+        const kinds = [null, { steer: -1 }, { steer: 1 }, { tuck: 1 }, { brake: 0.4 }, { brake: 1 }, { jump: true }, { steer: 1, tuck: 1 }];
+        let now = null, until = 0;
+        const W = L.world(seed, { ...CFG, wipeouts: true }), C = W.course;
+        let under = 0, off = 0, minPair = 9, stomps = 0;
+        for (let i = 0; i < 5 * 3600; i++) {
+            if (i >= until) { now = kinds[Math.floor(roll() * kinds.length)]; until = i + 30 + Math.floor(roll() * 150); }
+            L.worldStep(W, 1 / 60, now);
+            stomps += W.events.filter(e => e.type === 'stomp').length;
+            W.events.length = 0;
+            for (const r of W.riders) {
+                if (r.y < C.height(r.x, r.z) - 0.02) under++;
+                if (Math.abs(r.u) > C.width(r.z) + 0.3 && !r.lane && !C.find(r.z).T.single && !r.afoot) off++;
+            }
+            for (let a = 0; a < W.riders.length; a++) for (let b = a + 1; b < W.riders.length; b++) {
+                const p = W.riders[a], q = W.riders[b];
+                if (!p.afoot || !q.afoot) minPair = Math.min(minPair, Math.hypot(p.x - q.x, p.z - q.z, p.y - q.y));
+            }
+        }
+        assert.equal(under, 0, `seed ${seed}: under the snow`);
+        assert.equal(off, 0, `seed ${seed}: off the piste`);
+        assert.ok(minPair > 0.9, `seed ${seed}: two riders ${minPair.toFixed(2)} m apart`);
+        assert.equal(W.ghosts, 0, `seed ${seed}: somebody stuck`);
+        assert.ok(W.riders[0].z > 1500, `seed ${seed}: only ${W.riders[0].z.toFixed(0)} m`);
+    }
+});
+
 test('the same mountain covered at 10, 30, 60 and 120 frames a second', () => {
     const at = hz => { const { W } = ski(5, 3, { ...CFG, others: 0, wildlife: false, wipeouts: false }, hz); return W.riders[0].z; };
     const base = at(60);
@@ -1400,7 +1502,10 @@ test('settings: the panel offers what the code knows, and the keys are declared'
     const defaults = context.WP.defaultsOf ? context.WP.defaultsOf('ski-run') : null;
     if (defaults) assert.deepEqual(plain(defaults.sections), plain(L.ORDER));
     const entry = context.WP.entry('ski-run');
-    assert.deepEqual(plain(entry.keys.flatMap(k => k.keys)), ['a', 'd', 'ArrowLeft', 'ArrowRight', 'j', 'ArrowUp', 'v', 't', 'x', 'g']);
+    assert.deepEqual(plain(entry.keys.flatMap(k => k.keys)), ['a', 'd', 'ArrowLeft', 'ArrowRight', 'w', 's', 'ArrowUp', 'ArrowDown', 'j', ' ', 'v', 't', 'x', 'g']);
+    // Every key a hand holds is one the manager knows to hold.
+    const hold = plain(vm.runInContext('SKI_HOLD', context));
+    for (const key of [...entry.keys[1].keys, ...entry.keys[2].keys]) assert.ok(hold[key.toLowerCase()], `${key} is held`);
     const steer = plain(vm.runInContext('SKI_STEER', context));
     for (const key of entry.keys[0].keys) assert.ok(steer[key.toLowerCase()], `${key} steers`);
     assert.deepEqual(plain(entry.effects.map(([name]) => name)), ['shadows', 'sparkle']);

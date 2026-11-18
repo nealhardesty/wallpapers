@@ -20,6 +20,13 @@ const SKI_WEATHER_ORDER = ['auto', 'clear', 'flurries', 'snow', 'fog'];
 const SKI_WEATHER_NAMES = { auto: 'comes and goes', clear: 'clear', flurries: 'flurries', snow: 'snowing', fog: 'fog on the hill' };
 const SKI_CAMERA_NAMES = { follow: 'Following behind', front: 'From in front', diorama: 'From on high', auto: 'The director decides' };
 const SKI_STEER = { a: -1, arrowleft: -1, d: 1, arrowright: 1 };
+// The other keys a hand holds: tuck (in the air, a front flip), brake (a backflip), jump (held longer, a bigger one; in the air, a grab).
+const SKI_HOLD = { w: 'tuck', arrowup: 'tuck', s: 'brake', arrowdown: 'brake', j: 'jump', ' ': 'jump' };
+const SKI_BRAKE = [0.4, 1.2];     // a tap of the brake checks speed by that much; held for that many seconds, it is a stop
+const SKI_HINT = {
+    keys: '⛷️ Yours: ←→ carve · ↑ tuck · ↓ brake (hold to stop) · J or Space jump (hold for more) · in the air ←→ spin, ↑↓ flip, J grab',
+    touch: '⛷️ Yours: drag ←→ to carve, up to tuck, down to brake · tap to jump · in the air drag to spin and flip, tap to grab',
+};
 const SKI_TAP = 0.6;            // seconds a key counts as held when only its press was seen (longer than a keyboard's repeat delay)
 // What a struggling GPU gives up, in turn: shadows, then resolution and far trees.
 const SKI_GPU = [{ scale: 1, shadows: true, trees: 1 }, { scale: 1, shadows: false, trees: 1 }, { scale: 0.75, shadows: false, trees: 0.8 }, { scale: 0.55, shadows: false, trees: 0.6 }, { scale: 0.4, shadows: false, trees: 0.4 }];
@@ -44,8 +51,12 @@ class SkiRunAnimationManager {
         this.chunks = new Map();
         this.trails = new Map();
         this.held = new Map();
+        this.hold = new Map();
         this.drag = null;
-        this.input = { steer: 0 };
+        this.dragV = 0;
+        this.braking = 0;
+        this.hinted = false;
+        this.input = { steer: 0, tuck: 0, brake: 0, jump: false };
         this.stack = new SkiStack();
         this.moving = new SkiSoup(16384);
         this.puffs = new SkiSprites(1400);
@@ -56,12 +67,13 @@ class SkiRunAnimationManager {
         this.cloudDrift = [0, 0];
         this.onResize = () => this.resize();
         this.onKey = event => {
-            const steer = SKI_STEER[event.key.toLowerCase()];
-            if (!steer) return;
-            if (event.type === 'keyup') this.held.delete(steer);
-            else if (!event.ctrlKey && !event.metaKey && !event.altKey && !event.target.closest?.('input, select, textarea')) this.held.set(steer, Infinity);
+            const name = event.key.toLowerCase(), steer = SKI_STEER[name], hold = SKI_HOLD[name];
+            if (!steer && !hold) return;
+            const map = steer ? this.held : this.hold, what = steer || hold;
+            if (event.type === 'keyup') map.delete(what);
+            else if (!event.ctrlKey && !event.metaKey && !event.altKey && !event.target.closest?.('input, select, textarea')) { map.set(what, Infinity); this.hint('keys'); }
         };
-        this.onLetGo = () => { this.held.clear(); this.drag = null; };
+        this.onLetGo = () => { this.held.clear(); this.hold.clear(); this.drag = null; this.dragV = 0; };
         this.onLost = event => { event.preventDefault(); this.renderer.lost = true; };
         // A lost graphics context takes everything on the GPU with it: build the view again.
         this.onRestored = () => {
@@ -94,10 +106,22 @@ class SkiRunAnimationManager {
             document.addEventListener('keyup', this.onKey);
             window.addEventListener('blur', this.onLetGo);
             document.addEventListener('visibilitychange', this.onLetGo);
-            // A drag steers, from where it began; a tap sends it.
-            let from = 0;
-            const steer = x => { if (this.config.touch) this.drag = SkiLogic.clamp((x - from) / (Math.min(this.width, this.height) * 0.25), -1, 1); };
-            this.stopGestures = this.host.gestures({ tap: () => { if (this.config.touch) this.sendIt(false); }, start: x => { from = x; steer(x); }, move: steer, end: () => { this.drag = null; } });
+            // A drag steers from where it began (across: carve; up: tuck; down: brake; in the air the same way spins and flips);
+            // a tap sends it, and in the air is a grab.
+            let fromX = 0, fromY = 0;
+            const steer = (x, y) => {
+                if (!this.config.touch) return;
+                const reach = Math.min(this.width, this.height) * 0.25;
+                this.drag = SkiLogic.clamp((x - fromX) / reach, -1, 1);
+                this.dragV = SkiLogic.clamp((y - fromY) / reach, -1, 1);
+                this.hint('touch');
+            };
+            const tap = () => {
+                if (!this.config.touch) return;
+                this.hint('touch');
+                if (this.world.riders[0].air) this.hold.set('jump', this.seconds + 0.45); else this.sendIt(false);
+            };
+            this.stopGestures = this.host.gestures({ tap, start: (x, y) => { fromX = x; fromY = y; steer(x, y); }, move: steer, end: () => { this.drag = null; this.dragV = 0; } });
             this.gpu.step = SkiLogic.clamp((Number(this.host.storage.get('gpu')) || 0) - 1, 0, SKI_GPU.length - 1);
             // No GPU at all: start where it would end up, and stay there.
             if (this.renderer.software) Object.assign(this.gpu, { step: SKI_GPU.length - 1, gaveUp: true });
@@ -188,7 +212,7 @@ class SkiRunAnimationManager {
     applySettings(config) {
         const before = this.config;
         this.config = config;
-        if (!config.touch) this.drag = null;
+        if (!config.touch) { this.drag = null; this.dragV = 0; }
         if (before.steep !== config.steep || String(before.sections) !== String(config.sections)) this.seedScene();
         else {
             Object.assign(this.world.cfg, this.worldConfig());
@@ -220,20 +244,42 @@ class SkiRunAnimationManager {
     nextWeather() { return `Weather: ${this.cycle('weather', SKI_WEATHER_ORDER, SKI_WEATHER_NAMES)}`; }
     swapGear() { return this.cycle('leadGear', ['ski', 'board'], { ski: 'On skis', board: 'On a board' }); }
     sendIt(badly) { return SkiLogic.sendIt(this.world, badly) ? (badly ? 'Sending it… badly' : 'Sending it') : 'Not here'; }
+    // J or Space, by way of the catalog. Held here, the hand does it (a longer hold, a bigger jump); forwarded by the player
+    // there is only the press: a jump from the snow, a moment's grab in the air.
+    jumpKey(shift) {
+        if (shift) return this.sendIt(true);
+        if (this.hold.get('jump') === Infinity) return undefined;
+        this.hint('keys');
+        if (this.world.riders[0].air) { this.hold.set('jump', this.seconds + 0.45); return undefined; }
+        return this.sendIt(false);
+    }
+    // The first time a hand goes on, what it can do: once a visit.
+    hint(by) {
+        if (this.hinted || this.host.params.thumb) return;
+        this.hinted = true;
+        this.host.toast?.(SKI_HINT[by], 6000);
+    }
     // A carving key's press, by way of the catalog. With focus here the key's
     // own events already hold it; forwarded by the player there is only the
     // press, so it counts for a moment, and a held key's repeats keep it down.
     nudge(key) {
-        const steer = SKI_STEER[key.toLowerCase()];
+        const name = key.toLowerCase(), steer = SKI_STEER[name], hold = SKI_HOLD[name];
         if (steer && this.held.get(steer) !== Infinity) this.held.set(steer, this.seconds + SKI_TAP);
+        if (hold && hold !== 'jump' && this.hold.get(hold) !== Infinity) this.hold.set(hold, this.seconds + SKI_TAP);
+        if (steer || hold) this.hint('keys');
     }
     // What the hands are asking for this frame, or null with hands off.
     hand() {
-        for (const [steer, until] of this.held) if (until < this.seconds) this.held.delete(steer);
-        if (!this.held.size && this.drag === null) return null;
+        for (const map of [this.held, this.hold]) for (const [what, until] of map) if (until < this.seconds) map.delete(what);
+        // A brake key checks speed at first, and held on, comes to a stop.
+        this.braking = this.hold.has('brake') ? this.braking + (this.seconds - (this.handAt ?? this.seconds)) : 0;
+        this.handAt = this.seconds;
+        if (!this.held.size && !this.hold.size && this.drag === null) return null;
         let steer = this.drag || 0;
         for (const s of this.held.keys()) steer += s;
-        this.input.steer = steer;
+        const up = Math.max(0, -this.dragV - 0.2) / 0.8, down = Math.max(0, this.dragV - 0.2) / 0.8;
+        const brake = this.hold.has('brake') ? SkiLogic.mix(SKI_BRAKE[0], 1, SkiLogic.clamp(this.braking / SKI_BRAKE[1], 0, 1)) : 0;
+        Object.assign(this.input, { steer, tuck: Math.max(this.hold.has('tuck') ? 1 : 0, up), brake: Math.max(brake, down), jump: this.hold.has('jump') });
         return this.input;
     }
 
@@ -360,6 +406,9 @@ class SkiRunAnimationManager {
         for (const e of W.events) {
             if (e.type === 'land') { const n = Math.round(4 + 18 * e.power); for (let i = 0; i < n; i++) { const a = R() * 6.28, v = (1 + 3 * R()) * e.power; this.puff(e.x, e.y + 0.1, e.z, Math.sin(a) * v, 0.6 + 2.2 * R() * e.power, Math.cos(a) * v + 3, 0.5 + 0.6 * R(), 0.3, 2.2, 0.4); } }
             if (e.type === 'wipe') for (let i = 0; i < 26; i++) { const a = R() * 6.28, v = 1 + 4 * R(); this.puff(e.x, e.y + 0.3, e.z, Math.sin(a) * v, 1 + 3 * R(), Math.cos(a) * v + 5, 0.8 + 0.8 * R(), 0.5, 2.6, 0.5); }
+            // A trick by hand, called as it lands.
+            if (e.type === 'stomp') this.stomped = e;
+            if (e.type === 'stomp' && !this.host.params.thumb) this.host.toast?.(e.clean ? `🤘 ${e.name}` : e.down ? `${e.name}… not quite` : `${e.name}, just about`, 1800);
             if (e.type === 'shake') for (let i = 0; i < 12; i++) this.puff(e.x + R() - 0.5, e.y + 0.9 + 0.5 * R(), e.z + R() - 0.5, R() - 0.5, 0.3 - R(), R() - 0.5, 0.5 + 0.4 * R(), 0.14, 0.5, 0.5);
         }
         W.events.length = 0;

@@ -2543,7 +2543,7 @@ const STAGE_CHECKS = {
                 const open = { configVersion: 1, sections: ['groomer', 'powder'], others: 0 };
                 if (!await stageWith('ski-run', open, '&seed=7')) return record('open pistes: not ready');
                 await sleep(500);
-                const lead = () => evaluate('(m => { const r = m.world.riders[0]; return { active: m.world.hand.active, manual: r.manual, air: r.air, lift: r.lift, trick: r.trick && r.trick.name, fall: r.fall && r.fall.phase, v: r.v, riders: m.world.riders.length, shot: m.cam.shot }; })(WP.stage.manager)');
+                const lead = () => evaluate('(m => { const r = m.world.riders[0]; return { active: m.world.hand.active, manual: r.manual, air: r.air, lift: r.lift, trick: r.trick && (r.trick.name || r.trick.manual && "by hand"), fall: r.fall && r.fall.phase, v: r.v, riders: m.world.riders.length, shot: m.cam.shot }; })(WP.stage.manager)');
                 const run = (key, shift = false) => evaluate(`WP.entry('ski-run').keys.find(k => k.keys.includes('${key}')).run(WP.stage.manager, { key: '${key}', shift: ${shift} })`);
                 const press = (type, name) => evaluate(`document.dispatchEvent(new KeyboardEvent('${type}', { key: '${name}', bubbles: true }))`);
                 // By hand: D held carries the lead across; let go, and four seconds later the line is their own again. A press the player forwards counts too.
@@ -2561,6 +2561,7 @@ const STAGE_CHECKS = {
                 await sleep(300);
                 const tapped = await lead();
                 if (!tapped.active || tapped.manual >= back.manual) record(`a forwarded A: ${JSON.stringify(tapped)}`);
+                // (A hand was on the lead a moment ago, so the air is the hand's: a trick by hand counts.)
                 // Sent: off the snow, a trick, and landed. Sent badly: a tumble, sitting up, shaking it off, and away again.
                 await waitFor(async () => { const s = await lead(); return !s.air && !s.fall && s.v > 6; }, 8000);
                 const said = await run('j');
@@ -2572,6 +2573,29 @@ const STAGE_CHECKS = {
                 const phases = new Set();
                 const through = await waitFor(async () => { const s = await lead(); if (s.fall) phases.add(s.fall); return phases.size >= 3 && !s.fall && s.v > 4; }, 20000);
                 if (!through || !phases.has('tumble') || !phases.has('shake')) record(`a botched jump went through ${[...phases]}`);
+                // The rest of the hand: S held is a stop, and let go they are away; J held is a bigger jump; an arrow in the air spins,
+                // and let go in time it comes round and is called out, clean.
+                const hint = await evaluate('WP.stage.manager.hinted');
+                if (!hint) record('no word on what the hand can do');
+                await press('keydown', 's');
+                const stopped = await waitFor(async () => (await lead()).v < 0.5, 9000);
+                await press('keyup', 's');
+                if (!stopped) record(`S held: still going at ${(await lead()).v.toFixed(1)} m/s`);
+                if (!await waitFor(async () => (await lead()).v > 5, 9000)) record('let go of S, they did not set off');
+                await waitFor(async () => { const s = await lead(); return !s.air && !s.fall && s.v > 6; }, 8000);
+                await evaluate('WP.stage.manager.stomped = null');
+                await press('keydown', 'j');
+                await sleep(900);
+                await press('keyup', 'j');
+                const flying = await waitFor(async () => { const s = await evaluate('(m => { const r = m.world.riders[0]; return r.air && r.airT > 0.05 ? { T: r.T, manual: !!(r.trick && r.trick.manual) } : null; })(WP.stage.manager)'); return s; }, 3000);
+                if (!flying || flying.T < 1 || !flying.manual) record(`J held: ${JSON.stringify(flying)}`);
+                await press('keydown', 'ArrowRight');
+                await sleep(130);
+                await press('keyup', 'ArrowRight');
+                const called = await waitFor(() => evaluate('WP.stage.manager.stomped'), 4000);
+                // (Whether it comes round in time here depends on how quickly the page answers a key, so only that it was called;
+                // the unit tests hold a spin let go in time to a clean landing.)
+                if (!called || !/^\d+$/.test(called.name)) record(`a spin by hand: ${JSON.stringify(called)}`);
                 if (await evaluate("localStorage.getItem('wp:ski-run')") !== JSON.stringify(open)) record('carving and jumping saved something');
                 // Friends come and go with the setting, live.
                 for (const friends of [3, 1]) {
