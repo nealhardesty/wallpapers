@@ -607,13 +607,18 @@ const SkiLogic = (() => {
     // swung (radians a second); PLANT how long a pole plant takes, and how long of that its tip is coming to the snow and leaving it.
     const SWING = 2.2, PLANT = { T: 0.28, in: 0.06, out: 0.08, far: [0.85, 1.25] };
     const turned = a => a - TAU * Math.round(a / TAU);
-    const HAND = { back: 4, speed: 7 };       // seconds hands-off before the lines are the riders' own again; metres a second a held key moves the lead across
+    // A hand on the lead (`input` to worldStep: { steer -1 to 1, tuck 0 to 1, brake 0 to 1, jump: held }):
+    // back: seconds hands-off before the lines are the riders' own again; speed: metres a second a held key moves the
+    // lead across; want: how much faster a tuck wants to go; yaw, flip: radians a second it spins and flips by hand in
+    // the air; charge: the most seconds of crouch a held jump takes (a longer crouch, a bigger spring: up to `more` ×);
+    // clean: how far off a whole turn (radians) a landing may be and be stomped.
+    const HAND = { back: 4, speed: 7, want: 0.45, yaw: 7.5, flip: 6.3, charge: 0.6, more: 0.55, clean: { yaw: 0.55, flip: 0.6 } };       // seconds hands-off before the lines are the riders' own again; metres a second a held key moves the lead across
 
     // cfg: { speed, tricks (0 to 2), wipeouts, friends (1 to 3), others (0 to 2), kinds: ['ski' | 'board', …] }
     function world(seed, cfg, o = {}) {
         const C = course(seed, o), random = rng(seed ^ 0x2F6E2B1);
         const W = { seed, course: C, rng: random, cfg: { ...cfg }, time: 0, riders: [], others: [], school: null, events: [], lastWipe: -30, nextId: 1,
-            ghosts: 0, group: { done: -1, phase: 'ride', timer: 0, swap: 20, wood: -1 }, hand: { idle: Infinity, active: false }, spawn: 4, creature: null, nextCreature: 25 + random() * 30 };
+            ghosts: 0, group: { done: -1, phase: 'ride', timer: 0, swap: 20, wood: -1 }, hand: { idle: Infinity, active: false, jump: false }, spawn: 4, creature: null, nextCreature: 25 + random() * 30 };
         const z = (o.z || 0) + 90;
         const starts = [[1, 0], [2, 13], [0, -12], [3, 25]];
         for (let i = 0; i <= 3; i++) {
@@ -774,6 +779,15 @@ const SkiLogic = (() => {
         if (vh > 1 && !r.pipe) { r.vx *= r.v / vh; r.vz *= r.v / vh; }
         const C = W.course, cfg = W.cfg, T = r.T = airtime(W, r), random = W.rng;
         if (r.role !== 'lead' && r.role !== 'friend') return;
+        // With a hand on the lead, the air is the hand's: it spins, flips and grabs as it is told (and a jump sent badly still goes wrong).
+        if (r === W.riders[0] && W.hand.active && r.forced !== 2 && !r.rail) {
+            // (Whatever the hand was already holding when it left the snow, carving or tucking into the jump, does nothing up
+            // there until it is let go: only what is pressed in the air spins or flips it.)
+            const h = W.hand.now || NONE;
+            r.trick = { manual: true, T, yaw: 0, flip: 0, yr: 0, fr: 0, grabbed: 0, step: r.kind === 'board' ? Math.PI : TAU, was: { yaw: Math.sign(h.steer || 0), flip: Math.sign((h.tuck || 0) - (h.brake || 0)) } };
+            r.forced = 0;
+            return;
+        }
         const s = C.find(r.z + r.vz * T), open = s.T.open || s.type === 'park' || s.type === 'cliff';
         const want = r.pipe ? 0.8 : r.forced ? 1 : clamp(0.3 + 0.55 * cfg.tricks, 0, 1);
         if (T < 0.4 || cfg.tricks <= 0 && !r.forced || random() > want) { r.forced = 0; return; }
@@ -813,13 +827,31 @@ const SkiLogic = (() => {
         r.c = r.u - r.a * wave(r.phase);
         W.events.push({ type: 'land', id: r.id, x: r.x, y: g, z: r.z, power: clamp(impact / 8, 0.15, 1.5) * (r.airT > 0.25 ? 1 : 0.3) });
         const k = r.trick;
-        if (k) {
+        if (k && k.manual) {
+            // Stomped, if it is all but round: within HAND.clean of a whole turn (a half one on a board, which rides away switch).
+            const yawOff = k.yaw - k.step * Math.round(k.yaw / k.step), flipOff = k.flip - TAU * Math.round(k.flip / TAU);
+            const clean = Math.abs(yawOff) < HAND.clean.yaw && Math.abs(flipOff) < HAND.clean.flip, name = trickName(k);
+            const down = !clean && W.cfg.wipeouts && !r.pipe;
+            if (name) W.events.push({ type: 'stomp', id: r.id, name, clean, down });
+            r.trick = null;
+            if (down) { tumble(W, r); return; }
+            if (Math.round(k.yaw / Math.PI) % 2) r.sw = !r.sw;
+        } else if (k) {
             if (k.wipe) { r.trick = null; tumble(W, r); return; }
             if (k.yaw && k.half) r.sw = !r.sw;
             r.trick = null;
         }
         r.spin[0] = r.spin[1] = r.spin[2] = 0;
         r.grab = r.spread = r.twist = 0;
+    }
+
+    // What a trick by hand is called: its flips, its spin in degrees, and a grab if one was held.
+    function trickName(k) {
+        const half = Math.round(Math.abs(k.yaw) / Math.PI), flips = Math.round(Math.abs(k.flip) / TAU), grab = k.grabbed > 0.25;
+        if (!half && !flips && !grab) return '';
+        const flip = flips ? `${['', '', 'double ', 'triple '][Math.min(3, flips)]}${k.flip > 0 ? 'front flip' : 'backflip'}` : '';
+        const name = [flip, half ? String(half * 180) : '', grab ? 'grab' : ''].filter(Boolean).join(' ');
+        return name[0].toUpperCase() + name.slice(1);
     }
 
     // Down in the snow: a tumble, a moment lying there, sitting up, shaking it off, and up.
@@ -980,7 +1012,7 @@ const SkiLogic = (() => {
         return { c: clamp(pref, best[0] + a, best[1] - a), a, wait };
     }
 
-    function riderStep(W, r, dt, list, steer) {
+    function riderStep(W, r, dt, list, steer, hand = null) {
         const C = W.course, cfg = W.cfg;
         if (r.fall) { fallStep(W, r, dt); return; }
         if (r.afoot) { afootStep(W, r, dt); return; }
@@ -998,8 +1030,11 @@ const SkiLogic = (() => {
             // Friends range ahead and behind, and wait when the lead is down.
             const gap = r.z - lead.z;
             V *= 1 - 0.55 * smooth(28, 70, gap) + 0.45 * smooth(28, 80, -gap);
-            if (lead.fall && gap > 12) { V *= 1 - smooth(14, 30, gap); idle = gap > 22; }
+            if ((lead.fall || lead.halt) && gap > 12) { V *= 1 - smooth(14, 30, gap); idle = gap > 22; }
         }
+        // Tucked by hand, the lead wants to run.
+        const ground = hand && !r.air ? hand : null;
+        if (ground) V *= 1 + HAND.want * clamp(ground.tuck || 0, 0, 1);
         let brake = false;
         const limit = v => { if (v < V) { V = Math.max(0, v); brake = true; } };
         // Friends pull up together at a hut, and at a lodge.
@@ -1032,6 +1067,10 @@ const SkiLogic = (() => {
             if (end !== null) { idle = true; limit(Math.sqrt(2 * 1.6 * Math.max(0, end - 50 - (r.id % 7) * 3.5 - r.z))); r.lane0 = (r.lane0 < 0 ? -1 : 1) * 0.98; if (r.v < 0.25) r.parked = true; }
         }
         if (r.parked) V = 0;
+        // Braking by hand: checked, and held on, pulled up to a stop (and the friends wait for it there).
+        const braked = ground ? clamp(ground.brake || 0, 0, 1) : 0;
+        if (braked > 0) { limit(V * (1 - braked)); if (braked > 0.6) idle = true; }
+        r.halt = braked > 0.6 && r.v < 1;
         r.want = !(idle || resting || r.parked);
         // Pulling up to a halt (not just easing off): at a hut, at the side, behind somebody who has stopped.
         const halting = r.parked || resting && brake || idle && (brake || V < 2) || brake && V < 2;
@@ -1044,12 +1083,14 @@ const SkiLogic = (() => {
         if (r === lead) {
             // A hand on it: the line moves across, within what is safe, and drifts back when let go.
             const reach = L.lane ? 0.9 : Math.max(0, wu - 0.6);
-            if (steer) r.manual = clamp(r.manual + steer * HAND.speed * dt, -reach - c, reach - c);
+            if (steer && !r.air) r.manual = clamp(r.manual + steer * HAND.speed * dt, -reach - c, reach - c);
             else if (!W.hand.active) r.manual *= Math.exp(-dt / 1.2);
             c += clamp(r.manual, -reach - c, reach - c);
             if (L.lane) c = clamp(c, L.c - 0.9, L.c + 0.9);
         }
         if (r.parked || resting && r.v < 3) a = 0;
+        // A tuck runs straight.
+        if (ground && ground.tuck) a = mix(a, Math.min(a, 0.35), clamp(ground.tuck, 0, 1));
         const inPipe = s.type === 'pipe' && t > 0.12 && t < 0.88 && group && !r.parked;
         if (!L.lane && !inPipe && !r.air) {
             const got = thread(W, r, c, a, wu, list, s.kickers, narrow);
@@ -1077,7 +1118,7 @@ const SkiLogic = (() => {
         r.scrub += (scrub / GRIP - r.scrub) * (1 - Math.exp(-dt / 0.15));
         if (r.v < 0.02) r.v = 0;
         r.stop += ((r.v < 1.2 ? 1 : 0) - r.stop) * (1 - Math.exp(-dt / 0.35));
-        r.tuck += (L.tuck - r.tuck) * (1 - Math.exp(-dt / 0.6));
+        r.tuck += (Math.max(L.tuck, ground ? clamp(ground.tuck || 0, 0, 1) : 0) - r.tuck) * (1 - Math.exp(-dt / (ground && ground.tuck ? 0.25 : 0.6)));
 
         // Down the mountain it makes only what its line leaves it: least while it is coming across.
         const vz = r.air ? r.vz : r.v / Math.hypot(1, dC + (inPipe ? 0 : r.a * TAU / lam * waveD(r.phase))), z = r.z + vz * dt, x0 = r.x, zWas = r.z;
@@ -1149,14 +1190,15 @@ const SkiLogic = (() => {
                 r.vu = -r.pipe * 0.55;
                 r.pipe = -r.pipe;
                 r.y += r.vy * dt;
-            } else if (r.pop && r.popT >= POP.load) {
-                // Down, and up: as much of a spring as legs have.
+            } else if (r.pop && r.popT >= POP.load && !(ground && ground.jump && r.popT < POP.load + HAND.charge)) {
+                // Down, and up: as much of a spring as legs have. (Held down by hand for longer, more of it: a deeper crouch.)
                 r.vx = dC * vz + clamp(r.vu, -2.5, 2.5);
                 r.vz = vz;
                 r.x = x; r.z = z; r.u = u; r.y = g;
+                const popT = r.popT;
                 r.forced = r.pop;
                 r.pop = r.popT = 0;
-                takeOff(W, r, rate + POP.vy);
+                takeOff(W, r, rate + POP.vy * (1 + HAND.more * clamp((popT - POP.load) / HAND.charge, 0, 1)));
             } else if (r.vyG - G * dt > rate + 1.2 && r.v > 3) {
                 // (The 1.2 m/s is what legs take up: over less than that they reach down and stay on the snow.)
                 r.vx = dC * vz + clamp(r.vu, -2.5, 2.5);     // squared up for the air
@@ -1293,7 +1335,18 @@ const SkiLogic = (() => {
         if (r.plantT >= PLANT.in && r.plantT < PLANT.T) r.reach += speed * dt;
         r.plant = edged && r.plantT < PLANT.T ? smooth(0, PLANT.in, r.plantT) * smooth(PLANT.T, PLANT.T - PLANT.out, r.plantT) * smooth(PLANT.far[1], PLANT.far[0], r.reach) : 0;
         const k = r.trick;
-        if (r.air && k) {
+        if (r.air && k && k.manual) {
+            // By hand: held, it spins (steer) and flips (tuck forward, brake back) at up to HAND.yaw and HAND.flip; let go, it
+            // goes on round to the next whole turn and stops there, spotting its landing. A held jump is a grab.
+            const h = hand || NONE, fresh = (axis, want) => { if (want && Math.sign(want) === k.was[axis]) return 0; k.was[axis] = 0; return want; };
+            [k.yaw, k.yr] = spinBy(k.yaw, k.yr, fresh('yaw', clamp((h.steer || 0) * 1.5, -1, 1)), HAND.yaw, k.step, dt);
+            [k.flip, k.fr] = spinBy(k.flip, k.fr, fresh('flip', clamp((h.tuck || 0) - (h.brake || 0), -1, 1)), HAND.flip, TAU, dt);
+            r.grab += ((h.jump ? 1 : 0) - r.grab) * (1 - Math.exp(-dt / 0.1));
+            if (r.grab > 0.6) k.grabbed += dt;
+            r.spin[0] = k.yaw;
+            r.spin[1] = k.flip;
+            r.spin[2] = r.spread = r.twist = 0;
+        } else if (r.air && k) {
             // Set spinning at the lip and spinning at one rate, but for the pull of a tuck in the middle; round before the snow comes up.
             const p = clamp(r.airT / k.T, 0, 1), q = Math.min(1, p / 0.92), e = (q - 0.3 / TAU * Math.sin(TAU * q)) * k.off, arc = Math.sin(Math.PI * p) ** 0.6;
             r.spin[0] = TAU * (k.yaw || 0) * k.sign * e;
@@ -1427,11 +1480,16 @@ const SkiLogic = (() => {
         a.slot = to;
     }
 
-    // One step of at most 1/60 s. input: { steer: -1 to 1 } while a hand is on it, else null.
+    // One step of at most 1/60 s. input: { steer, tuck, brake, jump } (see HAND) while a hand is on it, else null.
     function worldStep(W, dt, input) {
         const hand = W.hand;
         hand.idle = input ? 0 : hand.idle + dt;
         hand.active = hand.idle < HAND.back;
+        // A jump pressed (not held from before) is sent from the snow; held in the air, it is a grab.
+        const jump = !!(input && input.jump), lead = W.riders[0];
+        if (jump && !hand.jump && !lead.air) sendIt(W);
+        hand.jump = jump;
+        hand.now = input;
         W.time += dt;
         groupStep(W, dt);
         populate(W, dt);
@@ -1442,7 +1500,7 @@ const SkiLogic = (() => {
         for (const r of all) {
             const z0 = r.z, u0 = r.u;
             r.ghost = Math.max(0, (r.ghost || 0) - dt);
-            riderStep(W, r, dt, list, r === W.riders[0] && input ? clamp(input.steer || 0, -1, 1) : 0);
+            riderStep(W, r, dt, list, r === lead && input ? clamp(input.steer || 0, -1, 1) : 0, r === lead ? input : null);
             // The last word: nobody ends a step inside somebody else.
             // Held up for seconds by something that will not move: slip by it (it should never come to this).
             // (Four of them: setting off from a stop, the last of four abreast waits that long for room.)
@@ -1501,6 +1559,16 @@ const SkiLogic = (() => {
         if (r.air || r.fall || r.afoot || r.v < 4 || r.lane || s.T.single || r.parked) return false;
         r.pop = badly ? 2 : 1;
         return true;
+    }
+
+    const NONE = {};
+    // One axis of a trick by hand: [angle, rate] a step on. With `want` (-1 to 1) the rate comes round to want × max in about
+    // 0.12 s; without, it keeps going (at least 0.6 × max) to the next multiple of `step`, and stops there.
+    function spinBy(angle, rate, want, max, step, dt) {
+        if (want) { const r = rate + (want * max - rate) * (1 - Math.exp(-dt / 0.12)); return [angle + r * dt, r]; }
+        if (Math.abs(rate) < 1e-3) return [angle, 0];
+        const go = Math.sign(rate) * Math.max(Math.abs(rate), 0.6 * max), next = (go > 0 ? Math.floor(angle / step + 1e-9) + 1 : Math.ceil(angle / step - 1e-9) - 1) * step, to = angle + go * dt;
+        return (to - next) * go >= 0 ? [next, 0] : [to, go];
     }
 
     // ---- Camera ---------------------------------------------------------------------
@@ -1726,7 +1794,7 @@ const SkiLogic = (() => {
     return {
         clamp, smooth, mix, mix3, RAD, TAU, G, hash, rng,
         bake, pack, sample, TYPES, ORDER, CHUNK, SLOTS, PIPE, LODGE, APRES, slotU, win, kicker, course,
-        CRUISE, TRICKS, FALL, HAND, POP, GRIP, wave, world, rider, setFriends, hits, cuts, line, support, railEnds, airtime, tumble, riderStep, worldStep, worldAdvance, sendIt, obstacles,
+        CRUISE, TRICKS, FALL, HAND, POP, GRIP, wave, world, rider, setFriends, hits, cuts, line, support, railEnds, airtime, tumble, riderStep, worldStep, worldAdvance, sendIt, trickName, obstacles,
         CAMERAS, camera, cameraStep, nextJump, bodies, light, LIGHT, WEATHER, weatherStart, weatherStep, air,
     };
 })();

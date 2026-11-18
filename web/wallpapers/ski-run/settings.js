@@ -15,7 +15,7 @@
         { key: 'camera', label: 'Camera', type: 'select', options: [['follow', '🎿 Following behind'], ['front', '🤳 From in front'], ['diorama', '🦅 From on high'], ['auto', '🎬 The director decides']], help: 'The director follows, and cuts to the side of a jump, to the front, up high, or to a camera left by the piste' },
         { key: 'speed', label: 'Speed', type: 'range', min: 0.5, max: 1.6, step: 0.05, unit: '×', digits: 2, help: '1× is about 50 km/h on a groomed piste' },
         { key: 'steep', label: 'Steepness', type: 'range', min: 0.7, max: 1.4, step: 0.05, unit: '×', digits: 2, help: 'How fast the mountain falls away. Changing it starts a new mountain' },
-        { key: 'touch', label: 'Drag to carve, tap to jump', type: 'toggle', help: 'A drag moves the lead rider across the piste; A and D or the arrows do too. They take their own line again 4 seconds after you let go' },
+        { key: 'touch', label: 'Drag to ride, tap to jump', type: 'toggle', help: 'Drag across to carve, up to tuck, down to brake; tap to jump. In the air, drag to spin and flip and tap to grab. The keys do the same (arrows or WASD, J or Space). They ride on by themselves 4 seconds after you let go' },
         { group: '⛷️ The Lead Rider' },
         ...rider('lead', 'You'),
         { group: '👫 Friends' },

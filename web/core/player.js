@@ -280,7 +280,7 @@
         const opening = force ?? help.hidden;
         if (opening) {
             const entry = WP.entry(resolve(choice));
-            const names = { ArrowLeft: '←', ArrowRight: '→', ArrowUp: '↑', ArrowDown: '↓' };
+            const names = { ArrowLeft: '←', ArrowRight: '→', ArrowUp: '↑', ArrowDown: '↓', ' ': 'Space' };
             const row = (keys, text) => [WP.h('dt', {}, ...keys.flatMap((k, i) => [i ? ' ' : '', WP.h('kbd', {}, names[k] || k.toUpperCase())])), WP.h('dd', {}, text)];
             help.replaceChildren(
                 WP.h('h2', {}, 'Keys'),

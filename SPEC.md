@@ -5614,11 +5614,36 @@ their thousands cheap; without WebGL or without that, the 2D fallback runs.
   another), else the towers either side grow, half a metre at a time, up
   to 30 m. A lift that still cannot be hung is not built: 211 of the 224
   are, with as many towers as before (median 53 m apart).
-- **By hand.** `A`/`D`, the arrows or a drag move the lead's line across
-  (within the piste, or 0.9 m within a lane), eased back four seconds after
-  letting go. `J`, up or a tap pops a jump where they stand, after the
-  crouch (not in a lane or a narrow place, nor on foot at a lodge); Shift+`J` marks it to end in a heap. Nothing is saved.
-  Held keys work as Ice Patrol's do (§10.34).
+- **By hand** (owner, 2026-11-18: "some manual control over the rider; it
+  can be on rails, but some control would be great"). Still on its rails:
+  the lead keeps its line and gives way as ever, and the hand only bends
+  it. The logic takes `input` = { steer, tuck, brake, jump } (`HAND`):
+  - *Carve:* `A`/`D`, ←/→ or a drag across move the lead's line across
+    (within the piste, or 0.9 m within a lane), eased back four seconds
+    after letting go.
+  - *Tuck:* `W`, ↑ or a drag up. Straight running (swing to 0.35 m), a
+    tuck, and a wish to go 45% faster: about 20 m/s on a groomer where
+    it would cruise at 14.7.
+  - *Brake:* `S`, ↓ or a drag down. A tap checks speed (to 60% of its
+    pace); held for 1.2 s it is a full stop, a hockey stop with the skis
+    across the hill, and there it stands while held (the friends wait,
+    and nobody counts it as stuck). Let go and it sets off.
+  - *Jump:* `J`, Space or a tap, where they may (not in a lane or a narrow
+    place, nor on foot). Held, the crouch goes on up to 0.6 s more and the
+    spring grows to 1.55 times: 0.8 s of air becomes 1.27. Shift+`J`
+    still ends in a heap.
+  - *The air is the hand's* when a hand has been on the lead in the last
+    four seconds: no trick is picked for it. Steer spins it (7.5 rad/s),
+    tuck flips it forward and brake back (6.3 rad/s), a held jump (or a
+    tap) grabs. Let go, and it goes on round to the next whole turn and
+    stops there (a half turn on a board, which rides away switch). What
+    was already held when it left the snow does nothing up there until
+    let go. Landed within 0.55 rad of a whole turn (0.6 for a flip) it
+    is stomped and called out ("🤘 Backflip 360 grab"); short of that it
+    goes down in a heap, or with wipeouts off lands "just about".
+  - The first touch of a key or the screen says, once, what the hand can
+    do. Nothing is saved. Held keys work as Ice Patrol's do (§10.34); a
+    key forwarded by the player counts as held for 0.6 s.
 - **Cameras (`cameraStep`, pure):** behind (6.3 m back, 2.5 up), in front
   (9.5 m down the lead's own line, looking back), on high (15 m to the side
   that falls away, 17 up), and the director: follows, cuts to a camera by
@@ -5666,8 +5691,10 @@ their thousands cheap; without WebGL or without that, the 2D fallback runs.
   near in flat colour, trees as triangles, riders as blocks of their kit.
   It is what the smoke test times.
 
-**Tests.** Unit (`tools/ski-run.test.mjs`, 31; chairlifts clear of the
-snow on six mountains; the last thirteen are how
+**Tests.** Unit (`tools/ski-run.test.mjs`, 32; chairlifts clear of the
+snow on six mountains; a hand on the lead (tuck, a stop, a held jump,
+spins stomped and short, a flip with a grab, a board's 180, nothing from a
+key held into the jump, five minutes of a restless hand on two mountains); the last thirteen are how
 they hold themselves: into the turn and skis on a side-slope, lean against
 the force rebuilt from positions and never late, legs and angulation, skid
 and its sign, the stop, chest against skis, one pole plant an edge change,
@@ -5690,7 +5717,8 @@ huts; by hand; every camera keeps the lead in the lens; the mesh is the
 ground (to 2 cm at its vertices, 30 cm between them on the piste); models;
 sky and weather; settings; a cheap-and-clean source check. Smoke: the
 first frame; the 2D fallback in real time on Low and High, carved by hand,
-a jump sent and one botched, friends 1 to 3, each camera; the lodge (run
+a jump sent and one botched, `S` held to a stop, `J` held for a longer
+jump and a spin by hand called out, friends 1 to 3, each camera; the lodge (run
 on to it, three at the table, their skis in the snow, the director's shot
 and the one from behind, and away again); night, snow, fog and the keys; a
 phone.
