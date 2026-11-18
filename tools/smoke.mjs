@@ -2593,6 +2593,35 @@ const STAGE_CHECKS = {
             }
             return true;
         }],
+        ['at the grand lodge they pull in, leave their skis in the snow, walk up to a table on the terrace and sit over a drink; the director shows the lodge; then they are away again', async () => {
+            if (!await stageWith('ski-run', { configVersion: 1, sections: ['groomer', 'lodge'], others: 0, time: 'day', weather: 'clear', camera: 'auto' }, '&seed=7')) return record('not ready');
+            await sleep(500);
+            // On down the mountain to the first lodge, until all three are at the table; then the land about them afresh.
+            const at = await evaluate(`(m => { const W = m.world; let i = 0; for (; i < 30000 && !W.riders.every(r => r.afoot && r.afoot.seated); i++) { SkiLogic.worldStep(W, 1 / 60, null); W.events.length = 0; }
+                m.trails.clear(); m.cam = SkiLogic.camera(); m.kc = null; const s = W.course.find(W.riders[0].z), l = W.course.lodge(s);
+                return { steps: i, type: s.type, phase: W.group.phase, seated: W.riders.filter(r => r.afoot && r.afoot.seated).length, gear: W.riders.filter(r => r.afoot && r.afoot.gear).length,
+                    deck: Math.max(...W.riders.map(r => Math.abs(r.y - l.y - SkiLogic.LODGE.deck))), pad: Math.abs(W.course.height(l.x, l.z) - l.y) }; })(WP.stage.manager)`);
+            if (at.type !== 'lodge' || at.phase !== 'apres' || at.seated !== 3 || at.gear !== 3 || at.deck > 0.01 || at.pad > 0.01) record(`at the lodge: ${JSON.stringify(at)}`);
+            await sleep(3000);
+            const view = await evaluate('(m => ({ flat: m.flat, shot: m.cam.shot, lodges: m.lodges.length, moving: m.moving.n / 3, tracks: m.trails.get(m.world.riders[0].id)?.pts.length || 0 }))(WP.stage.manager)');
+            if (view.shot !== 'lodge' || view.lodges < 1 || view.tracks > 2) record(`the view of the lodge: ${JSON.stringify(view)}`);
+            // With WebGL: the three at their table and thirteen more about the terrace, as triangles.
+            if (!view.flat && view.moving < 3000) record(`the terrace: ${JSON.stringify(view)}`);
+            if (!await waitFor(async () => await evaluate(DRAWN) >= 30, 8000)) record('barely drawn');
+            await shoot('ski-run-lodge');
+            await evaluate("WP.stage.manager.config.camera = 'follow'");
+            await sleep(2500);
+            const behind = await evaluate('(m => ({ shot: m.cam.shot, seated: m.world.riders.filter(r => r.afoot && r.afoot.seated).length }))(WP.stage.manager)');
+            if (behind.shot !== 'follow' || behind.seated !== 3) record(`from behind the lead at the table: ${JSON.stringify(behind)}`);
+            // (On a slow renderer the wallpaper's own watch on the GPU resizes the canvas, which is blank until its next frame.)
+            if (!await waitFor(async () => await evaluate(DRAWN) >= 30, 8000)) record('from behind the lead at the table: barely drawn');
+            await shoot('ski-run-lodge-follow');
+            // And away: back down the steps, into their skis, and off down the hill.
+            const away = await evaluate(`(m => { const W = m.world; let i = 0; for (; i < 6000 && !(W.group.phase === 'ride' && W.riders.every(r => !r.afoot && r.v > 5)); i++) { SkiLogic.worldStep(W, 1 / 60, null); W.events.length = 0; }
+                return { steps: i, afoot: W.riders.filter(r => r.afoot).length, v: W.riders[0].v, ghosts: W.ghosts }; })(WP.stage.manager)`);
+            if (away.steps >= 6000 || away.afoot || away.ghosts) record(`away from the lodge: ${JSON.stringify(away)}`);
+            return at.seated === 3;
+        }],
         ['night lights the floodlights and the stars; snow closes in; fog rolls through; T and X step and save', async () => {
             if (!await stageWith('ski-run', { configVersion: 1, time: 'day', weather: 'clear' }, '&seed=7')) return record('midday: not ready');
             await sleep(1500);

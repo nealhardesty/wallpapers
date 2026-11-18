@@ -307,8 +307,12 @@ three friends, on skis or boards, go down a mountain that is made as they
 go: wide groomed corduroy, deep powder with pillows to pop off, glades with
 lanes between snow-laden trees, a half-pipe ridden wall to wall, a terrain
 park with three kickers and a line of rails, rollers, a frozen lake, a cliff
-to drop (or ski round), a narrow gully, a cat track under a chairlift, and a
-hut with smoke in its chimney where everyone pulls up for a moment. Each
+to drop (or ski round), a narrow gully, a cat track under a chairlift, a
+hut with smoke in its chimney where everyone pulls up for a moment, and now
+and then a grand lodge, where they step out of their skis, walk up to a
+table on the terrace and sit over a drink before setting off again. The
+hill is what moves them: they pick up speed in the fall line and scrub it
+off across, glide out slower over the flat lake, and take time to stop. Each
 takes their own line, leaves tracks that stay on the slope, throws spray in
 the turns, and does what the ground offers: grabs, spread eagles, spins,
 a backflip off the big kicker. Now and then a landing goes wrong: a

@@ -23,7 +23,7 @@ WP.defaults('ski-run', {
     wipeouts: true,
     others: 1,                 // × strangers and ski schools on the pistes
     wildlife: true,            // a hare or a fox across the piste, an eagle over the valley
-    sections: ['groomer', 'powder', 'glade', 'pipe', 'park', 'rollers', 'lake', 'cliff', 'gully', 'cattrack', 'hut'],
+    sections: ['groomer', 'powder', 'glade', 'pipe', 'park', 'rollers', 'lake', 'cliff', 'gully', 'cattrack', 'hut', 'lodge'],
     time: 'cycle',             // cycle, clock, dawn, day, dusk, night
     dayMinutes: 20,            // a full day and night, in 'cycle'
     weather: 'auto',           // auto, clear, flurries, snow, fog

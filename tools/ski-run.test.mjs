@@ -130,7 +130,7 @@ test('trees: thick by the piste, none on it, none in a lane, none under a lift; 
 
 // Twenty minutes down a mountain, watching everything.
 function ski(seed, minutes, cfg = CFG, hz = 60, each = null, land = {}) {
-    const W = L.world(seed, cfg, land), C = W.course, stats = { tricks: new Set(), wipes: 0, lands: 0, minPair: 9, minTree: 9, under: 0, off: 0, types: new Set(), maxLift: 0, flown: 0 };
+    const W = L.world(seed, cfg, land), C = W.course, stats = { tricks: new Set(), wipes: 0, lands: 0, minPair: 9, minAfoot: 9, minTree: 9, under: 0, off: 0, types: new Set(), maxLift: 0, flown: 0 };
     const cache = new Map();
     const treesOf = k => { let t = cache.get(k); if (!t) { t = C.trees(k); cache.set(k, t); if (cache.size > 30) cache.delete(cache.keys().next().value); } return t; };
     for (let i = 0; i < minutes * 60 * hz; i++) {
@@ -145,7 +145,9 @@ function ski(seed, minutes, cfg = CFG, hz = 60, each = null, land = {}) {
             for (let b = a + 1; b < all.length; b++) {
                 const o = all[b];
                 if ((r.role === 'kid' || r.role === 'school') && (o.role === 'kid' || o.role === 'school')) continue;
-                stats.minPair = Math.min(stats.minPair, Math.hypot(r.x - o.x, r.z - o.z, r.y - o.y));
+                // On foot at a lodge they walk and sit closer than they ski.
+                if (r.afoot && o.afoot) stats.minAfoot = Math.min(stats.minAfoot, Math.hypot(r.x - o.x, r.z - o.z, r.y - o.y));
+                else stats.minPair = Math.min(stats.minPair, Math.hypot(r.x - o.x, r.z - o.z, r.y - o.y));
             }
             if (a >= W.riders.length) continue;
             const k = Math.floor(r.z / L.CHUNK), s = C.find(r.z);
@@ -154,7 +156,7 @@ function ski(seed, minutes, cfg = CFG, hz = 60, each = null, land = {}) {
                 for (let j = 0; j < t.n; j++) if (r.y - (t.y + t.data[j * 8 + 1]) < t.data[j * 8 + 3]) stats.minTree = Math.min(stats.minTree, Math.hypot(t.x + t.data[j * 8] - r.x, t.z + t.data[j * 8 + 2] - r.z) - t.data[j * 8 + 7]);
             }
             // On the piste, or on a lane through the trees (or up a gully's wall, or a pipe's).
-            if (Math.abs(r.u) > C.width(r.z) + 0.3 && !r.lane && !s.T.single) stats.off++;
+            if (Math.abs(r.u) > C.width(r.z) + 0.3 && !r.lane && !s.T.single && !r.afoot) stats.off++;
             if (a === 0) stats.types.add(s.type);
             if (r.air && r.lift > 1) stats.flown++;
         }
@@ -199,15 +201,19 @@ test('jumps land, tricks finish, and a wipeout ends with the rider up and skiing
         if (r.fall) { down++; got = true; } else { if (got) falls++; got = false; }
         if (r.air && r.trick) assert.ok(r.trick.T >= 0.4 && r.trick.T < 4);
     }
-    assert.ok(airs > 20, `${airs} airs in 12 minutes`);
+    assert.ok(airs > 12, `${airs} airs in 12 minutes`);
     assert.ok(longest < 60 * 3, `in the air for ${(longest / 60).toFixed(1)} s`);
     assert.ok(down < 0.25 * 12 * 3600, 'on the ground most of the time');
     // Sent, and sent badly.
-    const calm = () => { for (let i = 0; i < 600 && (r.air || r.fall || r.lane || W.course.find(r.z).T.single || r.v < 6); i++) L.worldStep(W, 1 / 60, null); };
+    const calm = () => { for (let i = 0; i < 4800 && (r.air || r.fall || r.afoot || r.lane || W.course.find(r.z).T.single || r.v < 6); i++) L.worldStep(W, 1 / 60, null); };
     calm();
     assert.equal(L.sendIt(W, false), true);
-    L.worldStep(W, 1 / 60, null);
-    assert.ok(r.air && r.vy > 1 && r.T > 0.7, 'sent');
+    // Down first, then up: a crouch of a fifth of a second, and no more spring than legs have.
+    let crouch = 0;
+    for (let i = 0; i < 30 && !r.air; i++) { L.worldStep(W, 1 / 60, null); crouch = Math.max(crouch, r.load); }
+    const under = (W.course.height(r.x + r.vx / 60, r.z + r.vz / 60) - W.course.height(r.x, r.z)) * 60;
+    assert.ok(r.air && crouch > 0.5 && r.airT < 0.05, 'sent');
+    assert.ok(r.vy - under > 3 && r.vy - under < 4.6 && r.T > 0.6 && r.T < 1.2, `sent ${(r.vy - under).toFixed(1)} m/s off the snow, for ${r.T.toFixed(2)} s`);
     for (let i = 0; i < 400 && r.air; i++) L.worldStep(W, 1 / 60, null);
     assert.ok(!r.air && !r.fall, 'landed it');
     calm();
@@ -224,6 +230,148 @@ test('jumps land, tricks finish, and a wipeout ends with the rider up and skiing
     assert.equal(tame.stats.wipes, 0);
     assert.equal(tame.stats.tricks.size, 0);
     assert.ok(tame.stats.flown > 100);
+});
+
+test('the hill moves them: slower across a turn and over flat ice, no harder on the brakes than edges hold, spun from the lip, slow at a pipe\'s lip', () => {
+    // On groomed pistes: down the mountain fastest at a turn's apex (in the fall line), slowest coming across it.
+    {
+        const W = L.world(3, { ...CFG, others: 0, wildlife: false, wipeouts: false, tricks: 0 }, { sections: ['groomer', 'rollers'] }), r = W.riders[0];
+        const apex = [0, 0], across = [0, 0];
+        let hardest = 0, was = r.v, calm = 0;
+        for (let i = 0; i < 6 * 3600; i++) {
+            L.worldStep(W, 1 / 60, null);
+            W.events.length = 0;
+            const on = !r.air && !r.fall && !r.lane;
+            if (on && r.a > 2.5 && W.course.find(r.z).type === 'groomer') {
+                const sin = Math.abs(Math.sin(r.phase));
+                if (sin > 0.95) { apex[0] += r.vz; apex[1]++; } else if (sin < 0.3) { across[0] += r.vz; across[1]++; }
+            }
+            // Two steps on the snow together, and not the step somebody was in the way: no more braking than an edge holds.
+            calm = on ? calm + 1 : 0;
+            if (calm > 2 && r.v > 1) hardest = Math.max(hardest, (was - r.v) * 60);
+            was = r.v;
+        }
+        assert.ok(apex[1] > 500 && across[1] > 500, `${apex[1]} steps at an apex, ${across[1]} across`);
+        assert.ok(apex[0] / apex[1] > 1.05 * across[0] / across[1], `down the hill at ${(apex[0] / apex[1]).toFixed(1)} m/s at the apex, ${(across[0] / across[1]).toFixed(1)} across`);
+        assert.ok(hardest < L.GRIP * 1.05, `braked at ${hardest.toFixed(1)} m/s²`);
+    }
+    // Flat ice gives nothing back: across a lake they lose speed, and skate rather than stop.
+    {
+        const W = L.world(5, { ...CFG, others: 0, wildlife: false, wipeouts: false }, { sections: ['powder', 'lake'] }), r = W.riders[0];
+        const into = [], out = [];
+        let slowest = 99;
+        for (let i = 0; i < 6 * 3600; i++) {
+            L.worldStep(W, 1 / 60, null);
+            W.events.length = 0;
+            const s = W.course.find(r.z), t = (r.z - s.z0) / s.len;
+            if (s.type !== 'lake' || r.fall) continue;
+            if (t > 0.2 && t < 0.25) into.push(r.v);
+            if (t > 0.9 && t < 0.95) out.push(r.v);
+            slowest = Math.min(slowest, r.v);
+        }
+        const mean = a => a.reduce((x, y) => x + y, 0) / a.length;
+        assert.ok(into.length > 50 && out.length > 50);
+        assert.ok(mean(out) < mean(into) - 1, `on to the lake at ${mean(into).toFixed(1)} m/s, off it at ${mean(out).toFixed(1)}`);
+        assert.ok(slowest > 4, `down to ${slowest.toFixed(1)} m/s on the lake`);
+    }
+    // A spin is going from the lip, at much the rate it will keep, and is round before the snow comes up.
+    {
+        const W = L.world(31, { ...CFG, wipeouts: false, tricks: 2 }, { sections: ['park', 'groomer'] }), r = W.riders[0];
+        let spins = 0;
+        for (let i = 0; i < 10 * 3600; i++) {
+            L.worldStep(W, 1 / 60, null);
+            W.events.length = 0;
+            const k = r.trick;
+            if (!r.air || !k || !k.yaw) continue;
+            const p = r.airT / k.T, turned = Math.abs(r.spin[0]) / (L.TAU * k.yaw);
+            if (p > 0.2 && p < 0.25) { spins++; assert.ok(turned > 0.12 && turned < 0.3, `${(turned * 100).toFixed(0)}% round a ${k.name} a fifth of the way through the air`); }
+            if (p > 0.93 && p < 1) assert.ok(turned > 0.999, `a ${k.name} still turning at the landing`);
+        }
+        assert.ok(spins > 20, `${spins} steps of spin seen`);
+    }
+    // In the pipe, speed is the wall's to take: quick across the flat, slow at the lip, and off it no higher than that allows.
+    {
+        const W = L.world(2, { ...CFG, others: 0, wildlife: false, wipeouts: false }, { sections: ['groomer', 'pipe'] }), r = W.riders[0];
+        const flat = [0, 0], lip = [0, 0];
+        let highest = 0;
+        for (let i = 0; i < 6 * 3600; i++) {
+            L.worldStep(W, 1 / 60, null);
+            W.events.length = 0;
+            const s = W.course.find(r.z);
+            if (s.type !== 'pipe' || !r.pipe) continue;
+            if (r.air) { highest = Math.max(highest, r.lift); continue; }
+            if (Math.abs(r.u) < 2) { flat[0] += Math.abs(r.vu); flat[1]++; } else if (Math.abs(r.u) > s.W - 1.2) { lip[0] += Math.abs(r.vu); lip[1]++; }
+        }
+        assert.ok(flat[1] > 100 && lip[1] > 100, `${flat[1]} steps on the flat, ${lip[1]} by the lip`);
+        assert.ok(flat[0] / flat[1] > 1.6 * lip[0] / lip[1], `across the flat at ${(flat[0] / flat[1]).toFixed(1)} m/s, by the lip at ${(lip[0] / lip[1]).toFixed(1)}`);
+        assert.ok(highest > 2 && highest < L.PIPE.wall + 2.4, `${highest.toFixed(1)} m over the pipe's floor`);
+    }
+});
+
+test('the grand lodge: level ground, no trees in it, never after a hut; they pull in, sit over a drink at their own places, and ski away', () => {
+    // On a mountain of everything, a lodge comes up now and then, and never straight after (or before) a hut.
+    const all = L.course(7);
+    all.find(120000);
+    const kinds = all.sections.map(s => s.type), lodges = kinds.filter(t => t === 'lodge').length;
+    assert.ok(lodges >= 4 && lodges < 0.1 * kinds.length, `${lodges} lodges in ${kinds.length} sections`);
+    for (let i = 1; i < all.sections.length; i++) assert.ok(!(all.sections[i].T.stop && (all.sections[i - 1].T.stop || i < 3)), 'two stops in a row, or one at the very top');
+    // Where it stands: off the piste, on a level pad as wide as the building and its terrace, and no tree within it.
+    for (const s of all.sections.filter(q => q.type === 'lodge').slice(0, 4)) {
+        const l = all.lodge(s);
+        assert.ok(Math.abs(l.x - all.centre(l.z)) > all.width(l.z) + 20);
+        for (const [lx, lz] of [[0, 0], [-13, -5.5], [13, -5.5], [-13, 14], [13, 14], [0, 16.6], [5.5, 11]]) { const p = l.at(lx, 0, lz); assert.ok(Math.abs(all.height(p[0], p[2]) - l.y) < 0.02, `the pad is ${(all.height(p[0], p[2]) - l.y).toFixed(2)} m off level at (${lx}, ${lz})`); }
+        // The piste itself is as it was: its edge is nowhere near the pad.
+        for (const dz of [-14, 0, 14]) { const x = all.centre(l.z + dz) + l.side * (all.width(l.z + dz) - 0.5); assert.ok(Math.abs(all.height(x, l.z + dz) - all.elev(l.z + dz)) < 0.5); }
+        for (const k of [Math.floor(l.z / L.CHUNK) - 1, Math.floor(l.z / L.CHUNK), Math.floor(l.z / L.CHUNK) + 1]) {
+            const t = all.trees(k);
+            for (let j = 0; j < t.n; j++) {
+                const dx = (t.x + t.data[j * 8] - l.x) * -l.side, dz = (t.z + t.data[j * 8 + 2] - l.z) * l.side;      // the lodge's own lz and lx
+                assert.ok(!(Math.abs(dz) < 15.5 && dx > -8 && dx < L.LODGE.out), `a tree in the lodge at (${dz.toFixed(1)}, ${dx.toFixed(1)})`);
+            }
+        }
+    }
+    // Eight minutes of groomers and lodges: at each they go in, sit, and come out.
+    const seats = new Set(), shots = new Set(), cam = L.camera();
+    let visits = 0, was = 'ride', sat = 0, walked = 0;
+    const { W, stats } = ski(13, 8, CFG, 60, world => {
+        const g = world.group, C = world.course, lead = world.riders[0];
+        if (g.phase === 'apres' && was !== 'apres') visits++;
+        was = g.phase;
+        L.cameraStep(cam, world, 1 / 60, 'auto');
+        shots.add(cam.shot);
+        for (const r of world.riders) {
+            const a = r.afoot;
+            if (!a) continue;
+            assert.equal(g.phase, 'apres');
+            assert.ok(r.v === 0 && !L.sendIt(world), 'on foot, and no jumping');
+            const l = C.lodge(C.find(lead.z));
+            if (a.seated) {
+                sat++;
+                const i = world.riders.indexOf(r), [lx, lz] = L.LODGE.seat(i), p = l.at(lx, L.LODGE.deck, lz);
+                assert.ok(Math.hypot(r.x - p[0], r.y - p[1], r.z - p[2]) < 0.01, 'not in its own place at the table');
+                seats.add(i);
+                assert.ok(a.gear, 'sat down with its skis on');
+            } else if (a.walk) walked++;
+        }
+        if (cam.shot === 'lodge') {
+            // The whole party is in the picture.
+            for (const r of world.riders.filter(q => q.afoot)) {
+                const dx = r.x - cam.x, dy = r.y + 1 - cam.y, dz = r.z - cam.z, dist = Math.hypot(dx, dy, dz);
+                const off = Math.acos(Math.min(1, (dx * Math.sin(cam.heading) * Math.cos(cam.pitch) + dy * Math.sin(cam.pitch) + dz * Math.cos(cam.heading) * Math.cos(cam.pitch)) / dist));
+                assert.ok(off < Math.atan(cam.tan) * 1.25 && dist > 6, `a drinker ${off.toFixed(2)} rad off the lens's middle, ${dist.toFixed(0)} m away`);
+            }
+        }
+    }, { sections: ['groomer', 'lodge'] });
+    assert.ok(visits >= 3, `${visits} visits in eight minutes`);
+    assert.deepEqual([...seats].sort(), [0, 1, 2, 3]);
+    assert.ok(sat > visits * 4 * 60 * (L.APRES.sit - 1) * 0.8 && walked > visits * 4 * 60 * L.APRES.walk, `sat for ${sat} steps, walked for ${walked}`);
+    assert.ok(shots.has('lodge'), `the director showed ${[...shots]}`);
+    assert.equal(stats.under, 0, 'under the snow');
+    assert.equal(stats.off, 0, 'off the piste on skis');
+    assert.equal(W.ghosts, 0, 'somebody got stuck');
+    assert.ok(stats.minPair > 0.9, `two riders ${stats.minPair.toFixed(2)} m apart`);
+    assert.ok(stats.minAfoot > 0.2, `two on foot ${stats.minAfoot.toFixed(2)} m apart`);
+    assert.ok(W.riders[0].z > 2600, `only ${W.riders[0].z.toFixed(0)} m in eight minutes of lodges`);
 });
 
 test('the same mountain covered at 10, 30, 60 and 120 frames a second', () => {
@@ -364,7 +512,7 @@ test('models: trees in three levels of detail, riders of every kind in every pos
         assert.ok(wide < (kind === 5 ? 1.3 : 0.45), `tree ${kind} is ${wide} wide`);
     }
     const soup = new SkiSoup(), st = new SkiStack();
-    const poses = [{}, { lean: 1, crouch: 1 }, { lean: -1 }, { tuck: 1 }, { air: 1, grab: 1, spin: [3, 1, 0.4] }, { air: 1, spread: 1 }, { stop: 1 }, { sit: 1 }, { plough: 1, size: 0.65 }, { stop: 1, wave: 1 },
+    const poses = [{}, { lean: 1, crouch: 1 }, { lean: -1 }, { tuck: 1 }, { air: 1, grab: 1, spin: [3, 1, 0.4] }, { air: 1, spread: 1 }, { stop: 1 }, { sit: 1 }, { plough: 1, size: 0.65 }, { stop: 1, wave: 1 }, { stop: 1, walk: 1.3 }, { stop: 1, sit: 1, drink: 0.9 }, { stop: 1, sit: 1, drink: 0 },
         ...['tumble', 'lie', 'sit', 'shake', 'rise'].map(phase => ({ fall: { phase, t: 0.3, roll: 2, turn: 1 } }))];
     for (const kind of ['ski', 'board', 'none']) {
         for (const woman of [true, false]) {
@@ -375,6 +523,26 @@ test('models: trees in three levels of detail, riders of every kind in every pos
                 for (let i = 0; i < soup.n * 6; i += 6) assert.ok(Number.isFinite(soup.F[i]) && Math.abs(soup.F[i]) < 3 && soup.F[i + 1] > -1.6 && soup.F[i + 1] < 3.2, `${kind}, ${JSON.stringify(pose)}: a vertex at ${soup.F[i]}, ${soup.F[i + 1]}`);
             }
         }
+    }
+    // A mug in the hand of anyone with a drink, close up and far off; skis and a board left standing in the snow.
+    for (const lo of [false, true]) {
+        const count = pose => { soup.clear(); M.figure(soup, st, 0, 0, 0, M.look('none', true, 'ember', 0.4), { stop: 1, sit: 1, lo, ...pose }); return soup.n; };
+        assert.ok(count({ drink: 0.5 }) > count({}), 'no mug');
+    }
+    for (const kind of ['ski', 'board']) {
+        soup.clear();
+        M.gear(soup, st, 0, 0, 0, 0.4, M.look(kind, true, 'ember', 0.4));
+        let top = 0, low = 9;
+        for (let i = 0; i < soup.n * 6; i += 6) { top = Math.max(top, soup.F[i + 1]); low = Math.min(low, soup.F[i + 1]); }
+        assert.ok(soup.n > 30 && top > 1.2 && top < 1.9 && low > -0.25 && low < 0.1, `${kind} stood in the snow from ${low.toFixed(2)} to ${top.toFixed(2)} m`);
+    }
+    // The grand lodge: grand, and not a hut's worth of triangles more than it needs.
+    {
+        const l = M.lodge(), F = l.F;
+        let top = 0, wide = 0, front = 0;
+        for (let i = 0; i < l.n * 6; i += 6) { top = Math.max(top, F[i + 1]); wide = Math.max(wide, Math.abs(F[i])); front = Math.max(front, F[i + 2]); }
+        assert.ok(l.n / 3 > 2000 && l.n / 3 < 6000, `the lodge is ${l.n / 3} triangles`);
+        assert.ok(top > 15 && top < 19 && wide > 13 && wide < 16 && front > L.LODGE.steps[1] && front < L.LODGE.out - 5, `the lodge: ${top} tall, ${wide} to each side, ${front} to the front`);
     }
     assert.equal(M.KIT_ORDER.length, 8);
     for (const make of [M.hut, M.station, M.chair, M.mast, M.groomer, () => M.tower(9.5), () => M.pole(1), () => M.flag(0), () => M.rail(0), () => M.rail(1), () => M.arch(26), () => M.sign(2)]) assert.ok(make().n > 20);

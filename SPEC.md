@@ -162,7 +162,7 @@ Added for Christmas, drawn in code (designs in §10.27–§10.30):
 | `pocket-hockey` | hockey-logic.js, hockey-art.js, pocket-hockey.js | ~2.4k lines | No network; an invented league of eight clubs and the game in progress kept in `host.storage` (§10.35); the league, the 60 Hz game (physics, steering, signature moves) and the seasons pure and seeded (`HockeyLogic`), unit-tested; top-down pixel art at its own resolution, scaled up pixelated, with its own 5×7 font; interactive (a tap throws something on the ice, or starts a wave); keys N, G, B, X, W |
 | `baseball` | baseball-logic.js, baseball-league.js, baseball-talk.js, baseball-art.js, baseball.js | ~2.4k lines | No network; a league of eight invented clubs kept in `host.storage` (§10.37); every pitch, ball in play and box score pure and seeded (`BaseballLogic`, `BaseballLeague`), unit-tested; 16-bit pixel art at its own resolution with its own lettering, scaled up pixelated; interactive (a tap starts a wave); day, dusk and night by `host.now()`; keys N, S |
 | `wayfarer` | way-logic.js, way-models.js, way-detail.js, way-actors.js, way-people.js, way-companions.js, way-gl.js, wayfarer.js | ~6.6k lines | The second on WebGL (§10.38): an endless road through nine kinds of country (which of them is a setting) with villages, walled cities, grand cities under a castle and landmarks along it, all a pure function of a seed (`WayLogic`), unit-tested; every shape modelled in code as triangles (`WayModels`, `WayActors`); built a 64 m square at a time as the walk reaches it, finer near the traveller; four cameras, one of them an orbit a drag turns; nine travellers (one changes shape, one goes unseen) and 46 companions, six at once, the named cats among them; day, night, weather and seasons; a flat 2D fallback without WebGL; its own watch on the GPU; interactive (drag to look around, or to turn the orbit); keys V, T, X, N, G |
-| `ski-run` | ski-logic.js, ski-models.js, ski-gl.js, ski-run.js | ~3.7k lines | The third on WebGL (§10.39), with instancing: an endless ski run stitched from eleven kinds of section, one `height(x, z)` for the riders and the mesh (`SkiLogic`), riders, tricks, wipeouts, cameras and a ski school all pure and unit-tested; trees, figures and props modelled in code (`SkiModels`); a flat 2D fallback without WebGL; its own watch on the GPU; interactive (carve by keys or a drag, tap to jump; the riders take it back after 4 s); keys A, D, arrows, J, V, T, X, G |
+| `ski-run` | ski-logic.js, ski-models.js, ski-gl.js, ski-run.js | ~4.1k lines | The third on WebGL (§10.39), with instancing: an endless ski run stitched from twelve kinds of section, one `height(x, z)` for the riders and the mesh (`SkiLogic`), riders moved by the hill (gravity, drag, the scrub of their edges), tricks, wipeouts, a stop for a drink at a grand lodge, cameras and a ski school all pure and unit-tested; trees, figures and props modelled in code (`SkiModels`); a flat 2D fallback without WebGL; its own watch on the GPU; interactive (carve by keys or a drag, tap to jump; the riders take it back after 4 s); keys A, D, arrows, J, V, T, X, G |
 
 About 1.7 MB of JavaScript in total. **Not imported:** links, weather, clocks,
 search/omniprompt, custom links, status bar, Docker/nginx, the homepage's
@@ -5449,8 +5449,9 @@ their thousands cheap; without WebGL or without that, the 2D fallback runs.
   but never doubles back, and `u = x - centre(z)` is how far across the run
   a thing is. It is stitched from sections picked by a seeded draw (never
   two alike in a row, never two narrow ones, never off the wide lake
-  straight into a narrow place): groomed piste, powder, glade, half-pipe,
-  park, rollers, frozen lake, cliff, gully, cat track, hut. Each has a
+  straight into a narrow place, never a hut and a lodge one after the
+  other): groomed piste, powder, glade, half-pipe, park, rollers, frozen
+  lake, cliff, gully, cat track, hut, grand lodge. Each has a
   length, a half-width, a grade, a drift and a wind; the grade, the drift
   and the width blend from the last section's over the first 40 to 110 m
   (in closed form, so elevation and centre are exact anywhere), and what a
@@ -5471,7 +5472,9 @@ their thousands cheap; without WebGL or without that, the 2D fallback runs.
 - **Riders (`worldStep`, pure).** Four lines abreast down the piste; the
   lead and each friend have one, and change now and then when well apart.
   A line is a middle and a swing: carved turns no harder than about a g, so
-  wide ones are long. In a glade the line is the slot's lane between the
+  wide ones are long, rounder the steeper the snow, and shaped as carved
+  arcs are (a third harmonic on the sine: longer at the apex, quicker from
+  edge to edge). In a glade the line is the slot's lane between the
   trees; in the pipe it is wall to wall, off the lip, a turn in the air and
   back down; in the gully up one bank and the other; on a cat track
   straight, in a tuck. Vertically they follow the snow until it falls away
@@ -5483,14 +5486,60 @@ their thousands cheap; without WebGL or without that, the 2D fallback runs.
   tumble, a moment lying there, sitting up, shaking it off and getting up.
   Friends range ahead and behind on a rubber band, wait when the lead is
   down, and all pull up abreast at a hut for five seconds.
+- **What moves them (owner, 2026-11-18: "the physics seem off").** Until
+  then speed was a number eased towards a target, whatever was underfoot.
+  Now a rider's speed along its path is the hill's: gravity down the snow
+  actually under it (so up a kicker's ramp costs speed, a roller's back
+  gives it, and nothing is made from nothing), less the snow's drag (more
+  in powder than on ice) and the air's (less in a tuck). What a rider wants
+  is still a pace for the section; all it can do about it is skate from a
+  standstill (to about 8 m/s) and scrub with its edges, hardest coming
+  across the hill and least in the fall line, and never more than 0.7 g
+  (`GRIP`), to give way or to stop as well. So they are slowest down the
+  mountain while crossing it and quickest at a turn's apex (it was the
+  other way round), they lose speed across the flat lake, and a stop takes
+  the room a stop takes. Speed is kept through the air and a landing keeps
+  what was along the snow. A line moves across the piste as a body can
+  (6 m/s² sideways, and room to stop), and the lean is taken from how hard
+  the rider is really turning, so a dodge or a held key leans as a swing
+  does. Legs take up 1.2 m/s of the snow falling away before a rider
+  leaves it: before, riders skittered airborne over powder 44% of the
+  time, unable to steer or slow; now 17%, and the pillows still throw
+  them. A spin is going from the lip at near the rate it keeps (a little
+  quicker in the middle, as a tuck does) and is round at 92% of the air;
+  it used to start from nothing and be fastest at touchdown. In the pipe
+  the wall takes speed back: pumped to 10.5 m/s across the flat, slowing
+  up the transition by the height climbed, and what is left at the lip
+  goes up (3.8 to 6.4 m/s); it used to cross at one speed and be thrown.
+  A jump by hand is a crouch of a fifth of a second and 4 m/s of spring
+  (it was 5.4 m/s at once). Knees fold over a crest and before a lip
+  (`absorb`, `load`), and scrubbing throws spray. A tumble slides further
+  where it is steep.
+- **The grand lodge (owner, 2026-11-18: "a proper grand lodge, not just a
+  hut; huts are cool too").** Its own kind of section, as often as a hut
+  (about one in 25 sections each). The building is 27 m by 12 on a stone
+  plinth, three floors, a great hall's gable of glass facing the piste,
+  dormers, balconies, two chimneys that smoke, and a terrace of tables in
+  front with a fire, a string of lamps, ski racks and thirteen people
+  about it; lit from inside at night. It stands 24 m off the piste's edge
+  on a level pad the ground is eased to (`height` again, so the mesh
+  agrees), with no tree in it. The friends draw over to its side of the
+  piste and pull up by the steps; whoever has arrived steps out of their
+  skis (left standing in the snow), walks up to a table (7.5 s), sits
+  over a mug for 16 s, and walks back. They are `afoot` for it: nothing
+  else moves them, a tap does not jump. The director shows the whole
+  lodge from out on the piste meanwhile; the camera behind stands on the
+  piste side and looks at it. Without WebGL it is a flat front of timber,
+  snow and glass.
 - **Room for each other.** Everything a rider must give way to (other
   riders' swings, a stopped stranger, the ski school as one, a creature) is
   a stretch across the piste; a rider threads the free stretch it is in or
   the nearest that will do, and holds back behind what is dead ahead. Coming
   up to a narrow place they go in line by the gaps between them. Nobody
   flies off the piste (the air only carries them down it), and no step ends
-  with one rider inside another. A rider held up for 2.5 s by something
-  that will not move slips by it; the tests require that never to happen.
+  with one rider inside another. A rider held up for 4 s by something
+  that will not move slips by it; the tests require that never to happen
+  (the last of four abreast setting off from a stop waits nearly that).
 - **Others.** Strangers ski the open pistes more slowly and stop at the
   side rather than ski what is not for them; a ski school is an instructor
   and five children on the instructor's own tracks; chairs go round each
@@ -5498,8 +5547,8 @@ their thousands cheap; without WebGL or without that, the 2D fallback runs.
   a hare or a fox crosses well ahead; an eagle turns over the valley.
 - **By hand.** `A`/`D`, the arrows or a drag move the lead's line across
   (within the piste, or 0.9 m within a lane), eased back four seconds after
-  letting go. `J`, up or a tap pops a jump where they stand (not in a lane
-  or a narrow place); Shift+`J` marks it to end in a heap. Nothing is saved.
+  letting go. `J`, up or a tap pops a jump where they stand, after the
+  crouch (not in a lane or a narrow place, nor on foot at a lodge); Shift+`J` marks it to end in a heap. Nothing is saved.
   Held keys work as Ice Patrol's do (§10.34).
 - **Cameras (`cameraStep`, pure):** behind (6.3 m back, 2.5 up), in front
   (9.5 m down the lead's own line, looking back), on high (15 m to the side
@@ -5548,26 +5597,38 @@ their thousands cheap; without WebGL or without that, the 2D fallback runs.
   near in flat colour, trees as triangles, riders as blocks of their kit.
   It is what the smoke test times.
 
-**Tests.** Unit (`tools/ski-run.test.mjs`, 15): the course always descends,
+**Tests.** Unit (`tools/ski-run.test.mjs`, 17): the course always descends,
 is continuous along and across, has every section kind, repeats from a
 seed; sections, lifts, the section mix and steepness; 3 × 10⁹ m from home;
 trees keep their distance; twenty minutes on each of three mountains with
 nobody under the snow, off the piste, within 0.2 m of a trunk or 0.9 m of
-anybody else, nobody stuck; jumps land, a sent jump and a botched one; the
+anybody else, nobody stuck; jumps land, a sent jump (its crouch, and no
+more spring than 4.6 m/s) and a botched one; the hill moves them (down the
+mountain 5% quicker at an apex than across, never braking past `GRIP`,
+slower off a lake than on to it, a spin 12 to 30% round a fifth of the way
+through the air and done before the landing, across a pipe's flat 1.6
+times the speed by its lip); the lodge (never beside a hut, a level pad
+with no tree in it, the piste untouched, each rider to their own place at
+the table and back, the director's shot with the whole party in it); the
 same distance at 10, 30, 60 and 120 fps; friends, strangers, the school,
 huts; by hand; every camera keeps the lead in the lens; the mesh is the
 ground (to 2 cm at its vertices, 30 cm between them on the piste); models;
 sky and weather; settings; a cheap-and-clean source check. Smoke: the
 first frame; the 2D fallback in real time on Low and High, carved by hand,
-a jump sent and one botched, friends 1 to 3, each camera; night, snow, fog
-and the keys; a phone.
+a jump sent and one botched, friends 1 to 3, each camera; the lodge (run
+on to it, three at the table, their skis in the snow, the director's shot
+and the one from behind, and away again); night, snow, fog and the keys; a
+phone.
 
 **Not verified.** It has only ever run on a software renderer (headless
 Chrome's SwiftShader), a third of a second to a second a frame: smoothness,
 frame rate, the GPU watch's thresholds, the tiers' real cost on a phone,
 the Mac saver and the Windows host are all unmeasured, and `make bench`
 means nothing for it here. A lost context is handled in code and not
-exercised. The look was judged from still frames only.
+exercised. The look was judged from still frames only: that goes for the
+2026-11-18 physics too, which was tuned by numbers (speeds and air by
+section, before and after) and never watched in motion, and for the walk
+to the lodge's table.
 
 **Not built:** signposts with run names (the signs carry a grade colour
 only); slalom gates; a groomer at work at night (one is parked by the hut);
