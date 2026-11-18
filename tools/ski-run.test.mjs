@@ -86,6 +86,42 @@ test('the course: no two sections alike in a row, lifts cross the run clear of t
     assert.ok(Number.isFinite(C.height(C.centre(39500), 39500)));
 });
 
+test('chairlifts: the chairs hang clear of the snow all the way, highest over the pistes; towers a real distance apart', () => {
+    // The lowest feet on a chair hang 4.3 m under the top of a tower's arm (0.3 m from the top to the cable, 4 m below it).
+    let lifts = 0, offLeast = Infinity, pisteLeast = Infinity, stationLeast = Infinity, tallest = 0, closest = Infinity;
+    for (const seed of [7, 11, 23, 31, 3, 13]) {
+        const C = L.course(seed);
+        C.find(60000);
+        assert.ok(C.lifts.length > 20, `seed ${seed}: ${C.lifts.length} lifts in 60 km`);
+        for (const lift of C.lifts) {
+            lifts++;
+            const tw = lift.towers, yaw = Math.atan2(lift.xb - lift.xa, lift.zb - lift.za), cy = Math.cos(yaw), sy = Math.sin(yaw);
+            for (let i = 1; i < tw.length; i++) {
+                const a = tw[i - 1], b = tw[i], len = Math.hypot(b.x - a.x, b.z - a.z);
+                closest = Math.min(closest, len);
+                tallest = Math.max(tallest, a.top, b.top);
+                for (let d = 0; d <= len; d += 1) {
+                    const f = d / len, x = a.x + (b.x - a.x) * f, z = a.z + (b.z - a.z) * f, feet = a.y + a.top + (b.y + b.top - a.y - a.top) * f - 4.3;
+                    const fromEnd = Math.min(Math.hypot(x - tw[0].x, z - tw[0].z), Math.hypot(x - tw[tw.length - 1].x, z - tw[tw.length - 1].z));
+                    for (const off of [-3.4, -2.45, -1.5, 1.5, 2.45, 3.4]) {
+                        const px = x + off * cy, pz = z - off * sy, room = feet - C.height(px, pz);
+                        if (fromEnd < 3) continue;          // inside the station, where the chairs go round its wheel
+                        if (fromEnd < 40) stationLeast = Math.min(stationLeast, room);
+                        else if (Math.abs(px - C.centre(pz)) < C.width(pz) + 2) pisteLeast = Math.min(pisteLeast, room);
+                        else offLeast = Math.min(offLeast, room);
+                    }
+                }
+            }
+        }
+    }
+    // (Checked every metre here, every two when the lift is hung: a little under the 2 m and 5.5 m it asks for.)
+    assert.ok(offLeast > 1.8, `feet ${offLeast.toFixed(2)} m over the snow beside the piste`);
+    assert.ok(pisteLeast > 5.2, `feet ${pisteLeast.toFixed(2)} m over a piste`);
+    assert.ok(stationLeast > -1.3, `chairs ${(-stationLeast).toFixed(2)} m into the snow by a station`);
+    assert.ok(closest >= 29.9 && tallest <= 30, `towers ${closest.toFixed(0)} m apart at the closest, ${tallest} m tall at the most`);
+    assert.ok(lifts > 180, `${lifts} lifts on six mountains`);
+});
+
 test('far from the origin it is the same mountain, to the millimetre', () => {
     const near = L.course(23), far = L.course(23, { z: 3e9, x: -2e9 });
     for (let z = 5; z < 6000; z += 61.3) {

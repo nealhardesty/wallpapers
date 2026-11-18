@@ -283,6 +283,9 @@ const SkiLogic = (() => {
                 lift.towers.push({ x, z, y: height(x, z), top: j === 0 || j === n ? 5.5 : 9.5 });
             }
             if (lift.towers.length < 3) return;
+            // Clear of the snow all the way: where a span sags into rising ground, a tower goes in under
+            // its lowest point, or (over a piste, where no tower may stand) the towers either side grow.
+            if (!clear(lift)) return;
             lift.length = 0;
             for (let j = 1; j < lift.towers.length; j++) {
                 const a = lift.towers[j - 1], b = lift.towers[j];
@@ -292,6 +295,62 @@ const SkiLogic = (() => {
             }
             s.lift = lift;
             lifts.push(lift);
+        }
+
+        // How far the lowest feet on a chair hang below the cable (the chair is 2.7 m, a rider's boots
+        // and skis below that), and the room they need above the snow: off the piste, and over it,
+        // where riders pass under (and now and then pop a jump).
+        // At either station the chairs swing in low over its platform to load, so the room grows from a little
+        // under nothing (`platform`) to all of it over the first `station` metres.
+        // (apart: no two towers closer than that.)
+        const HANG = 4, ROOM = { off: 2, piste: 5.5, station: 40, platform: 1.2, apart: 30 }, TOP = { max: 30 };
+        // The worst shortfall of room along the span from tower a to tower b: { need, f } with f how
+        // far along it is, or null if the chairs are clear everywhere.
+        function shortfall(lift, a, b) {
+            const tw = lift.towers, first = tw[0], last = tw[tw.length - 1], yaw = Math.atan2(lift.xb - lift.xa, lift.zb - lift.za), cy = Math.cos(yaw), sy = Math.sin(yaw);
+            const len = Math.hypot(b.x - a.x, b.z - a.z), steps = Math.max(2, Math.ceil(len / 2));
+            let worst = null;
+            for (let k = 1; k < steps; k++) {
+                const f = k / steps, x = a.x + (b.x - a.x) * f, z = a.z + (b.z - a.z) * f, feet = a.y + a.top + (b.y + b.top - a.y - a.top) * f - 0.3 - HANG;
+                // Both cables, and the width of a chair about each.
+                for (const off of [-3.4, -2.45, -1.5, 1.5, 2.45, 3.4]) {
+                    const px = x + off * cy, pz = z - off * sy, on = Math.abs(px - centre(pz)) < width(pz) + 2;
+                    const fromEnd = Math.min(Math.hypot(x - first.x, z - first.z), Math.hypot(x - last.x, z - last.z));
+                    const need = height(px, pz) + (on ? ROOM.piste : ROOM.off) * smooth(0, ROOM.station, fromEnd) - ROOM.platform * (1 - smooth(0, ROOM.station, fromEnd)) - feet;
+                    if (need > 0 && (!worst || need > worst.need)) worst = { need, f, x, z };
+                }
+            }
+            return worst;
+        }
+        function clear(lift) {
+            const tw = lift.towers;
+            for (let pass = 0; pass < 60; pass++) {
+                let fixed = true;
+                for (let j = 1; j < tw.length; j++) {
+                    const a = tw[j - 1], b = tw[j], w = shortfall(lift, a, b);
+                    if (!w) continue;
+                    fixed = false;
+                    // A tower goes under the lowest point if it may stand there (off the piste, and not on top of
+                    // either end); over the piste, at its edge, the nearest place to the low point that it may.
+                    const len = Math.hypot(b.x - a.x, b.z - a.z), may = f => { const z = a.z + (b.z - a.z) * f, x = lift.x(z); return f * len > ROOM.apart && (1 - f) * len > ROOM.apart && Math.abs(x - centre(z)) > width(z) + 5; };
+                    let at = null;
+                    for (let d = 0; d <= 1 && at === null; d += 1 / Math.max(8, len)) {
+                        if (may(w.f - d)) at = w.f - d; else if (may(w.f + d)) at = w.f + d;
+                    }
+                    if (at !== null) {
+                        const z = a.z + (b.z - a.z) * at, x = lift.x(z);
+                        tw.splice(j, 0, { x, z, y: height(x, z), top: 9.5 });
+                    } else {
+                        // Else both ends grow, by half a metre at a time, the one nearer the low point first.
+                        const near = w.f < 0.5 ? a : b, far = near === a ? b : a, end = t => t === tw[0] || t === tw[tw.length - 1];
+                        const grow = t => { if (end(t) || t.top >= TOP.max) return false; t.top = Math.min(TOP.max, t.top + 0.5); return true; };
+                        if (!grow(near) && !grow(far)) return false;        // nothing left to give: no lift here
+                    }
+                    break;
+                }
+                if (fixed) return true;
+            }
+            return false;
         }
 
         let building = false;
