@@ -5600,6 +5600,20 @@ their thousands cheap; without WebGL or without that, the 2D fallback runs.
   and five children on the instructor's own tracks; chairs go round each
   lift (people on most of those going up); folk stand on the hut's terrace;
   a hare or a fox crosses well ahead; an eagle turns over the valley.
+- **Chairlifts hang clear (owner, 2026-11-18: "occasionally it looks like
+  the chairlift is embedded in the ground, or so low the rider would plow
+  into it").** Towers stood every 52 m but never on a piste, and a lift
+  crosses its run on a long diagonal, so a straight cable could span 300 to
+  500 m while the ground rose under it: on six mountains 82 of 224 lifts
+  had chairs into the snow somewhere, up to 21 m deep. Now `hang` checks
+  every span (both cables, the width of a chair, every 2 m) for the lowest
+  feet, 4 m under the cable: 2 m of room off the piste, 5.5 m over it,
+  coming down to a little under the snow at a station's platform over its
+  last 40 m. Short of that, a tower goes in under the low point if one may
+  stand there, else at the piste's edge nearest it (never within 30 m of
+  another), else the towers either side grow, half a metre at a time, up
+  to 30 m. A lift that still cannot be hung is not built: 211 of the 224
+  are, with as many towers as before (median 53 m apart).
 - **By hand.** `A`/`D`, the arrows or a drag move the lead's line across
   (within the piste, or 0.9 m within a lane), eased back four seconds after
   letting go. `J`, up or a tap pops a jump where they stand, after the
@@ -5652,7 +5666,8 @@ their thousands cheap; without WebGL or without that, the 2D fallback runs.
   near in flat colour, trees as triangles, riders as blocks of their kit.
   It is what the smoke test times.
 
-**Tests.** Unit (`tools/ski-run.test.mjs`, 30; the last thirteen are how
+**Tests.** Unit (`tools/ski-run.test.mjs`, 31; chairlifts clear of the
+snow on six mountains; the last thirteen are how
 they hold themselves: into the turn and skis on a side-slope, lean against
 the force rebuilt from positions and never late, legs and angulation, skid
 and its sign, the stop, chest against skis, one pole plant an edge change,
