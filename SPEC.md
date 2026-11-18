@@ -162,7 +162,7 @@ Added for Christmas, drawn in code (designs in §10.27–§10.30):
 | `pocket-hockey` | hockey-logic.js, hockey-art.js, pocket-hockey.js | ~2.4k lines | No network; an invented league of eight clubs and the game in progress kept in `host.storage` (§10.35); the league, the 60 Hz game (physics, steering, signature moves) and the seasons pure and seeded (`HockeyLogic`), unit-tested; top-down pixel art at its own resolution, scaled up pixelated, with its own 5×7 font; interactive (a tap throws something on the ice, or starts a wave); keys N, G, B, X, W |
 | `baseball` | baseball-logic.js, baseball-league.js, baseball-talk.js, baseball-art.js, baseball.js | ~2.4k lines | No network; a league of eight invented clubs kept in `host.storage` (§10.37); every pitch, ball in play and box score pure and seeded (`BaseballLogic`, `BaseballLeague`), unit-tested; 16-bit pixel art at its own resolution with its own lettering, scaled up pixelated; interactive (a tap starts a wave); day, dusk and night by `host.now()`; keys N, S |
 | `wayfarer` | way-logic.js, way-models.js, way-detail.js, way-actors.js, way-people.js, way-companions.js, way-gl.js, wayfarer.js | ~6.6k lines | The second on WebGL (§10.38): an endless road through nine kinds of country (which of them is a setting) with villages, walled cities, grand cities under a castle and landmarks along it, all a pure function of a seed (`WayLogic`), unit-tested; every shape modelled in code as triangles (`WayModels`, `WayActors`); built a 64 m square at a time as the walk reaches it, finer near the traveller; four cameras, one of them an orbit a drag turns; nine travellers (one changes shape, one goes unseen) and 46 companions, six at once, the named cats among them; day, night, weather and seasons; a flat 2D fallback without WebGL; its own watch on the GPU; interactive (drag to look around, or to turn the orbit); keys V, T, X, N, G |
-| `ski-run` | ski-logic.js, ski-models.js, ski-gl.js, ski-run.js | ~4.1k lines | The third on WebGL (§10.39), with instancing: an endless ski run stitched from twelve kinds of section, one `height(x, z)` for the riders and the mesh (`SkiLogic`), riders moved by the hill (gravity, drag, the scrub of their edges), tricks, wipeouts, a stop for a drink at a grand lodge, cameras and a ski school all pure and unit-tested; trees, figures and props modelled in code (`SkiModels`); a flat 2D fallback without WebGL; its own watch on the GPU; interactive (carve by keys or a drag, tap to jump; the riders take it back after 4 s); keys A, D, arrows, J, V, T, X, G |
+| `ski-run` | ski-logic.js, ski-models.js, ski-gl.js, ski-run.js | ~4.6k lines | The third on WebGL (§10.39), with instancing: an endless ski run stitched from twelve kinds of section, one `height(x, z)` for the riders and the mesh (`SkiLogic`), riders moved by the hill (gravity, drag, the scrub of their edges) and held as the forces on them ask (lean from edge force, legs solved to skis that stay on the snow, skid, toe-side and heel-side), tricks, wipeouts, a stop for a drink at a grand lodge, cameras and a ski school all pure and unit-tested; trees, figures and props modelled in code (`SkiModels`); a flat 2D fallback without WebGL; its own watch on the GPU; interactive (carve by keys or a drag, tap to jump; the riders take it back after 4 s); keys A, D, arrows, J, V, T, X, G |
 
 About 1.7 MB of JavaScript in total. **Not imported:** links, weather, clocks,
 search/omniprompt, custom links, status bar, Docker/nginx, the homepage's
@@ -5530,7 +5530,62 @@ their thousands cheap; without WebGL or without that, the 2D fallback runs.
   else moves them, a tap does not jump. The director shows the whole
   lodge from out on the piste meanwhile; the camera behind stands on the
   piste side and looks at it. Without WebGL it is a flat front of timber,
-  snow and glass.
+  snow and glass. They pull in to berths 1.9 m apart dealt by where they
+  are across the piste, and walk in lanes, order and seats set by where
+  they stand, so no two on foot come within a metre while either walks.
+- **How they hold themselves (owner, 2026-11-18, after the release: "the
+  rider is always leaning into the wrong direction"; then "all of the
+  fixes").** The owner was right: `figure` tipped the body out of every
+  turn, and rolled the skis the wrong way against a side-slope (`rz` tips
+  +x up; both signs were wrong from the first day, and no test looked).
+  Fixed, tested, and then the rest of what the research asked for:
+  - *Lean is the force the edges carry.* `force = v² × curvature + g sin α
+    sin h` (gravity helps a turn above the fall line and fights it below),
+    `tilt = atan2(force, g cos α)`, `press` in g. On a scripted line it is
+    read 0.07 s ahead, so the body goes in as the turn begins and not
+    after; a dodge or a hand on it adds what was not scripted.
+  - *Skis on the snow, legs solved.* Each ski lies on the snow rolled onto
+    its edge, the hips sit inside on the tilt's line, and each leg is
+    two-bone inverse kinematics: the inside leg comes out short and the
+    outside long because that is the geometry. The torso is more upright
+    than the legs (55% of the tilt at 0.3 rad, 40% at 0.9), the head level.
+  - *Skid.* `skid` is the skis' yaw from their travel: a per-rider steering
+    angle (4 to 8° for the friends, 8 to 20° for strangers, by `skill`)
+    plus `asin(scrub / edge force)`, tails out, mostly below the fall line
+    (median 4.6°, 90th centile 10.7° for the lead on a groomer). Pulling
+    up is a hockey stop: the skis come round to 70 to 84° from the fall
+    line as speed falls and stay there. Spray is thrown by the skid, and
+    the track widens from two lines to a smear with it.
+  - *Chest, eyes, hands.* The chest (`face`) turns 64% as far as the skis
+    in long turns and 15% in a glade's short ones; the eyes (`gaze`) go to
+    where the line is in 0.6 s. Hands forward, poles back beside the skis,
+    and a pole plant on the new inside at every edge change, its tip
+    staying where it touched the snow.
+  - *Boards.* A board is rolled onto its working edge with both boots
+    strapped to it. Heel-side is sitting into a chair (hips 0.40 m up at
+    0.6 rad, knees at 92°, chest forward of the line); toe-side has long
+    legs and hips forward (0.72 m, 129°, back along the line). The weighted
+    middle of hips, chest and head lies on the tilt's line either way. A
+    regular rider's toes are to the right of travel. Stopped heel-side they
+    sit; toe-side they kneel.
+  - *No two turns alike.* A turn's length follows the hill and the speed
+    (34% shorter above a grade of 0.3 than below 0.2) and wanders ±18% from
+    turn to turn by `hash`, with a run of three or four short ones or one
+    long one now and then; changed only at an edge change and eased.
+  - *Deep snow.* `sink` draws the feet 0.19 to 0.21 m under powder at a
+    turn's apex (0.03 m on a groomer) and lets them up 7 cm at each edge
+    change; `y` stays on the surface.
+  - *Landings.* A landing adds no speed unless the rider really fell on to
+    steeper ground (a park landing gains under 0.05 m/s; it was 1.4), and
+    none down a pipe. A tumble ends the right way up, eased on to its back.
+  - *The camera behind* is anchored on the hips and takes 55% of the swing,
+    so it moves half as hard sideways as the rider, and rolls into the turn
+    by at most 3°.
+  - `make ski-filmstrip` (`tools/ski-filmstrip.mjs`) puts a turn, stop,
+    jump, pipe wall, powder or the lodge on one sheet: a row of frames from
+    behind, in front, the side or above over plots of the rider's numbers.
+    Every part above was checked on those sheets, since this machine cannot
+    show it moving.
 - **Room for each other.** Everything a rider must give way to (other
   riders' swings, a stopped stranger, the ski school as one, a creature) is
   a stretch across the piste; a rider threads the free stretch it is in or
@@ -5597,7 +5652,12 @@ their thousands cheap; without WebGL or without that, the 2D fallback runs.
   near in flat colour, trees as triangles, riders as blocks of their kit.
   It is what the smoke test times.
 
-**Tests.** Unit (`tools/ski-run.test.mjs`, 17): the course always descends,
+**Tests.** Unit (`tools/ski-run.test.mjs`, 30; the last thirteen are how
+they hold themselves: into the turn and skis on a side-slope, lean against
+the force rebuilt from positions and never late, legs and angulation, skid
+and its sign, the stop, chest against skis, one pole plant an edge change,
+landings, boards on both edges, turn lengths, deep snow, poles carried,
+the lodge on six mountains, the camera, a tumble): the course always descends,
 is continuous along and across, has every section kind, repeats from a
 seed; sections, lifts, the section mix and steepness; 3 × 10⁹ m from home;
 trees keep their distance; twenty minutes on each of three mountains with
@@ -5627,8 +5687,12 @@ the Mac saver and the Windows host are all unmeasured, and `make bench`
 means nothing for it here. A lost context is handled in code and not
 exercised. The look was judged from still frames only: that goes for the
 2026-11-18 physics too, which was tuned by numbers (speeds and air by
-section, before and after) and never watched in motion, and for the walk
-to the lodge's table.
+section, before and after) and never watched in motion, for the walk
+to the lodge's table, and for how the riders hold themselves, which was
+judged on filmstrip sheets. Not seen on any sheet: riding switch, grabs
+and spins on a board, a fall, the children, and short turns in a glade
+(numbers only). In powder the poles ride nearly level over the snow. Hard
+over, the poles still splay a little seen from behind. `bench` not run.
 
 **Not built:** signposts with run names (the signs carry a grade colour
 only); slalom gates; a groomer at work at night (one is parked by the hut);

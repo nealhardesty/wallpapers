@@ -336,9 +336,11 @@ class SkiRunAnimationManager {
             const on = !r.air && !r.afoot && (!r.fall || down) && !(r.rail && r.y > C.height(r.x, r.z) + 0.1);
             // Deep in powder, faint on a groomed piste, hardly there on ice; wider and deeper through a turn.
             const depth = (s.type === 'lake' ? 0.14 : 0.3 + 0.32 * s.T.rough) + 0.22 * Math.abs(r.lean);
-            const pt = { x: r.x, y: r.y, z: r.z, rx: dz / l, rz: -dx / l, w: down ? 0.55 : t.board ? 0.2 + 0.22 * Math.abs(r.lean) : (r.size ? 0.2 : 0.26) + 0.06 * Math.abs(r.lean), a: on ? Math.min(0.85, depth) * (r.size ? 0.7 : 1) * (down ? 0.5 : 1) * (1 - 0.45 * (this.air ? this.air.overcast : 0)) : 0 };
+            // Skis that are turned across the way they are going leave a smear as wide as they are long across it, and softer: carved, two thin lines.
+            const smear = Math.abs(Math.sin(r.skid || 0));
+            const pt = { x: r.x, y: r.y, z: r.z, rx: dz / l, rz: -dx / l, w: down ? 0.55 : (t.board ? 0.2 + 0.22 * Math.abs(r.lean) : (r.size ? 0.2 : 0.26) + 0.06 * Math.abs(r.lean)) + (t.board ? 0.6 : 0.85) * smear, a: on ? Math.min(0.85, depth) * (r.size ? 0.7 : 1) * (down ? 0.5 : 1) * (1 - 0.45 * (this.air ? this.air.overcast : 0)) / (1 + 1.6 * smear) : 0 };
             t.board = r.kind === 'board' ? 1 : 0;
-            pt.k = down ? 1 : t.board;
+            pt.k = down ? 1 : Math.max(t.board, SkiLogic.smooth(0.08, 0.45, smear));
             t.pts.push(pt);
             if (t.pts.length > t.cap) t.pts.shift();
             t.last = [r.x, r.z];
@@ -366,18 +368,35 @@ class SkiRunAnimationManager {
     spray(dt) {
         const W = this.world, C = W.course, R = Math.random, cam = this.cam, q = this.host.quality.density, p = this.pool, d = p.d;
         for (const r of this.everyone()) {
-            if (r.air || r.v < 3 || Math.hypot(r.x - cam.x, r.z - cam.z) > 170) continue;
-            const s = C.find(r.z), powder = 0.5 + 1.3 * s.T.rough, down = r.fall && r.fall.phase === 'tumble', sh = Math.sin(r.heading), ch = Math.cos(r.heading);
-            // Off the edges in a turn, thrown to its outside; a cloud round anyone tumbling; a plume behind in deep snow.
-            const rate = (down ? 70 : (Math.abs(r.lean) ** 1.3 * 46 + 6 * s.T.rough + 60 * (r.scrub || 0)) * powder * r.v / 14) * q * (r.size || 1);
+            if (r.air || r.v < 1.5 || r.afoot || Math.hypot(r.x - cam.x, r.z - cam.z) > 170) continue;
+            // Snow is thrown by edges that are skidding: as hard as they are pressed (m/s²) times how far across their travel they
+            // are turned, times the speed; from the tails, square off the skis to the side they are sliding towards, which is the
+            // outside of a turn and a little forward, and straight down the hill in a hockey stop (a sheet of it). A clean carve
+            // throws only a thin plume, hard over; deep snow a plume behind; and there is a cloud round anyone tumbling.
+            const s = C.find(r.z), powder = 0.5 + 1.3 * s.T.rough, down = r.fall && r.fall.phase === 'tumble', skid = r.skid || 0, across = Math.abs(Math.sin(skid)), tilt = Math.abs(r.tilt || 0);
+            const yaw = r.heading + skid, sh = Math.sin(yaw), ch = Math.cos(yaw), push = (r.press || 1) * 9.81 * across;
+            const rate = (down ? 70 : (12 * push * (1 + across * across) + 16 * SkiLogic.smooth(0.4, 0.9, tilt) + 6 * s.T.rough) * powder * r.v / 14) * q * (r.size || 1);
             let n = rate * dt;
             n = Math.floor(n) + (R() < n % 1 ? 1 : 0);
-            const out = r.lean > 0 ? -1 : 1, kick = 1.5 + 3.5 * Math.abs(r.lean);
+            const out = (across > 0.02 ? skid > 0 : r.lean > 0) ? -1 : 1, kick = 1 + 2 * tilt + 0.6 * r.v * across;
+            // (Where it starts, across them: a board throws from the edge it is on, the heel edge or the toe edge, as the figure has it.)
+            const from = r.kind === 'board' ? 0.13 * (Math.sign(SkiModels.tipped(r.tilt || 0, skid, (r.scrub || 0) * SkiLogic.GRIP / SkiLogic.G)) || -out) : out * 0.3;
             for (let i = 0; i < n; i++) {
-                const back = R() * 0.8;
-                this.puff(r.x - sh * back + ch * out * 0.3, r.y + 0.1, r.z - ch * back - sh * out * 0.3,
-                    r.vx * 0.45 + ch * out * kick * (0.5 + R()) + (down ? (R() - 0.5) * 4 : 0), 0.8 + (1.5 + 2 * Math.abs(r.lean)) * R() + (down ? 2 * R() : 0), r.vz * 0.45 - sh * out * kick * (0.5 + R()),
+                // (Along the skis from the boots back; a sheet comes off their whole length.)
+                const back = R() * 0.8 - 0.8 * across * R();
+                this.puff(r.x - sh * back + ch * from, r.y + 0.1, r.z - ch * back - sh * from,
+                    r.vx * 0.45 + ch * out * kick * (0.5 + R()) + (down ? (R() - 0.5) * 4 : 0), 0.8 + (1.5 + 2 * tilt + 1.5 * across) * R() + (down ? 2 * R() : 0), r.vz * 0.45 - sh * out * kick * (0.5 + R()),
                     0.5 + 0.6 * R() + (down ? 0.5 : 0), 0.25 + 0.25 * R(), 2 + powder, 0.34 + 0.14 * powder);
+            }
+            // Down in deep snow it comes up over the tips and off the shins, and hangs behind: more the deeper and the harder the turn.
+            const deep = (r.sink || 0) - 0.05;
+            if (deep > 0 && !down) {
+                let m = 90 * deep * (0.4 + tilt) * r.v / 14 * q * dt;
+                m = Math.floor(m) + (R() < m % 1 ? 1 : 0);
+                for (let i = 0; i < m; i++) {
+                    const ahead = 0.2 + 0.8 * R(), wide = (R() - 0.5) * 0.4;
+                    this.puff(r.x + sh * ahead + ch * wide, r.y + 0.05 + 0.3 * R(), r.z + ch * ahead - sh * wide, r.vx * 0.7 + ch * out * (0.3 + R()), 1 + 1.8 * R(), r.vz * 0.7 - sh * out * (0.3 + R()), 0.35 + 0.45 * R(), 0.3, 2.6, 0.4);
+                }
             }
             // Brushing past a laden tree shakes its snow loose.
             if (r.lane && R() < dt * 2.2) {
@@ -566,18 +585,21 @@ class SkiRunAnimationManager {
     // Everyone and everything that moves, posed and stamped into one soup, already placed from the camera.
     pose(scene, view) {
         const W = this.world, C = W.course, cam = scene.cam, out = this.moving.clear(), st = this.stack, t = this.seconds, f = view.f;
-        const where = { yaw: 0, pitch: 0, bank: 0, lean: 0, crouch: 0, tuck: 0, air: 0, grab: 0, spread: 0, twist: 0, spin: null, phase: 0, stop: 0, sit: 0, plough: 0, fall: null, t: 0, size: 1, sw: false, wave: 0, head: 0, walk: 0, drink: null };
+        const where = { yaw: 0, pitch: 0, bank: 0, lean: 0, tilt: 0, press: 1, skid: 0, brake: 0, face: 0, plant: 0, plantSide: 0, crouch: 0, tuck: 0, air: 0, grab: 0, spread: 0, twist: 0, spin: null, phase: 0, stop: 0, sit: 0, plough: 0, fall: null, t: 0, size: 1, sw: false, wave: 0, head: 0, walk: 0, drink: null, sink: 0, reach: 0, wide: 0, upright: 0 };
         // A sip now and then: the mug up for a second in every five or so, each in their own time.
         const sip = k => SkiLogic.smooth(0.72, 0.9, Math.sin(t * 1.2 + k * 2.4)) * (0.8 + 0.2 * Math.sin(t * 7 + k));
-        const lead = W.riders[0];
+        const lead = W.riders[0], turned = a => a - 6.283185307179586 * Math.round(a / 6.283185307179586);
         for (const r of this.everyone()) {
-            const x = r.x - cam.x, y = r.y - cam.y, z = r.z - cam.z, dist = Math.hypot(x, z);
+            // (In deep snow the skis ride under its surface, which is where `y` is: the figure is drawn that far down, and the snow hides what is in it.)
+            const sink = r.sink || 0, wary = 1 - (r.skill ?? 1), x = r.x - cam.x, y = r.y - sink - cam.y, z = r.z - cam.z, dist = Math.hypot(x, z);
             if (dist > 420 || x * f[0] + y * f[1] + z * f[2] < -4) continue;
+            // The chest and the eyes are yaws in the world: the figure wants the chest from the travel, and the head from the chest (a board's, from the board).
+            const face = turned((r.face ?? r.heading) - r.heading), gaze = SkiLogic.clamp(turned((r.gaze ?? r.heading) - r.heading - (r.kind === 'board' ? r.skid || 0 : face)), -0.9, 0.9);
             Object.assign(where, {
-                yaw: r.heading, pitch: r.pitch, bank: r.bank || 0, lean: r.lean, crouch: SkiLogic.clamp(0.46 + 0.4 * Math.abs(r.lean) + 0.7 * (r.impact || 0) / 8 + (r.pipe ? 0.25 : 0) + 0.45 * (r.load || 0) + 0.3 * (r.absorb || 0), 0, 1), tuck: r.tuck || 0,
+                yaw: r.heading, pitch: r.pitch, bank: r.bank || 0, lean: r.lean, tilt: r.tilt || 0, press: r.press || 1, skid: r.skid || 0, brake: (r.scrub || 0) * SkiLogic.GRIP / SkiLogic.G, face, plant: r.plant || 0, plantSide: r.plantSide || 0, crouch: SkiLogic.clamp(0.46 + 0.7 * (r.impact || 0) / 8 + (r.pipe ? 0.25 : 0) + 0.45 * (r.load || 0) + 0.3 * (r.absorb || 0) + 1.6 * Math.max(0, sink - 0.08), 0, 1), tuck: r.tuck || 0,
                 air: r.air && r.lift > 0.25 ? 1 : 0, grab: r.grab, spread: r.spread, twist: r.twist, spin: r.spin, phase: r.phase, stop: r.stop, sit: 0, plough: r.role === 'kid' ? 1 : 0, fall: r.fall, t: t + r.id, size: r.size || 1, sw: r.sw,
-                lo: dist > this.figNear, wave: r.parked && r.role === 'stranger' && Math.abs(lead.z - r.z) < 14 ? 1 : 0, head: r !== lead && r.stop > 0.5 && lead.fall ? 2.4 : 0,
-                walk: 0, drink: null,
+                lo: dist > this.figNear, wave: r.parked && r.role === 'stranger' && Math.abs(lead.z - r.z) < 14 ? 1 : 0, head: r !== lead && r.stop > 0.5 && lead.fall ? 2.4 : gaze,
+                walk: 0, drink: null, sink, reach: r.reach || 0, wide: 0.07 * wary, upright: wary,
             });
             let who = this.lookOf(r);
             // In for a drink: on foot, their skis or board left standing in the snow by the piste.
@@ -589,7 +611,7 @@ class SkiRunAnimationManager {
             }
             SkiModels.figure(out, st, x, y, z, who, where);
         }
-        Object.assign(where, { walk: 0, drink: null, pitch: 0, bank: 0, lean: 0, crouch: 0, tuck: 0, air: 0, grab: 0, spread: 0, twist: 0, spin: null, stop: 1, plough: 0, fall: null, size: 1, sw: false, head: 0 });
+        Object.assign(where, { walk: 0, drink: null, sink: 0, reach: 0, wide: 0, upright: 0, pitch: 0, bank: 0, lean: 0, tilt: 0, press: 1, skid: 0, brake: 0, face: 0, plant: 0, plantSide: 0, crouch: 0, tuck: 0, air: 0, grab: 0, spread: 0, twist: 0, spin: null, stop: 1, plough: 0, fall: null, size: 1, sw: false, head: 0 });
         // Folk on the hut's terrace.
         for (const h of this.huts) {
             const l = h.lamp, s = C.find(l.hz), side = l.side, hx = l.hx - cam.x, hy = l.hy - cam.y, hz = l.hz - cam.z;
@@ -781,15 +803,17 @@ class SkiRunAnimationManager {
                 ctx.beginPath(); ctx.moveTo(p[0] - tw, p[1]); ctx.lineTo(p[0], p[1] - th); ctx.lineTo(p[0] + tw, p[1]); ctx.fill();
                 if (what < 3) { ctx.fillStyle = white; ctx.beginPath(); ctx.moveTo(p[0] - tw * 0.45, p[1] - th * 0.55); ctx.lineTo(p[0], p[1] - th); ctx.lineTo(p[0] + tw * 0.45, p[1] - th * 0.55); ctx.fill(); }
             } else {
-                const who = this.lookOf(what), tallness = 1.7 * s * (what.size || 1) * (what.fall ? 0.4 : 1), lean = what.lean * tallness * 0.35;
+                const who = this.lookOf(what), foot = what.afoot && what.afoot.gear, tallness = 1.7 * s * (what.size || 1) * (what.fall ? 0.4 : foot && what.afoot.seated ? 0.75 : 1), lean = what.lean * tallness * 0.35;
                 ctx.fillStyle = `rgb(${who.pants})`;
                 ctx.fillRect(p[0] - s * 0.16, p[1] - tallness * 0.5 - what.lift * s, s * 0.32, tallness * 0.5);
                 ctx.fillStyle = `rgb(${who.jacket})`;
                 ctx.fillRect(p[0] - s * 0.2 + lean * 0.5, p[1] - tallness * 0.9 - what.lift * s, s * 0.4, tallness * 0.45);
                 ctx.fillStyle = `rgb(${who.helmet})`;
                 ctx.beginPath(); ctx.arc(p[0] + lean, p[1] - tallness - what.lift * s, Math.max(1, s * 0.13), 0, 6.3); ctx.fill();
+                // (Their skis or board under them: left in the snow by whoever has gone in for a drink.)
+                const at = foot ? project(what.afoot.path[0][0], what.afoot.path[0][1], what.afoot.path[0][2]) : p, sg = foot ? k / at[2] : s;
                 ctx.fillStyle = `rgb(${who.gear})`;
-                ctx.fillRect(p[0] - s * 0.45, p[1] - what.lift * s - Math.max(1, s * 0.05), s * 0.9, Math.max(1, s * 0.07));
+                ctx.fillRect(at[0] - sg * 0.45, at[1] - (foot ? 0 : what.lift * s) - Math.max(1, sg * 0.05), sg * 0.9, Math.max(1, sg * 0.07));
             }
         }
     }

@@ -312,7 +312,11 @@ hut with smoke in its chimney where everyone pulls up for a moment, and now
 and then a grand lodge, where they step out of their skis, walk up to a
 table on the terrace and sit over a drink before setting off again. The
 hill is what moves them: they pick up speed in the fall line and scrub it
-off across, glide out slower over the flat lake, and take time to stop. Each
+off across, glide out slower over the flat lake, and take time to stop.
+They lean on what their edges carry, the inside leg short and the outside
+long, plant a pole at each turn, skid their tails to check speed, and pull
+up in a hockey stop; the boarders sit back on their heel edge and reach
+forward over their toes; in powder they sink to the shins. Each
 takes their own line, leaves tracks that stay on the slope, throws spray in
 the turns, and does what the ground offers: grabs, spread eagles, spins,
 a backflip off the big kicker. Now and then a landing goes wrong: a
@@ -839,6 +843,7 @@ Run `make` to list every target.
 | `make cert` | Make a fresh self-signed certificate in `.cert/` (localhost and your LAN addresses) |
 | `make bing-json` | Fetch Bing's last eight images of the day into `web/bing.json`, so the Bing wallpaper works when served |
 | `make thumbnails` | Re-render the panel's wallpaper thumbnails (they're committed: review the changes) |
+| `make ski-filmstrip` | Fresh Tracks on one sheet, for checking how the riders move: a turn, a stop or a jump as a row of frames over plots of the rider's numbers, written to `dist/ski-filmstrip-<scene>-<view>.png` (`ARGS="--scene=jump --view=side"`; the options are at the top of `tools/ski-filmstrip.mjs`) |
 | `make world-atlas` | Regenerate World Clock's borders, states and provinces and city names, `web/wallpapers/world-clock/world-atlas.js`, from Natural Earth (downloads it; `ATLAS=<folder>` to use copies you have). Committed; the same input gives the same file |
 | `make world-land` | Regenerate World Clock's coastline, `web/wallpapers/world-clock/world-land.js`, from Natural Earth's 1:110m land (downloads it; `LAND=<file>` to use a copy you have). Committed; the same input gives the same file |
 | `make icons` | Render `web/icons/icon.svg` to the PNG icons the extension and web app need (committed) |
