@@ -3,7 +3,8 @@
 Toy animated wallpapers: snow, a fireplace, northern lights, a fish tank, a
 self-playing 8-bit adventure, koi, a night train, the real satellites
 overhead, an orrery of the solar system right now, your own Jellyfin videos
-in an old TV, endless sports leagues, a ski run, and more: 49 in all. Each
+in an old TV, endless sports leagues, a ski run, a New England town at
+Christmas, and more: 50 in all. Each
 one is a full-screen canvas animation with no page around it. Most just
 play; some also respond to you: feed the fish, rake the sand, or take over
 Pixel Quest's hero with the arrow keys.
@@ -294,6 +295,7 @@ still draws offline). 📅 **Seasonal** isn't one itself: it picks one by date.
 | 💡 [The Last Bulb on the Strand](https://nealhardesty.github.io/wallpapers/?w=last-bulb) | 👆 | Old C9 lights, and the loose last bulb |
 | 🧊 [Frost on the Glass](https://nealhardesty.github.io/wallpapers/?w=frost) | 👆 | Frost creeping over a window onto a warm room |
 | 🎄 [A Very Small Christmas](https://nealhardesty.github.io/wallpapers/?w=small-christmas) | 👆 | A tiny pixel tree with a toy train |
+| ☃️ [Christmas Village](https://nealhardesty.github.io/wallpapers/?w=christmas-village) | 👆 | A New England town in the snow: skaters, a grand tree, cats |
 | 🏝️ [Sky Island](https://nealhardesty.github.io/wallpapers/?w=sky-island) | 👆 | A pixel village on a floating island, new each load |
 | ⚔️ [Pixel Quest](https://nealhardesty.github.io/wallpapers/?w=quest) | 👆 | A self-playing 8-bit adventure; take over the hero |
 | 🌇 [Synthwave](https://nealhardesty.github.io/wallpapers/?w=synthwave) | | The endless neon drive |

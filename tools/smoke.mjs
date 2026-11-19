@@ -2515,6 +2515,105 @@ const STAGE_CHECKS = {
             return true;
         }],
     ],
+    'christmas-village': [
+        ['alive on frame one: snow in the air, the town lit, the cast out; a tap makes a skater jump, wakes a cat, darkens a house', async () => {
+            if (!await stageWith('christmas-village', null, '&seed=7&date=2026-12-20T19:30')) return record('not ready');
+            const first = await evaluate(`(m => ({ frames: WP.host.frames.count, flakes: m.flakes.length, onScreen: m.flakes.filter(f => f.y > m.H * 0.5).length, skaters: m.skaters.length, cats: m.cats.length,
+                walkers: m.walkers.length, puffs: m.puffs.length, sledders: m.sledders.length, deer: m.deer.length, train: !!m.train, grand: !!m.scene.grand, houses: m.scene.houses.length,
+                lit: m.scene.windows.filter(w => m.isLit(w)).length, windows: m.scene.windows.length, bulbs: +(m.bulbA + m.bulbB).toFixed(2), tracks: (g => { const d = g.getImageData(0, 0, m.ice.width, m.ice.height).data; let n = 0; for (let i = 3; i < d.length; i += 4) if (d[i]) n++; return n; })(m.ice.getContext('2d', { willReadFrequently: true })),
+                farm: m.scene.farmRow.trees.length, church: !!m.scene.church, cabin: !!m.scene.cabin, store: m.scene.houses.some(h => h.style === 'store') }))(WP.stage.manager)`);
+            if (first.frames > 10) record(`the first frame came at ${first.frames}`);
+            if (first.flakes < 200 || first.onScreen < 60 || first.puffs < 10 || first.walkers < 1 || first.tracks < 500) record(`not alive on frame one: ${JSON.stringify(first)}`);
+            if (first.skaters !== 8 || first.cats !== 6 || first.sledders !== 3 || first.deer !== 3 || !first.train || !first.grand || first.houses < 5 || first.farm < 4 || !first.church || !first.cabin || !first.store) record(`the cast is missing: ${JSON.stringify(first)}`);
+            if (first.lit < first.windows * 0.4 || first.bulbs < 1) record(`a dark town at half past seven: ${JSON.stringify(first)}`);
+            const tap = async (x, y) => { await mouse('mousePressed', x, y); await mouse('mouseReleased', x, y); await sleep(120); };
+            // A skater: hold the frame's clock still for a moment by asking for the place and tapping at once.
+            let jumped = false;
+            for (let i = 0; i < 6 && !jumped; i++) {
+                const at = await evaluate(`(m => { const s = m.skaters.find(s => s.kind === 'lap' && s.state === 'skate'); s.smoke = true; return { x: s.x, y: s.y - 9 * m.L.s }; })(WP.stage.manager)`);
+                await tap(at.x, at.y);
+                jumped = await evaluate(`WP.stage.manager.skaters.some(s => s.state === 'jump' || s.hop > 0 || (s.kind === 'beginner' && s.state === 'down'))`);
+            }
+            if (!jumped) record('a tap moved no skater');
+            const cat = await evaluate(`(m => { const c = m.cats.find(c => c.state === 'sleep') || m.cats[0]; c.state = 'sleep'; c.smoke = true; return { x: c.x, y: c.y - 4 * c.k() }; })(WP.stage.manager)`);
+            await tap(cat.x, cat.y);
+            const woke = await evaluate(`(m => ({ state: m.cats.find(c => c.smoke).state, heart: m.notes.some(n => n.ch === '♥') }))(WP.stage.manager)`);
+            if (woke.state !== 'sit' || !woke.heart) record(`the cat slept through a tap: ${JSON.stringify(woke)}`);
+            // A lit house, tapped where no cat, tree or skater is: its windows go dark, and the glow is repainted.
+            const house = await evaluate(`(m => { const h = m.scene.houses.find(h => h.row === 'front' && h.style !== 'store' && m.scene.windows.some(w => w.owner === h && m.isLit(w))); h.smoke = true; return { x: h.x - h.w * 0.2, y: h.y - 8 * h.k, key: m.glowKey }; })(WP.stage.manager)`);
+            await tap(house.x, house.y);
+            await sleep(300);
+            const dark = await evaluate(`(m => { const h = m.scene.houses.find(h => h.smoke); return { forced: h.forced, lit: m.scene.windows.filter(w => w.owner === h && m.isLit(w)).length, repainted: m.glowKey !== ${JSON.stringify(house.key)} }; })(WP.stage.manager)`);
+            if (dark.forced !== false || dark.lit || !dark.repainted) record(`the house stayed lit: ${JSON.stringify(dark)}`);
+            console.log(`    christmas-village: ${first.flakes} flakes, ${first.lit} of ${first.windows} windows lit, ${first.houses} houses, ${first.walkers} out walking, ${first.tracks} px of skate marks on frame ${first.frames}`);
+            await shoot('christmas-village-evening');
+            return true;
+        }],
+        ['the windows keep their hours: dark by day, lit of an evening, mostly asleep at three, everybody up on Christmas Eve; advent decorates a little more each day', async () => {
+            const town = async (date, settings = null) => {
+                if (!await stageWith('christmas-village', settings, `&seed=7&date=${date}`)) return null;
+                return evaluate(`(m => ({ lit: m.scene.windows.filter(w => !w.cabin && m.isLit(w)).length, windows: m.scene.windows.filter(w => !w.cabin).length, dark: +m.light.dark.toFixed(2), bulbs: +(m.bulbA + m.bulbB).toFixed(2),
+                    decorated: m.scene.houses.filter(h => h.deco).length, houses: m.scene.houses.length, litTrees: [...m.scene.trees, ...m.scene.smallTrees].filter(t => t.lit).length, eve: m.season.eve, share: m.config.decorate === 'advent' ? m.season.advent : 1 }))(WP.stage.manager)`);
+            };
+            const noon = await town('2026-12-20T12:30'), evening = await town('2026-12-20T19:30'), small = await town('2026-12-20T03:00'), late = await town('2026-12-20T23:50'), eve = await town('2026-12-24T23:50');
+            if (!noon || !evening || !small || !late || !eve) return record('no boot');
+            if (noon.lit || noon.dark > 0.05) record(`windows lit at noon: ${JSON.stringify(noon)}`);
+            if (!(noon.bulbs > 0.2 && noon.bulbs < 0.6)) record(`the strings by day should glow a little: ${noon.bulbs}`);
+            if (evening.lit < evening.windows * 0.5) record(`a dark evening: ${JSON.stringify(evening)}`);
+            if (!(small.lit < evening.lit * 0.45) || small.bulbs < 1.1) record(`three in the morning: ${small.lit} lit (${evening.lit} of an evening), bulbs ${small.bulbs}`);
+            if (!eve.eve || !(eve.lit > late.lit * 1.25)) record(`Christmas Eve at ten to midnight has ${eve.lit} lit; the 20th has ${late.lit}`);
+            const first = await town('2026-12-01T19:30', { configVersion: 1, decorate: 'advent' }), mid = await town('2026-12-12T19:30', { configVersion: 1, decorate: 'advent' }), last = await town('2026-12-24T19:30', { configVersion: 1, decorate: 'advent' });
+            if (!(first.decorated < mid.decorated && mid.decorated <= last.decorated) || last.decorated !== last.houses || first.decorated > first.houses * 0.5) record(`advent: ${first.decorated}, ${mid.decorated}, ${last.decorated} of ${last.houses} houses decorated on the 1st, 12th and 24th`);
+            if (!(first.litTrees < last.litTrees)) record(`advent: ${first.litTrees} lit trees on the 1st, ${last.litTrees} on the 24th`);
+            if (evening.decorated !== evening.houses) record(`with everything up, ${evening.decorated} of ${evening.houses} houses are decorated`);
+            console.log(`    christmas-village: lit windows ${noon.lit} at noon, ${evening.lit} at 19:30, ${late.lit} at 23:50, ${small.lit} at 03:00, ${eve.lit} on Christmas Eve at 23:50 (of ${evening.windows}); advent ${first.decorated}/${mid.decorated}/${last.decorated} houses`);
+            return true;
+        }],
+        ['carollers light the house they sing to; a family saws a tree, drags it off, and a new one grows; the sleigh crosses the moon; lost canvases are baked again', async () => {
+            if (!await stageWith('christmas-village', { configVersion: 1, sky: 'night', moonPhase: 'full', carollers: 0, farmVisits: 0, sleigh: 0, villagers: 0, dogs: 0 }, '&seed=7&date=2026-12-20T19:30')) return record('not ready');
+            // Time is run forward by hand in each of these: the stage's own frames carry on underneath.
+            const carol = await evaluate(`(m => { const said = m.callCarollers(), n = m.walkers.filter(w => w.offset).length; let steps = 0; while (!m.singing.length && steps++ < 3000) m.update(0.1, true);
+                const h = m.scene.houses.find(h => h.sung > m.time), mine = h ? m.scene.windows.filter(w => w.owner === h) : [];
+                return { said, n, steps, sung: !!h, lit: mine.filter(w => m.isLit(w)).length, of: mine.length, poses: m.walkers.filter(w => w.offset && w.pose === 'sing').length }; })(WP.stage.manager)`);
+            if (!carol.said || carol.n < 4 || !carol.sung || carol.lit !== carol.of || carol.of < 4 || carol.poses < 3) record(`the carollers: ${JSON.stringify(carol)}`);
+            const farm = await evaluate(`(m => { const said = m.callFamily(), tree = m.scene.farmRow.trees.find(t => t.taken), n = m.party ? m.party.length : 0; let sawn = false, dragged = false, steps = 0, stump = 1;
+                while (m.party && steps++ < 6000) { m.update(0.1, true); if (tree.shake > 0) sawn = true; if (m.party && m.party[0].drag === tree) dragged = true; stump = Math.min(stump, tree.grown); }
+                for (let i = 0; i < 6000; i++) m.update(0.1, true);
+                return { said, n, sawn, dragged, steps, stump: +stump.toFixed(2), regrown: +tree.grown.toFixed(2), gone: !m.walkers.length }; })(WP.stage.manager)`);
+            if (!farm.said || farm.n !== 2 || !farm.sawn || !farm.dragged || farm.stump > 0.02 || !(farm.regrown > 0.9) || !farm.gone) record(`the tree farm: ${JSON.stringify(farm)}`);
+            const sleigh = await evaluate(`(m => { m.updateSky(); const said = m.callSleigh(), s = m.sleigh, moon = m.moonAt(), mid = s.at(0.5); let steps = 0; while (m.sleigh && steps++ < 400) m.update(0.1, true);
+                return { said, up: +m.moon.alt.toFixed(0), miss: +Math.hypot(mid.x - moon.x, mid.y - moon.y).toFixed(1), steps, again: m.callSleigh() }; })(WP.stage.manager)`);
+            if (!/Sleigh bells/.test(sleigh.said) || sleigh.up < 8 || sleigh.miss > 2 || sleigh.steps < 100 || sleigh.steps > 200) record(`the sleigh: ${JSON.stringify(sleigh)}`);
+            const noon = await evaluate(`(m => { const was = m.config.sky; m.config.sky = 'day'; m.pinKey = null; m.updateSky(); const said = m.callSleigh(); m.config.sky = was; m.pinKey = null; m.updateSky(); return said; })(WP.stage.manager)`);
+            if (!/Not before dark/.test(noon)) record(`a sleigh at noon: ${noon}`);
+            // The drill (SPEC §10.22): wipe the land, as a lost GPU process does.
+            const probe = `(m => m.scene.land.getContext('2d', { willReadFrequently: true }).getImageData(Math.floor(m.scene.land.width / 2), m.scene.land.height - 1, 1, 1).data[3])(WP.stage.manager)`;
+            if (await evaluate(probe) === 0) record('the land is transparent at the bottom (the loss probe would never fire)');
+            await evaluate(`(m => { m.scene.land.getContext('2d').clearRect(0, 0, m.scene.land.width, m.scene.land.height); m.lastBakeCheck = m.time - 10; })(WP.stage.manager)`);
+            if (!await waitFor(() => evaluate('WP.stage.manager.recoveries === 1'), 3000)) return record('a blank land was not noticed');
+            if (await evaluate(probe) === 0) record('baked again, but the land is still blank');
+            console.log(`    christmas-village: ${carol.n} carollers lit ${carol.lit} windows; the tree went to a stump (${farm.stump}) and grew back to ${farm.regrown}; the sleigh missed the moon's middle by ${sleigh.miss} px`);
+            return true;
+        }],
+        ['a phone held upright: the town fits above the gesture bar, with a front street; everything switched off is still a snowy valley', async () => {
+            if (!await bootStage('w=christmas-village&host=android&seed=7&date=2026-12-20T19:30', { width: 412, height: 915, deviceScaleFactor: 2 })) return record('not ready on a phone');
+            const phone = await evaluate(`(m => { const L = m.L, p = L.pond; return { inset: WP.host.insets.bottom, Hu: L.Hu, H: m.H, portrait: L.portrait, pond: +(p.cy + p.ry * 1.12).toFixed(0), front: m.scene.houses.filter(h => h.row === 'front').length,
+                lowest: Math.round(Math.max(...m.scene.trees.map(t => t.y), ...m.skaters.map(s => s.y), ...m.cats.map(c => c.y))), skatersOn: m.skaters.every(s => VillageLogic.pondR(p, s.x, s.y) < 1.02), grand: !!m.scene.grand, bridge: !!m.scene.bridge }; })(WP.stage.manager)`);
+            if (phone.inset !== 48 || phone.Hu !== phone.H - 48 || !phone.portrait) record(`the phone's layout: ${JSON.stringify(phone)}`);
+            if (phone.pond >= phone.Hu || phone.lowest > phone.Hu || !phone.skatersOn) record(`under the gesture bar: ${JSON.stringify(phone)}`);
+            if (phone.front < 2 || !phone.grand || phone.bridge) record(`the phone's town: ${JSON.stringify(phone)}`);
+            await shoot('christmas-village-phone');
+            await cdp.send('Emulation.clearDeviceMetricsOverride');
+            const off = { configVersion: 1, moon: false, stars: false, clouds: 0, aurora: 'never', sleigh: 0, snowfall: 0, village: false, smoke: false, windows: false, candles: false, lamps: false, snowman: false, lights: false, townTree: false, litTrees: 0,
+                train: false, pond: false, farm: false, cabin: false, villagers: 0, carollers: 0, sledders: 0, cats: 0, dogs: 0, callouts: false, touch: false };
+            if (!await stageWith('christmas-village', off, '&seed=7&date=2026-12-20T19:30')) return record('no boot with everything left out');
+            await sleep(600);
+            const bare = await evaluate(`(m => ({ frames: WP.host.frames.count, cast: m.skaters.length + m.walkers.length + m.cats.length + m.sledders.length + m.deer.length + m.flakes.length + m.puffs.length, houses: m.scene.houses.length,
+                windows: m.scene.windows.length, land: m.scene.land.getContext('2d', { willReadFrequently: true }).getImageData(10, m.scene.land.height - 10, 1, 1).data[3] }))(WP.stage.manager)`);
+            if (bare.frames < 5 || bare.cast || bare.houses || bare.windows || bare.land !== 255) record(`the bare valley: ${JSON.stringify(bare)}`);
+            return true;
+        }],
+    ],
     'ski-run': [
         ['on the mountain on the first frame: the lead and two friends on the snow, tracks behind them, the land about them', async () => {
             if (!await stageWith('ski-run', null, '&seed=7')) return record('not ready');

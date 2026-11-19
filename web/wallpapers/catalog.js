@@ -136,6 +136,21 @@
               { keys: ['l'], label: 'Jingle the tree', run: set => set.jingle() },
               { keys: ['s'], label: 'A sleigh', run: set => set.keySleigh() },
           ] },
+        // harvest-sky.js loads first here too: the village keeps the real sun and moon.
+        { id: 'christmas-village', name: 'Christmas Village', icon: '☃️', accent: '#ffb84e', background: '#0b1230',
+          scripts: ['harvest/harvest-sky.js', 'christmas-village/village-logic.js', 'christmas-village/village-art.js', 'christmas-village/village-buildings.js',
+              'christmas-village/village-scene.js', 'christmas-village/village-actors.js', 'christmas-village/christmas-village.js'],
+          make: host => new ChristmasVillageAnimationManager(host), cost: 'medium', interactive: true,
+          effects: [['reflections', 'medium'], ['aurora', 'medium']],
+          keys: [
+              { keys: ['s'], label: 'A certain sleigh', run: village => village.callSleigh() },
+              { keys: ['h'], label: 'Hark: send the carollers out', run: village => village.callCarollers() },
+              { keys: ['a'], label: 'Northern lights', run: village => village.callAurora() },
+              { keys: ['w'], label: 'A flurry', run: village => village.flurry() },
+              { keys: ['t'], label: 'A family comes for a tree', run: village => village.callFamily() },
+              { keys: ['d'], label: 'A dog gets loose', run: village => village.callDog() },
+              { keys: ['m'], label: 'What time is it in Evergreen Hollow?', run: village => village.report() },
+          ] },
         // harvest-sky.js (the sun and the moon) loads first: Sky Island shares Harvest Valley's astronomy.
         { id: 'sky-island', name: 'Sky Island', icon: '🏝️', accent: '#7cc4ff', background: '#5a8fd0',
           scripts: ['harvest/harvest-sky.js', 'sky-island/sky-island-logic.js', 'sky-island/sky-island-art.js', 'sky-island/sky-island-land.js', 'sky-island/sky-island-actors.js', 'sky-island/sky-island.js'],

@@ -48,11 +48,13 @@ const OVERRIDES = {
     wayfarer: { configVersion: 2, time: 'dusk', weather: 'fair', season: 'autumn' },
     // A clear morning, a little closer in, so the rider and the trees read in a tile.
     'ski-run': { configVersion: 1, time: 'day', weather: 'clear', zoom: 1.2 },
+    // An evening under a full moon, a little bigger, so the lit town reads in a tile.
+    'christmas-village': { configVersion: 1, sky: 'night', moonPhase: 'full', scale: 1.3, horizon: 0.36 },
 };
 // URL parameters for a better picture: satellites as its sample station
 // passes overhead before dawn, weather's sample at a golden dusk (thumb mode never fetches, so it's the sample),
 // World Clock near the June solstice, Europe in its long evening; the Orrery tilted, on a fixed night.
-const PARAMS = { baseball: '&date=2026-06-20T18:40&seed=7', sumo: '&date=2026-06-20T14:00&seed=7', 'sky-island': '&date=2026-06-20T11:00', satellites: '&date=2026-10-14T04:47:15', 'pixel-room': '&date=2026-10-22T18:20', 'rainy-window': '&date=2026-10-22T21:00', harvest: '&date=2026-11-20T15:50', neko: '&date=2026-06-10T12:00', weather: '&date=2026-11-05T17:50', 'world-clock': '&date=2026-06-21T19:30:00Z', orrery: '&date=2026-11-05T21:00' };
+const PARAMS = { baseball: '&date=2026-06-20T18:40&seed=7', sumo: '&date=2026-06-20T14:00&seed=7', 'sky-island': '&date=2026-06-20T11:00', satellites: '&date=2026-10-14T04:47:15', 'pixel-room': '&date=2026-10-22T18:20', 'rainy-window': '&date=2026-10-22T21:00', harvest: '&date=2026-11-20T15:50', neko: '&date=2026-06-10T12:00', weather: '&date=2026-11-05T17:50', 'world-clock': '&date=2026-06-21T19:30:00Z', orrery: '&date=2026-11-05T21:00', 'christmas-village': '&date=2026-12-20T19:30&seed=7' };
 SETTLE_MS.fireworks = 2600;
 SETTLE_MS.harvest = 4000;
 SETTLE_MS['sky-island'] = 3000;
