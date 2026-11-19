@@ -45,6 +45,8 @@ wallpapers' only home. They run in three hosts:
 > world, makes 47.
 > Fresh Tracks (§10.39, 2026-11-15), a ski run that never ends and the
 > third wallpaper drawn with WebGL, makes 48.
+> Christmas Village (§10.40, 2026-11-19), a New England town in the snow
+> with a skating pond, a tree farm and a cabin up the mountain, makes 49.
 > Phase 10, the clock overlay (§4.9), was built 2026-10-28; §10 holds the
 > other ideas.
 > Windows (§10.25): the W0 spikes passed, and W1 (the desktop core: behind
@@ -156,6 +158,7 @@ Added for Christmas, drawn in code (designs in §10.27–§10.30):
 | `last-bulb` | last-bulb-logic.js, last-bulb-art.js, last-bulb.js | ~1.4k lines | Interactive (tap a bulb to jiggle it); a C9 strand whose last bulb is loose, along the rail, in rows, round the border or over a doorway; the flicker scripts, the filament and the strand's path (`LastBulbLogic`), unit-tested; follows `host.now()` (Christmas Eve and Day); keys L, O, D, N |
 | `frost` | frost-logic.js, frost-art.js, frost.js | ~1k lines | Interactive (drag to draw in the frost, tap to breathe on it); fern frost grown tip by tip on an occupancy grid, the window and the doodles (`FrostLogic`), unit-tested; follows `host.now()` (Christmas Eve and Day); keys B, D, T |
 | `small-christmas` | small-christmas-logic.js, small-christmas-art.js, small-christmas.js | ~800 lines | Interactive (tap the tree, the train, the floor); pixel art at its own resolution, scaled up pixelated; palettes, blink patterns, the train's oval and the hops (`SmallXmasLogic`), unit-tested; follows `host.now()` (the sleigh on Christmas Eve, presents on Christmas Day); keys T, M, L, S |
+| `christmas-village` | village-logic.js, village-art.js, village-buildings.js, village-scene.js, village-actors.js, christmas-village.js (and Harvest's harvest-sky.js) | ~3.9k lines | Interactive (tap a cat, a skater, a house, a tree, the cabin, the sky); a New England town painted in code at daylight colour and washed with the hour; the light, the calendar, the windows' hours, the layout and the skaters' steering (`VillageLogic`), unit-tested; follows `host.now()` (the real sun and moon, the church clock, Christmas Eve) (§10.40) |
 | `sky-island` | sky-island-logic.js, sky-island-art.js, sky-island-land.js, sky-island-actors.js, sky-island.js (and Harvest's harvest-sky.js) | ~3.5k lines | Interactive (tap a cat, a person, the lake, a house at night, the sky); 16-bit pixel art at its own resolution (a pixel is 2 CSS px on a laptop or 1080p), scaled up pixelated; a terraced island seen from above and in front, its underside, the sea of cloud and the ground far below all baked; the calendar (seasons, holidays, Easter, the owner's dates), the names and the island's three-tier layout from a seed (`SkyIslandLogic`), unit-tested over 240 layouts; follows `host.now()` (the hour, the season, every holiday); keys N, P, V, O, B, W, S, H |
 | `ice-patrol` | ice-logic.js, ice-gl.js, ice-cockpit.js, ice-patrol.js | ~3k lines | The first on WebGL (§10.34): an endless snowfield from two baked noise fields, the same height formula in JavaScript and in the shaders (`IceLogic`), unit-tested; a 2D cockpit (struts, a winged console, switches that keep house) whose centre screen is a live scan of the real terrain; a 2D ridgeline fallback without WebGL; its own watch on the GPU; interactive (fly it by hand: keys and a drag; the autopilot takes it back after 5 s); keys W A S D, arrows, Q, E, X, T, V, R |
 | `sumo` | sumo-logic.js, sumo-art.js, sumo.js | ~1.3k lines | No network; a league of invented wrestlers kept in `host.storage`, written in Japanese with an English gloss (§10.35); bouts and tournaments pure and seeded (`SumoLogic`), unit-tested; interactive (a tap throws a cushion); evening by `host.now()`; keys N, B |
@@ -401,7 +404,7 @@ Phase 4 and 6 take it:
   | Sep | leaves |
   | Oct | halloween |
   | Nov | harvest |
-  | Dec | advent, cat-ornament, last-bulb, frost, small-christmas: one a day, in turn (wins over snow's Dec–Apr) |
+  | Dec | advent, cat-ornament, christmas-village, last-bulb, frost, small-christmas: one a day, in turn (wins over snow's Dec–Apr). The village is third so that, with Sky Island making seven, its turn falls on Christmas Eve |
 
   Every month also lists **sky-island** (§10.31, 2026-11-11) after its own
   wallpaper: it dresses itself for the real season and holiday, so it
@@ -885,6 +888,7 @@ and the commits.
 | frost | `glints` (medium) | Three canvases: the room and frost (redrawn ten times a second at most, six on a slow tier), the frame (baked once) and the snow (every frame, only while it's snowing, else idleUntil the next tenth); the room's blur, the bokeh discs and the frost's backlit colour baked per resize; frost accumulates on a mask (new ice only) and is re-tinted through it when it changes; tips capped at 9,000 × density; a render-scale change keeps the frost, rescaled; snow × density |
 | small-christmas | — | The canvas is the picture's own pixels (a few hundred across), scaled up by CSS with `image-rendering: pixelated`, so a frame is tiny; 12 fps by default (a setting), idleUntil between frames; sky, moon and snow floor one baked layer; every sprite baked per palette; scanlines a baked overlay canvas; snow × density |
 | harvest | `mist`, `beams` (medium) | Land is one baked layer per resize; trees, leaves, apples, geese and clouds are baked sprites; the world is washed once per frame with the hour's light; leaves, apples, smoke, sparks and flocks × density; squirrels × (0.5 + 0.5 density) |
+| christmas-village | `reflections`, `aurora` (medium) | The land is one baked painting per layout, washed into a second canvas only when the hour's colour has moved a step; lit windows and lamps are one layer repainted when a window goes on or off; every string bulb is on one of two layers faded against each other (the twinkle costs two blits); the cast is a few filled shapes apiece in colours toned for the hour, the trees among them sprites toned the same way; far snow is one path of squares, near flakes a sprite. 5.4% busy on Low, 7.0% on Medium, 15.1% on High at 4× throttle |
 | sky-island | — | The canvas is the picture's own pixels (2 CSS px each on a laptop or 1080p, 3 at 1440p, 4 at 4K, 1 on a phone), scaled up pixelated; the terrain (three tiers, their cliffs, the underside, the water) is one bake per season, the roots three sway frames, the sea of cloud two tileable strips and the ground one, rebaked with the light; everything that stands still (houses, trees, lamps, props, trimmings) is baked into one layer per street band, drawn in turn with whoever moves (trees are drawn live, swaying, only on High); the sky is a dithered bake redone as the light changes, the stars four baked twinkle frames; the night is one `source-atop` wash over the island's scratch, with the lit windows and lamps one glow layer redone only when the lit set changes; a passing island is one bake with a few live bits; 20 fps by default (a setting), 12 on Low, paced on a steady timeline through idleUntil; folk × (0.4 + 0.6 density), strays, wildlife, rain, snow, leaves, fireflies × density. Bench 2026-11-11 (v2): Low 21%, Medium 38%, High 46% |
 | ice-patrol | `shadows`, `sparkle` (medium) | WebGL: one grid drawn nine times (96, 64 or 48 cells a side by density), heights and slopes from two noise textures; shadows ten marched steps on High, six on Medium, compiled out when shed (after fading); flakes × density, wrapped in the vertex shader; the cockpit frame painted per light step, the gauges at 15 Hz (8 on Low) on a strip of their own, each instrument only when its reading changes; the terrain scan a 144² map (80² on Low) scrolled by cells, four rows (two) rescanned a tick; lamp halos one sprite a colour; a few dozen height lookups a frame on the main thread. The GPU is watched by the wallpaper itself (late frames give up shadows, then render scale to 0.4), since the governor only times callbacks; software renderers start there. No WebGL: 34 ridgelines a frame in 2D |
 | sumo | — | The hall is one cached canvas (rebuilt on resize, tier and at dusk); a frame draws it, three jointed figures and a few marks. The crowd's rows and the cushions thrown follow density |
@@ -5911,6 +5915,139 @@ console snippet saves the old wallpaper keys (never the links) as
 
 Tested by unit tests and end to end: the smoke test feeds a dump through
 the panel's real file input.
+
+### 10.40 Christmas Village (`christmas-village`, owner request, 2026-11-19)
+
+The owner's brief, after a round of ideas: "the Christmas Eve Village… a
+New-England style town. Maybe a bit more realism than Harvest Valley. Lots
+of lit Christmas trees", with the skating pond (skaters and the hut) in
+it, "there must be cats. Occasionally a dog. Snow falling, lots of it", a
+Christmas tree farm, and the mountain cabin "off in the distance partway
+up the mountains". Then: "a grand tree in the center of the town square
+(with a little Christmas train underneath it)". Cosy, festive, fun, and
+**everything configurable**: each part has a switch, down to a bare valley
+under the moon. The town is **Evergreen Hollow**, which is nowhere.
+
+- **Where things are (`VillageLogic.layout`, pure, unit-tested on seven
+  screen shapes):** two mountain ranges from ridged noise, the near one with
+  a shoulder where the cabin sits (56% of the way down from its ridge); a
+  belt of woods at their foot; the tree farm on the left hillside (2–7
+  rows, nearer rows lower and bigger); a back street and a front street,
+  the green between the two halves of the front one (the meetinghouse
+  behind it, the bandstand and the grand tree on it); the pond in front of
+  the green with the cocoa hut and the bonfire on its far bank; the
+  covered bridge on the right where the brook comes down (wide screens
+  only); the sledding hill below the farm. Sizes follow one unit, `s`
+  (the smaller of height/780 and width/600, × the Scene Scale setting),
+  and `L.depth(y)`: nearer is bigger. A phone held upright has a smaller
+  green, smaller houses (two at least on the front street: tested), no
+  bandstand or bridge, and everything above the host's bottom inset.
+  *Houses* is a limit: back-street houses go first, the store last.
+- **Buildings (`village-buildings.js`):** each painted in its own units in
+  an oblique view (the front square on, one side running away), mirrored
+  at random: capes with dormers, five-bay colonials with end chimneys,
+  saltboxes with the long back roof, gable-fronted houses with a porch,
+  the general store (false front, striped awning, shop windows), the inn
+  (seven bays, a porch, a hanging sign), the meetinghouse (pediment, tall
+  arched windows, a tower with a clock, an open belfry with its bell, an
+  eight-sided spire), the farm's gambrel barn (cross-braced doors, cut
+  trees leaning by them), the bandstand, the covered bridge, the skating
+  hut and a log cabin. Clapboards, six-over-six sashes with shutters,
+  wreaths on every door, snow lipped over every eave with icicles under
+  it, drifts where walls meet the ground. Each returns what brings it to
+  life: `windows` (quads to light), `eaves` (lines to hang lights from),
+  `chimneys`, `doors`, and `spots` where a cat might sit.
+- **Light (the Harvest Valley method, cheaper):** everything is painted at
+  daylight colour. `VillageLogic.light` (a winter palette: a pale snow sky,
+  rose at the ends of the day, a night that is blue, not black; continuous,
+  tested) gives the hour's wash; the land is washed into a second canvas
+  only when that colour has moved a step (steps of 6 in each channel and
+  0.02 in strength), and the cast's colours (`tone`) and the tree sprites
+  (`toned`) are redone on the same key. The sun and moon are Harvest
+  Valley's (`harvest-sky.js`): the real sunset for the date, the real
+  phase, a pinned Day, Dusk or Night, or a whole day in 1–30 minutes. A
+  pinned Night is an evening as far as the town goes (the windows' hour is
+  19:45), or it would be a town asleep.
+- **Windows keep hours (`windowLit`, tested):** each window has its own
+  dusk (how dark before the light goes on), bedtime (21:36 to 01:12; one
+  in eight is a night owl) and rising (05:24 to 07:12). The meetinghouse
+  is lit until 21:30, the store until 21:00, the hut until 23:30. On
+  Christmas Eve everybody stays up two and a half hours later and the
+  meetinghouse until half past one. Lit windows show curtains, and some a
+  tree or a cat on the sill; the meetinghouse's are stained glass; the hut's
+  shows the cocoa seller. Some houses keep a candle in every window all
+  night. The cabin's windows are firelight, flickering, drawn each frame.
+- **Lights and trees:** strings along every decorated eave, bulbs on the lit
+  trees, in five palettes or the user's own; a twinkle rate (0 is steady);
+  a faint glow by day, if wanted. *Decorations* is either everything up, or
+  **advent**: a quarter of the town on the 1st of December, all of it by
+  the 24th (owners are ranked once by the golden ratio, so each day adds
+  to what was there), and the layout is rebuilt at midnight. The **grand
+  tree** (200 units, × 0.6–1.8) always has its lights, and lights the snow
+  round it; the **toy train** (engine, tender, boxcar, a gondola of
+  presents, a caboose with lit windows) runs an oval round its foot, the
+  half behind the trunk drawn before the tree and the half in front after,
+  cars seen side-on at the front and end-on at the sides, steam puffing.
+- **The pond:** skaters steer in the pond's own flattened space
+  (`VillageLogic.skate`, tested: nobody leaves the ice, everybody gets
+  round, each settles at the distance out it wants). Lappers, a pair (one
+  keeps station beside the other), a figure skater who spins and changes
+  direction (a figure of eight), quick children, and beginners who wobble
+  and fall. Blades mark a canvas the size of the pond and the marks fade
+  (a little erased every second and a half). With `reflections` on, the
+  light layers are drawn again in the ice, upside down about the far
+  shore and squashed; the moon lays a path on it.
+- **Cast:** villagers on errands (door to door, to the hut for a cocoa and
+  then the fire or the bench, to stand and look up at the grand tree,
+  carrying a present), fewer late at night; **carollers** (four or five,
+  door to door, and the house they sing to lights every window: `H`);
+  **dogs** (on a lead ahead of their person, or loose and leaping:
+  `D`); **cats** (eight coats; a perch on a roof, a porch, a doorstep, a
+  barrel, the hut's counter, the wall, the warm side of the fire; mostly
+  asleep, snow gathering on their backs until they sit up and shake it
+  off; ground cats walk to another perch now and then, leaving prints);
+  sledders; a **family at the tree farm** (they choose, saw, the tree
+  comes down, they drag it to the barn and away; a stump for a minute,
+  then eight minutes to a tree: `T`); at the cabin, deer that graze and
+  look up, an owl after dark, and snow letting go of the roof.
+- **Sky:** stars and shooting stars, snow clouds, northern lights now and
+  then (`A`), and **the sleigh** (`S`): across the sky after dark, bent
+  through the moon's disc when the moon is up, six times as often on
+  Christmas Eve. The deer look up.
+- **Snow:** up to 1,800 flakes (520 × the setting × density × area) in
+  three depths, slanted by a wind that swings and gusts (`W`: a flurry).
+- **Taps:** a cat wakes (♥), a skater jumps and turns (a beginner falls),
+  a house's lights go on or off with a puff from its chimney, a tree drops
+  its snow, the cabin's roof slides, the sky gives a shooting star. Touch
+  can be switched off.
+- **Callouts:** the days to Christmas (1–24 December), Christmas Eve,
+  Christmas Day and New Year on opening; the meetinghouse clock striking
+  the hour (Live only); sleigh bells; `M` reports the time in Evergreen
+  Hollow, the days to go and the moon.
+- **Seasonal:** in December's rotation, third, so that its turn falls on
+  the 24th (§4.2).
+- **Lost canvases:** Harvest Valley's guards (§10.22): `contextrestored`,
+  a probe of the land every four seconds, and no layout for a window
+  under 16 px.
+- **Cost:** 5.4% busy on Low, 7.0% on Medium, 15.1% on High at 4×
+  throttle. `reflections` and `aurora` shed on Low.
+- **Tests:** unit (`tools/christmas-village.test.mjs`, 7): the light's
+  continuity, the calendar, the windows' hours, the layout on seven
+  screens (on screen, above the inset, rows that never overlap, a front
+  street on a phone), every part left out, the skaters. Smoke (4): alive
+  on frame one, and taps (a skater, a cat, a house); the windows' hours at
+  noon, 19:30, 23:50 and 03:00, Christmas Eve, and advent on the 1st, 12th
+  and 24th; carollers lighting a house, the family and the regrown tree,
+  the sleigh through the moon's middle, the lost-canvas drill; a phone
+  held upright, and everything switched off.
+- **Found on the way:** a skater who wanted the middle but started near
+  the edge circled the edge for ever (the "turn in at the edge" rule
+  replaced the lean inward instead of adding to it; the unit test found
+  it); the bonfire's sparks outlived the bonfire when it was switched off
+  (a stress run through every switch found it); `node tools/bench.mjs
+  <id>` rewrites `costs.js` from that one run and drops other wallpapers'
+  entries, so after a single-wallpaper bench, restore it and add the line
+  by hand.
 
 ### 10.21 macOS: live desktop and screen saver (`mac/`, owner idea)
 

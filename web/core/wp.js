@@ -19,7 +19,7 @@
         ['leaves', 'sky-island'],                                                                       // Sep
         ['halloween', 'sky-island'],                                                                    // Oct
         ['harvest', 'sky-island'],                                                                      // Nov
-        ['advent', 'cat-ornament', 'last-bulb', 'frost', 'small-christmas', 'sky-island'],              // Dec (wins over snow), a different one each day
+        ['advent', 'cat-ornament', 'christmas-village', 'last-bulb', 'frost', 'small-christmas', 'sky-island'],   // Dec (wins over snow), a different one each day: the village has Christmas Eve
     ];
 
     WP.seasonalFor = date => {
