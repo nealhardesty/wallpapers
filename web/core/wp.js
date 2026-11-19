@@ -6,7 +6,7 @@
     'use strict';
 
     // The version the panel shows: manifest.json's, bumped with it (the tests keep them equal).
-    WP.VERSION = '0.21.0';
+    WP.VERSION = '0.22.0';
 
     // Seasonal: the wallpaper for each calendar month (0 = January). A list
     // takes turns, one a day: the month's own wallpaper on the 1st, then
