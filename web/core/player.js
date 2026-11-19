@@ -10,7 +10,11 @@
     const host = WP.hostKind(params, location.protocol);
     const currentKey = WP.currentKey(params);
     const insets = WP.parseInsets(params.insets, host);
-    const settingsScreen = host === 'android' && params.panel === 'open';
+    const settingsScreen = host === 'android' && (params.panel === 'open' || params.panel === 'gallery');
+    // Android's live wallpaper itself, behind the launcher: its corners are
+    // the home screen's, so a hold there opens nothing (settings live in
+    // the app, and fullscreen means nothing there).
+    const liveWallpaper = host === 'android' && !settingsScreen;
     const FADE_MS = 600;
     const REBUILD_MS = 400;
 
@@ -305,6 +309,7 @@
     // ---- Keys ---------------------------------------------------------------
     function key(name, event) {
         const typing = event?.target?.closest?.('input, select, textarea');
+        if (WP.panel.isOpen && !(help && !help.hidden) && WP.panel.key(name, event)) return;   // the gallery: search, arrows, Esc back
         if (name === 'Escape') {
             if (help && !help.hidden) toggleHelp(false);
             else WP.panel.close();
@@ -312,13 +317,13 @@
             return;
         } else if (name === ',' || name === 'c' || name === 'C') {
             // c, as on the old homepage
-            WP.panel.toggle();
+            if (!liveWallpaper) WP.panel.toggle();
         } else if (name === '[') cycle(-1);
         else if (name === ']') cycle(1);
         else if ((name === 'ArrowLeft' || name === 'ArrowRight') && WP.panel.isOpen) {
             event?.preventDefault();
             cycle(name === 'ArrowLeft' ? -1 : 1);
-        } else if (name === 'f' || name === 'F') toggleFullscreen();
+        } else if (name === 'f' || name === 'F') { if (!liveWallpaper) toggleFullscreen(); }
         else if (name === 'k' || name === 'K') toggleClock();
         else if (name === '?') toggleHelp();
         else if (!WP.panel.isOpen && WP.entry(resolve(choice)).keys) {
@@ -414,11 +419,11 @@
             syncClock();
             // Not on the stage's ready: a wallpaper that is slow or fails to
             // start must not leave the settings screen (Android) empty.
-            if (params.panel === 'open') WP.panel.open();
+            if (params.panel === 'open' || params.panel === 'gallery') WP.panel.open({ gallery: params.panel === 'gallery' });
             let said = null;
             try { said = sessionStorage.getItem('wp:toast'); sessionStorage.removeItem('wp:toast'); } catch {}
             if (said) toast(said, 7000);
-            else if (!WP.store.get('wp:hinted') && !params.w) {
+            else if (!WP.store.get('wp:hinted') && !params.w && !liveWallpaper) {
                 WP.store.set('wp:hinted', true);
                 const touch = matchMedia('(hover: none)').matches;
                 toast(touch ? 'Hold a right-hand corner for wallpapers and settings'

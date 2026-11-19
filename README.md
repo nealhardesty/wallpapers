@@ -1,1006 +1,329 @@
 # wallpapers
 
-Toy animated wallpapers: snow, rain, falling leaves, fireflies, a fireplace,
-northern lights, a fish tank, a Halloween night, an advent calendar, a
-self-playing 8-bit adventure, koi, a zen garden, a night train, fireworks,
-the real satellites overhead, your own Jellyfin videos playing in an old
-TV, a harvest valley for Thanksgiving, the weather outside, a world
-clock with the real day and night, an orrery of the solar system right now,
-and more: 37 in all. Each one is a full-screen canvas
-animation with no page around it. Most just play; some also respond to you.
-Click to feed the fish, light the jack-o'-lanterns, rake the sand, or take
-over Pixel Quest's hero with the arrow keys.
+Toy animated wallpapers: snow, a fireplace, northern lights, a fish tank, a
+self-playing 8-bit adventure, koi, a night train, the real satellites
+overhead, an orrery of the solar system right now, your own Jellyfin videos
+in an old TV, endless sports leagues, a ski run, and more: 49 in all. Each
+one is a full-screen canvas animation with no page around it. Most just
+play; some also respond to you: feed the fish, rake the sand, or take over
+Pixel Quest's hero with the arrow keys.
 
 **[Try it: nealhardesty.github.io/wallpapers](https://nealhardesty.github.io/wallpapers/)**, then press `,`.
 
 ![The settings panel open over the fireplace](docs/panel.webp)
 
 Everything is plain HTML, CSS and JavaScript, with no build step. Most
-wallpapers work fully offline. The online ones, such as the Bing image of
-the day, need no API keys.
-
-> **Status: working** as a web page, a Chrome new tab and an Android live
-> wallpaper (sideloaded). The plan and roadmap are in [SPEC.md](SPEC.md).
-
-## The wallpapers
-
-Click one to see it live.
-
-| | | | |
-|:-:|:-:|:-:|:-:|
-| [<img src="web/wallpapers/snow/thumb.webp" width="200" alt="Snow">](https://nealhardesty.github.io/wallpapers/?w=snow)<br>❄️ Snow | [<img src="web/wallpapers/rain/thumb.webp" width="200" alt="Rain">](https://nealhardesty.github.io/wallpapers/?w=rain)<br>🌧️ Rain | [<img src="web/wallpapers/leaves/thumb.webp" width="200" alt="Falling Leaves">](https://nealhardesty.github.io/wallpapers/?w=leaves)<br>🍂 Falling Leaves | [<img src="web/wallpapers/fireflies/thumb.webp" width="200" alt="Fireflies">](https://nealhardesty.github.io/wallpapers/?w=fireflies)<br>✨ Fireflies |
-| [<img src="web/wallpapers/fireplace/thumb.webp" width="200" alt="Fireplace">](https://nealhardesty.github.io/wallpapers/?w=fireplace)<br>🔥 Fireplace | [<img src="web/wallpapers/northern-lights/thumb.webp" width="200" alt="Northern Lights">](https://nealhardesty.github.io/wallpapers/?w=northern-lights)<br>🌌 Northern Lights | [<img src="web/wallpapers/parallax-clouds/thumb.webp" width="200" alt="Parallax Clouds">](https://nealhardesty.github.io/wallpapers/?w=parallax-clouds)<br>☁️ Parallax Clouds | [<img src="web/wallpapers/mountains/thumb.webp" width="200" alt="Mountains">](https://nealhardesty.github.io/wallpapers/?w=mountains)<br>🏔️ Mountains |
-| [<img src="web/wallpapers/starfield/thumb.webp" width="200" alt="Starfield">](https://nealhardesty.github.io/wallpapers/?w=starfield)<br>🌠 Starfield | [<img src="web/wallpapers/cherry-blossoms/thumb.webp" width="200" alt="Cherry Blossoms">](https://nealhardesty.github.io/wallpapers/?w=cherry-blossoms)<br>🌸 Cherry Blossoms | [<img src="web/wallpapers/halloween/thumb.webp" width="200" alt="Halloween Night">](https://nealhardesty.github.io/wallpapers/?w=halloween)<br>🎃 Halloween Night | [<img src="web/wallpapers/neko/thumb.webp" width="200" alt="Neko">](https://nealhardesty.github.io/wallpapers/?w=neko)<br>🐈 Neko |
-| [<img src="web/wallpapers/matrix/thumb.webp" width="200" alt="Matrix">](https://nealhardesty.github.io/wallpapers/?w=matrix)<br>🟩 Matrix | [<img src="web/wallpapers/fishtank/thumb.webp" width="200" alt="Fish Tank">](https://nealhardesty.github.io/wallpapers/?w=fishtank)<br>🐠 Fish Tank | [<img src="web/wallpapers/advent/thumb.webp" width="200" alt="Advent Calendar">](https://nealhardesty.github.io/wallpapers/?w=advent)<br>🎁 Advent Calendar | [<img src="web/wallpapers/quest/thumb.webp" width="200" alt="Pixel Quest">](https://nealhardesty.github.io/wallpapers/?w=quest)<br>⚔️ Pixel Quest |
-| [<img src="web/wallpapers/harmonograph/thumb.webp" width="200" alt="Harmonograph">](https://nealhardesty.github.io/wallpapers/?w=harmonograph)<br>🖋️ Harmonograph | [<img src="web/wallpapers/pixel-room/thumb.webp" width="200" alt="Pixel Room">](https://nealhardesty.github.io/wallpapers/?w=pixel-room)<br>🛋️ Pixel Room | [<img src="web/wallpapers/girih/thumb.webp" width="200" alt="Girih">](https://nealhardesty.github.io/wallpapers/?w=girih)<br>✴️ Girih | [<img src="web/wallpapers/stained-glass/thumb.webp" width="200" alt="Stained Glass">](https://nealhardesty.github.io/wallpapers/?w=stained-glass)<br>⛪ Stained Glass |
-| [<img src="web/wallpapers/synthwave/thumb.webp" width="200" alt="Synthwave">](https://nealhardesty.github.io/wallpapers/?w=synthwave)<br>🌇 Synthwave | [<img src="web/wallpapers/zen-garden/thumb.webp" width="200" alt="Zen Garden">](https://nealhardesty.github.io/wallpapers/?w=zen-garden)<br>🪨 Zen Garden | [<img src="web/wallpapers/koi-pond/thumb.webp" width="200" alt="Koi Pond">](https://nealhardesty.github.io/wallpapers/?w=koi-pond)<br>🎏 Koi Pond | [<img src="web/wallpapers/murmuration/thumb.webp" width="200" alt="Murmuration">](https://nealhardesty.github.io/wallpapers/?w=murmuration)<br>🐦 Murmuration |
-| [<img src="web/wallpapers/lanterns/thumb.webp" width="200" alt="Lantern Festival">](https://nealhardesty.github.io/wallpapers/?w=lanterns)<br>🏮 Lantern Festival | [<img src="web/wallpapers/rainy-window/thumb.webp" width="200" alt="Rainy Window">](https://nealhardesty.github.io/wallpapers/?w=rainy-window)<br>🪟 Rainy Window | [<img src="web/wallpapers/night-train/thumb.webp" width="200" alt="Night Train">](https://nealhardesty.github.io/wallpapers/?w=night-train)<br>🚆 Night Train | [<img src="web/wallpapers/fireworks/thumb.webp" width="200" alt="Fireworks">](https://nealhardesty.github.io/wallpapers/?w=fireworks)<br>🎆 Fireworks |
-| [<img src="web/wallpapers/lighthouse/thumb.webp" width="200" alt="Lighthouse">](https://nealhardesty.github.io/wallpapers/?w=lighthouse)<br>🌊 Lighthouse | [<img src="web/wallpapers/wiki-pond/thumb.webp" width="200" alt="Wiki Pond">](https://nealhardesty.github.io/wallpapers/?w=wiki-pond)<br>🪷 Wiki Pond | [<img src="web/wallpapers/satellites/thumb.webp" width="200" alt="Satellites">](https://nealhardesty.github.io/wallpapers/?w=satellites)<br>🛰️ Satellites | [<img src="web/wallpapers/jellyfin/thumb.webp" width="200" alt="Jellyfin">](https://nealhardesty.github.io/wallpapers/?w=jellyfin)<br>📺 Jellyfin |
-| [<img src="web/wallpapers/harvest/thumb.webp" width="200" alt="Harvest Valley">](https://nealhardesty.github.io/wallpapers/?w=harvest)<br>🌾 Harvest Valley | [<img src="web/wallpapers/weather/thumb.webp" width="200" alt="Weather">](https://nealhardesty.github.io/wallpapers/?w=weather)<br>🌦️ Weather | [<img src="web/wallpapers/world-clock/thumb.webp" width="200" alt="World Clock">](https://nealhardesty.github.io/wallpapers/?w=world-clock)<br>🌍 World Clock | [<img src="web/wallpapers/orrery/thumb.webp" width="200" alt="Orrery">](https://nealhardesty.github.io/wallpapers/?w=orrery)<br>🪐 Orrery |
-| [<img src="web/wallpapers/cat-ornament/thumb.webp" width="200" alt="The Cat vs. the Ornament">](https://nealhardesty.github.io/wallpapers/?w=cat-ornament)<br>🐾 The Cat vs. the Ornament | [<img src="web/wallpapers/last-bulb/thumb.webp" width="200" alt="The Last Bulb on the Strand">](https://nealhardesty.github.io/wallpapers/?w=last-bulb)<br>💡 The Last Bulb on the Strand | [<img src="web/wallpapers/frost/thumb.webp" width="200" alt="Frost on the Glass">](https://nealhardesty.github.io/wallpapers/?w=frost)<br>🧊 Frost on the Glass | [<img src="web/wallpapers/small-christmas/thumb.webp" width="200" alt="A Very Small Christmas">](https://nealhardesty.github.io/wallpapers/?w=small-christmas)<br>🎄 A Very Small Christmas |
-| [<img src="web/wallpapers/sky-island/thumb.webp" width="200" alt="Sky Island">](https://nealhardesty.github.io/wallpapers/?w=sky-island)<br>🏝️ Sky Island | [<img src="web/wallpapers/ice-patrol/thumb.webp" width="200" alt="Ice Patrol">](https://nealhardesty.github.io/wallpapers/?w=ice-patrol)<br>🛩️ Ice Patrol | [<img src="web/wallpapers/sumo/thumb.webp" width="200" alt="Sumo Championship">](https://nealhardesty.github.io/wallpapers/?w=sumo)<br>🤼 Sumo Championship | [<img src="web/wallpapers/pocket-hockey/thumb.webp" width="200" alt="Pocket Hockey">](https://nealhardesty.github.io/wallpapers/?w=pocket-hockey)<br>🏒 Pocket Hockey |
-| [<img src="web/wallpapers/baseball/thumb.webp" width="200" alt="The Never-Ending Baseball Season">](https://nealhardesty.github.io/wallpapers/?w=baseball)<br>⚾ The Never-Ending Baseball Season | [<img src="web/wallpapers/wayfarer/thumb.webp" width="200" alt="Wayfarer">](https://nealhardesty.github.io/wallpapers/?w=wayfarer)<br>🥾 Wayfarer | [<img src="web/wallpapers/ski-run/thumb.webp" width="200" alt="Fresh Tracks">](https://nealhardesty.github.io/wallpapers/?w=ski-run)<br>⛷️ Fresh Tracks | |
-
-The **Fireplace** 🔥 burns wood you'd recognise: furrowed oak, papery birch,
-scaly pine or bleached driftwood (following its Wood Type), round or split,
-each showing the rings of its sawn end and charring into alligator cracks
-whose glow breathes as the air moves. It lies in a heap of coals behind an
-iron grate or a pair of andirons; the panel's Char, Coal Bed and Ironwork
-controls set them. Lay it how you like: a heap, a log cabin, a teepee,
-top-down with kindling on top, a lean-to, one great backlog, or kindling
-alone, from rounds, splits, sticks and twigs, snapped ends with their
-splinters showing, or punky old wood. The flame puffs the way a real one
-does, licks in tongues as tall as you like, burns blue at its roots, and
-wobbles the air above it; or let it burn down to coals, drop a log, and
-catch again on a fresh one that steams before it takes (L drops one now,
-W lays the wood again).
-
-The second half is new: a harmonograph inking its figures, a pixel-art room
-with a cat that keeps the real hours, Islamic star patterns that breathe, a
-stained-glass window lit by the time of day, the synthwave drive, a zen
-garden to rake, koi to feed, a starling murmuration you can scatter as the
-falcon, sky lanterns to release, a rainy window to draw on, the view from a
-night train, fireworks (with a New Year's countdown), a lighthouse that
-keeps a real light's rhythm, every Wikipedia edit as a ripple on a pond, and
-the real satellites crossing your sky. Last, **Jellyfin** 📺 plays your own
-server's videos in a frame of your choice (see below). And for Thanksgiving, **Harvest Valley** 🌾: see below.
-
-**The Cat vs. the Ornament** 🐾 is a classic Christmas problem. A tree in a
-warm room, one ornament hanging low, and nine cats taking turns with it.
-Moofy lurks under the boughs with only his grin showing; Butters slow-blinks
-at you; Ras The Destroyer swats the ornament while making eye contact; Ibbie
-sleeps in the empty box; Die Fleder Maus has the zoomies; Turkey lounges
-belly-up; Harry (or Indiana Jones, or Friskies) plays; the Persian judges.
-Now and then one stares at the ornament for an uncomfortably long time, and
-now and then one goes up the tree, and the tree comes down: ornaments
-everywhere, the lights out, a cat with no idea what happened. Then a fade,
-and it's up again. Tap for a laser dot. The tree is Grand by default, wide
-and full, with up to 180 lights and a pile of presents. Choose Cozy for a
-slim tree or Majestic for the biggest, then make it yours: height (up to
-the ceiling), width, fullness, up to three times the lights and ornaments,
-gold beads or silver tinsel, a star or a red bow, snow on the boughs, and
-nought to twelve presents. Or choose the Charlie Brown tree: a sapling
-with a few drooping branches, one red ball bending it over, and a blanket
-round its base. The cats still bring it down.
-
-**The Last Bulb on the Strand** 💡 is a string of old C9 bulbs hung along
-the top of the wall (or snaking down it in rows, or right round the
-border, or up and over a doorway), every one pooling its colour on the
-plaster. Except the last one, on the tail where the wire drops off the
-final hook: it's loose. Every so often it flickers twice (a real filament's soft blink) and
-lights, and stays lit a while, and works loose again; sometimes it
-flickers twice and thinks better of it. On Christmas Eve it lights first
-time. Once in a long while the whole strand goes out, and someone jiggles
-the last bulb until it all comes back. Tap a bulb to jiggle it. Nearly
-nothing moves, so it costs next to nothing. Everything about the strand
-is yours to set: C9, globe or little C6 bulbs, painted, clear or frosted,
-nine palettes or your own, how far their light reaches, a pine garland
-wound along the wire, a few old twinkle bulbs blinking on their own, the
-wall (plaster, pine, brick, wallpaper, white or charcoal), and what the
-note on the last bulb says.
-
-**Frost on the Glass** 🧊: you're outside on a cold night, looking in. The
-room behind the window is out of focus, a warm lamp and a Christmas tree
-that's only the soft discs of its lights (as big or wide or bright as you
-like, or a Charlie Brown tree with one red ball, or no tree), and fern frost creeps in from the
-corners of each pane, crystal by crystal, glowing amber where the tree
-shines through it and glinting now and then. Someone inside draws in it
-with a fingertip (a heart, a star, a cat's paw print, NOEL backwards from
-out here) and it slowly frosts over again; after a long while the glass
-thaws from the middle and it all starts again. Snow falls outside, and now
-and then a flake sticks to the glass. Drag to draw in the frost; tap to
-breathe on it.
-
-**A Very Small Christmas** 🎄 is a little pixel-art tree near the bottom of
-a big dark screen, on a strip of snow, with a few presents and a toy train
-parked on its track (tiny to huge, wide or slim, with as many lights and
-ornaments as you like; or a Charlie Brown tree, a bent stick with one red
-ball). Its lights blink (twinkle, chase, alternate, all
-together). Every couple of minutes the train toots and goes round. Now and
-then the whole set moves house: the track packs itself away, the tree hops
-somewhere new with the presents and the train hopping after it in a line,
-and the track lays itself back down. Stars twinkle, pixel snow falls, and
-sometimes a sleigh crosses the sky (often, on Christmas Eve). In full
-colour, four greens, amber or four greys, with scanlines if you like. Tap
-the tree, the train, or the floor.
-
-In December, Seasonal takes turns, a day each, between the Advent
-calendar, the cats, the bulb, the frost, the very small tree and Sky
-Island.
-
-**Sky Island** 🏝️ is a village on a terraced island floating in an
-enormous sky, in 16-bit pixel art, and a new island every time it loads.
-Three tiers of ground step down from the top, where a castle tower flies
-its flag by a windmill and a crag with goats on it, through the village
-round its square (a well, benches, a market stall, a chapel) to the lake
-with its pier and sailboat and the farm with its red barn and fields of
-wheat. A spring on top spills into a waterfall that falls into the pond by
-the village, which falls into the lake, which pours off the edge in a
-cascade that dissolves into the sea of cloud below, where the ground far
-beneath (fields, woods, a river, little towns that light up at night)
-rolls slowly by. The island's underside is banded rock trailing roots,
-with something cyan crackling in its cracks and bits of rock in orbit
-round it, and a cave where something green mostly sleeps. About twenty
-townsfolk each have a job and a day: the baker's up before dawn, the
-fisher's on the pier (and a cat keeps running out to steal the catch),
-kids kick a ball about or fly kites when the wind's up, a roofer's up a
-ladder, the mail does the rounds, a fiddler plays in the square of an
-evening, couples take the benches at sunset, and the night watch walks
-the streets with a lantern. The cats are the household's own (Moofy lurks
-and grins, Butters follows people about, Ras knocks flowerpots off sills,
-Ibbie sleeps, Maus gets the zoomies, Turkey loafs on the pier, Harry
-chases butterflies, Kitty Toes judges from the castle's platform), plus
-strays and a couple of dogs, with birds, rabbits, deer, ducks, a fox at
-dusk and an owl at night. The real clock lights the sky and the windows; the
-real date dresses the island for the season and every holiday (and your own
-special dates, which throw a party). Other whole islands drift past, with
-their own towers and villages, and everyone waves; a small one comes now and
-then to orbit ours a couple of times; a balloon may bring a visitor (or a
-cat) over for a look round. Tap a cat and it comes; keep an island you like
-with `P`.
-
-**Ice Patrol** 🛩️ is an endless low flight over an ice world, from the
-pilot's seat. Plains of wind-carved snow, rolling hills and mountain chains
-with rock showing where it's too steep for snow to hold, all of it lit: long
-blue shadows under a low sun, alpenglow at dusk, a moonlit night with stars,
-two moons and an aurora, and the landing lamps throwing a pool of light on
-the snow ahead. Snow comes and goes on its own, from a few flurries (and a
-halo round the sun) to a blizzard that closes the world down to the streaks
-pouring past the canopy. Wingmen fly ahead with their engines glowing, and
-far beacons blink out on the ice. You sit in a dark, angular cockpit: two
-heavy canopy struts lean in over your head, the console's wings sweep back
-past you under louvred walls, and the yoke moves with the turn. Its
-instruments are real: the centre screen is a live scan of the actual
-terrain all round you (relief, contours, and anything higher than you fly
-in amber and red), the attitude ball rolls with the horizon, and the
-terrain scope shows the ground the autopilot is about to cross. The rest
-keeps house: lamps blink, a needle follows the engine, and now and then a
-switch is thrown. The panel comes in three sizes (full, small, extra
-small) for more of the view. Turbulence sets how much the air moves you:
-a slow float in still air, buffets in a storm, and at 0 dead level flight.
-You can fly it yourself: `W` `A` `S` `D` or the arrows turn, climb and dive,
-`Q` and `E` are the throttle, and a drag on the screen works as a stick.
-You can't hit anything (the autopilot keeps the height, and turns away from
-a wall you couldn't climb), and five seconds after you let go it takes over
-again. `X` changes the weather, `T` the time of day, `V` the view (canopy,
-panel only, or none), `R` the radar's range. It is one of the three wallpapers drawn with
-WebGL, so it wants a GPU; without one it carries on as paper-cut ridgelines.
-
-**Wayfarer** 🥾 is a walk that never ends, through a cosy fantasy world of
-its own. A traveller and their company follow a road that wanders on for
-ever (nine travellers to choose from: a hooded ranger, a wizard, a bard, a
-knight, a barbarian woman and man in furs, an antlered elf druid who turns
-into a bear, an owl-beast or a great black cat for a stretch, an elf ranger
-with a recurve bow, and a rogue who slips past the guards unseen, vaults a fence and stops to
-stroke the cat; and a company of up to twelve of 46 companions, left to
-chance or ticked one by one, from a hound, a donkey and a goose to a dragon whelp, a
-paper-lantern spirit and a snail with a lit window, with Moofy, Butters,
-Waffles, Ras The Destroyer, Ibbie, Maus, Turkey, Harry and Kitty Toes among
-them): through forest and the deep forest, where the crowns close over the
-road and the leaves come down in autumn, flowering meadow, along a lake's shore and along a coast road above the sea, over a
-mountain pass with snow on the firs, across the moors, past farms with a
-windmill turning, and through an enchanted grove of giant mushrooms that
-glows after dark. Which of the nine countries the road passes through is
-yours to say (all of them, the woods, open country, the shore, the high
-country, or the ones you tick). Every few minutes the road arrives somewhere: a
-timber-framed village with smoking chimneys, bunting over the street, a
-well, market stalls and people who wave; a walled city with gate towers, a
-market square and fountain, a keep and a spire; now and then a grand city
-behind a moat and a drawbridge, with a cathedral, a guildhall and a castle
-on a rock above the roofs; or a landmark: standing
-stones, a castle on its hill, a ruined abbey, a lighthouse, an elder tree
-with a door in it, a fairy ring. Streams are crossed on stone bridges.
-Each country has its wild things (a setting says how many): a bear well back
-among the trunks, stags, squirrels on the boughs, hares boxing, herons and
-swans, ibex in the pass, bats and glow-worms after dark. Sheep and cows graze, deer bolt as you come near, crows fly up from the
-ruins, carts and riders pass on the road, geese cross the sky, and now and
-then, far off, a dragon, an airship or a balloon. The day goes round: golden
-mornings and evenings with long shadows, then a blue night with two moons,
-stars, fireflies, lit windows and lanterns, the traveller's own lantern
-swinging from the staff, and a while spent sitting by a campfire. Weather
-comes and goes (rain on the lake, snow in the pass and in winter), and the
-seasons turn along the road, so you walk out of summer into autumn. Three
-cameras: behind the traveller, through their eyes, or cinematic, which cuts
-between a crane shot, a bird's view, a low shot looking back and more.
-Choose the traveller (ranger, wizard, bard or knight) and the companion
-(fox, dog, pack pony, cat, a wisp of light, or none), the pace, how many
-towns there are, the season and the hour. Drag to look around. `V` changes
-the camera, `T` the time of day, `X` the weather, and `N` goes on down the
-road to the next place. Like Ice Patrol it is drawn with WebGL; without it
-the walk carries on as a flat storybook picture.
-
-**Sumo Championship** 🤼 is a tournament that never ends, drawn as a
-woodblock print that moves and written in Japanese. Sixteen wrestlers meet
-over fifteen days, each under a ring name built the way real ones are but
-from words no stable would choose: 団子山 (Dangoyama, "Dumpling
-Mountain"), 河馬川 (Kabagawa, "Hippo River"), 昼寝の桜 (Hirunenozakura,
-"Afternoon Nap Cherry"). Each bout has its ritual (salt thrown, a leg
-raised and stamped down, the crouch and the stare) and is then decided in a
-few seconds by its own small physics: shoves, thrusts, belt grips,
-slap-downs, a sidestep on the straw. The referee's fan points to the
-winner and the caption names the winning technique (決まり手). At the end
-of the last day (千秋楽) the cup is given, with a prize of doubtful use,
-and the new ranking sheet (新番付) is written: promotions and demotions,
-two down to the second division and two up, the old retire, and two cups
-in a row make a 横綱. Ranks, days, results and the standings (星取表, a
-white disc for a win and a black one for a loss) are all in Japanese, with
-the reading and meaning in small English underneath unless you turn that
-off; a device with no Japanese font gets Roman letters instead. The league
-is remembered between visits and only moves on while you watch. An upset
-brings the crowd's cushions down; a tap throws one. `N` goes to the
-finish, `B` holds up the ranking sheet.
-
-**Pocket Hockey** 🏒 is a whole invented league of three-on-three hockey,
-seen from above in pixel art. Eight clubs from towns on no map (the Mount
-Mitten Yetis, the Port Pickle Walruses, the Biscuit Falls Gravy Boats, the
-Noodle Harbour Honkers ...) play fourteen rounds, the top four go to
-best-of-three playoffs, and somebody skates the Big Biscuit Tin round the
-ice under falling paper; then the old retire, rookies arrive, and it starts
-again. One game of each round is played in front of you by real little
-physics: skaters with momentum who carve and overshoot, a puck that
-ricochets off the boards and rings off the posts, body checks, tiny goalies
-in big nets, lines changing on the fly. They steer for themselves: the
-nearest goes where a loose puck will be, a carrier weighs a shot against a
-pass, the rest find open ice or get between the puck and their net. The
-round's other games are played out of sight and their scores come in.
-Players grow signature moves from what they do (a slapshot with a wind-up,
-a spin, a burst of speed, a one-timer, a kick save), each with a name of
-its own ("the Polite Freight Train", "the Disco Pretzel") that the
-announcer shouts when it happens, and polish them with use. A side that is
-a goal down late pulls its goalie, and once in a long while the other
-goalie heaves the puck the length of the ice into the empty net; the hats
-come down for that, as they do for a hat trick. Level after three periods
-is two-on-two overtime, then both nets empty until somebody scores. Between
-periods Old Smoothie, the ice resurfacer, does its laps and leaves a clean
-wet stripe. The league and the game in progress are remembered between
-visits, to the very step, and only move on while you watch. A tap on the
-ice throws something onto it (skaters slip on it); a tap in the seats
-starts a wave. `N` skips to the end of the period, `G` to the final horn,
-`B` shows the table and then the scorers, `X` throws something, `W` starts
-a wave. An upright phone stands the rink on end.
-
-**The Never-Ending Baseball Season** ⚾ is a whole league in 16-bit pixel
-art, seen from high behind home plate: eight clubs from towns that don't
-exist (the Port Biscuit Clams, the Lake Regret Thunder Geese, the Fort
-Mildew Tax Collectors), each in a park with a quirk of its own. Every game
-is played a pitch at a time. The pitcher picks from his own repertoire by
-the count and misses by his control; the batter reads it as well as his eye
-allows; a ball in play has an exit speed, a launch angle and a shadow, and
-whoever can get to it first plays it: double plays, sacrifice flies, a man
-thrown out at the plate, a catch at the wall, a home run over it. Every
-number is kept, on the scoreboard behind centre field, on the cards for the
-man at bat and the man on the mound, and on the leaders' sheets between
-innings; an announcer who has had too much coffee calls it. Nicknames are
-earned: strike out too often and you are the Ceiling Fan, end a game with
-one swing and you are Mr. Bedtime. Twenty-one days make a season, the top
-two play for the Golden Gravy Boat, and after a winter of retirements and
-rookies it starts again. Day, dusk and night games follow your clock and
-the lamps come on; there are rain delays under the tarp, a seventh-inning
-stretch, a mascot, a hot-dog seller, and fireworks for a home run at night.
-The league is remembered between visits and only moves on while you watch.
-A tap starts a wave and a beach ball (tap the hot-dog seller for a hot
-dog). `N` goes to the next half-inning (with Shift, the end of the game),
-`S` holds up the standings and the leaders.
-
-**Fresh Tracks** ⛷️ is a ski run that never ends. A lead rider and one to
-three friends, on skis or boards, go down a mountain that is made as they
-go: wide groomed corduroy, deep powder with pillows to pop off, glades with
-lanes between snow-laden trees, a half-pipe ridden wall to wall, a terrain
-park with three kickers and a line of rails, rollers, a frozen lake, a cliff
-to drop (or ski round), a narrow gully, a cat track under a chairlift, a
-hut with smoke in its chimney where everyone pulls up for a moment, and now
-and then a grand lodge, where they step out of their skis, walk up to a
-table on the terrace and sit over a drink before setting off again. The
-hill is what moves them: they pick up speed in the fall line and scrub it
-off across, glide out slower over the flat lake, and take time to stop.
-They lean on what their edges carry, the inside leg short and the outside
-long, plant a pole at each turn, skid their tails to check speed, and pull
-up in a hockey stop; the boarders sit back on their heel edge and reach
-forward over their toes; in powder they sink to the shins. Each
-takes their own line, leaves tracks that stay on the slope, throws spray in
-the turns, and does what the ground offers: grabs, spread eagles, spins,
-a backflip off the big kicker. Now and then a landing goes wrong: a
-tumble in a cloud of powder, a moment sitting in the snow, a shake of the
-head, and off again (a setting turns that off; nobody is ever hurt).
-Strangers are passed, a ski school snakes down behind its instructor,
-chairs go up overhead with skis dangling, a hare or a fox crosses well
-ahead, an eagle turns over a valley full of cloud with far ranges standing
-out of it. The day goes round, with long shadows, alpenglow at dusk and a
-floodlit run under the stars; snow and fog come and go. Watch from behind,
-from in front, from on high, or let the director cut between them (`V`).
-`A` and `D` or the arrows carve the lead across the piste and a drag does
-too (they take their own line again four seconds after you let go); `J`,
-the up arrow or a tap sends a jump there and then, and Shift+`J` botches
-it; `T` changes the time of day, `X` the weather, `G` swaps skis for a
-board. Like Ice Patrol it is drawn with WebGL and wants a GPU; without one
-the same run carries on as flat paper-cut slopes.
-
-**Weather** 🌦️ is the forecast for your place from Open-Meteo (no key),
-over a sky that is the weather outside: drifting clouds, rain or snow,
-fog, lightning, the stars and the real moon at night. As a row of day cards
-(tap one for its hours), the next 24 hours as a ribbon, or right now, large,
-every day and hour with its own little looping scene. Set a place in the
-panel (typed, or from the device); until then it shows a labelled sample,
-and offline it keeps the last forecast with how old it is. `U` switches
-°C and °F without asking the network again.
-
-The **World Clock** 🌍 shows your cities on the world as it is right now: the
-real day and night, with twilight, the sun and the moon overhead and the city
-lights coming on, in four looks (night lights, atlas, blueprint, old paper).
-Or as analog faces, each dial that city's sky, or as a split-flap departures
-board that flips as the minutes turn. Pick cities in the panel, or add any
-time zone as `Label=Area/City`. The map can be stretched to fill the screen,
-or zoomed in (up to 8×) on home, or on wherever the sun or the moon is
-overhead, with country borders, states and provinces, and the biggest
-cities' names if you like. No network, no location: "Here" is your device's
-time zone.
-
-The **Orrery** 🪐 is the solar system as it is right now, computed in code:
-the eight planets (and Pluto, if you like), the Moon in its real phase,
-Jupiter's four moons, the asteroid belt and Jupiter's Trojans. In deep
-space, as an antique brass machine with turning gears, or as an ink star
-chart with lines of sight showing where each planet is in tonight's sky.
-Compressed, true or inner-planet distances, from above or tilted (drag to
-turn it). `=` runs time forward up to a year a second, `0` comes back to
-now. Tap a planet for how far it is, where it is among the stars, and
-whether it's retrograde. A little globe in a corner (pick which, or none)
-has a needle pointing at the Galactic Core, turning as the view does (its
-ticks turn with it); the deep-space Milky Way band can be switched off.
-
-Also: **Seasonal** 📅 picks by month (the default), **Blank** ⬛ is just
-black, and the **Bing Image of the Day** 🖼️ shows Bing's photo with its
-credit.
+wallpapers work fully offline; the online ones need no API keys. How it all
+works is in [SPEC.md](SPEC.md).
 
 ## Install
 
-**As a web page.** Open [the hosted copy](https://nealhardesty.github.io/wallpapers/), or `web/index.html`
-straight from a clone, or run `make serve`. To make it Chrome's start page
-without the extension, set Settings → On startup → Open a specific page to
-the hosted address.
+Downloads are on the [latest release](https://github.com/nealhardesty/wallpapers/releases/latest).
+Each zip has a `.sha256` beside it.
 
-**As Chrome's new tab.** Every new tab shows the wallpaper.
-1. Get the extension: `make extension` builds `dist/extension/`. Or download
-   `wallpapers-extension-<version>.zip` from the latest
-   [release](https://github.com/nealhardesty/wallpapers/releases) (or the
-   `wallpapers-extension` artifact of a
-   [CI run](https://github.com/nealhardesty/wallpapers/actions/workflows/ci.yml))
-   and unzip it somewhere it can stay.
-2. Open `chrome://extensions`, turn on Developer mode, click **Load
-   unpacked** and pick that folder.
-3. Open a new tab. Chrome asks once whether to keep the change; keep it.
+| Where | Get it | How |
+|---|---|---|
+| **Web page** | [Hosted copy](https://nealhardesty.github.io/wallpapers/) | Open it, or `web/index.html` from a clone, or `make serve`. Set it as Chrome's startup page if you like |
+| **Any phone** | [Hosted copy](https://nealhardesty.github.io/wallpapers/) | Browser menu → *Add to Home screen*. Opens full screen |
+| **Chrome new tab** | `wallpapers-extension-<version>.zip` from [Releases](https://github.com/nealhardesty/wallpapers/releases/latest) | Unzip, then **Load unpacked** (below) |
+| **Android live wallpaper** | `wallpapers-<version>.apk` from [Releases](https://github.com/nealhardesty/wallpapers/releases/latest) | Sideload it, open **Wallpapers**, **Set as wallpaper** |
+| **macOS 14+ desktop and screen saver** | `wallpapers-mac-<version>.zip` from [Releases](https://github.com/nealhardesty/wallpapers/releases/latest) | Unzip, move `Wallpapers.app` to `~/Applications`, first open via right-click → **Open** |
+| **Windows 11 desktop and screen saver** | `wallpapers-windows-<version>.zip` from [Releases](https://github.com/nealhardesty/wallpapers/releases/latest) | Unzip, run `Wallpapers.exe`, choose **Install** or **Just Run** |
+| **Self-hosted** | A clone | `make docker-build && make docker-run`, then http://localhost:8000 |
 
-Its ID is always `hajnldgffgkdnbimdihipffnimjckgcp`, whichever folder you
-load it from, so a new version unpacked somewhere else keeps your settings.
+<details>
+<summary><b>Chrome extension</b></summary>
 
-Chrome puts the cursor in the address bar on a new tab, so click the page
-once before pressing `,`, or use the gear in the top-right corner. The
-extension asks for one permission, reading `www.bing.com`, so the Bing
-wallpaper can fetch its photo; nothing else leaves your machine.
+1. Unzip the extension somewhere it can stay (or build it: `make extension` → `dist/extension/`).
+2. `chrome://extensions` → turn on **Developer mode** → **Load unpacked** → pick that folder.
+3. Open a new tab; Chrome asks once whether to keep the change. Keep it.
 
-**Moving from the old homepage.** Its wallpaper settings come with you:
-the wallpaper you'd picked, every setting you changed, and the advent
-calendar's memory of the last door it celebrated. Settings you never
-touched take today's defaults. Links, weather, search and clocks stay
-behind.
-1. On an old homepage tab, open the console (⌥⌘J on a Mac, Ctrl+Shift+J
-   elsewhere). If Chrome asks, type `allow pasting` first. Paste this and
-   press Enter; it downloads `homepage-wallpapers.json`, and reads nothing
-   but the wallpaper keys:
+Its ID is always `hajnldgffgkdnbimdihipffnimjckgcp`, so a new version unpacked
+elsewhere keeps your settings. Chrome focuses the address bar on a new tab:
+click the page before pressing `,`, or use the gear top-right. Its one
+permission reads `www.bing.com` for the Bing wallpaper.
 
-   ```js
-   (() => {
-     const keep = k => /Config$/.test(k) || ['wallpaperPreference', 'adventCelebrated', 'adventLastSeen'].includes(k);
-     const data = { app: 'homepage', exported: new Date().toISOString(),
-       localStorage: Object.fromEntries(Object.keys(localStorage).filter(keep).map(k => [k, localStorage.getItem(k)])) };
-     const a = document.createElement('a');
-     a.href = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
-     a.download = 'homepage-wallpapers.json';
-     a.click();
-   })();
-   ```
-2. In `chrome://extensions`, turn the old homepage off, and install this
-   extension (above).
-3. Open a new tab, press `c` (or `,`), choose **Import** and pick the file.
-   A note says what came over.
+**Coming from the old homepage?** Its wallpaper settings can come with you.
+On an old homepage tab, open the console (⌥⌘J / Ctrl+Shift+J; type `allow
+pasting` if asked), paste this, and press Enter to download
+`homepage-wallpapers.json`:
 
-The same file imports on the hosted copy and in the Android app.
+```js
+(() => {
+  const keep = k => /Config$/.test(k) || ['wallpaperPreference', 'adventCelebrated', 'adventLastSeen'].includes(k);
+  const data = { app: 'homepage', exported: new Date().toISOString(),
+    localStorage: Object.fromEntries(Object.keys(localStorage).filter(keep).map(k => [k, localStorage.getItem(k)])) };
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
+  a.download = 'homepage-wallpapers.json';
+  a.click();
+})();
+```
 
-**On Android, as a live wallpaper.** Download `wallpapers-<version>.apk`
-from the latest [release](https://github.com/nealhardesty/wallpapers/releases)
-(or `make android-install` with a phone connected) and install it; your
-phone asks you to allow installs from the browser once. Open **Wallpapers**
-from the app drawer: it's the panel, with a **Set as wallpaper** button.
-On the home screen, taps and drags reach the wallpaper (feed the fish, wake
-the cat), and the mountains, clouds and stars pan as you swipe between
-pages. It pauses whenever it's covered, and runs at Medium and 30 fps at
-most, lower on battery saver or when the phone is warm.
+Turn the old homepage off, install this extension, open a new tab, press
+`,` → **Import** and pick the file. It imports on the hosted copy and on
+Android too.
+</details>
 
-**On a Mac, as your desktop background** (macOS 14 or later, experimental). Run
-`make mac-run`, or `make mac-install` to put the app in `~/Applications`. The
-wallpaper sits behind your desktop icons, widgets and windows, on every
-display, and the menu bar item (the project's icon, a window onto a dusk
-scene) picks a wallpaper, pauses it, opens **Settings** (the same panel) and
-sets it to open at login. The icon is black and white like the rest of the
-bar, so it follows light and dark menu bars and the contrast settings;
-**Menu Bar Icon → In Colour** shows the full-colour one. It pauses when a
-full-screen app covers it, when the screen sleeps or locks, and it runs at a
-lower quality on battery, in Low Power Mode and when the Mac is hot. Wallpapers
-that react to the mouse do: fish follow the pointer, and a click on the bare
-desktop is a tap. **Use as Lock Screen Picture…** renders a still and sets it
-as your desktop picture, because a live wallpaper can't show on the lock
-screen. The app isn't notarized (no paid developer account), so building it
-yourself is the easy way in. Or download `wallpapers-mac-<version>.zip` from the
-latest [release](https://github.com/nealhardesty/wallpapers/releases) (a
-universal build for Apple silicon and Intel; check it against the `.sha256`
-beside it), unzip it, and move `Wallpapers.app` to `~/Applications`. macOS
-blocks a downloaded app that isn't notarized the first time: right-click →
-**Open**, or clear the flag with `xattr -dr com.apple.quarantine
-~/Applications/Wallpapers.app`.
+<details>
+<summary><b>Android</b></summary>
 
-**On a Mac, as a screen saver.** The app carries one, and installs it for you:
-✨ → **Screen Saver → Install Screen Saver…**. macOS wants you to choose it
-yourself, once: System Settings → Wallpaper → **Screen Saver**, scroll to the
-bottom (**Other**) and pick **Wallpapers**. From the same menu you choose what it
-shows: the same wallpaper as your desktop, a different one each time (changing
-every 1, 5, 15 or 30 minutes, and a different one on each display), or one in
-particular, and whether to float a quiet clock over it. **Preview Now** runs it
-at once. The saver follows your settings in the app, which keeps them where the
-saver can read them. If macOS's screen saver host ever stalls the page, the
-saver reloads it, and failing that shows a clock on black rather than a broken
-screen. An update of the app updates the saver by itself.
+Your phone asks once to allow installs from the browser (or `make
+android-install` with a phone connected). Open **Wallpapers** from the app
+drawer: it's the panel, with a **Set as wallpaper** button. Taps and drags
+reach the wallpaper, depth layers pan as you swipe home screens, and it
+pauses when covered and runs at Medium, 30 fps at most. More in SPEC §6.
+</details>
 
-**On Windows, as your desktop background** (Windows 11). Download
-`wallpapers-windows-<version>.zip` from the latest
-[release](https://github.com/nealhardesty/wallpapers/releases), check it against
-the `.sha256` beside it, unzip it, and run `Wallpapers.exe`. It asks once:
-**Install** copies the app to `%LOCALAPPDATA%\Programs\Wallpapers` (no admin
-rights), adds *Wallpapers* to the Start menu and to Settings → Apps, and makes it
-start with Windows; **Just Run** runs it from where it is and doesn't ask again
-(the tray's **Install…** is still there if you change your mind). To update, run
-a newer download: it offers to **Update** the installed copy in place (the old
-one quits, your settings stay) and starts the new one. **Start with Windows** is
-a tick in the tray menu. To remove it, use Settings → Apps → *Wallpapers* →
-Uninstall, or **About → Uninstall…** in the tray; it asks whether to keep your
-settings (`%LOCALAPPDATA%\Wallpapers`, kept unless you say otherwise). The app
-never checks for updates and sends nothing anywhere; its only network use is
-the Bing wallpaper fetching the picture of the day. The About dialog's
-**Project Page** opens the releases page in your browser. Or
-build and start it from WSL with `make win-run` (it needs the .NET 10 SDK in WSL;
-see Development). The wallpaper runs live behind your desktop icons on
-every monitor, and the icons, the right-click menu and drag-selecting all work
-as before. A tray icon controls it. Windows puts new tray icons behind the **^**
-at first: drag it onto the taskbar to keep it there. Left or right click opens
-the menu:
-- pick a wallpaper (with thumbnails), **Surprise Me**, **Next** and **Previous**
-- **Pause**
-- **Wallpaper Follows the Mouse** and **Clicks on the Desktop Play** (both on
-  at first): untick them to keep the desktop to itself
-- **Play in a Window…**: the current wallpaper in an ordinary window you can
-  resize, fill the screen with (**f**) and type into, for the ones that want
-  keys (Pixel Quest's arrows; **,** opens the panel there). It has sound.
-- **Monitors**: **Same on All** (every monitor shows the current wallpaper) or
-  **Different per Monitor** (each monitor gets its own, with a submenu per
-  monitor to pick its wallpaper, open its settings or play it in a window; a monitor you unplug
-  gets its wallpaper back when you plug it in). **Identify Monitors** shows a
-  big number on each screen for three seconds, to match the menu's rows.
-- **Performance**: **Auto**, **Low**, **Medium**, **High**, and **Save Power on
-  Battery**, with a line saying what it is doing now
-- **Settings…**: the same panel as everywhere else, in a window; a pick there
-  changes the desktop at once
-- **Start with Windows** (installed) or **Install…** (running from elsewhere)
-- **Troubleshooting**: **Open Log Folder**, **Reload Wallpapers**, and **Draw
-  Above Icons**, a fallback for a Windows update that breaks the layer behind
-  the icons
+<details>
+<summary><b>macOS</b></summary>
 
-It keeps going when Explorer restarts and when a Remote Desktop session
-resizes the screen. Plugging a monitor in or out, changing its scale or moving
-the taskbar adjusts that monitor and leaves the others running.
+The app isn't notarized, so macOS blocks it the first time: right-click →
+**Open**, or `xattr -dr com.apple.quarantine ~/Applications/Wallpapers.app`.
+Or build it yourself: `make mac-run` / `make mac-install`. The wallpaper sits
+behind your icons on every display; the menu bar item picks a wallpaper,
+pauses, opens **Settings** and sets open-at-login. For the screen saver: menu
+bar item → **Screen Saver → Install Screen Saver…**, then pick **Wallpapers**
+under System Settings → Wallpaper → Screen Saver → Other. More in SPEC §10.21
+(macOS).
+</details>
 
-It pauses, and stops drawing, while it can't be seen: the PC is locked, the
-display is off or asleep, a fullscreen game or presentation is running, the
-screen saver is on, you've disconnected from Remote Desktop, or a monitor is
-covered by windows (a maximized window, or two snapped halves; the other
-monitors keep going). It lowers quality, but never pauses, on battery, with
-Energy Saver on and over Remote Desktop. On a laptop with two graphics chips,
-it uses the one Windows picks; to force the power-saving one, add
-`Wallpapers.exe` in Settings → System → Display → Graphics. **Quit** gives you your own picture back. Wallpapers that
-react to the mouse do on the desktop too: they follow it everywhere, even over
-your windows, and a left click plays only on bare desktop (never on an icon or
-a window; right and middle clicks never). Keys never reach the desktop (typing
-there jumps between icons): use **Play in a Window**. While an administrator
-window (Task Manager, an installer) has focus Windows withholds the mouse from
-the app: the wallpaper still follows it, at about 30 times a second, but clicks
-don't play until you click the desktop once. The two tray toggles turn the
-following and the clicks off, and with both off the app doesn't listen to the
-mouse at all. The exe isn't
-signed, so **Smart App Control**, if it's on, can refuse a build by its hash.
-`make win-run` notices and builds again (each build is a new file to it).
-SmartScreen asks about a downloaded copy: **More info → Run anyway**. (Or
-right-click the zip → Properties → **Unblock** before you unzip it.) Its data
-(settings, log) is in `%LOCALAPPDATA%\Wallpapers`.
+<details>
+<summary><b>Windows</b></summary>
 
-**Windows screen saver.** Once the app is installed (the screen saver is the
-installed copy's `Wallpapers.scr`, so **Just Run** can't offer it), open the tray
-menu → **Screen Saver** → **Use Wallpapers as the Screen Saver…**. It asks first,
-then makes Wallpapers your saver and remembers the one you had. The same submenu
-has:
-- **Start After**: 1, 3, 5, 10, 15 or 30 minutes without input
-- **Show**: **Same as the Desktop**, **A Different One Each Time** (a different
-  wallpaper on each monitor, never one that needs the network), or **One
-  Wallpaper** of your choice
-- **Change Every**: 1, 5, 15 or 30 minutes, for *Different*
-- **Show a Clock**: the drifting clock on top
-- **Preview Now**, and **Open Windows Screen Saver Settings…**
-
-Windows' own *Screen Saver Settings* dialog lists *Wallpapers*, shows a live
-preview, and its **Settings…** button opens the same options in a small window.
-A key, a click or moving the mouse ends the saver, on every monitor; *On resume,
-display logon screen* should work as for any saver (Windows handles it; not yet
-checked by hand). The desktop pauses while it runs.
-If the page ever stalls, the saver reloads it and, failing that, shows a clock on
-black. Untick **Use Wallpapers…** (or uninstall) and your old saver comes back.
-The saver is a second copy of the exe, about 52 MB more on disk. Smart App
-Control and SmartScreen should treat `Wallpapers.scr` as they do `Wallpapers.exe`
-(the same file; not yet checked by hand).
-A group policy that sets the screen saver wins, and the menu says so. Its log is
-`%LOCALAPPDATA%\Wallpapers\saver-log.txt`.
-
-**On any phone,** without installing anything: open the hosted copy and
-choose *Add to Home screen*. It opens full screen, with no browser around
-it. Hold a right-hand corner for the panel.
-
-<img src="docs/phone.webp" width="260" alt="The panel as a bottom sheet on a phone">
-
-
-## Harvest Valley
-
-A calm, cosy autumn valley, built for Thanksgiving, with a switch on every
-part of it. A village with smoking chimneys and a windmill, patchwork
-farmland, corn and a scarecrow with a crow, a pumpkin patch, an apple
-orchard whose apples and acorns fall, tumble and get carried off the edge of
-the screen by squirrels (who wander back in later), turkeys and sleepy cats
-about the meadow (who, now and then, chase a squirrel clear off the screen,
-then come back for a long nap), flocks of small brown-and-black geese overhead, up to a hundred
-strong, sometimes several at once and sometimes with a few stragglers behind
-(a V that ripples wingbeat by wingbeat; the leader drops to the back now and
-then; every goose its own bird, drifting in and out of step, jinking,
-overtaking, and now and then rolling upside down to lose height, the way
-real geese whiffle),
-leaves on the wind, valley mist and slanting sunbeams, and an autumn wreath
-on every door.
-
-The sky is real: the sun's path for the date, the moon in tonight's actual
-phase (rising and setting where it would, bright limb towards the sun, and
-named: the Harvest Moon, the Hunter's, the Beaver), a shooting star now and
-then. After dark the windows light, the lamps come on and there's a bonfire
-on the green. In Thanksgiving week the bunting spells *give thanks*.
-
-And it has a secret. On a dark night, now and then, the most sincere pumpkin
-in the patch has been known to rise. (Press `G` to wait for it.)
-
-Everything is in the panel: time of day (live, a whole day in a few minutes,
-or pinned to day, golden hour or night), the sun, the moon, its phase and
-size, stars, clouds, geese (and how irregular they fly), the village and each part of it, fields, the
-scarecrow, the patch, the orchard (trees, apples, squirrels and their size, turkeys, cats),
-leaves, wind, mist, sunbeams, and the autumn colours: seven presets, or your
-own palette of up to eight. Leave out the village and the orchard for a
-bare moon over a dark field, or turn off the day for a night with only the
-moon. `?date=2026-11-26T17:00` shows any date and hour.
+The exe is unsigned by default: SmartScreen asks, so **More info → Run
+anyway** (or right-click the zip → Properties → **Unblock** first).
+**Install** puts it in `%LOCALAPPDATA%\Programs\Wallpapers` (no admin), in the
+Start menu and Settings → Apps, starting with Windows; running a newer
+download offers **Update**. A tray icon (drag it out from behind **^**)
+picks wallpapers, per-monitor or the same on all, performance, **Play in a
+Window…** for wallpapers that want keys, and **Screen Saver → Use Wallpapers
+as the Screen Saver…** (installed copy only). It pauses whenever it can't be
+seen. Uninstall from Settings → Apps. Data and logs live in
+`%LOCALAPPDATA%\Wallpapers`. More in SPEC §10.25.
+</details>
 
 ## Use
 
-You see only the wallpaper. On first run it's **Seasonal**: snow from January to
-April, the fish tank in May, fireflies in summer, falling leaves in
-September, Halloween in October, Harvest Valley in November, and in
-December the Christmas wallpapers, a different one each day (the advent
-calendar, The Cat vs. the Ornament, The Last Bulb on the Strand, Frost on
-the Glass and A Very Small Christmas). Sky Island, which dresses itself for
-the season and the holiday, takes every other day all year round.
+On first run it's **Seasonal** 📅, which picks by month: snow in winter, the
+fish tank in May, fireflies in summer, leaves in September, Halloween,
+Harvest Valley in November, and a different Christmas wallpaper each day in
+December, with Sky Island every other day all year.
 
 | Key | Action |
 |---|---|
-| `,` or `c` | The panel: every wallpaper, and the current one's settings |
-| `[` / `]` | Previous / next wallpaper (remembered) |
-| `←` / `→` | Switch, while the panel is open |
+| `,` or `c` | The panel: the current wallpaper's settings, and the gallery |
+| `[` / `]` | Previous / next wallpaper (remembered); `←` / `→` too while the panel is open |
 | `f` | Fullscreen |
 | `k` | The clock, on or off |
 | `?` | All keys, including the current wallpaper's own |
 | `Esc` | Close |
 
-On a touch screen, hold a right-hand corner to open the panel. With a
-mouse, a gear appears when you move toward that corner. The bottom-right
-corner works too, and the two left-hand corners toggle fullscreen.
+On a touch screen, hold a right-hand corner for the panel; with a mouse, a
+gear appears near that corner. The left-hand corners toggle fullscreen. The
+Android live wallpaper leaves its corners to the launcher: its settings are
+in the app.
 
-**The panel:**
-- Every wallpaper, with a thumbnail. Hover one for a moment to see it play.
-- The current wallpaper's settings, which take effect as you change them.
-  A dot marks anything you've changed; click it to put that setting back.
-- Performance: **Auto** (the default) watches how long each frame takes
-  and gives up detail in small steps when the device struggles, then
-  takes it back when it's calm; it remembers where each wallpaper settled.
-  **Low**, **Medium** and **High** pin it. Low draws fewer pixels, frames
-  and particles, and drops expensive effects such as bloom and blur.
-  Under it, a live readout shows what's happening.
-- **Save power on battery** (on by default): on battery, Auto stays at
-  Medium or below, and Low under 20%.
-- ⚡ badges on the tiles show how hard each wallpaper works a phone.
-- Reset, plus Export and Import, to move your settings to another browser.
+<img src="docs/phone.webp" width="220" align="right" alt="The panel as a bottom sheet on a phone">
 
-**A clock over any wallpaper** (off by default; `k` or the 🕐 Clock row in the
-panel, just under the wallpapers, turns it on). It's one collapsed row until
-you tick it, then seven, with the rest folded away:
-- **Time:** digital, in words ("quarter to eleven"), Roman numerals, a
-  binary or hexadecimal clock, or Swatch beats. 12 or 24 hour, seconds, a
-  blinking colon, any timezone.
-- **Date:** none, weekday, short, long, numbers or ISO, plus extras you can
-  add: the timezone, UTC offset, week number, day of the year, quarter, days
-  left in the year, the moon's phase, the Unix time.
-- **A second, smaller clock** for another timezone (UTC to begin with), that
-  says "tomorrow" or "yesterday" when its date differs.
-- **Looks** set the style in one go (Minimal, Neon, Terminal, Newsprint,
-  Frosted, Retro LCD, Sunset, Blueprint); or choose the font (system fonts,
-  or the name of one you have installed), weight, size, colour (one colour, a
-  gradient, light or dark to suit the wallpaper under it, the time of day, a
-  slowly shifting hue, or inverted against what's behind it), a shadow, glow
-  or neon, an outline, and a backing plate.
-- **Where it goes:** a corner or edge (drag it anywhere while the panel is
-  open), drifting about the screen, bouncing off the edges, teleporting to a new
-  spot every so often, or following the pointer. Moving costs the page almost
-  nothing; on battery saver or with reduced motion it keeps still.
-- **At night** it can dim or hide itself, and you can keep it off any
-  wallpaper you choose. `?clock=on`, `?clock=off` or `?clock=bounce` (and the
-  other positions) try it for one page load.
+**The panel.** Its header shows the current wallpaper (thumbnail and name)
+with ‹ › to step through them. Click it to open the **gallery**: the panel
+widens into a grid of every wallpaper with a search box (just start typing),
+filter chips (All, Interactive, Calm, Live data, Easy on battery), a 🎲
+**Surprise me** button, and live previews on hover. Arrow keys move around;
+Enter or a click picks one, Esc goes back to settings. `?panel=gallery`
+opens straight into it.
 
-**Some wallpapers have their own keys** (press `?` to see them):
-- Pixel Quest: `N` new quest, `H` hero, `V` look, `T` hat, `M` companion,
-  `P` palette. Arrows or WASD and Space take over the hero.
-- Advent calendar: arrows time-travel, `0` today, `T` theme, `R` replay.
-- Harmonograph `N` new drawing · Girih `N` next pattern, `T` tiling ·
-  Stained Glass `N` new window · Pixel Room `L` lamp, `P` pet the cat ·
-  Zen Garden `N` new stones, `R` rake, `E` smooth · Murmuration `D` falcon
-  dive, `R` roost, `N` new evening · Lantern Festival `L` or Space release
-  one · Rainy Window `W` wipe · Fireworks Space or `L` launch, `G` finale ·
-  Lighthouse `L` next light, `S` sea state · Satellites `N` next station pass ·
-  Harvest Valley `G` wait for the Great Pumpkin, `H` call the geese, `R` a goose whiffles, `W` a gust,
-  `S` a cat chases a squirrel, `M` what the moon is doing · The Cat vs. the Ornament `N` the next cat's
-  turn, `B` bap the ornament, `T` up the tree, `Z` the zoomies · The Last Bulb
-  `L` the last bulb tries (or gives up), `O` the strand out (or back), `D` a draft, `N` where it hangs · Frost on the Glass `B` breathe on it,
-  `D` someone draws in it, `T` thaw (or frost over again) · A Very Small
-  Christmas `T` the train, `M` move house, `L` jingle, `S` a sleigh · Sky Island `N` a new island, `P` pin
-  this one (or let it go), `V` another island passes, `O` a small one comes to orbit, `B` a balloon, `W` weather, `S` season, `H` holiday · Weather `V` next view (days, hours, now), `U` °C or °F,
-  `R` refresh now · World Clock `V` next view (map, faces, board), `M` centre
-  the map on the next place, `L` next map look · Orrery `=`/`+` faster, `-` slower,
-  `0` back to now, `L` look, `S` scale, `V` from above or tilted · Matrix `R` the code comes down again, `L` next look (the 1999 film, the sequels, Resurrections), `H` next colour · Cherry Blossoms `G` a gust, `B` shake the bough, `N` a new tree, `S` next sky, `W` next ground · Sumo Championship `N` to the finish or the next bout, `B` the ranking sheet · The Never-Ending Baseball Season `N` the next half-inning (Shift: the end of the game), `S` the standings and the leaders · Pocket Hockey `N` to the end of the period (or past whatever is showing), `G` to the final horn, `B` the table, then the scorers, `X` throw something on the ice, `W` a wave · Ice Patrol `W` `A` `S` `D` or arrows fly it, `Q`/`E` throttle, `X` weather, `T` time of day, `V` view, `R` radar range · Wayfarer `V` camera (behind, orbit, their eyes, cinematic), `T` time of day, `X` weather, `N` on to the next place, `G` the druid changes shape or the rogue goes unseen · Fresh Tracks `A` `D` or ←→ carve (in the air, spin), `W` or ↑ tuck (front flip), `S` or ↓ brake, held to a stop (backflip), `J` or Space jump, held for a bigger one (in the air, grab; Shift+`J` botches it), `V` camera, `T` time of day, `X` weather, `G` skis or a board · Fireplace `L` a log burns through and a fresh one lands, `W` the wood laid again.
+![The gallery: every wallpaper, with search and filters](docs/gallery.webp)
 
-**Touch and drag:** tap or drag on Zen Garden (rake), Koi Pond (ripples;
-feed them in settings), Murmuration (you're the falcon), Lantern Festival,
-Rainy Window (draw in the fog), Fireworks, Pixel Room (the cat and the lamp),
-Harvest Valley (shake an apple tree; tap the scarecrow, or the sky for geese),
-The Cat vs. the Ornament (a laser dot for the cats), The Last Bulb on the
-Strand (jiggle a bulb), Frost on the Glass (draw in it; tap to breathe), A Very Small Christmas (the tree
-jingles, the train goes round, the floor is where it moves to), Sky Island (a cat comes, a person
-waves, the lake jumps a fish, a house at night switches its lights, the sky sends a bird), Wayfarer (drag to look around; with the Orbit camera a drag turns it about the traveller and it stays, and the wheel moves it in and out),
-Satellites (what's that one?), Matrix (a splash of code), Cherry Blossoms (tap the bough to shake it, the air for a puff of wind; drag to push the air along), Weather (a day's hours; tap outside to go back),
-Pocket Hockey (the ice: something is thrown onto it; the seats: a wave), Fresh Tracks (drag across to carve, up to tuck, down to brake, tap to jump; in the air drag to spin and flip, tap to grab),
-World Clock (a city becomes home, and the map turns to it; tap it again to go back), Sumo Championship (a cushion), The Never-Ending Baseball Season (a wave, a beach ball, a hot dog) and
-the Orrery (tap a planet for its card; drag the tilted view). Each has a setting to ignore touch. On
-Android, a quick sideways swipe changes home screens and never counts.
+Below the header:
+- The wallpaper's settings, live as you change them. A dot marks a changed
+  setting; click it to put it back.
+- **Performance**: **Auto** (default) trades detail for smoothness as the
+  device needs, and remembers per wallpaper; **Low**, **Medium**, **High** pin
+  it. **Save power on battery** keeps Auto at Medium or below. ⚡ badges show
+  how hard each wallpaper works a phone (SPEC §4.8).
+- **Clock**: a clock over any wallpaper, in many formats, looks and
+  positions (drifting, bouncing, following the pointer), with a second
+  timezone and a dim-at-night option (SPEC §4.9).
+- Reset, Export and Import, to move settings to another browser.
 
-**Online, but never blank:** Weather (Open-Meteo's forecast), Satellites
-(CelesTrak's orbits), Wiki Pond (Wikipedia's live edits) and Lighthouse
-(Open-Meteo's swell, only with Live Swell on) need no keys and draw their own
-scene offline. Weather shows a labelled sample forecast until it knows where
-you are, and the last forecast it got, with its age, when it's offline.
-Weather and Satellites ask where you are, in their settings: type a town, or
-allow your location. It's
-rounded to about 10 km and stays in your browser.
+**Interactive wallpapers** (👆 in the [appendix](#appendix-the-wallpapers))
+respond to taps, drags or keys: press `?` on one to see its keys. Each has a
+setting to ignore touch, and on Android a sideways swipe between home
+screens never counts.
 
-![Pixel Quest, mid-adventure](docs/quest.webp)
+**Online, but never blank** (📡): Weather and Lighthouse (Open-Meteo),
+Satellites (CelesTrak) and Wiki Pond (Wikipedia's live edits) draw their own
+scene offline. Weather and Satellites ask where you are, typed or from the
+device, rounded to about 10 km and kept in your browser. The Bing photo needs
+a page that's served: locally, `make bing-json` then `make serve`.
+
+<br clear="right">
 
 ### Jellyfin 📺
 
-Your own [Jellyfin](https://jellyfin.org) server's videos, playing behind
-everything: a playlist (shuffled, by default), random picks from a library,
-or your favourites. They play inside a frame drawn in code: an old TV, a
-mantel over a crackling fire, a drive-in under the stars, a cinema whose
-curtains close between films, a gilt frame in a gallery, a glow that spills
-the picture's colours onto the wall, a camcorder viewfinder or a VHS deck, a
-submarine porthole, an arcade cabinet, or none at all. **Seasonal** picks
-the mantel in winter and the drive-in in summer.
+Plays your own [Jellyfin](https://jellyfin.org) server's playlists, libraries
+or favourites in a frame drawn in code (an old TV, a mantel, a drive-in, a
+cinema, Christmas frames and more).
+1. In the panel pick 📺 Jellyfin, type your server's address, press **Connect**.
+2. **Sign in with Quick Connect** and enter the six digits in any signed-in
+   Jellyfin app (or use a username and password; the password is never
+   stored).
+3. Pick what to play. Sign out tells the server to forget this device.
 
-🪵 **Big Old TV** is the old TV's bigger sibling: nearly all screen, in a
-slim cabinet with tiny knobs, a pilot light, a speaker grille and small
-rabbit ears just in view. Pick its cabinet in the panel (walnut, oak,
-mahogany, maple or ebony, each with its own grain, or avocado, tangerine,
-turquoise or cream enamel), its style (squared 1970s or rounded 1950s),
-where the controls go (down the side or along the bottom) and what sits
-on top (a plant or a china cat on a doily). An upright phone gets it on a
-matching stand with a shelf of records, under a sunburst clock that tells
-the time.
+It starts muted (`M` for sound), resumes where it left off, picks subtitles
+for you, and plays in one tab at a time. The sign-in never leaves the device
+(Export skips it). From the hosted https copy, allow Chrome's "local network"
+prompt and use the server's IP address for an http server; on Android allow
+"Nearby devices". Details in SPEC §10.21 (Jellyfin).
 
-Three more are for Christmas, each with its own options in the panel
-(light colours and twinkle, chase, fade or steady, plus the ones below):
-- ✨ **Christmas Lights**: the video nearly full screen with a string of
-  lights round it; big or mini bulbs, a fir garland, bows and holly.
-- ☃️ **Snowed In**: a flat-panel TV in a den, heavy snow at the window
-  behind it, a fireplace hung with stockings, bookcases, a small tree
-  with presents and a cat asleep on the rug; choose how hard it snows,
-  whether the fire is lit, and whether the cat is in.
-- 🎄 **Christmas Tree**: a big twinkling tree, with the video playing in a
-  little TV-shaped ornament (small, medium or large) among the baubles,
-  over a heap of presents; choose the topper and the snow.
+### URL options
 
-To connect:
-1. Open the panel (`,`), pick 📺 Jellyfin, type your server's address
-   (`nas.lan:8096`, an IP address, or an https address), and press **Connect**.
-2. Press **Sign in with Quick Connect**. Six digits appear. In any Jellyfin
-   app you're signed in to, open Quick Connect (on the web: your profile →
-   Quick Connect) and enter them. No password ever touches the wallpaper.
-   Servers with Quick Connect off can use a username and password instead;
-   the password goes to your server once and is never stored.
-3. Pick a playlist, a library or your favourites. Sign out tells the server
-   to forget this device.
-
-What it does for you:
-- Every start is muted; `M` or a tap on 🔇 gives sound. Each item carries
-  on where it left off, in any new tab.
-- Subtitles come on by themselves: a full track in your language, then a
-  forced one, then the file's default. With audio in another language,
-  "forced only" shows full subtitles. Picture subtitles (PGS, DVD) are
-  burned in by your server.
-- Only one tab plays at a time; the others hold their last picture and free
-  the decoder. The server sends no more than the tier needs (480p on Low,
-  720p on Medium or on battery), and with battery saver on it shows each
-  item's poster, slowly drifting, instead of video.
-- The sign-in stays on this device: Export leaves it out, and logs never
-  show your server's address.
-
-Where it works: everywhere, with one catch per place.
-
-| Here | http server at home | https server |
-|---|---|---|
-| The extension, or `web/index.html` from disk | Just works | Just works |
-| The hosted copy (GitHub Pages) | Allow Chrome's "local network" prompt, and type the server's **IP address** (Chrome blocks an http name such as `nas.lan` from an https page) | Allow the prompt |
-| Android | Allow "Nearby devices" when asked (Android 17 calls reaching your home network that) | Just works |
-
-On Android, it plays clips instead of whole films, and posters while on
-battery, so full video plays while charging.
-
-Keys: `Space` pause, `M` sound, `N`/`P` next and previous, `←`/`→` 30 s,
-`S` subtitles, `I` what's playing, `V` next frame.
-
-The Bing photo needs a connection. The hosted copy and the extension just
-work. Locally, a browser only lets a page reach it when the page is served:
-run `make bing-json` and then `make serve`. Opened straight from disk, it
-explains this instead (or uses public proxies, if you allow them in its
-settings).
-
-**URL options**, for this visit only; nothing is saved:
+For this visit only; nothing is saved.
 
 | Add to the URL | Effect |
 |---|---|
 | `?w=fishtank` | Show this wallpaper |
-| `?panel=open` | Open its settings on load |
-| `?date=2026-12-25` or `?date=2026-12-31T23:59:50` | Time-travel any wallpaper that follows the date or hour; the clock ticks on from there. With advent, `&theme=` picks a theme |
-| `?tier=low` | Low, medium or high performance tier (fewer pixels and frames on low) |
+| `?panel=open` | Open its settings on load (`?panel=gallery`: the gallery) |
+| `?date=2026-12-31T23:59:50` | Time-travel anything that follows the date or hour (advent: `&theme=`) |
+| `?tier=low` | Low, medium or high performance tier |
 | `?hud=1` | A corner readout: frame rate, frame cost, quality step, power |
 | `?seed=7` | The same random scene every time |
+| `?clock=on` / `off` / `bounce` | Try the clock overlay for one load |
 
-`web/stage.html?w=<id>` shows a single wallpaper on its own, without the
-player around it.
+`web/stage.html?w=<id>` shows one wallpaper without the player around it.
+
+![Pixel Quest, mid-adventure](docs/quest.webp)
 
 ## Development
 
-Requirements:
-- `make`, `git` and Node.js 22 or later
-- Google Chrome or Chromium, for `make smoke` (set `CHROME_PATH` if it isn't
-  found)
-- `openssl`, for `make serve-https`
-- Docker, for the container
-- For the Windows app: the .NET 10 SDK (in WSL or Linux is fine: it
-  cross-compiles; running it needs Windows, which WSL reaches directly).
-  Without it, `make ci` skips the Windows unit tests with a note.
-- For Android: the Android SDK and a JDK 17 or later. With Android Studio
-  installed in the usual place, the Makefile finds both (`ANDROID_HOME=`
-  and `JAVA_HOME=` override). Gradle comes with the wrapper.
-
-There are no npm packages to install.
-
-First time in a fresh clone:
+You need `make`, `git` and Node.js 22+. No npm packages. Optional: Chrome or
+Chromium for `make smoke` (`CHROME_PATH=` if not found), `openssl` for https,
+Docker, the .NET 10 SDK for the Windows app (cross-compiles in WSL or Linux;
+`make ci` skips its tests without it), and the Android SDK plus JDK 17+ for
+Android (found where Android Studio puts them; `ANDROID_HOME=`, `JAVA_HOME=`).
 
 ```sh
 make hooks   # audit every commit, commit message and push
 make ci      # lint, audit and test: the same thing CI runs
 ```
 
-Run `make` to list every target.
+Run `make` (that's `make help`) to list every target with its description.
 
-| Target | What it does |
+| Area | Targets |
 |---|---|
-| `make hooks` | Install the git hooks in `.githooks/` |
-| `make serve` | Serve `web/` at http://localhost:8000 (`PORT=` to change, `HOST=0.0.0.0` to reach it from a phone) |
-| `make serve-https` | The same over https at https://localhost:8443, with a self-signed certificate made on first use |
-| `make cert` | Make a fresh self-signed certificate in `.cert/` (localhost and your LAN addresses) |
-| `make bing-json` | Fetch Bing's last eight images of the day into `web/bing.json`, so the Bing wallpaper works when served |
-| `make thumbnails` | Re-render the panel's wallpaper thumbnails (they're committed: review the changes) |
-| `make ski-filmstrip` | Fresh Tracks on one sheet, for checking how the riders move: a turn, a stop or a jump as a row of frames over plots of the rider's numbers, written to `dist/ski-filmstrip-<scene>-<view>.png` (`ARGS="--scene=jump --view=side"`; the options are at the top of `tools/ski-filmstrip.mjs`) |
-| `make world-atlas` | Regenerate World Clock's borders, states and provinces and city names, `web/wallpapers/world-clock/world-atlas.js`, from Natural Earth (downloads it; `ATLAS=<folder>` to use copies you have). Committed; the same input gives the same file |
-| `make world-land` | Regenerate World Clock's coastline, `web/wallpapers/world-clock/world-land.js`, from Natural Earth's 1:110m land (downloads it; `LAND=<file>` to use a copy you have). Committed; the same input gives the same file |
-| `make icons` | Render `web/icons/icon.svg` to the PNG icons the extension and web app need (committed) |
-| `make screenshots` | Re-render the README's screenshots in `docs/` (committed: review the changes) |
-| `make extension` | Build the Chrome extension: `dist/extension/` to load unpacked, and a zip |
-| `make site` | Build the GitHub Pages copy in `dist/site/`, with a fresh `bing.json` |
-| `make open` | Open `web/index.html` in your default browser (from `file://`, no server needed), or bring its tab forward if it's already open (macOS, Chrome and Safari). `make open PAGE='?w=harvest'` opens a particular wallpaper |
-| `make bench` | Every wallpaper at every tier on a simulated phone (4× slower CPU), then the clock overlay's cost; checks the budgets, writes `bench/results.json` and the ⚡ badges |
-| `make bench-clock` | Just the clock overlay's cost: a bouncing clock with seconds against none |
-| `make wayfarer-sight` | Wayfarer: how often a wild animal is plainly in the picture behind the traveller, by country and wildlife setting (`node tools/wayfarer-sight.mjs --water`: how often the sea or a lake is) |
-| `make jellyfin-media` | Generate made-up test videos (patterns, tones, subtitles in several kinds) into `.jellyfin/media/`; needs `ffmpeg` |
-| `make jellyfin-dev` | Run a throwaway Jellyfin in Docker at http://localhost:8096 on that media, set up on first start (user `wallpapers`, password `wallpapers`, a playlist) |
-| `make jellyfin-stop` | Stop and remove that container (`.jellyfin/` stays; delete it to start over) |
-| `make jellyfin-mock` | Serve the smoke run's fixture Jellyfin at http://localhost:8097 (user `fixture`, password `fixture-pw`), when Docker isn't handy |
-| `make jellyfin-fixtures` | Regenerate the smoke run's tiny clip and backdrop in `tools/fixtures/jellyfin/` (committed) |
-| `make android-build` | Build the Android debug APK |
-| `make android-install` | Install it on the connected phone or emulator and open it |
-| `make android-logcat` | Follow the app's log, including the page's console |
-| `make android-emulator` | Boot an emulator in the background (`AVD=`, `EMULATOR_FLAGS=-no-window`) |
-| `make android-bench` | On a phone with the debug build set as wallpaper: frame cost, CPU and battery drain per wallpaper per tier |
-| `make android-keystore` | Make the release signing key, outside the repo (once, ever) |
-| `make android-release` | Build the signed release APK into `dist/` |
-| `make mac-build` | Build the macOS app, `dist/mac/Wallpapers.app` (needs Xcode's command line tools; `ARCHS="arm64 x86_64"` for a universal build) |
-| `make mac-run` | Build it and start it: the wallpaper goes behind your desktop icons |
-| `make mac-dev` | Run it straight from this checkout's `web/`, with the web inspector on, so edits show on reload |
-| `make mac-test` | The app's self-test against a throwaway settings store: windows and layering, animation, pause, settings sharing, mouse, Bing, still (about 30 s) |
-| `make mac-release` | Build the universal macOS app and zip it into `dist/wallpapers-mac-<version>.zip` with a `.sha256`; it checks both architectures, the versions and the signatures first |
-| `make mac-saver-test` | Load the built screen saver outside Apple's host and check its settings, choices, displays, clock and watchdog (about a minute; shows a window) |
-| `make mac-saver-live` | Run the installed saver in Apple's real host for a few seconds and read its log (once you've chosen it in System Settings) |
-| `make mac-saver-log` | The screen saver's own log |
-| `make mac-install` / `make mac-uninstall` | Put the app in `~/Applications` / remove it |
-| `make win-build` | Build the Windows app: `dist/win/Wallpapers.exe` (self-contained, about 50 MB) with `web/` beside it; cross-compiles in WSL or Linux |
-| `make win-release` | Build it, check it (a 64-bit exe carrying the manifest's version, `web/` beside it) and zip it: `dist/wallpapers-windows-<version>.zip` and `.sha256`. CI does this on every push |
-| `make win-unit` | The Windows app's unit tests (`windows/Wallpapers.Tests`); no Windows needed |
-| `make win-run` | Build it and start it on the Windows side from WSL, with your normal settings: the wallpaper goes behind your desktop icons, a tray icon controls it (a running installed copy quits first; it comes back at the next sign-in) |
-| `make win-install` | Build it and install it for this Windows user: `%LOCALAPPDATA%\Programs\Wallpapers`, a Start menu shortcut, an entry in Settings → Apps, Start with Windows. No admin rights; a running copy quits first |
-| `make win-uninstall` | Remove the installed app: the folder, the shortcut, the Apps entry and Start with Windows. Your settings stay (`DELETE_SETTINGS=1` removes them too); the steps are logged in `%TEMP%\Wallpapers-uninstall.log` |
-| `make win-saver` | Build it and run the screen saver (`Wallpapers.exe /s`) full screen with your settings, until you press a key or move the mouse, then print the end of `saver-log.txt` (`make win-log FLAVOR=saver` shows it any time). It takes over every monitor. It runs from its own folder (`Wallpapers-build\saver`), so the app you're running keeps running and stands aside while the saver shows, as for a real one |
-| `make win-sign` | Sign `dist/win/Wallpapers.exe` with Azure Trusted Signing through a pinned, sha256-checked jsign (see Releasing); prints `unsigned` when no `WALLPAPERS_SIGN_*` variable is set |
-| `make win-sign-tools` | Install `osslsigncode` (Debian/Ubuntu, through `apt` and `sudo`), which `make win-release` needs to verify a signed exe; CI runs it before a signed release |
-| `make win-dev` | Run it straight from this checkout's `web/` (over `\\wsl.localhost`), with its own settings and DevTools, so an edit shows after `make win-reload` or *Reload Wallpapers* in the tray |
-| `make win-reload` | Reload the running app's pages after a `web/` edit: the `win-dev` one, or `FLAVOR=run` for the normal one |
-| `make win-test` | The app's self-test against a throwaway settings store: layer, animation, settings sharing, pause, the pointer (a move, a tap and a double-click at the right CSS px, icons and hidden surfaces ignored, the toggles, the bare-desktop classifier against your real icons, a tap on fake monitor 2), coverage (a test window over monitor 1; skipped when something else already covers it), power reaching every page, `display=` and a resize in place (in a fake two-monitor layout), the Performance menu, insets, overlay, Bing, Explorer restart (simulated), a renderer crash, cleanup, then install, update (also with the exe held open) and uninstall into a throwaway `Wallpapers-test` install (never your real one) (about 70 s; `WIN_ARGS=--bad-web-root` checks the missing-files case) |
-| `make win-test-zip` | The same self-test against the app inside `dist/wallpapers-windows-<version>.zip` (from `make win-release`, or CI's `wallpapers-windows` artifact saved into `dist/`), unzipped to `dist/win-zip/`: what ships is what's tested. CI's `win` job runs it on a Windows runner (Git Bash or WSL) |
-| `WP_FAKE_DISPLAYS=<file>` with `make win-run` or `make win-dev` | Lay the surfaces out as a recorded monitor layout says (a JSON file under `/mnt/c`, made with `WIN_ARGS=--dump-displays make win-run`), each in an ordinary window, to try Different mode, per-monitor menus and hot-plug (edit the file) on one screen |
-| `make win-log` | The app's log (`FLAVOR=dev` or `test` for those, `saver` for the screen saver's; `FOLLOW=1` to follow) |
-| `make docker-build` | Build the container image `wallpapers` |
-| `make docker-run` | Run it at http://localhost:8000 (read-only, unprivileged) |
-| `make lint` | Syntax-check every script and JSON file |
-| `make audit` | Scan the working tree for anything private (see below) |
-| `make audit-staged` | Scan only what is staged for commit |
-| `make audit-history` | Scan every file version ever committed |
-| `make test` | Run the unit tests |
-| `make smoke` | Build the extension, then boot every wallpaper, the player and the extension in headless Chrome; screenshots go to `dist/smoke/` |
-| `make smoke-clock` | Just the clock overlay's checks in headless Chrome (about a minute); screenshots go to `dist/smoke/clock-*.png` |
-| `make smoke-live` | The same stage and player checks against the deployed site, with real network and Bing (`SMOKE_URL=` for another, e.g. `make serve`'s); CI runs it after every deploy |
-| `make ci` | Everything CI runs: lint, audit, audit-history, test, smoke |
-| `make clean` | Remove build output |
+| Run it | `open` (opens `web/index.html`; `PAGE='?w=harvest'`), `serve-http` (:8000; `HOST=0.0.0.0` for the LAN), `serve-https` (:8443, self-signed; `make serve` is the same), `cert` |
+| Check | `lint`, `audit`, `audit-staged`, `audit-history`, `test`, `smoke` (screenshots in `dist/smoke/`), `smoke-clock`, `smoke-live` (against the deployed site), `ci` (everything CI runs) |
+| Performance | `bench` (every wallpaper, every tier, simulated phone; writes the ⚡ badges), `bench-clock`, `android-bench` (on a real phone), `wayfarer-sight` |
+| Generated, committed | `thumbnails`, `screenshots`, `icons`, `world-land`, `world-atlas`, `jellyfin-fixtures` (review the diffs) |
+| Build | `extension`, `site` (GitHub Pages copy), `bing-json`, `docker-build`, `docker-run`, `clean` |
+| Debug aids | `ski-filmstrip` (Fresh Tracks motion as frames and plots), `jellyfin-media`, `jellyfin-dev` (Docker Jellyfin at :8096, user and password `wallpapers`), `jellyfin-stop`, `jellyfin-mock` (fixture API at :8097) |
+| Android | `android-build`, `android-install`, `android-logcat`, `android-emulator` (`AVD=`), `android-keystore` (once, ever), `android-release` |
+| macOS | `mac-build`, `mac-run`, `mac-dev` (from this checkout's `web/`), `mac-test`, `mac-release`, `mac-install`, `mac-uninstall`, `mac-saver-test`, `mac-saver-live`, `mac-saver-log` |
+| Windows | `win-build`, `win-run` (from WSL), `win-dev`, `win-reload`, `win-unit`, `win-test`, `win-test-zip`, `win-release`, `win-sign`, `win-sign-tools`, `win-install`, `win-uninstall`, `win-saver`, `win-log` (`FLAVOR=`, `FOLLOW=1`) |
+| Setup | `hooks`, `help` |
 
-### Trying Jellyfin
+**Phones:** `HOST=0.0.0.0 make serve-https` and open the printed address;
+accept the self-signed certificate once (or trust `.cert/cert.pem`).
 
-`make jellyfin-media` then `make jellyfin-dev` gives you a real Jellyfin with
-made-up videos, a playlist and every subtitle case, at
-http://localhost:8096. Point the wallpaper at `localhost:8096` and sign in
-as `wallpapers` / `wallpapers`, or approve a Quick Connect code from
-Jellyfin's own web page there. It listens on this computer only. For a
-phone on your network, `make jellyfin-stop`, then
-`JELLYFIN_HOST=0.0.0.0 make jellyfin-dev` and use this computer's address.
-The Android emulator's alias for this computer can't reach Docker Desktop's
-localhost ports, but it can reach `make jellyfin-mock` (port 8097).
-
-### HTTPS and phones
-
-To try the wallpapers on a phone, serve them on your network:
-`HOST=0.0.0.0 make serve-https`, then open the printed address. The
-certificate is self-signed, so the browser warns once. Accept it, or trust
-`.cert/cert.pem` on the device. HTTPS matters off localhost because some
-browser features only work on secure pages.
+**Jellyfin without a server:** `make jellyfin-media && make jellyfin-dev`,
+then point the wallpaper at `localhost:8096`. For a phone,
+`JELLYFIN_HOST=0.0.0.0 make jellyfin-dev`; the Android emulator can reach
+`make jellyfin-mock` (port 8097) but not Docker Desktop's ports.
 
 ### Releasing
 
-1. Once: `make android-keystore`, back the key up somewhere safe, and add
-   the four `WALLPAPERS_KEY*` secrets it prints to the GitHub repo
-   (`gh secret set`). Losing the key means people must uninstall to
-   update.
-2. Bump `version` in `web/manifest.json` (it's the extension's and the
-   app's version), commit, and push a matching tag: `git tag v0.6.0 &&
-   git push --tags`.
-3. CI checks everything, builds the signed APK, the extension zip, the
-   universal Mac app (on a macOS runner) and the Windows app (cross-compiled on
-   Linux), and publishes them on a GitHub Release: `wallpapers-<version>.apk`,
-   `wallpapers-extension-<version>.zip`, and `wallpapers-mac-<version>.zip` and
-   `wallpapers-windows-<version>.zip`, each with its `.sha256`. Until the secrets exist it
-   publishes the debug APK (`wallpapers-<version>-debug.apk`) instead: it
-   sideloads fine, but each one is signed by a throwaway key, so installing the
-   next release means uninstalling first.
-4. The Mac build is the newest part: if it fails, the release still goes out
-   without it and the run shows a warning saying so. The Mac app is ad-hoc
-   signed, not notarized, so there is nothing to set up for it. (A paid Apple
-   Developer account would add a Developer ID certificate, a notarization step
-   in `mac/release.sh` and a few secrets; nothing else changes.)
-5. To try the Mac job before tagging: `gh workflow run ci.yml --ref <branch>`
-   runs CI, the Android build and the Mac build, and uploads the zip as the
-   `wallpapers-mac` artifact, without publishing anything. Every CI run also
-   uploads the Windows zip as the `wallpapers-windows` artifact. It's unsigned:
-   see the Windows install notes. CI then self-tests that same zip on a Windows
-   runner (`make win-test-zip` in the `win` job; its report is the
-   `wallpapers-windows-selftest` artifact). Like the Mac's, it doesn't block the
-   other artifacts: a release whose Windows self-test fails goes out without
-   the Windows app, and the run shows a warning saying so.
-6. The Windows app is unsigned by default, and `make win-release` ends its last
-   line with `signed` or `unsigned` to say which. Unsigned means SmartScreen
-   shows "Windows protected your PC" on a downloaded copy (*More info* →
-   *Run anyway*), and a machine with Smart App Control on may refuse the exe by
-   its hash, with no override. To sign: create an Azure Trusted Signing account
-   and certificate profile, plus an Entra app registration allowed to sign with
-   it, then `gh secret set` each of `WALLPAPERS_SIGN_ENDPOINT`,
-   `WALLPAPERS_SIGN_ACCOUNT`, `WALLPAPERS_SIGN_PROFILE`, `WALLPAPERS_SIGN_TENANT`,
-   `WALLPAPERS_SIGN_CLIENT_ID` and `WALLPAPERS_SIGN_CLIENT_SECRET`. CI then signs
-   tagged releases and the release notes say so. All six or none: a partial set
-   fails the build. Locally the same variables work with `make win-release` or
-   `make win-sign` (needs `java`; `osslsigncode` verifies the result against
-   Microsoft's root certificate, which is downloaded and sha256-checked).
-   `windows/sign.sh --fetch` downloads and checks jsign and that certificate
-   without any secrets. Never commit a value.
+1. Once: `make android-keystore`, back the key up, and `gh secret set` the
+   four `WALLPAPERS_KEY*` secrets it prints. Losing it means people must
+   uninstall to update. Without them CI ships a debug APK instead.
+2. Bump `version` in `web/manifest.json`, commit, and push a matching tag:
+   `git tag v0.6.0 && git push --tags`.
+3. CI checks everything and publishes a GitHub Release with the APK, the
+   extension zip, the universal Mac zip and the Windows zip, each with a
+   `.sha256`. If the Mac build or the Windows self-test fails, the release
+   goes out without it and the run warns.
+4. `gh workflow run ci.yml --ref <branch>` tries the Mac build without
+   publishing; every CI run uploads the Windows zip as an artifact.
+5. The Mac app is ad-hoc signed, not notarized. The Windows app is unsigned
+   unless all six `WALLPAPERS_SIGN_*` secrets (Azure Trusted Signing) are
+   set; `make win-release` ends by saying `signed` or `unsigned`. Never
+   commit a value. Details in SPEC §10.25.
 
 ### Adding a wallpaper
 
-See "Building a new wallpaper" in [AGENTS.md](AGENTS.md). In short: a folder
-under `web/wallpapers/` with the code, `defaults.js` and `settings.js`, an
-entry in `catalog.js`, `make thumbnails`, and `make ci`.
+See "Building a new wallpaper" in [AGENTS.md](AGENTS.md) and SPEC §4. In
+short: a folder under `web/wallpapers/` with the code, `defaults.js` and
+`settings.js`, an entry in `catalog.js`, `make thumbnails`, and `make ci`.
 
 ### Keeping it public-safe
 
-This is a public repo, so `make audit` fails if it finds any of these:
+`make audit` fails on private IP addresses, email addresses (other than
+`noreply@`), home-directory paths, strings shaped like API keys, URLs off the
+allowlist in `tools/audit.mjs`, image metadata, and files over 1 MB. Put your
+own personal terms one per line in `.audit-denylist` (git-ignored). With
+`make hooks` it runs on each staged commit, each commit message, and the full
+history before each push. Findings are redacted; mark a false positive with
+`audit-allow: <reason>` on that line or the one above. More in SPEC §7.
 
-- private IP addresses
-- email addresses, other than `noreply@`
-- home-directory paths
-- strings shaped like API keys
-- URLs that aren't on the allowlist in `tools/audit.mjs`
-- image metadata
-- files over 1 MB
+## Appendix: the wallpapers
 
-Put your own personal terms (names, hostnames, employer) one per line in
-`.audit-denylist` at the repo root. Git ignores that file, so the list
-stays private while every commit is still checked against it.
+Click a name to see it live. 👆 responds to you · 📡 uses the network (and
+still draws offline). 📅 **Seasonal** isn't one itself: it picks one by date.
 
-With `make hooks` installed, the audit runs three times:
+| Wallpaper | | What it is |
+|---|:-:|---|
+| ⬛ [Blank](https://nealhardesty.github.io/wallpapers/?w=blank) | | Just black |
+| ❄️ [Snow](https://nealhardesty.github.io/wallpapers/?w=snow) | | Snow falling |
+| 🌧️ [Rain](https://nealhardesty.github.io/wallpapers/?w=rain) | | Rain falling |
+| 🍂 [Falling Leaves](https://nealhardesty.github.io/wallpapers/?w=leaves) | | Autumn leaves on the wind |
+| ✨ [Fireflies](https://nealhardesty.github.io/wallpapers/?w=fireflies) | | Fireflies drifting on a summer night |
+| 🔥 [Fireplace](https://nealhardesty.github.io/wallpapers/?w=fireplace) | | Real-looking wood burning down to coals, laid how you like |
+| 🌌 [Northern Lights](https://nealhardesty.github.io/wallpapers/?w=northern-lights) | | The aurora rippling over a night sky |
+| ☁️ [Parallax Clouds](https://nealhardesty.github.io/wallpapers/?w=parallax-clouds) | | Layers of clouds drifting by |
+| 🏔️ [Mountains](https://nealhardesty.github.io/wallpapers/?w=mountains) | | Layered mountain ranges |
+| 🌠 [Starfield](https://nealhardesty.github.io/wallpapers/?w=starfield) | | A deep field of drifting stars |
+| 🌸 [Cherry Blossoms](https://nealhardesty.github.io/wallpapers/?w=cherry-blossoms) | 👆 | A blossoming bough; shake it, or puff the wind |
+| 🎃 [Halloween Night](https://nealhardesty.github.io/wallpapers/?w=halloween) | 👆 | A spooky night; light the jack-o'-lanterns |
+| 🌾 [Harvest Valley](https://nealhardesty.github.io/wallpapers/?w=harvest) | 👆 | A cosy Thanksgiving valley under the real moon |
+| 🐈 [Neko](https://nealhardesty.github.io/wallpapers/?w=neko) | 👆 | The classic cat that chases your pointer |
+| 🟩 [Matrix](https://nealhardesty.github.io/wallpapers/?w=matrix) | 👆 | The film's falling code |
+| 🐠 [Fish Tank](https://nealhardesty.github.io/wallpapers/?w=fishtank) | 👆 | An aquarium; click to feed the fish |
+| 🎁 [Advent Calendar](https://nealhardesty.github.io/wallpapers/?w=advent) | 👆 | A door a day through December |
+| 🐾 [The Cat vs. the Ornament](https://nealhardesty.github.io/wallpapers/?w=cat-ornament) | 👆 | Nine cats, one low ornament, and sometimes the tree comes down |
+| 💡 [The Last Bulb on the Strand](https://nealhardesty.github.io/wallpapers/?w=last-bulb) | 👆 | Old C9 lights, and the loose last bulb |
+| 🧊 [Frost on the Glass](https://nealhardesty.github.io/wallpapers/?w=frost) | 👆 | Frost creeping over a window onto a warm room |
+| 🎄 [A Very Small Christmas](https://nealhardesty.github.io/wallpapers/?w=small-christmas) | 👆 | A tiny pixel tree with a toy train |
+| 🏝️ [Sky Island](https://nealhardesty.github.io/wallpapers/?w=sky-island) | 👆 | A pixel village on a floating island, new each load |
+| ⚔️ [Pixel Quest](https://nealhardesty.github.io/wallpapers/?w=quest) | 👆 | A self-playing 8-bit adventure; take over the hero |
+| 🌇 [Synthwave](https://nealhardesty.github.io/wallpapers/?w=synthwave) | | The endless neon drive |
+| 🚆 [Night Train](https://nealhardesty.github.io/wallpapers/?w=night-train) | | The view from a train at night |
+| 🛰️ [Satellites](https://nealhardesty.github.io/wallpapers/?w=satellites) | 👆 📡 | The real satellites crossing your sky |
+| 🌦️ [Weather](https://nealhardesty.github.io/wallpapers/?w=weather) | 👆 📡 | Your forecast, over a sky that matches outside |
+| 🌍 [World Clock](https://nealhardesty.github.io/wallpapers/?w=world-clock) | 👆 | Your cities on the real day-and-night world |
+| 🪐 [Orrery](https://nealhardesty.github.io/wallpapers/?w=orrery) | 👆 | The solar system as it is right now |
+| 🌊 [Lighthouse](https://nealhardesty.github.io/wallpapers/?w=lighthouse) | 📡 | A lighthouse keeping a real light's rhythm |
+| 🪷 [Wiki Pond](https://nealhardesty.github.io/wallpapers/?w=wiki-pond) | 📡 | Every Wikipedia edit as a ripple on a pond |
+| 🖋️ [Harmonograph](https://nealhardesty.github.io/wallpapers/?w=harmonograph) | | A pendulum pen inking its figures |
+| 🛋️ [Pixel Room](https://nealhardesty.github.io/wallpapers/?w=pixel-room) | 👆 | A pixel-art room with a cat that keeps real hours |
+| 🪨 [Zen Garden](https://nealhardesty.github.io/wallpapers/?w=zen-garden) | 👆 | Sand and stones to rake |
+| 🎏 [Koi Pond](https://nealhardesty.github.io/wallpapers/?w=koi-pond) | 👆 | Koi to feed and ripple |
+| 🪟 [Rainy Window](https://nealhardesty.github.io/wallpapers/?w=rainy-window) | 👆 | A fogged, rainy window to draw on |
+| 🎆 [Fireworks](https://nealhardesty.github.io/wallpapers/?w=fireworks) | 👆 | Fireworks, with a New Year's countdown |
+| ✴️ [Girih](https://nealhardesty.github.io/wallpapers/?w=girih) | | Islamic star patterns that breathe |
+| ⛪ [Stained Glass](https://nealhardesty.github.io/wallpapers/?w=stained-glass) | | A stained-glass window lit by the time of day |
+| 🐦 [Murmuration](https://nealhardesty.github.io/wallpapers/?w=murmuration) | 👆 | A starling flock; scatter it as the falcon |
+| 🏮 [Lantern Festival](https://nealhardesty.github.io/wallpapers/?w=lanterns) | 👆 | Sky lanterns to release |
+| 📺 [Jellyfin](https://nealhardesty.github.io/wallpapers/?w=jellyfin) | 👆 📡 | Your own Jellyfin videos in a frame of your choice |
+| 🛩️ [Ice Patrol](https://nealhardesty.github.io/wallpapers/?w=ice-patrol) | 👆 | A low flight over an ice world, from the cockpit (WebGL) |
+| 🤼 [Sumo Championship](https://nealhardesty.github.io/wallpapers/?w=sumo) | 👆 | An endless tournament as a moving woodblock print |
+| 🏒 [Pocket Hockey](https://nealhardesty.github.io/wallpapers/?w=pocket-hockey) | 👆 | An invented three-on-three hockey league, in pixel art |
+| ⚾ [The Never-Ending Baseball Season](https://nealhardesty.github.io/wallpapers/?w=baseball) | 👆 | A whole pixel-art league, a pitch at a time |
+| 🥾 [Wayfarer](https://nealhardesty.github.io/wallpapers/?w=wayfarer) | 👆 | An endless walk through a cosy fantasy world (WebGL) |
+| ⛷️ [Fresh Tracks](https://nealhardesty.github.io/wallpapers/?w=ski-run) | 👆 | An endless ski run; ride it yourself (WebGL) |
+| 🖼️ [Bing Image of the Day](https://nealhardesty.github.io/wallpapers/?w=bing) | 📡 | Bing's photo of the day, with its credit |
 
-- before each commit, on exactly what's staged
-- on each commit message
-- before each push, on the full history, since a secret that was committed
-  and then deleted is still public once pushed
-
-Findings are redacted in the output. If one is a false positive, add
-`audit-allow: <reason>` on that line or the line above.
+Each one's full story is in SPEC.md §2 and §10.
 
 ## License
 

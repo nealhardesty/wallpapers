@@ -17,9 +17,23 @@
 
     const COST_TITLES = { 1: 'Light on batteries', 2: 'Moderate on batteries', 3: 'Heavy on batteries: try Low on a phone' };
 
+    // The gallery's filter chips, all read from the catalog. Seasonal is a
+    // choice that changes by itself, so only All shows it.
+    const FILTERS = [
+        ['all', 'All', () => true],
+        ['interactive', 'Interactive', entry => !!entry.interactive],
+        ['calm', 'Calm', entry => entry.motion === 'slow'],
+        ['live', 'Live data', entry => !!entry.network],
+        ['light', 'Easy on battery', entry => WP.costs?.[entry.id] === 1],
+    ];
+    // Keys that keep their player meaning in the gallery rather than starting a search.
+    const PLAYER_KEYS = [',', '?', '[', ']'];
+
     let panel = null, picker = null, title = null, subtitle = null, body = null, tierButtons = null, tierNote = null, resetButton = null;
     let liveLine = null, batterySwitch = null;
-    let clockHost = null, clockSection = null;   // the clock overlay's settings (SPEC §4.9): a collapsed row under the filmstrip, loaded on first open
+    let switcher = null, switcherThumb = null, scroller = null;
+    let gallery = null, search = null, chips = null, empty = null, filter = 'all', browsing = false;
+    let clockHost = null, clockSection = null;   // the clock overlay's settings (SPEC §4.9): a collapsed row at the top of the settings, loaded on first open
     let shownFor = null;   // the wallpaper whose settings are on screen
     let place = null;      // the location controls, for wallpapers that need one (core/location.js)
     let shownForm = null;  // { form, config: () => config }, so the wallpaper's feed can update it
@@ -38,9 +52,35 @@
     })();
 
     function build() {
-        title = h('h2', { class: 'panel-title', id: 'panel-title' });
-        subtitle = h('p', { class: 'panel-subtitle' });
+        // The header is the switcher: what's showing, ‹ › to step, and a
+        // click opens the gallery in place of the settings.
+        title = h('span', { class: 'panel-title', id: 'panel-title' });
+        subtitle = h('span', { class: 'panel-subtitle' });
+        switcherThumb = h('span', { class: 'switcher-thumb', 'aria-hidden': 'true' });
+        switcher = h('button', {
+            type: 'button', class: 'switcher', 'aria-expanded': 'false', 'aria-controls': 'gallery',
+            onclick: () => browse(!browsing),
+        }, switcherThumb, h('span', { class: 'switcher-text' }, title, subtitle), h('span', { class: 'switcher-chevron', 'aria-hidden': 'true' }));
+        const step = (by, label, glyph) => h('button', { type: 'button', class: 'step', 'aria-label': label, title: label, onclick: () => WP.player.cycle(by) }, glyph);
+
+        const showable = [WP.entry('seasonal'), ...WP.showable()];
+        search = h('input', {
+            type: 'search', class: 'gallery-search', placeholder: `Search ${showable.length - 1} wallpapers`, 'aria-label': 'Search wallpapers',
+            autocomplete: 'off', spellcheck: 'false', enterkeyhint: 'go', oninput: filterTiles,
+        });
+        chips = h('div', { class: 'gallery-chips', role: 'radiogroup', 'aria-label': 'Show' }, FILTERS.map(([name, label]) => h('button', {
+            type: 'button', class: 'chip', role: 'radio', 'data-filter': name,
+            onclick: () => { filter = name; filterTiles(); },
+        }, label, ' ', h('span', { class: 'chip-count' }))));
         picker = h('div', { class: 'picker', role: 'group', 'aria-label': 'Wallpapers' });
+        empty = h('p', { class: 'gallery-empty', hidden: true });
+        gallery = h('div', { class: 'gallery', id: 'gallery', hidden: true },
+            h('div', { class: 'gallery-bar' },
+                h('div', { class: 'gallery-find' },
+                    search,
+                    h('button', { type: 'button', class: 'surprise', title: 'Surprise me: any of the ones shown', 'aria-label': 'Surprise me', onclick: surprise }, '🎲')),
+                chips),
+            picker, empty);
         body = h('div', { class: 'settings' });
         clockHost = h('div', { class: 'clock-host' });
 
@@ -60,9 +100,10 @@
 
         panel = h('aside', { class: 'panel', id: 'panel', role: 'dialog', 'aria-labelledby': 'panel-title', hidden: true },
             h('header', { class: 'panel-head' },
-                h('div', {}, title, subtitle),
+                switcher,
+                h('div', { class: 'stepper' }, step(-1, 'Previous wallpaper (←)', '‹'), step(1, 'Next wallpaper (→)', '›')),
                 h('button', { class: 'panel-close', type: 'button', 'aria-label': 'Close settings (Esc)', onclick: () => close() }, '×')),
-            h('div', { class: 'panel-scroll' }, picker, clockHost, body),
+            scroller = h('div', { class: 'panel-scroll' }, gallery, clockHost, body),
             h('footer', { class: 'panel-foot' },
                 h('div', { class: 'tier' },
                     h('span', { class: 'tier-label', id: 'tier-label' }, 'Performance'),
@@ -80,48 +121,173 @@
                     h('button', { type: 'button', class: 'action', title: 'Save every wallpaper’s settings to a file', onclick: exportSettings }, 'Export'),
                     h('button', { type: 'button', class: 'action', title: 'Load settings from an exported file', onclick: () => importInput.click() }, 'Import'),
                     importInput),
-                h('p', { class: 'keys' },
+                h('p', { class: 'keys keys-settings' },
                     h('span', {}, h('kbd', {}, '←'), ' ', h('kbd', {}, '→'), ' switch'),
                     h('span', {}, h('kbd', {}, '?'), ' all keys'),
                     h('span', {}, h('kbd', {}, 'Esc'), ' close')),
+                h('p', { class: 'keys keys-gallery' },
+                    h('span', {}, 'type to search'),
+                    h('span', {}, h('kbd', {}, '←'), h('kbd', {}, '↑'), h('kbd', {}, '↓'), h('kbd', {}, '→'), ' move'),
+                    h('span', {}, h('kbd', {}, 'Enter'), ' pick'),
+                    h('span', {}, h('kbd', {}, 'Esc'), ' back')),
                 h('p', { class: 'about' }, `Wallpapers ${WP.VERSION}`)));
-        // A vertical wheel scrolls the filmstrip sideways.
-        picker.addEventListener('wheel', event => {
-            if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
-            picker.scrollLeft += event.deltaY;
-            event.preventDefault();
-        }, { passive: false });
 
-        for (const entry of [WP.entry('seasonal'), ...WP.showable()]) {
+        for (const entry of showable) {
+            const seasonal = entry.id === 'seasonal';
+            const pick = seasonal ? WP.entry(WP.seasonalFor(new Date())) : null;
             const tile = h('button', {
-                type: 'button', class: 'tile', 'data-id': entry.id, title: entry.name,
+                type: 'button', class: 'tile', 'data-id': entry.id, title: seasonal ? `Seasonal: ${pick.name} this ${MONTH()}` : entry.name,
                 style: `--tile-accent: ${entry.accent || '#8ab4ff'}`,
-                onclick: () => WP.player.show(entry.id, { persist: true }),
+                onclick: () => choose(entry.id),
                 onpointerenter: () => preview(tile, entry.id), onpointerleave: endPreview,
                 onfocus: () => preview(tile, entry.id), onblur: endPreview,
-            }, h('span', { class: 'tile-icon', 'aria-hidden': 'true' }, entry.icon), h('span', { class: 'tile-name' }, entry.name),
-            // How hard it works a phone, from make bench (wallpapers/costs.js).
-            WP.costs?.[entry.id] ? h('span', { class: 'tile-cost', title: COST_TITLES[WP.costs[entry.id]] }, '⚡'.repeat(WP.costs[entry.id])) : null);
+            }, h('span', { class: 'tile-icon', 'aria-hidden': 'true' }, entry.icon),
+            h('span', { class: 'tile-name' }, entry.name, seasonal ? h('span', { class: 'tile-sub' }, `${MONTH()}: ${pick.name}`) : null),
+            h('span', { class: 'tile-meta' },
+                entry.interactive ? h('span', { title: 'Responds to you' }, '👆') : null,
+                entry.network ? h('span', { title: entry.offline ? 'Live data when online' : 'Needs the internet' }, '📡') : null,
+                // How hard it works a phone, from make bench (wallpapers/costs.js).
+                WP.costs?.[entry.id] ? h('span', { class: 'tile-cost', title: COST_TITLES[WP.costs[entry.id]] }, '⚡'.repeat(WP.costs[entry.id])) : null));
+            tile.search = `${entry.name} ${entry.id.replace(/-/g, ' ')} ${pick ? pick.name : ''}`.toLowerCase();
+            tile.entry = entry;
             picker.append(tile);
-            thumb(tile, entry.id === 'seasonal' ? WP.seasonalFor(new Date()) : entry.id);
+            thumb(seasonal ? pick.id : entry.id).then(src => {
+                if (!src) return;
+                tile.style.backgroundImage = `linear-gradient(to top, rgba(0, 0, 0, 0.7), transparent 62%), url(${src})`;
+                tile.classList.add('has-thumb');
+            });
         }
         document.body.append(panel);
     }
 
-    // The committed thumbnail, if this wallpaper has one (SPEC §4.7).
-    // Seasonal shows this month's pick and keeps its calendar badge.
-    function thumb(tile, id) {
-        // Every offline wallpaper with code has one (tested); Blank and the
-        // network-backed Bing don't.
+    // The committed thumbnail, if this wallpaper has one (SPEC §4.7): a
+    // promise for its URL, or null. Every offline wallpaper with code has
+    // one (tested); Blank and the network-backed Bing don't.
+    const thumbs = {};
+    function thumb(id) {
         const entry = WP.entry(id);
-        if (!entry.scripts?.length || (entry.network && !entry.offline)) return;
-        const src = `wallpapers/${id}/thumb.webp`;
-        const image = new Image();
-        image.onload = () => {
-            tile.style.backgroundImage = `linear-gradient(to top, rgba(0, 0, 0, 0.65), transparent 60%), url(${src})`;
-            tile.classList.add('has-thumb');
-        };
-        image.src = src;
+        if (!entry.scripts?.length || (entry.network && !entry.offline)) return Promise.resolve(null);
+        return thumbs[id] ??= new Promise(resolve => {
+            const src = `wallpapers/${id}/thumb.webp`;
+            const image = new Image();
+            image.onload = () => resolve(src);
+            image.onerror = () => resolve(null);
+            image.src = src;
+        });
+    }
+
+    // ---- The gallery ------------------------------------------------------
+    // The panel widens into a grid of every wallpaper, in place of the
+    // settings. Search and the chips narrow it; a pick goes back to settings.
+    function browse(on) {
+        if (!panel || browsing === on) return;
+        browsing = on;
+        endPreview();
+        panel.classList.toggle('browsing', on);
+        gallery.hidden = !on;
+        clockHost.hidden = body.hidden = on;
+        switcher.setAttribute('aria-expanded', String(on));
+        switcher.title = on ? 'Back to the settings (Esc)' : 'All wallpapers';
+        scroller.scrollTop = 0;
+        if (!on) {
+            refresh();
+            return switcher.focus({ preventScroll: true });
+        }
+        search.value = '';
+        refresh();
+        filterTiles();   // the last chip stays chosen, unless it would hide what's on
+        if (picker.querySelector('[aria-pressed="true"]')?.hidden) { filter = 'all'; filterTiles(); }
+        const current = picker.querySelector('[aria-pressed="true"]') || picker.firstChild;
+        // After the panel has widened, so the grid is laid out at its size.
+        requestAnimationFrame(() => {
+            current.scrollIntoView({ block: 'center' });
+            current.focus({ preventScroll: true });
+        });
+    }
+
+    // Which tiles the search and the chip leave, with each chip's count for this search.
+    function filterTiles() {
+        const words = search.value.toLowerCase().split(/\s+/).filter(Boolean);
+        const counts = {};
+        let shown = 0;
+        for (const tile of picker.children) {
+            const found = words.every(word => tile.search.includes(word));
+            const pseudo = tile.entry.pseudo;
+            for (const [name, , test] of FILTERS) if (found && (name === 'all' || (!pseudo && test(tile.entry)))) counts[name] = (counts[name] || 0) + 1;
+            const test = FILTERS.find(([name]) => name === filter)[2];
+            tile.hidden = !(found && (filter === 'all' || (!pseudo && test(tile.entry))));
+            if (!tile.hidden) shown++;
+        }
+        for (const chip of chips.children) {
+            chip.setAttribute('aria-checked', String(chip.dataset.filter === filter));
+            chip.querySelector('.chip-count').textContent = counts[chip.dataset.filter] || 0;
+        }
+        empty.hidden = shown > 0;
+        if (!shown) {
+            const label = FILTERS.find(([name]) => name === filter)[1];
+            empty.replaceChildren(words.length ? `Nothing called “${search.value.trim()}”${filter === 'all' ? '' : ` in ${label}`}. ` : `Nothing in ${label}. `,
+                h('button', { type: 'button', class: 'action', onclick: () => { search.value = ''; filter = 'all'; filterTiles(); search.focus(); } }, 'Show them all'));
+        }
+    }
+
+    const visibleTiles = () => [...picker.children].filter(tile => !tile.hidden);
+
+    function choose(id) {
+        WP.player.show(id, { persist: true });
+        browse(false);
+    }
+
+    // Any of the tiles shown, other than the one on screen.
+    function surprise() {
+        const pool = visibleTiles().filter(tile => tile.dataset.id !== WP.player.choice && !tile.entry.pseudo);
+        if (!pool.length) return;
+        const tile = pool[Math.floor(Math.random() * pool.length)];
+        tile.classList.add('picked');
+        choose(tile.dataset.id);
+        WP.player.toast(`🎲 ${tile.entry.icon} ${tile.entry.name}`);
+        setTimeout(() => tile.classList.remove('picked'), 600);
+    }
+
+    // Arrow keys move around the grid as it's laid out.
+    function move(name) {
+        const tiles = visibleTiles();
+        if (!tiles.length) return;
+        const at = tiles.indexOf(document.activeElement);
+        if (at < 0) return tiles[0].focus();
+        const columns = tiles.filter(tile => tile.offsetTop === tiles[0].offsetTop).length || 1;
+        const to = at + { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -columns, ArrowDown: columns }[name];
+        if (name === 'ArrowUp' && to < 0) return search.focus();
+        const tile = tiles[Math.max(0, Math.min(tiles.length - 1, to))];
+        tile.focus({ preventScroll: true });
+        tile.scrollIntoView({ block: 'nearest' });
+    }
+
+    // The player's keys come here first while the gallery is open (true:
+    // handled). Typing anywhere goes to the search; Esc steps back.
+    function key(name, event) {
+        if (!browsing) return false;
+        const inSearch = event?.target === search;
+        if (name === 'Escape') {
+            if (inSearch && search.value) { search.value = ''; filterTiles(); }
+            else browse(false);
+            return true;
+        }
+        if (inSearch) {
+            if (name === 'ArrowDown') { event.preventDefault(); visibleTiles()[0]?.focus(); }
+            if (name === 'Enter') { const first = visibleTiles()[0]; if (first) choose(first.dataset.id); }
+            return true;   // everything else is typing
+        }
+        if (name.startsWith('Arrow')) {
+            event?.preventDefault();
+            move(name);
+            return true;
+        }
+        if (name === '/' || (name.length === 1 && name !== ' ' && !PLAYER_KEYS.includes(name) && !event?.target?.closest?.('input, select, textarea'))) {
+            if (name === '/') event?.preventDefault();
+            search.focus();   // during keydown, so the character lands in the field
+            return true;
+        }
+        return false;
     }
 
     // Hovering or focusing a tile for a moment plays that wallpaper inside
@@ -155,16 +321,19 @@
         const entry = WP.entry(id);
         panel.style.setProperty('--accent', entry.accent || '#8ab4ff');
         title.textContent = `${entry.icon} ${entry.name}`;
-        subtitle.textContent = choice === 'seasonal' ? `Seasonal pick for ${MONTH()}` : '';
-        subtitle.hidden = choice !== 'seasonal';
-        for (const tile of picker.children) {
-            const active = tile.dataset.id === choice;
-            tile.setAttribute('aria-pressed', String(active));
-            if (active) {   // centre it in the filmstrip only: scrollIntoView would also drag the settings back to the top
-                const t = tile.getBoundingClientRect(), p = picker.getBoundingClientRect();
-                picker.scrollTo({ left: picker.scrollLeft + (t.left + t.width / 2) - (p.left + p.width / 2), behavior: 'instant' });
-            }
-        }
+        const order = [...picker.children].map(tile => tile.dataset.id);
+        subtitle.textContent = browsing ? 'Back to its settings'
+            : choice === 'seasonal' ? `Seasonal pick for ${MONTH()}`
+            : `${order.indexOf(choice)} of ${order.length - 1} · all wallpapers`;
+        switcherThumb.textContent = entry.icon;
+        switcherThumb.classList.remove('has-thumb');
+        switcherThumb.style.backgroundImage = '';
+        thumb(id).then(src => {
+            if (!src || WP.player.resolved !== id) return;
+            switcherThumb.style.backgroundImage = `url(${src})`;
+            switcherThumb.classList.add('has-thumb');
+        });
+        for (const tile of picker.children) tile.setAttribute('aria-pressed', String(tile.dataset.id === choice));
         resetButton.textContent = 'Reset';
         resetButton.title = `Put ${entry.name} back to its defaults`;
         resetButton.classList.remove('confirm');
@@ -304,17 +473,19 @@
         return text;
     }
 
-    function open() {
+    function open({ gallery: browsing = false } = {}) {
         if (!panel) build();
         panel.hidden = false;
         document.dispatchEvent(new CustomEvent('wp-panel', { detail: { open: true } }));
         shownFor = null;   // keys may have changed settings while it was closed
         refresh();
-        (picker.querySelector('[aria-pressed="true"]') || picker.firstChild).focus({ preventScroll: true });
+        if (browsing) browse(true);
+        else switcher.focus({ preventScroll: true });
     }
 
     function close() {
         if (!panel || panel.hidden) return;
+        browse(false);
         endPreview();
         panel.hidden = true;
         document.dispatchEvent(new CustomEvent('wp-panel', { detail: { open: false } }));
@@ -334,7 +505,10 @@
         refresh,
         stats,
         feed,
+        key,
+        browse,
         get isOpen() { return !!panel && !panel.hidden; },
+        get browsing() { return browsing; },
         contains: node => !!panel && panel.contains(node),
     };
 })(globalThis.WP);

@@ -12,6 +12,7 @@ const ROOT = resolve(import.meta.dirname, '..');
 const WEB = pathToFileURL(join(ROOT, 'web')).href;
 const SHOTS = [
     { name: 'panel', url: 'index.html?w=fireplace&panel=open', width: 1280, height: 800, scale: 1, mobile: false },
+    { name: 'gallery', url: 'index.html?w=sky-island&panel=gallery', width: 1280, height: 800, scale: 1, mobile: false },
     { name: 'phone', url: 'index.html?w=fishtank&panel=open&host=android', width: 390, height: 844, scale: 2, mobile: true },
     { name: 'quest', url: 'index.html?w=quest', width: 1280, height: 800, scale: 1, mobile: false, settle: 8000,
         settings: { configVersion: 1, story: false } },

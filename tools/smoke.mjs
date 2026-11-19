@@ -3960,6 +3960,61 @@ async function playerSuite(catalog) {
         return true;
     });
 
+    await check('the gallery: the header opens it, typing searches, chips filter, arrows move, Enter picks and Esc steps back', async () => {
+        await fresh(`${WEB}/index.html?w=rain&panel=open`, { 'wp:hinted': true });
+        await playerReady();
+        if (!await waitFor(() => evaluate(PANEL_OPEN), 3000)) return record('panel not open');
+        const state = () => evaluate(`({ browsing: WP.panel.browsing, query: document.querySelector('#panel .gallery-search').value,
+            focus: document.activeElement.dataset.id || null, shown: [...document.querySelectorAll('#panel .picker .tile:not([hidden])')].map(t => t.dataset.id),
+            choice: WP.player.choice, open: ${PANEL_OPEN} })`);
+        await evaluate(`document.querySelector('#panel .switcher').click()`);
+        await sleep(200);
+        let s = await state();
+        if (!s.browsing || s.focus !== 'rain') record(`the header didn't open the gallery on Rain: ${JSON.stringify({ browsing: s.browsing, focus: s.focus })}`);
+        if (s.shown.length !== catalog.filter(e => !e.pseudo && !e.disabled).length + 1) record(`${s.shown.length} tiles in the gallery`);
+        await press('ArrowRight');
+        if ((await state()).focus !== s.shown[s.shown.indexOf('rain') + 1]) record('→ did not move to the next tile');
+        for (const c of 'koi') await press(c);
+        s = await state();
+        if (s.query !== 'koi' || s.shown.join() !== 'koi-pond') record(`typing "koi" left ${JSON.stringify(s)}`);
+        await press('Escape');
+        s = await state();
+        if (!s.browsing || s.query) record('Esc in a search should clear it first');
+        await evaluate(`document.querySelector('#panel [data-filter=live]').click()`);
+        s = await state();
+        if (!s.shown.length || s.shown.some(id => !catalog.find(e => e.id === id)?.network)) record(`Live data shows ${s.shown}`);
+        await evaluate(`document.querySelector('#panel [data-filter=all]').click()`);
+        for (const c of 'fireplace') await press(c);
+        await press('Enter');
+        s = await state();
+        if (s.choice !== 'fireplace' || s.browsing || !s.open) record(`Enter in the search: ${JSON.stringify({ choice: s.choice, browsing: s.browsing, open: s.open })}`);
+        await evaluate(`document.querySelector('#panel .switcher').click()`);
+        await press('Escape');
+        s = await state();
+        if (s.browsing || !s.open) record('Esc in the gallery should go back to the settings, not close');
+        await press('Escape');
+        if (await evaluate(PANEL_OPEN)) record('a second Esc should close the panel');
+        return true;
+    });
+
+    await check('Android behind the launcher: a corner hold opens nothing (the settings screen still has its panel)', async () => {
+        const hold = corner => inStage(`(() => { const x = ${corner === 'tr' ? 'innerWidth - 10' : '10'}, y = 10;
+            window.dispatchEvent(new PointerEvent('pointerdown', { pointerType: 'touch', clientX: x, clientY: y, bubbles: true })); })()`);
+        await fresh(`${WEB}/index.html?w=rain&host=android`);
+        await playerReady();
+        await hold('tr');
+        await hold('tl');
+        await sleep(900);
+        if (await evaluate(PANEL_OPEN)) record('a hold in the top right opened the panel on the live wallpaper');
+        if (await evaluate(`!!document.fullscreenElement`)) record('a hold in the top left went fullscreen on the live wallpaper');
+        if (await evaluate(`document.getElementById('toast').classList.contains('show')`)) record('the live wallpaper showed the first-run hint');
+        await fresh(`${WEB}/index.html?w=rain`, { 'wp:hinted': true });
+        await playerReady();
+        await hold('tr');
+        if (!await waitFor(() => evaluate(PANEL_OPEN), 2000)) record('a hold in the top right no longer opens the panel in a browser');
+        return true;
+    });
+
     // Every wallpaper, through the real panel: its controls render, and a
     // change reaches storage and then the running wallpaper.
     for (const entry of catalog.filter(e => !e.pseudo && !e.disabled && e.id !== 'blank')) {
