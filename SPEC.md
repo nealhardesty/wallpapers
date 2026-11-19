@@ -371,6 +371,7 @@ Phase 4 and 6 take it:
   |---|---|
   | `w=<id>` | Show this wallpaper instead of the saved one, e.g. `index.html?w=fishtank`. An unknown id is ignored, with a console warning |
   | `panel=open` | Open the switcher and settings panel on load (closes as usual with `,` or `Esc`) |
+  | `panel=gallery` | The same, opened on the gallery (§4.4) |
   | `date=YYYY-MM-DD`, `theme=<id>` | Passed to the wallpaper as `host.params`. Advent uses them for time travel and themes, e.g. `?w=advent&date=2026-12-25`. A time may follow (`T23:59` or `T23:59:50`), in local time, or in UTC with a `Z` (`2026-06-21T12:00:00Z`) |
   | `tier=low\|medium\|high` | Pin a performance tier for this load (§4.8), e.g. to see Low on a desktop |
   | `host=android`, `hud=1`, `thumb=1` | Host simulation (§4.3), performance HUD (§4.8), thumbnail mode (§4.7). The Windows app passes `host=windows` (and its saver `host=windows-saver`, W5) |
@@ -532,21 +533,39 @@ settings directly (storage is shared) and tells the player to apply them:
 - **Touch:**
   - Range sliders are `touch-action: pan-y`: a vertical swipe that starts
     on a slider scrolls the panel, only a sideways drag moves it.
-  - `refresh()` centres the active tile by scrolling the filmstrip alone
-    (`scrollIntoView` also scrolled the settings back to the top).
+  - The gallery is a grid, not a sideways strip: at 49 wallpapers the
+    filmstrip it replaced (2026-11) took a long sideways scroll to cross,
+    and touch had nothing else.
   - On Android's settings screen (`panel=open`) the corner gear is always shown (there is no hover or
     corner-hold), 10% of the height down to clear the status bar, so a closed panel can always be reopened. The live wallpaper itself never shows it.
 - **Look:**
   - Smoked glass over the live wallpaper.
   - **Its accent follows the wallpaper on screen** (`accent` in the
-    catalog): fire orange, aurora green, petal pink. Each picker tile is
+    catalog): fire orange, aurora green, petal pink. Each gallery tile is
     washed in its own wallpaper's colour.
   - System rounded type.
   - A right-hand drawer on desktop; a bottom sheet on phones.
 - **Layout, top to bottom:**
-  - A filmstrip of every wallpaper, with thumbnails (§4.7). The current
-    one is centred; a vertical wheel scrolls it sideways; hovering or
-    focusing a tile plays a live preview.
+  - The header is the **switcher**: the wallpaper on screen as a card (its
+    thumbnail, §4.7, its name, and "6 of 49"), with ‹ › to step and × to
+    close. A click on the card opens the **gallery** in place of the
+    settings; another goes back.
+  - **The gallery.** The drawer widens to 780 px (the bottom sheet grows
+    to 86% of the height) into a grid of every wallpaper, Seasonal first
+    (captioned with this month's pick). Over it, sticky: a search field
+    (every word must match the name or id), 🎲 *Surprise me* (any tile
+    shown but the current one), and chips, each with its count for the
+    search: All, Interactive (`interactive`), Calm (`motion: 'slow'`),
+    Live data (`network`) and Easy on battery (`WP.costs` 1). All read
+    from the catalog; nothing is tagged by hand. Tiles carry 👆, 📡 and
+    ⚡ badges; hovering or focusing one plays a live preview. Keys, through
+    `WP.panel.key` before the player's own: typing anywhere goes to the
+    search (`,`, `?`, `[` and `]` keep their meaning), arrows move through
+    the grid as laid out (↓ from the search to the first match, ↑ from the
+    top row back to it), Enter picks (in the search, the first match), and
+    `Esc` clears the search, then goes back to the settings, then closes.
+    A pick goes back to the settings. The chip is kept between visits,
+    unless it would hide the wallpaper on screen; the search is not.
   - The settings, grouped, with Advanced collapsed. A dot appears next to
     any changed setting; clicking it resets that setting, and its tooltip
     names the default.
@@ -554,18 +573,24 @@ settings directly (storage is shared) and tells the player to apply them:
     blocking dialog), Export and Import (all settings as JSON, e.g. to move
     a tuned setup to the phone), and key hints, hidden on touch screens.
 - **Opening it:**
-  - `,` toggles it; `Esc` closes it; `?panel=open` opens it on load, as soon as the player mounts rather than when the wallpaper is ready, so a slow or failing wallpaper still leaves its settings reachable (the Android settings screen relies on it).
+  - `,` toggles it; `Esc` closes it (from the gallery, goes back first); `?panel=open` (or `gallery`) opens it on load, as soon as the player mounts rather than when the wallpaper is ready, so a slow or failing wallpaper still leaves its settings reachable (the Android settings screen relies on it).
   - On a touch screen, a long press in either right-hand corner (the top can sit under Safari's status bar).
   - iOS Safari turns a long press into a text selection and callout, which would swallow the hold, so `theme.css` switches selection, the callout and the tap highlight off (text inputs excepted). To debug on a phone: Settings → Safari → Advanced → Web Inspector, then Develop → the device in desktop Safari.
   - iPhone Safari has no fullscreen API for pages (iPad does), so `f` and the left-hand corners toast a pointer to Add to Home Screen instead.
   - With a mouse, a ⚙︎ gear fades in when the pointer nears either of them.
   - The left-hand corners do the same for fullscreen: a ⛶ button for a mouse, a long press on touch (no buttons on Android).
   - While it's open, wallpaper keys are suspended.
+  - **Never on Android's live wallpaper itself** (`host=android` without
+    `panel=`): behind the launcher, the corners are the home screen's, and
+    a hold there kept opening the panel over it (2026-11). The corner
+    keys (`,`, `c`, `f`) do nothing there, and there's no first-run hint;
+    settings are the app's own screen. Smoke: a corner hold there opens
+    nothing, and still opens the panel in a browser.
 
 ```
 ┌────────────────────────────────────┐
-│ 🐠 Fish Tank                     × │
-│ ▕Matrix▏▕Fish Tank▏▕Advent▏▕Pix…   │  ← filmstrip with thumbnails; live preview on hover
+│ [▣ 🐠 Fish Tank      ⌄] ‹ ›    ×   │  ← switcher: a click opens the gallery
+│     17 of 49 · all wallpapers      │
 │ 🐟 Livestock                    ⌃  │
 │ Stocking                           │
 │ [🐟 Community                 ▾]   │
@@ -980,7 +1005,7 @@ smaller second clock for another timezone. **Off by default**, everywhere.
 
 #### The panel
 
-A collapsed row right under the filmstrip, above the wallpaper's own settings
+A collapsed row right under the header, above the wallpaper's own settings
 (so it's found without scrolling past a long list). Its summary line shows the
 state, so you can see what's on without opening it.
 
@@ -1354,7 +1379,7 @@ spec has a stated price:
 - **Stage messages:** `sample` and `track` from the player; `luma` and
   `pointer` back. `stats` carries the stage's `tier`, which is how the clock
   knows to give Low a tint instead of glass. The stage forwards `K`.
-- **Position of the section:** under the filmstrip, not above Performance.
+- **Position of the section:** under the header (the filmstrip, before the gallery), not above Performance.
 - **Fonts:** ten stacks and *My own font*; a separate `light` and `lcd` were
   redundant with the weight slider and the *Retro LCD* look.
 - **Second clock:** the date difference reads *tomorrow* and *yesterday*, and
@@ -5850,7 +5875,7 @@ the import.
 
 | On the homepage | Here | |
 |---|---|---|
-| A wallpaper menu in its status bar: Blank, Bing and 16 animations | The panel's filmstrip, with thumbnails and live previews; every one, plus Seasonal | ✓ |
+| A wallpaper menu in its status bar: Blank, Bing and 16 animations | The panel's gallery, with thumbnails, search, filters and live previews; every one, plus Seasonal | ✓ |
 | First run: snow in season, else Blank | Seasonal by month (§4.2) | ✓ better |
 | A gear button for the current wallpaper's settings | The panel; the corner gear; a long press on touch | ✓ |
 | `c` settings, `f` fullscreen | `c` or `,`, `f`; also `[` `]` `?` | ✓ |

@@ -26,9 +26,11 @@
     box-shadow: 0 24px 64px rgba(0, 0, 0, 0.45);
     color: var(--ink);
     font: 14px/1.4 ui-rounded, 'SF Pro Rounded', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-    transition: transform 0.28s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.2s;
+    transition: transform 0.28s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.2s, width 0.32s cubic-bezier(0.2, 0.8, 0.2, 1);
     overflow: hidden;
 }
+/* Browsing: the drawer widens into a gallery. */
+.panel.browsing { width: min(780px, calc(100vw - 24px)); }
 .panel[hidden] { display: flex; transform: translateX(calc(100% + 24px)); opacity: 0; pointer-events: none; visibility: hidden; }
 .panel button, .panel select, .panel input { font: inherit; color: inherit; }
 /* A long press on a slow phone shouldn't select a button's label. */
@@ -38,14 +40,60 @@
 .panel-head {
     display: flex;
     align-items: center;
-    gap: 10px;
-    padding: 16px 16px 12px 18px;
+    gap: 6px;
+    padding: 12px 12px 12px 12px;
     border-bottom: 1px solid var(--line);
 }
-.panel-title { margin: 0; font-size: 17px; font-weight: 650; letter-spacing: 0.01em; }
-.panel-subtitle { margin: 2px 0 0; color: var(--ink-soft); font-size: 12.5px; }
+/* The switcher: what's on, as a card; a click opens the gallery. */
+.switcher {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    padding: 5px 10px 5px 5px;
+    border: 1px solid transparent;
+    border-radius: 14px;
+    background: none;
+    cursor: pointer;
+    text-align: left;
+    transition: background 0.15s, border-color 0.15s;
+}
+.switcher:hover, .switcher[aria-expanded='true'] { background: var(--well); border-color: var(--line); }
+.switcher-thumb {
+    flex: none;
+    width: 60px;
+    height: 45px;
+    display: grid;
+    place-items: center;
+    border-radius: 9px;
+    background: linear-gradient(155deg, color-mix(in srgb, var(--accent) 40%, transparent), rgba(255, 255, 255, 0.04)) center / cover;
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 50%, transparent), 0 4px 14px rgba(0, 0, 0, 0.35);
+    font-size: 22px;
+    overflow: hidden;
+}
+.switcher-thumb.has-thumb { color: transparent; }
+.switcher-text { min-width: 0; display: grid; }
+.panel-title { margin: 0; font-size: 16.5px; font-weight: 650; letter-spacing: 0.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.panel-subtitle { margin: 1px 0 0; color: var(--ink-soft); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.switcher-chevron { flex: none; margin-left: auto; width: 7px; height: 7px; border-right: 1.5px solid var(--ink-soft); border-bottom: 1.5px solid var(--ink-soft); transform: translateY(-2px) rotate(45deg); transition: transform 0.2s; }
+.switcher[aria-expanded='true'] .switcher-chevron { transform: translateY(2px) rotate(225deg); }
+.stepper { display: flex; flex: none; }
+.step {
+    width: 30px;
+    height: 32px;
+    border: 0;
+    background: var(--well);
+    cursor: pointer;
+    font-size: 20px;
+    line-height: 1;
+    color: var(--ink-soft);
+}
+.step:first-child { border-radius: 10px 0 0 10px; margin-right: 1px; }
+.step:last-child { border-radius: 0 10px 10px 0; }
+.step:hover { color: var(--ink); background: rgba(255, 255, 255, 0.12); }
 .panel-close {
-    margin-left: auto;
+    flex: none;
     width: 32px;
     height: 32px;
     border: 0;
@@ -59,21 +107,62 @@
 
 .panel-scroll { flex: 1; overflow-y: auto; overscroll-behavior: contain; padding: 14px 16px 20px; scrollbar-width: thin; }
 
-/* Picker: a filmstrip of every wallpaper, each tile washed in its own
-   accent; the settings below stay in view. */
+.panel-scroll > [hidden] { display: none; }
+/* The header's own rule is the line above the first section. */
+.clock-host > .settings-group:first-child { border-top: 0; }
+
+/* The gallery: search and chips stay put over a grid of every wallpaper,
+   each tile washed in its own accent. */
+.gallery-bar {
+    position: sticky;
+    top: -14px;
+    z-index: 2;
+    display: grid;
+    gap: 10px;
+    margin: -14px -16px 12px;
+    padding: 14px 16px 10px;
+    background: linear-gradient(var(--glass) 70%, transparent);
+    -webkit-backdrop-filter: blur(14px);
+    backdrop-filter: blur(14px);
+}
+.gallery-find { display: flex; gap: 8px; }
+.panel .gallery-search {
+    flex: 1;
+    min-width: 0;
+    padding: 9px 12px 9px 34px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: var(--well) no-repeat 12px 50% / 14px url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23a9b0c2' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='7' cy='7' r='5'/%3E%3Cpath d='M11 11l3.5 3.5'/%3E%3C/svg%3E");
+    font-size: 14px;
+}
+.gallery-search:focus { border-color: color-mix(in srgb, var(--accent) 60%, transparent); outline: none; }
+.gallery-search::placeholder { color: var(--ink-faint); }
+.surprise {
+    flex: none;
+    width: 40px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: var(--well);
+    cursor: pointer;
+    font-size: 18px;
+    transition: transform 0.25s;
+}
+.surprise:hover { transform: rotate(-18deg) scale(1.08); }
+.surprise:active { transform: rotate(200deg) scale(0.95); }
+.gallery-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.gallery-chips .chip[aria-checked='true'] { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 22%, transparent); }
+.chip-count { color: var(--ink-faint); font-size: 11.5px; font-variant-numeric: tabular-nums; }
+.chip[aria-checked='true'] .chip-count { color: var(--ink-soft); }
+.gallery-empty { margin: 24px 0; color: var(--ink-soft); text-align: center; }
+.gallery-empty .action { margin-left: 4px; }
+
 .picker {
     display: grid;
-    grid-auto-flow: column;
-    grid-auto-columns: 104px;
-    gap: 8px;
-    margin: 0 -16px 16px;
-    padding: 2px 16px 10px;
-    overflow-x: auto;
-    scroll-snap-type: x proximity;
-    scroll-padding: 0 16px;
-    scrollbar-width: thin;
+    grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+    gap: 10px;
+    scroll-padding: 120px 0 10px;
 }
-.picker .tile { scroll-snap-align: start; }
+.picker .tile[hidden] { display: none; }
 .tile {
     --tile-accent: #8ab4ff;
     position: relative;
@@ -95,12 +184,18 @@
 .tile[aria-pressed='true'] { border-color: var(--tile-accent); box-shadow: inset 0 0 0 1px var(--tile-accent), 0 0 18px color-mix(in srgb, var(--tile-accent) 35%, transparent); }
 .tile-icon { font-size: 24px; line-height: 1; filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.4)); }
 .tile-name { font-size: 12px; font-weight: 600; line-height: 1.2; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.7); }
-.tile-cost { position: absolute; top: 5px; right: 6px; font-size: 9px; letter-spacing: -1px; filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.8)); }
+.tile-meta { position: absolute; top: 5px; right: 6px; z-index: 1; display: flex; align-items: center; gap: 3px; font-size: 10px; filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.8)); }
+.tile-cost { font-size: 9px; letter-spacing: -1px; }
+.tile-sub { display: block; margin-top: 1px; font-size: 10.5px; font-weight: 500; opacity: 0.85; }
+/* Surprise me: the chosen tile winks. */
+.tile.picked { animation: tile-pick 0.6s ease-out; }
+@keyframes tile-pick { 40% { transform: scale(1.08); box-shadow: 0 0 28px var(--tile-accent); } }
 .tile.has-thumb { background-size: cover; background-position: center; }
 .tile.has-thumb .tile-icon { display: none; }
 .tile.has-thumb .tile-name { margin-top: auto; }
 .tile.has-thumb[data-id='seasonal'] .tile-icon { display: block; font-size: 18px; }
 .tile-name, .tile-icon { position: relative; z-index: 1; }
+.tile:focus-visible { outline-offset: 1px; }
 /* A live preview: the stage laid out at 4x the tile and scaled down. */
 .tile-preview {
     position: absolute;
@@ -230,6 +325,8 @@
 .action.primary { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 22%, transparent); color: var(--ink); }
 .action.confirm { border-color: var(--accent); color: var(--ink); }
 .keys { margin: 0; color: var(--ink-faint); font-size: 12px; display: flex; flex-wrap: wrap; gap: 4px 12px; }
+.panel .keys-gallery, .panel.browsing .keys-settings, .panel.browsing .tier, .panel.browsing .actions { display: none; }
+.panel.browsing .keys-gallery { display: flex; }
 .about { margin: 0; color: var(--ink-faint); font-size: 12px; user-select: text; }
 .panel kbd, .help kbd {
     display: inline-block;
@@ -301,16 +398,18 @@
 @media (max-width: 600px) {
     .panel { top: auto; left: 8px; right: 8px; bottom: 8px; width: auto; max-height: 74vh; }
     .panel[hidden] { transform: translateY(calc(100% + 24px)); }
-    .picker { grid-auto-columns: 92px; }
+    .panel.browsing { width: auto; height: 86vh; max-height: 86vh; }
+    .picker { grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 8px; }
 }
 
 /* No keyboard, no key hints. */
 @media (hover: none) {
-    .keys { display: none; }
+    .keys, .panel.browsing .keys-gallery { display: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-    .panel, .tile, .switch, .switch::after, .gear { transition: none; }
+    .panel, .tile, .switch, .switch::after, .gear, .switcher-chevron, .surprise { transition: none; }
+    .tile.picked { animation: none; }
 }
 
 /* Location (core/location.js), for wallpapers that need one */
