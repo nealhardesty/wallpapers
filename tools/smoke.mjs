@@ -400,6 +400,18 @@ const AVERAGE = `(() => {
     return sum.map(v => Math.round(v / 256));
 })()`;
 
+// The true mean colour over every pixel, for scenes of thin strokes (code
+// rain), where AVERAGE's 16x16 shrink samples too few pixels to be steady.
+const MEAN = `(() => {
+    const src = document.querySelector('canvas'), probe = document.createElement('canvas');
+    probe.width = src.width; probe.height = src.height;
+    const g = probe.getContext('2d', { willReadFrequently: true });
+    g.drawImage(src, 0, 0);
+    const d = g.getImageData(0, 0, probe.width, probe.height).data, sum = [0, 0, 0];
+    for (let i = 0; i < d.length; i += 4) for (let c = 0; c < 3; c++) sum[c] += d[i + c];
+    return sum.map(v => Math.round(v / (d.length / 4)));
+})()`;
+
 const STAGE_CHECKS = {
     // Cherry Blossoms: a tree with blossom and petals in the air on frame
     // one; petals land on the grass (the pile grows) and float on water; a
@@ -460,7 +472,7 @@ const STAGE_CHECKS = {
         if (!await stageWith('matrix', { configVersion: 2, intro: false, cycle: 0, stutter: false }, '&seed=7')) return record('no boot');
         let s = await st();
         if (s.look !== 'operator' || s.layers !== 2 || s.drops < 30 || s.bright < 3 || s.cols < 40) record(`frame one: ${JSON.stringify(s)}`);
-        const avg = await evaluate(AVERAGE);
+        const avg = await evaluate(MEAN);
         if (!(avg[1] > avg[0] + 10 && avg[1] > avg[2] + 10) || avg[1] < 8) record(`not green code on frame one: ${avg}`);
         // The symbols stay put: with the symbol clock off, a cell's glyph is the same a second later.
         const cellsBefore = await evaluate('(m => Array.from(m.layers[1].glyphs.slice(0, 400)))(WP.stage.manager)');
@@ -479,7 +491,7 @@ const STAGE_CHECKS = {
         await press('h');
         if ((await st()).colour !== 'amber') record(`H: ${JSON.stringify(await st())}`);
         await sleep(300);
-        const amber = await evaluate(AVERAGE);
+        const amber = await evaluate(MEAN);
         if (!(amber[0] > amber[2] + 8)) record(`amber isn't warm: ${amber}`);
         await shoot('matrix-classic-amber');
         // A tap: bright-headed strings from that row in the seven columns
@@ -2193,7 +2205,8 @@ const STAGE_CHECKS = {
         }],
         ['a company of six, each in its place; nobody; the barbarian with her brand after dark; the druid changes shape and back; the rogue goes unseen and returns', async () => {
             const six = ['moofy', 'hound', 'pony', 'raven', 'ibbie', 'lantern'];
-            if (!await stageWith('wayfarer', { configVersion: 2, time: 'day', weather: 'clear', companionPick: 'choose', companionChoice: six, rests: false, craft: 'never' }, '&seed=7')) return record('not ready');
+            // (No wildlife: its animals are drawn with the traveller and company, and would swamp the counts below.)
+            if (!await stageWith('wayfarer', { configVersion: 2, time: 'day', weather: 'clear', companionPick: 'choose', companionChoice: six, rests: false, craft: 'never', wildlife: 'none' }, '&seed=7')) return record('not ready');
             const state = () => evaluate('JSON.parse(JSON.stringify(WP.stage.manager.debugState()))');
             const apply = more => evaluate(`(m => m.applySettings({ ...m.config, ...${JSON.stringify(more)} }))(WP.stage.manager)`);
             const run = () => evaluate("WP.entry('wayfarer').keys.find(k => k.keys.includes('g')).run(WP.stage.manager, {})");
