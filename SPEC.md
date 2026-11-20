@@ -1501,6 +1501,11 @@ ready and its frame stats over DevTools. What the spike found:
   the WebView keeps its old density, so the page saw a quarter-size
   viewport. The page's own pixel-ratio scaling (§4.8) is used instead, so
   the surface stays at full size.
+- **Ignore a 0×0 surface.** A foldable hands the engine one mid-fold, and
+  `createVirtualDisplay` throws on it ("width must be positive"); two such
+  crashes in a row and Android puts its default wallpaper back
+  (2026-11-20, a Galaxy Z Fold on Android 17: every crash of ours since
+  11-05 was this). `onSurfaceChanged` returns until the real size follows.
 - Not yet measured: frame rate, CPU and battery on a real phone (the
   emulator was software-rendered on an overloaded host, at 2–5 fps, and
   its battery numbers mean nothing). `make android-bench` (§4.8) does it;
@@ -1513,7 +1518,10 @@ ready and its frame stats over DevTools. What the spike found:
   wrapper pinned with its SHA-256. Application ID
   `com.roadwaffle.wallpapers` (permanent after the first release),
   `minSdk 26`, compile and target SDK 37. Its version is
-  `web/manifest.json`'s (0.6.0 → versionCode 600).
+  `web/manifest.json`'s (0.6.0 → versionCode 600), read through
+  `providers.fileContents` so the configuration cache sees a bump (read
+  directly, local builds kept an old version and the phone refused them as
+  a downgrade).
 - `web/` becomes the assets at build time (`SyncWeb` in
   `app/build.gradle.kts`: everything but `bing.json` and the two web
   manifests), served by `WebViewAssetLoader` at

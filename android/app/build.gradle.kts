@@ -6,7 +6,8 @@ plugins {
 }
 
 // One version for everything: the extension's manifest.json. 0.6.0 → 600.
-val webVersion = (JsonSlurper().parse(rootProject.file("../web/manifest.json")) as Map<*, *>)["version"] as String
+// (Read through providers, so the configuration cache sees the file and a bump isn't built as the old version.)
+val webVersion = (JsonSlurper().parseText(providers.fileContents(rootProject.layout.projectDirectory.file("../web/manifest.json")).asText.get()) as Map<*, *>)["version"] as String
 val (major, minor, patch) = webVersion.split(".").map { it.toInt() }
 
 android {

@@ -39,6 +39,9 @@ class LiveWallpaper : WallpaperService() {
         }
 
         override fun onSurfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
+            // A foldable hands over a 0×0 surface mid-fold; a virtual display of that size throws, and two such
+            // crashes in a row make Android put its default wallpaper back. The real size follows straight after.
+            if (width <= 0 || height <= 0) return
             val dpi = resources.displayMetrics.densityDpi
             val existing = display
             if (existing != null) {
