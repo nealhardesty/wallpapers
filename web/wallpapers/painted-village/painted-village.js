@@ -1,8 +1,9 @@
 // Painted Village: Evergreen Hollow from the hill above the pond, as a
-// painting. The rink at our feet, the green and its grand tree, the store,
-// the meetinghouse and the rows of houses, the tree farm up the left, the
-// woods, the mountain and the house on it, and every window and lamp
-// lighting the snow in front of it (SPEC §10.41).
+// painting. The rink at our feet, the green and its grand tree, Main
+// Street's shops, the meetinghouse and the rows of houses, the mill on the
+// brook, the tree farm up the left and the sledding hill in front of it,
+// the woods with their glades, the mountain and the house on it, and every
+// window and lamp lighting the snow in front of it (SPEC §10.41).
 //
 // The picture is brush strokes, laid once (painted-bake.js) and lit by
 // arithmetic on canvases, so the hour can turn without repainting:
@@ -94,7 +95,8 @@ class PaintedVillageAnimationManager {
         this.config = config;
         if (!this.running) return;
         const changed = keys => keys.some(k => JSON.stringify(old[k]) !== JSON.stringify(config[k]));
-        if (changed(['village', 'houses', 'church', 'bridge', 'pond', 'bonfire', 'cabin', 'horizon', 'townTree', 'townTreeSize', 'lights', 'decorate', 'snowman', 'lamps', 'candles', 'brush', 'mice', 'cardinal', 'rabbits', 'treeFarm', 'bandstand', 'cocoa']) || !old.sledders !== !config.sledders) { this.rebuildAt = performance.now() + 300; return; }      // once a slider has stopped moving
+        if (changed(['village', 'houses', 'church', 'bridge', 'pond', 'bonfire', 'cabin', 'horizon', 'townTree', 'townTreeSize', 'lights', 'decorate', 'snowman', 'lamps', 'candles', 'brush', 'mice', 'cardinal', 'rabbits', 'treeFarm', 'bandstand', 'cocoa',
+            'townName', 'townSign', 'houseStyles', 'housePaint', 'shops', 'store', 'inn', 'school', 'mill', 'trail', 'train', 'deer']) || !old.sledders !== !config.sledders || !old.bears !== !config.bears) { this.rebuildAt = performance.now() + 300; return; }      // once a slider has stopped moving
         if (changed(['sky', 'moonPhase', 'cycleMinutes'])) { this.pinKey = null; this.cycleBase = this.host.now().getTime() - this.time * 1000 * 86400 / (config.cycleMinutes * 60); }
         if (changed(['clouds'])) this.buildClouds();
         if (changed(['stars'])) this.buildStars();
@@ -261,7 +263,8 @@ class PaintedVillageAnimationManager {
             default: return 0;
         }
     }
-    fireOn() { const h = this.evening(); return this.config.bonfire !== false && this.light.dark > 0.12 && h < 23.6; }
+    // The fire burns while anyone might be skating by it.
+    fireOn() { const h = this.evening(); return this.config.bonfire !== false && this.light.dark > 0.12 && (h < 23.6 || this.config.nightLife !== 'sleeps'); }
 
     // The street lamps: lit already if we arrive after dark; otherwise the
     // lamplighter's to light (the cast), with a fallback if he is not about.
@@ -560,11 +563,12 @@ class PaintedVillageAnimationManager {
     callCarollers() { return this.cast ? this.cast.callCarollers() : null; }
     callHorse() { return this.cast ? this.cast.callHorse() : null; }
     callLamplighter() { return this.cast ? this.cast.callLamplighter() : null; }
+    callBears() { return this.cast ? this.cast.callBears() : null; }
     repaint() { this.scene = null; this.rebuild(); return '🖌️ Painting it again'; }
 
     report() {
         const d = this.sky, s = this.season, pad = n => String(n).padStart(2, '0');
         const when = s.eve ? 'Christmas Eve' : s.day ? 'Christmas Day' : s.daysTo > 0 ? `${s.daysTo} day${s.daysTo === 1 ? '' : 's'} to Christmas` : `${-s.daysTo} days since Christmas`;
-        return `🕰️ ${d.getHours()}:${pad(d.getMinutes())} in Evergreen Hollow · ${when} · ${HarvestSky.moonTitle(d, this.moon.age)}`;
+        return `🕰️ ${d.getHours()}:${pad(d.getMinutes())} in ${String(this.config.townName || '').trim() || 'the village'} · ${when} · ${HarvestSky.moonTitle(d, this.moon.age)}`;
     }
 }

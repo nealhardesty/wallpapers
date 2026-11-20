@@ -6,7 +6,7 @@ WP.costs = {
     'cat-ornament': 2,
     'cherry-blossoms': 1,
     'christmas-village': 2,
-    'painted-village': 2,
+    'painted-village': 3,
     'fireflies': 1,
     'fireplace': 2,
     'frost': 1,

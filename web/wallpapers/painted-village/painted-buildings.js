@@ -1,7 +1,9 @@
 // Painted Village's buildings, as underpainting: New England in clapboard.
-// The general store with its porch, a colonial, a cape, a saltbox, the
-// inn, the white meetinghouse and its steeple, the covered bridge, and the
-// small houses up the hill behind. Each is a box in the world, seen in true
+// The general store with its porch, the shops of Main Street under their
+// awnings, colonials, capes, saltboxes, farmhouses and cottages, the inn,
+// the white meetinghouse and its steeple, the red schoolhouse and its
+// bell, the mill on the brook, the covered bridge, the barn, the cocoa
+// hut, the bandstand. Each is a box in the world, seen in true
 // perspective: a front square on to us and the side that faces the middle
 // of the picture running back. Every floor of windows is its own group of
 // lights (painted-plates.js), so a house can go to bed a floor at a time.
@@ -19,11 +21,48 @@ const PaintedBuildings = (() => {
         { wall: [0.56, 0.62, 0.50], trim: [0.94, 0.94, 0.90], shutter: [0.24, 0.20, 0.18], door: [0.50, 0.16, 0.14] },     // sage
         { wall: [0.64, 0.62, 0.62], trim: [0.95, 0.95, 0.93], shutter: [0.34, 0.14, 0.14], door: [0.20, 0.22, 0.36] },     // grey
     ];
+    // The paint a town may choose (the Houses' Paint setting): `village` is the mixture above.
+    const PAINT = {
+        village: SCHEMES.concat([
+            { wall: [0.92, 0.80, 0.46], trim: [0.96, 0.95, 0.90], shutter: [0.18, 0.26, 0.20], door: [0.20, 0.30, 0.24] },     // butter
+            { wall: [0.50, 0.24, 0.20], trim: [0.93, 0.92, 0.88], shutter: [0.12, 0.12, 0.14], door: [0.12, 0.20, 0.16] },     // brick
+        ]),
+        white: [
+            { wall: [0.93, 0.93, 0.91], trim: [0.97, 0.97, 0.95], shutter: [0.12, 0.13, 0.15], door: [0.56, 0.14, 0.12] },
+            { wall: [0.91, 0.91, 0.90], trim: [0.97, 0.97, 0.95], shutter: [0.14, 0.26, 0.20], door: [0.14, 0.24, 0.18] },
+            { wall: [0.94, 0.92, 0.86], trim: [0.97, 0.96, 0.93], shutter: [0.16, 0.20, 0.34], door: [0.16, 0.20, 0.34] },
+        ],
+        bright: [
+            { wall: [0.94, 0.80, 0.40], trim: [0.97, 0.96, 0.92], shutter: [0.20, 0.30, 0.44], door: [0.62, 0.16, 0.14] },     // buttercup
+            { wall: [0.44, 0.62, 0.74], trim: [0.96, 0.96, 0.94], shutter: [0.94, 0.93, 0.90], door: [0.84, 0.66, 0.24] },     // robin's egg
+            { wall: [0.66, 0.16, 0.14], trim: [0.96, 0.95, 0.91], shutter: [0.14, 0.14, 0.16], door: [0.14, 0.30, 0.22] },     // red
+            { wall: [0.52, 0.70, 0.56], trim: [0.96, 0.96, 0.92], shutter: [0.22, 0.34, 0.28], door: [0.56, 0.18, 0.16] },     // mint
+            { wall: [0.86, 0.60, 0.62], trim: [0.97, 0.96, 0.94], shutter: [0.36, 0.20, 0.26], door: [0.24, 0.30, 0.44] },     // rose
+            { wall: [0.50, 0.42, 0.62], trim: [0.96, 0.95, 0.94], shutter: [0.24, 0.20, 0.34], door: [0.86, 0.72, 0.30] },     // lilac
+        ],
+        brick: [
+            { wall: [0.52, 0.25, 0.20], trim: [0.94, 0.93, 0.89], shutter: [0.12, 0.12, 0.14], door: [0.12, 0.20, 0.16] },
+            { wall: [0.44, 0.21, 0.19], trim: [0.92, 0.90, 0.84], shutter: [0.16, 0.24, 0.20], door: [0.50, 0.14, 0.12] },
+            { wall: [0.60, 0.33, 0.25], trim: [0.95, 0.94, 0.90], shutter: [0.18, 0.20, 0.30], door: [0.18, 0.20, 0.30] },
+        ],
+    };
     const STYLES = {
         colonial: { e: 5.6, r: 8.7, d: 8, floors: 2, bays: 5, shutters: true },
         cape: { e: 3.3, r: 6.9, d: 8, floors: 1, bays: 5, dormers: 2, shutters: true },
         saltbox: { e: 5.4, r: 8.4, d: 9.5, floors: 2, bays: 3 },
+        farmhouse: { e: 5.5, r: 8.5, d: 8, floors: 2, bays: 3, shutters: true, porch: true },
+        cottage: { e: 3.1, r: 6.3, d: 7, floors: 1, bays: 3, dormers: 1 },
         inn: { e: 6.0, r: 9.2, d: 9, floors: 2, bays: 7, shutters: true, porch: true },
+        shop: { e: 6.3, r: 9.0, d: 9, floors: 2, bays: 3, shop: true },
+    };
+    // Main Street's shops: the name over the door, its paint, its awning, what is in the window.
+    const SHOP = {
+        bakery: { sign: 'BAKERY', wall: [0.93, 0.86, 0.68], door: [0.45, 0.20, 0.14], awning: [0.78, 0.16, 0.14], board: [0.34, 0.12, 0.10], goods: ['rgba(170,110,50,0.92)', 'rgba(206,150,80,0.92)', 'rgba(120,70,36,0.92)', 'rgba(240,226,200,0.92)'] },
+        toys: { sign: 'TOYS', wall: [0.36, 0.48, 0.64], door: [0.62, 0.16, 0.14], awning: [0.90, 0.68, 0.20], board: [0.14, 0.20, 0.36], goods: ['rgba(190,40,36,0.92)', 'rgba(40,90,170,0.92)', 'rgba(50,130,70,0.92)', 'rgba(230,180,40,0.92)'] },
+        books: { sign: 'BOOKS', wall: [0.36, 0.44, 0.36], door: [0.30, 0.16, 0.12], awning: [0.16, 0.36, 0.26], board: [0.10, 0.20, 0.15], goods: ['rgba(110,30,34,0.92)', 'rgba(30,44,90,0.92)', 'rgba(90,90,40,0.92)', 'rgba(160,120,70,0.92)'] },
+        sweets: { sign: 'SWEETS', wall: [0.90, 0.74, 0.78], door: [0.36, 0.48, 0.44], awning: [0.86, 0.38, 0.52], board: [0.40, 0.14, 0.24], goods: ['rgba(230,110,140,0.92)', 'rgba(250,244,236,0.92)', 'rgba(120,200,170,0.92)', 'rgba(200,50,60,0.92)'] },
+        post: { sign: 'POST OFFICE', wall: [0.56, 0.28, 0.22], door: [0.16, 0.22, 0.38], awning: [0.18, 0.24, 0.44], board: [0.12, 0.16, 0.30], goods: ['rgba(170,130,84,0.92)', 'rgba(240,236,224,0.92)', 'rgba(150,40,36,0.92)'] },
+        tea: { sign: 'TEA ROOM', wall: [0.92, 0.90, 0.84], door: [0.20, 0.36, 0.34], awning: [0.26, 0.50, 0.46], board: [0.12, 0.26, 0.24], goods: ['rgba(240,236,226,0.92)', 'rgba(60,110,120,0.92)', 'rgba(190,150,90,0.92)'] },
     };
     const BRICK = [0.50, 0.24, 0.20], STONE = [0.46, 0.43, 0.44], DARK = [0.10, 0.10, 0.13];
 
@@ -104,7 +143,7 @@ const PaintedBuildings = (() => {
             });
             P.glowPoly(o.grp, 'rgba(255,190,90,0.95)', glass);
             const out = isFront ? { x: B.t.x + c, z: B.z, face: [0, -1] } : { x: B.xs + B.side * 0.5, z: B.z + c / P.cam.zm, face: [B.side, 0], out: 0 };
-            P.light(o.grp, { ...out, y: v, c: WINDOW, I: 5.5 * w * h * (o.gain || 1), r2: 0.5 });
+            if (!B.far) P.light(o.grp, { ...out, y: v, c: WINDOW, I: 5.5 * w * h * (o.gain || 1), r2: 0.5 });
         }
         // Glazing bars.
         wall(); P.set({ m: MAT.WOOD, size });
@@ -164,10 +203,14 @@ const PaintedBuildings = (() => {
 
     // ---- Houses -----------------------------------------------------------------
 
+    // A house, the inn, or one of the shops (t.shop). A house up the hill
+    // (t.far) lights the snow with one light a floor, not one a window.
     function house(P, t, config) {
-        const st = STYLES[t.style] || STYLES.colonial, col = SCHEMES[t.tint % SCHEMES.length], B = frame(P, t, st.d), { hw, side, s, fy } = B, { e, r, d } = st;
-        const name = `${t.style}${Math.round(t.x)}`, decor = P.R() < (P.share ?? 1), candles = config.candles !== false && P.R() < 0.6, catAt = P.R() < 0.5 ? Math.floor(P.rr(0, st.bays)) : -1;
-        const grp = { down: P.group(name + '.down', { kind: 'window', house: name }), up: P.group(name + '.up', { kind: 'window', house: name, upstairs: true }), porch: P.group(name + '.porch', { kind: 'porch', house: name }) };
+        const st = STYLES[t.style] || STYLES.colonial, shop = SHOP[t.shop], paint = PAINT[config.housePaint] || PAINT.village, B = frame(P, t, st.d), { hw, side, s, fy } = B, { e, r, d } = st;
+        const col = shop ? { wall: shop.wall, trim: [0.96, 0.95, 0.91], door: shop.door } : paint[t.tint % paint.length];
+        const name = `${t.shop || t.style}${Math.round(t.x)}.${Math.round(t.z * 10)}`, decor = P.R() < (P.share ?? 1), candles = config.candles !== false && P.R() < 0.6, catAt = P.R() < 0.5 ? Math.floor(P.rr(0, st.bays)) : -1;
+        const grp = { down: P.group(name + '.down', { kind: 'window', house: name, shop: !!shop }), up: P.group(name + '.up', { kind: 'window', house: name, upstairs: true }), porch: P.group(name + '.porch', { kind: 'porch', house: name }) };
+        B.far = !!t.far;
         const size = fine(P, s * 0.09, 2.5, 5), door = (st.bays - 1) / 2, bay = i => -hw + (i + 0.5) * (t.w / st.bays);
         const wo = { trim: col.trim, shutter: st.shutters ? col.shutter : null, cols: 2, rows: 4 };
         const body = () => {
@@ -183,19 +226,24 @@ const PaintedBuildings = (() => {
             P.set({ m: MAT.STONE, size: 2.6, ang: null }); P.fill(STONE, g => poly(g, quad(B.F, -hw, 0, hw, 0.32)));
             P.set({ m: MAT.WOOD, size: 2.4, ang: Math.PI / 2 });
             for (const u of [-hw, hw]) P.fill(col.trim, g => poly(g, quad(B.F, u - 0.09, 0.3, u + 0.09, e)));
-            for (let i = 0; i < st.bays; i++) {
-                if (i !== door) win(P, B, B.F, bay(i), 1.8, 1.0, 1.55, { ...wo, grp: grp.down, wreath: decor, candle: candles, tree: i === door + 1, cat: i === catAt });
-                if (st.floors > 1) win(P, B, B.F, bay(i), 4.35, 1.0, 1.45, { ...wo, grp: grp.up, wreath: decor && i === door, candle: candles });
-            }
-            // The door: a surround, a light over it, a wreath, two steps.
             const du = bay(door);
-            B.front(); P.set({ m: MAT.WOOD, size: 2.2, ang: Math.PI / 2 });
-            P.fill(col.trim, g => { poly(g, quad(B.F, du - 0.82, 0.3, du + 0.82, 2.75)); poly(g, [B.F(du - 0.98, 2.72), B.F(du + 0.98, 2.72), B.F(du, 3.3)]); });
-            P.fill(col.door, g => poly(g, quad(B.F, du - 0.52, 0.34, du + 0.52, 2.3)));
-            P.fill(col.door.map(c => c * 0.72), g => { for (const [a, b, c2, d2] of [[-0.4, 0.5, -0.06, 1.2], [0.06, 0.5, 0.4, 1.2], [-0.4, 1.36, -0.06, 2.16], [0.06, 1.36, 0.4, 2.16]]) poly(g, quad(B.F, du + a, b, du + c2, d2)); });
-            P.set({ cls: CLS.SELF, m: MAT.GLASS, size: 2 }); P.fill('#ffd98a', g => poly(g, quad(B.F, du - 0.5, 2.38, du + 0.5, 2.64)));
-            P.glowPoly(grp.down, 'rgba(255,196,100,0.9)', quad(B.F, du - 0.5, 2.38, du + 0.5, 2.64));
-            wreath(P, B, B.F(du, 1.62), 0.25 * s);
+            if (shop) shopFront(P, B, col, shop, grp, wo);
+            else {
+                for (let i = 0; i < st.bays; i++) {
+                    if (i !== door) win(P, B, B.F, bay(i), 1.8, 1.0, 1.55, { ...wo, grp: grp.down, wreath: decor, candle: candles, tree: i === door + 1, cat: i === catAt });
+                    if (st.floors > 1) win(P, B, B.F, bay(i), 4.35, 1.0, 1.45, { ...wo, grp: grp.up, wreath: decor && i === door, candle: candles });
+                }
+                // The door: a surround, a light over it, a wreath, two steps.
+                B.front(); P.set({ m: MAT.WOOD, size: 2.2, ang: Math.PI / 2 });
+                P.fill(col.trim, g => { poly(g, quad(B.F, du - 0.82, 0.3, du + 0.82, 2.75)); poly(g, [B.F(du - 0.98, 2.72), B.F(du + 0.98, 2.72), B.F(du, 3.3)]); });
+                P.fill(col.door, g => poly(g, quad(B.F, du - 0.52, 0.34, du + 0.52, 2.3)));
+                P.fill(col.door.map(c => c * 0.72), g => { for (const [a, b, c2, d2] of [[-0.4, 0.5, -0.06, 1.2], [0.06, 0.5, 0.4, 1.2], [-0.4, 1.36, -0.06, 2.16], [0.06, 1.36, 0.4, 2.16]]) poly(g, quad(B.F, du + a, b, du + c2, d2)); });
+                P.set({ cls: CLS.SELF, m: MAT.GLASS, size: 2 }); P.fill('#ffd98a', g => poly(g, quad(B.F, du - 0.5, 2.38, du + 0.5, 2.64)));
+                P.glowPoly(grp.down, 'rgba(255,196,100,0.9)', quad(B.F, du - 0.5, 2.38, du + 0.5, 2.64));
+                wreath(P, B, B.F(du, 1.62), 0.25 * s);
+            }
+            // One light a floor, for a house too far off for each window's to tell.
+            if (t.far) { P.light(grp.down, { x: t.x, y: 1.8, z: B.z, c: WINDOW, I: 8 * (st.bays - 1), face: [0, -1], r2: 0.8 }); if (st.floors > 1) P.light(grp.up, { x: t.x, y: 4.3, z: B.z, c: WINDOW, I: 7 * st.bays, face: [0, -1], r2: 0.8 }); }
             B.front(); P.set({ m: MAT.STONE, size: 2.4, ang: 0 }); P.fill([0.56, 0.54, 0.56], g => { poly(g, quad(B.F, du - 0.95, 0, du + 0.95, 0.34)); });
             P.set({ cls: CLS.TOP, m: MAT.ROOF, size: 2.6 }); P.fill([0.90, 0.90, 0.97], g => { const a = B.at(t.x + du - 1.0, 0.34, B.z), b = B.at(t.x + du + 1.0, 0.34, B.z), c2 = B.at(t.x + du + 1.0, 0.17, B.z - 0.7 / P.cam.zm), d2 = B.at(t.x + du - 1.0, 0.17, B.z - 0.7 / P.cam.zm); poly(g, [a, b, c2, d2]); });
             const lp = B.F(du + 1.12, 2.05);
@@ -213,17 +261,151 @@ const PaintedBuildings = (() => {
             snowBand(P, [eaveEnd, ridgeEnd, back], 0.2 * s, { size: 3.5, cls: side > 0 ? CLS.TOPR : CLS.TOPL });
             snowBand(P, [e0, e1], 0.28 * s, { icicles: true });
             snowBand(P, [r0, r1], 0.17 * s, { size: 4 });
-            for (let i = 0; i < (st.dormers || 0); i++) dormer(P, B, col, (i ? 1 : -1) * t.w * 0.24, st, grp.up, wo);
+            for (let i = 0; i < (st.dormers || 0); i++) dormer(P, B, col, st.dormers === 1 ? -t.w * 0.2 : (i ? 1 : -1) * t.w * 0.24, st, grp.up, wo);
             chimney(P, B, st.floors > 1 ? 0 : t.w * 0.05, r, 1.2, 1.5);
             if (decor && config.lights !== false) string(P, B.at(t.x - hw, e - 0.34, zo), B.at(t.x + hw, e - 0.34, zo), fy, Math.max(1.1 * P.cam.u, 0.045 * s));
             drift(P, B, B.F, -hw - 0.4, hw + 0.4, [du, 1.2]); drift(P, B, B.S, 0.4, d);
-            for (let i = 0; i < st.bays; i++) if (i !== door && !st.porch) shrub(P, B, bay(i) + P.rr(-0.2, 0.2));
+            for (let i = 0; i < st.bays; i++) if (i !== door && !st.porch && !shop) shrub(P, B, bay(i) + P.rr(-0.2, 0.2));
         };
         const top = B.at(t.x, r + 2, B.zmid)[1];
         P.solid(t.z, B.fx, fy, body, { reflect: [B.F(-hw - 0.5, 0)[0], top, B.F(hw + 0.5, 0)[0], fy] });
+        if (shop) P.letter([0.97, 0.84, 0.44], shop.sign, B.F(0, 3.78)[0], B.F(0, 3.78)[1], Math.min(0.52, 5.9 / (shop.sign.length * 0.64)) * s, { foot: fy, squeeze: 0.86 });
         const x0 = Math.min(B.F(-hw, 0)[0], B.S(d, 0)[0]), x1 = Math.max(B.F(hw, 0)[0], B.S(d, 0)[0]);
         P.hit('house', x0, top, x1, fy, { groups: [grp.down, grp.up, grp.porch], name });
         (P.spots.houses ||= []).push({ name, x: t.x, z: t.z, door: [t.x + bay(door), t.z], groups: grp, style: t.style });
+    }
+
+    // A shop's ground floor: two windows full of things and a glazed door
+    // between them, a striped awning over all three, a board for its name.
+    function shopFront(P, B, col, shop, grp, wo) {
+        const { t, hw, s, fy } = B, zf = B.z - 1.15 / P.cam.zm, A = (u, v) => B.at(t.x + u, v, zf);
+        for (const sgn of [-1, 1]) {
+            const c = sgn * (hw * 0.56), gl = quad(B.F, c - 1.4, 0.85, c + 1.4, 2.5), ctr = B.F(c, 1.7);
+            B.front(); P.set({ m: MAT.WOOD, size: 2.2, ang: Math.PI / 2 }); P.fill(col.trim, g => poly(g, quad(B.F, c - 1.54, 0.7, c + 1.54, 2.64)));
+            P.set({ cls: CLS.SELF, m: MAT.GLASS, size: 1.8, ang: Math.PI / 2 });
+            const gr = P.alb.createRadialGradient(ctr[0], ctr[1], 0, ctr[0], ctr[1], 1.9 * s);
+            gr.addColorStop(0, '#fff0b4'); gr.addColorStop(0.5, '#ffc95c'); gr.addColorStop(1, '#ec8a2a');
+            P.fill(gr, g => poly(g, gl));
+            for (let i = 0; i < 6; i++) { const u = c - 1.15 + i * 0.46, hgt = P.rr(0.3, 0.95); P.fill(P.pick(shop.goods), g => poly(g, quad(B.F, u - 0.15, 0.85, u + 0.15, 0.85 + hgt))); }
+            P.glowPoly(grp.down, 'rgba(255,196,96,0.95)', gl);
+            P.light(grp.down, { x: t.x + c, y: 1.7, z: B.z, c: WINDOW, I: 18, face: [0, -1], r2: 0.5 });
+            B.front(); P.set({ m: MAT.WOOD, size: 1.8 });
+            P.line(col.trim, Math.max(1, 0.04 * s), g => { const a = B.F(c, 0.85), b = B.F(c, 2.5); g.moveTo(a[0], a[1]); g.lineTo(b[0], b[1]); });
+        }
+        B.front(); P.set({ m: MAT.WOOD, size: 2, ang: Math.PI / 2 });
+        P.fill(col.trim, g => poly(g, quad(B.F, -0.68, 0.3, 0.68, 2.64)));
+        P.fill(col.door, g => poly(g, quad(B.F, -0.52, 0.34, 0.52, 2.5)));
+        P.set({ cls: CLS.SELF, m: MAT.GLASS, size: 1.8 }); P.fill('#ffd98a', g => poly(g, quad(B.F, -0.36, 1.2, 0.36, 2.3)));
+        P.glowPoly(grp.down, 'rgba(255,196,100,0.9)', quad(B.F, -0.36, 1.2, 0.36, 2.3));
+        wreath(P, B, B.F(0, 1.78), 0.22 * s);
+        // The awning, out over the pavement, and the snow on it.
+        P.set({ cls: CLS.TOP, foot: fy, m: MAT.FIG, size: 1.8, ang: Math.PI / 2, haze: 0 });
+        const n = 9; for (let i = 0; i < n; i++) { const u0 = -hw + 0.2 + (t.w - 0.4) * i / n, u1 = -hw + 0.2 + (t.w - 0.4) * (i + 1) / n; P.fill(i % 2 ? [0.95, 0.94, 0.90] : shop.awning, g => poly(g, [B.F(u0, 3.22), B.F(u1, 3.22), A(u1, 2.72), A(u0, 2.72)])); }
+        P.set({ cls: CLS.TOP, m: MAT.ROOF, size: 2 }); P.line(SNOW, 0.17 * s, g => { const a = B.F(-hw + 0.2, 3.27), b = B.F(hw - 0.2, 3.27); g.moveTo(a[0], a[1]); g.lineTo(b[0], b[1]); });
+        // The board, and the windows of the rooms over the shop.
+        B.front(); P.set({ m: MAT.WOOD, size: 1.4, ang: 0 });
+        P.fill([0.90, 0.72, 0.30], g => poly(g, quad(B.F, -3.3, 3.42, 3.3, 4.14)));
+        P.fill(shop.board, g => poly(g, quad(B.F, -3.2, 3.5, 3.2, 4.06)));
+        for (const u of [-hw * 0.6, 0, hw * 0.6]) win(P, B, B.F, u, 5.15, 1.0, 1.3, { ...wo, grp: grp.up, wreath: u === 0, candle: true });
+    }
+
+    // A building with its gable to the street: the side wall we see, then
+    // the front, boarded; and its roof (the slope on the side we see, lips
+    // of snow up both rakes and along that eave, lights if there are any).
+    function gableWalls(P, B, wall, e, r, size) {
+        const { hw, d } = B;
+        B.sideW(); boards(P, B.S, wall.map(c => c * 0.9), 0, e, () => [0, d], size);
+        B.front(); boards(P, B.F, wall, 0, r - 0.05, v => v <= e ? [-hw, hw] : [-hw * (r - v) / (r - e), hw * (r - v) / (r - e)], size);
+    }
+    function gableRoof(P, B, e, r, lights) {
+        const { t, hw, side, s, fy } = B, zo = B.z - 0.4 / P.cam.zm, ex = B.xs + side * 0.35, top = side > 0 ? CLS.TOPR : CLS.TOPL;
+        P.set({ cls: top, foot: fy, m: MAT.ROOF, size: fine(P, s * 0.16, 3, 8), ang: 0.5 * side, haze: 0 });
+        P.fill([0.92, 0.93, 1], g => poly(g, [B.at(ex, e - 0.1, zo), B.at(ex, e - 0.1, B.zb), B.at(t.x, r, B.zb), B.at(t.x, r, zo)]));
+        snowBand(P, [B.at(t.x - hw - 0.4, e - 0.14, zo), B.at(t.x, r + 0.06, zo), B.at(t.x + hw + 0.4, e - 0.14, zo)], 0.3 * s, { icicles: true });
+        snowBand(P, [B.at(ex, e - 0.1, zo), B.at(ex, e - 0.1, B.zb)], 0.2 * s, { icicles: true, size: 3.6, cls: top });
+        if (lights) for (const [a, b] of [[-1, 0], [0, 1]]) string(P, B.at(t.x + a * hw, a ? e - 0.2 : r - 0.25, zo), B.at(t.x + b * hw, b ? e - 0.2 : r - 0.25, zo), fy, Math.max(1.1 * P.cam.u, 0.045 * s));
+    }
+
+    // ---- The schoolhouse -----------------------------------------------------------
+
+    // One room, red, its gable to the lane; tall windows; a bell under a little roof of its own.
+    function school(P, t, config) {
+        const e = 4.9, r = 7.9, d = 11, col = { wall: [0.60, 0.17, 0.15], trim: [0.95, 0.94, 0.90], door: [0.16, 0.22, 0.30] }, B = frame(P, t, d), { hw, side, s, fy } = B, zm = P.cam.zm;
+        const grp = P.group('school', { kind: 'window', house: 'school', shop: true }), lampG = P.group('school.porch', { kind: 'porch', house: 'school' });
+        const wo = { trim: col.trim, cols: 2, rows: 4, curtains: false };
+        const body = () => {
+            gableWalls(P, B, col.wall, e, r, fine(P, s * 0.09, 2.4, 5));
+            for (const u of [d * 0.2, d * 0.5, d * 0.8]) win(P, B, B.S, u, 2.6, 1.1, 2.3, { ...wo, grp });
+            for (const u of [-hw * 0.62, hw * 0.62]) win(P, B, B.F, u, 2.6, 1.1, 2.3, { ...wo, grp, candle: true });
+            B.front(); P.set({ m: MAT.WOOD, size: 2.2, ang: Math.PI / 2 });
+            for (const u of [-hw, hw]) P.fill(col.trim, g => poly(g, quad(B.F, u - 0.1, 0.3, u + 0.1, e)));
+            P.fill(col.trim, g => { poly(g, quad(B.F, -0.9, 0.3, 0.9, 2.9)); poly(g, [B.F(-1.1, 2.86), B.F(1.1, 2.86), B.F(0, 3.6)]); });
+            P.fill(col.door, g => poly(g, quad(B.F, -0.6, 0.34, 0.6, 2.4)));
+            P.set({ cls: CLS.SELF, m: MAT.GLASS, size: 2 }); P.fill('#ffd98a', g => poly(g, quad(B.F, -0.58, 2.48, 0.58, 2.76)));
+            P.glowPoly(grp, 'rgba(255,196,100,0.9)', quad(B.F, -0.58, 2.48, 0.58, 2.76));
+            wreath(P, B, B.F(0, 1.7), 0.26 * s);
+            B.front(); P.set({ m: MAT.STONE, size: 2.4, ang: 0 }); P.fill([0.56, 0.54, 0.56], g => poly(g, quad(B.F, -1.3, 0, 1.3, 0.34)));
+            const lp = B.F(1.3, 2.2); lantern(P, lampG, lp[0], lp[1], s * 0.95, { x: t.x + 1.3, y: 2.2, z: B.z }, 8);
+            // A round window in the gable.
+            const rp = B.F(0, 5.7); B.front(); P.set({ m: MAT.WOOD, size: 1.6, ang: null }); P.fill(col.trim, g => ell(g, rp[0], rp[1], 0.62 * s, 0.62 * s));
+            P.set({ cls: CLS.SELF, m: MAT.GLASS, size: 1.6 }); P.fill('#ffcf70', g => ell(g, rp[0], rp[1], 0.46 * s, 0.46 * s)); P.glowEll(grp, 'rgba(255,196,100,0.9)', rp[0], rp[1], 0.46 * s, 0.46 * s);
+            gableRoof(P, B, e, r, config.lights !== false);
+            // The bell: a white box on the ridge, open on each side, under a cap of slate and snow.
+            const zc = B.z + 1.7 / zm, C = (u, v) => B.at(t.x + u, v, zc), CS = (u, v) => B.at(t.x + side * 0.85, v, zc + u / zm);
+            B.sideW(); P.set({ m: MAT.WALL, size: 2, ang: 0 }); P.fill(col.trim.map(c => c * 0.88), g => poly(g, [CS(0, r - 0.5), CS(1.7, r - 0.5), CS(1.7, r + 1.9), CS(0, r + 1.9)]));
+            B.front(); P.set({ m: MAT.WALL, size: 2, ang: 0 }); P.fill(col.trim, g => poly(g, quad(C, -0.85, r - 0.5, 0.85, r + 1.9)));
+            P.set({ m: MAT.WOOD, size: 1.6 }); P.fill([0.16, 0.16, 0.22], g => { const a = C(-0.5, r + 0.5), b = C(0.5, r + 0.5), top = C(0, r + 1.75); g.moveTo(a[0], a[1]); g.lineTo(a[0], C(0, r + 1.3)[1]); g.quadraticCurveTo(a[0], top[1], top[0], top[1]); g.quadraticCurveTo(b[0], top[1], b[0], C(0, r + 1.3)[1]); g.lineTo(b[0], b[1]); g.closePath(); });
+            P.set({ m: MAT.FIG, size: 1.4 }); P.fill([0.78, 0.60, 0.22], g => { const p = C(0, r + 0.9); ell(g, p[0], p[1], 0.3 * s, 0.34 * s); });
+            P.set({ m: MAT.STONE, size: 2, ang: Math.PI / 2 }); P.fill([0.34, 0.33, 0.44], g => poly(g, [C(-1.15, r + 1.9), C(1.15, r + 1.9), B.at(t.x, r + 3.5, zc + 0.85 / zm)]));
+            P.set({ cls: CLS.TOP, m: MAT.ROOF, size: 2 }); P.fill([0.93, 0.94, 1], g => poly(g, side > 0 ? [C(-1.15, r + 1.9), C(-0.2, r + 1.9), B.at(t.x, r + 3.5, zc + 0.85 / zm)] : [C(0.2, r + 1.9), C(1.15, r + 1.9), B.at(t.x, r + 3.5, zc + 0.85 / zm)]));
+            P.line(SNOW, 0.2 * s, g => { const a = C(-1.2, r + 1.95), b = C(1.2, r + 1.95); g.moveTo(a[0], a[1]); g.lineTo(b[0], b[1]); });
+            drift(P, B, B.S, 0.4, d); drift(P, B, B.F, -hw - 0.4, hw + 0.4, [0, 1.5]);
+        };
+        const top = B.at(t.x, r + 4, B.z)[1];
+        P.solid(t.z, B.fx, fy, body, {});
+        P.letter([0.95, 0.94, 0.90], 'SCHOOL', B.F(0, 4.15)[0], B.F(0, 4.15)[1], 0.6 * s, { foot: fy, squeeze: 0.9 });
+        const x0 = Math.min(B.F(-hw, 0)[0], B.S(d, 0)[0]), x1 = Math.max(B.F(hw, 0)[0], B.S(d, 0)[0]);
+        P.hit('house', x0, top, x1, fy, { groups: [grp, lampG], name: 'school' });
+    }
+
+    // ---- The mill on the brook ------------------------------------------------------------
+
+    // Stone below and weathered boards above, its gable to the street and its
+    // wheel in the brook at the corner. The wheel is the cast's: it turns.
+    function mill(P, t, config) {
+        const e = 6.8, r = 10, d = 9, e1 = 3.0, wood = [0.46, 0.34, 0.27], trim = [0.90, 0.88, 0.82], B = frame(P, t, d), { hw, side, s, fy } = B, zm = P.cam.zm;
+        const grp = { down: P.group('mill.down', { kind: 'window', house: 'mill' }), up: P.group('mill.up', { kind: 'window', house: 'mill', upstairs: true }), porch: P.group('mill.porch', { kind: 'porch', house: 'mill' }) };
+        const wo = { trim, cols: 2, rows: 2 }, wx = side * (hw - 0.3), wr = 2.3;         // the wheel's axle, on the front at the corner by the brook, and its reach
+        const body = () => {
+            gableWalls(P, B, wood, e, r, fine(P, s * 0.09, 2.4, 5));
+            // The stone of the ground floor.
+            B.sideW(); P.set({ m: MAT.STONE, size: 2.6, ang: null }); P.fill(STONE.map(c => c * 0.86), g => poly(g, quad(B.S, 0, 0, d, e1)));
+            B.front(); P.set({ m: MAT.STONE, size: 2.6, ang: null }); P.fill(STONE, g => poly(g, quad(B.F, -hw, 0, hw, e1)));
+            for (let v = 0.2; v < e1 - 0.1; v += 0.42) for (let u = -hw + P.rr(0.1, 0.5); u < hw - 0.2; u += P.rr(0.6, 0.95)) { const p = B.F(u, v); P.fill(P.vary(P.pick([[0.52, 0.48, 0.48], [0.60, 0.54, 0.48], [0.42, 0.42, 0.50], [0.36, 0.35, 0.40]]), 0.14), g => ell(g, p[0], p[1], P.rr(0.26, 0.4) * s, 0.16 * s)); }
+            for (const u of [d * 0.3, d * 0.72]) win(P, B, B.S, u, 4.9, 0.95, 1.3, { ...wo, grp: grp.up });
+            // The door and a window beside it, away from the wheel; the rooms over; the loft door and its hoist.
+            const du = -side * 0.9;
+            B.front(); P.set({ m: MAT.WOOD, size: 2.2, ang: Math.PI / 2 });
+            P.fill(trim, g => poly(g, quad(B.F, du - 0.8, 0.2, du + 0.8, 2.6))); P.fill([0.30, 0.17, 0.13], g => poly(g, quad(B.F, du - 0.6, 0.24, du + 0.6, 2.42)));
+            win(P, B, B.F, -side * 3.2, 1.75, 1.0, 1.3, { ...wo, grp: grp.down, wreath: true });
+            for (const u of [-3, 0, 3]) win(P, B, B.F, u, 4.9, 0.95, 1.3, { ...wo, grp: grp.up, candle: true });
+            B.front(); P.set({ m: MAT.WOOD, size: 2, ang: Math.PI / 2 }); P.fill(trim, g => poly(g, quad(B.F, -0.7, 7.1, 0.7, 8.7))); P.fill([0.20, 0.12, 0.10], g => poly(g, quad(B.F, -0.55, 7.2, 0.55, 8.6)));
+            P.line([0.22, 0.15, 0.12], Math.max(1, 0.16 * s), g => { const a = B.F(0, 9.1), b = B.at(t.x, 9.1, B.z - 1.3 / zm); g.moveTo(a[0], a[1]); g.lineTo(b[0], b[1]); });
+            const lp = B.F(du - side * 1.15, 2.2); lantern(P, grp.porch, lp[0], lp[1], s * 0.95, { x: t.x + du - side * 1.15, y: 2.2, z: B.z }, 8);
+            // The wheel pit: black water where the wheel turns, a block of stone for the axle.
+            const pit = B.at(t.x + wx, 0, B.z - 1.1 / zm);
+            P.set({ cls: CLS.GROUND, foot: pit[1], m: MAT.ICE, size: 3, ang: 0.02, haze: 0 }); P.fill([0.12, 0.15, 0.26], g => ell(g, pit[0], pit[1], (wr + 0.9) * s, 0.62 * s));
+            B.front(); P.set({ m: MAT.STONE, size: 2.2, ang: null }); P.fill([0.40, 0.38, 0.42], g => poly(g, quad(B.F, wx - 0.5, wr - 0.45, wx + 0.5, wr + 0.6)));
+            gableRoof(P, B, e, r, config.lights !== false);
+            B.zmid = B.z + d * 0.7 / zm; chimney(P, B, 0, r - 0.2, 1.1, 1.7); B.zmid = B.z + d / 2 / zm;
+            drift(P, B, B.S, 0.4, d); drift(P, B, B.F, -hw - 0.4, hw + 0.4, [wx, wr + 1]);
+        };
+        const top = B.at(t.x, r + 2.2, B.z)[1];
+        P.solid(t.z, B.fx, fy, body, {});
+        const x0 = Math.min(B.F(-hw, 0)[0], B.S(d, 0)[0]) - wr * s, x1 = Math.max(B.F(hw, 0)[0], B.S(d, 0)[0]) + wr * s;
+        P.hit('house', x0, top, x1, fy, { groups: [grp.down, grp.up, grp.porch], name: 'mill' });
+        (P.spots.houses ||= []).push({ name: 'mill', x: t.x, z: t.z, door: [t.x, t.z], groups: grp, style: 'mill' });
+        P.spots.mill = { x: t.x + wx, y: wr + 0.2, z: B.z - 0.8 / zm, r: wr };
     }
 
     function dormer(P, B, col, u, st, grp, wo) {
@@ -594,5 +776,5 @@ const PaintedBuildings = (() => {
         P.spots.bandstand = { x: t.x, z: t.z };
     }
 
-    return { house, store, church, bridge, barn, cocoaHut, bandstand };
+    return { house, store, church, school, mill, bridge, barn, cocoaHut, bandstand };
 })();

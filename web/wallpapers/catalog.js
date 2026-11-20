@@ -163,10 +163,11 @@
               { keys: ['h'], label: 'Hark: send the carollers out', run: village => village.callCarollers() },
               { keys: ['b'], label: 'Sleigh bells: a horse and sleigh', run: village => village.callHorse() },
               { keys: ['l'], label: 'Send the lamplighter round', run: village => village.callLamplighter() },
+              { keys: ['g'], label: 'Bears in the glade', run: village => village.callBears() },
               { keys: ['a'], label: 'Northern lights', run: village => village.callAurora() },
               { keys: ['w'], label: 'A flurry', run: village => village.flurry() },
               { keys: ['p'], label: 'Paint it again', run: village => village.repaint() },
-              { keys: ['m'], label: 'What time is it in Evergreen Hollow?', run: village => village.report() },
+              { keys: ['m'], label: 'What time is it in the village?', run: village => village.report() },
           ] },
         // harvest-sky.js (the sun and the moon) loads first: Sky Island shares Harvest Valley's astronomy.
         { id: 'sky-island', name: 'Sky Island', icon: '🏝️', accent: '#7cc4ff', background: '#5a8fd0',

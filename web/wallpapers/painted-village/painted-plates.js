@@ -133,6 +133,13 @@ const PaintedPlates = (() => {
             }
             this.solids.push({ z, fy, draw, reflect: o.reflect || null, flat: !!o.flat });
         }
+        // A soft shadow on the ground from something that is not a standing
+        // thing (a hill), for one key light: 'A', the low light from behind, or 'B', the day's sun.
+        shade(key, x, y, rx, ry, a) {
+            const g = key === 'A' ? this.shadowA : this.shadowB; g.save(); g.translate(x, y); g.scale(1, ry / rx);
+            const gr = g.createRadialGradient(0, 0, 0, 0, 0, rx); gr.addColorStop(0, `rgba(0,0,0,${a})`); gr.addColorStop(0.55, `rgba(0,0,0,${a * 0.6})`); gr.addColorStop(1, 'rgba(0,0,0,0)');
+            g.fillStyle = gr; g.beginPath(); g.arc(0, 0, rx, 0, TAU); g.fill(); g.restore();
+        }
         // Queue something to be drawn at depth z; run() draws far to near.
         add(z, fn) { this.queue.push([z, fn]); }
         run() { this.queue.sort((a, b) => b[0] - a[0]); for (const q of this.queue) q[1](); this.queue = []; }
