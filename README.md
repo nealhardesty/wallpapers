@@ -296,6 +296,7 @@ still draws offline). 📅 **Seasonal** isn't one itself: it picks one by date.
 | 🧊 [Frost on the Glass](https://nealhardesty.github.io/wallpapers/?w=frost) | 👆 | Frost creeping over a window onto a warm room |
 | 🎄 [A Very Small Christmas](https://nealhardesty.github.io/wallpapers/?w=small-christmas) | 👆 | A tiny pixel tree with a toy train |
 | ☃️ [Christmas Village](https://nealhardesty.github.io/wallpapers/?w=christmas-village) | 👆 | A New England town in the snow: skaters, a grand tree, cats |
+| 🖼️ [Painted Village](https://nealhardesty.github.io/wallpapers/?w=painted-village) | 👆 | The village at street level, as a painting: lamplight on snow |
 | 🏝️ [Sky Island](https://nealhardesty.github.io/wallpapers/?w=sky-island) | 👆 | A pixel village on a floating island, new each load |
 | ⚔️ [Pixel Quest](https://nealhardesty.github.io/wallpapers/?w=quest) | 👆 | A self-playing 8-bit adventure; take over the hero |
 | 🌇 [Synthwave](https://nealhardesty.github.io/wallpapers/?w=synthwave) | | The endless neon drive |
