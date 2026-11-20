@@ -493,6 +493,26 @@
         "busy": 8.4
       }
     },
+    "painted-village": {
+      "low": {
+        "fps": 20,
+        "p50": 2.3,
+        "p95": 20.9,
+        "busy": 8.6
+      },
+      "medium": {
+        "fps": 30,
+        "p50": 2.7,
+        "p95": 18.9,
+        "busy": 17.3
+      },
+      "high": {
+        "fps": 60,
+        "p50": 2.7,
+        "p95": 3.7,
+        "busy": 33.3
+      }
+    },
     "parallax-clouds": {
       "low": {
         "fps": 10,
