@@ -6260,7 +6260,7 @@ broad passes. `P` paints it again.
   hill in front of it; then the woods in ranks with two glades in them,
   the mountain, and the log house in its clearing on the mountain's
   shoulder with a trail winding down to the top of the town.
-- **Three arrangements** (`PaintedLogic.layout`, unit-tested on seven
+- **Three arrangements** (`PaintedLogic.layout`, unit-tested on eight
   screens):
   - *wide*: all of the above: 36 places for a house, four shops, the
     store, the inn, the school, the mill, the meetinghouse, the barn;
@@ -6514,7 +6514,7 @@ broad passes. `P` paints it again.
 - **Unit** (`tools/painted-village.test.mjs`, 7): the camera's round
   trips, the ground meeting the inset, and that we stand on a hill; the
   light with no jumps from midnight to noon, warm against cool at dusk,
-  within what a plate holds; the layout on seven screens (the whole town
+  within what a plate holds; the layout on eight screens (the whole town
   there and in view, the green open between the pond and the store, the
   farm up the left, lanes that join every place, every door a
   building's, the rink on the ice above the gesture bar, the glades in
@@ -6579,6 +6579,13 @@ Hard-won, 2026-11-20:
   the finished woods it was a ribbon lying on the canopy. Painted in its
   turn among the ranks, with the trees in front left to overlap it, it
   is a gap.
+- **The street is nearer than the houses on it, so we see less of it.**
+  A house at the edge of a wide screen was in view and the lamp in front
+  of it was not: lit, and walked to by the lamplighter, for nobody. CI's
+  window is a little wider than a laptop's, and its lamp check found it
+  (it read the snow by the first lamp, which was off the picture). A
+  lamp is placed only where it will be seen, tested at every width from
+  900 to 2,600.
 - **Putting the picture back over someone costs by the time, not by the
   size**: about 0.2 ms each at the bench's throttle, for forty pixels or
   four thousand. A larger scratch canvas did not change it. So the train
