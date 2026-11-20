@@ -13,7 +13,7 @@ let defaults = null;
 new Function('WP', read('defaults.js'))({ defaults: (id, values) => { defaults = values; } });
 
 const seeded = seed => { let a = seed >>> 0; return () => { a = (a + 0x6d2b79f5) >>> 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; };
-const SCREENS = [[1400, 860, 0], [1920, 1080, 0], [2560, 1080, 0], [412, 915, 48], [820, 1180, 0], [1280, 600, 0], [360, 640, 48]];
+const SCREENS = [[1400, 860, 0], [1920, 1080, 0], [2560, 1080, 0], [412, 915, 48], [820, 1180, 0], [1280, 600, 0], [360, 640, 48], [1280, 658, 0]];
 const scene = (W, H, bottom, config = {}) => { const cam = Logic.camera(W, H, bottom, defaults.horizon); return { cam, L: Logic.layout(cam, { ...defaults, ...config }, seeded(W * 3 + H * 17)) }; };
 
 test('camera: metres to pixels and back, the ground meeting the bottom of the picture above the inset', () => {
@@ -162,6 +162,9 @@ test('layout: every part has its switch, and what stands still stands just neare
     for (const [W, H, bottom] of SCREENS) {
         const { cam, L } = scene(W, H, bottom), B = Logic.BANDS, thing = kind => L.things.find(t => t.kind === kind);
         for (const lamp of L.lamps) assert.ok(B.some(b => b - lamp.z > 0 && b - lamp.z < 0.07), `a lamp at depth ${lamp.z}`);
+        // Every lamp is in the picture: one off its edge would be lit, and walked to by the lamplighter, for nobody.
+        for (const lamp of L.lamps) { const x = cam.sx(lamp.x, lamp.z); assert.ok(x > 0 && x < W, `the lamp at ${lamp.x} is in view at ${W}×${H} (${Math.round(x)})`); }
+        for (let w = 900; w <= 2600; w += 20) { const wide = scene(w, 700, 0); for (const lamp of wide.L.lamps) { const x = wide.cam.sx(lamp.x, lamp.z); assert.ok(x > 0 && x < w, `the lamp at ${lamp.x} is in view at ${w}×700 (${Math.round(x)})`); } }
         assert.equal(Logic.bandOf(L.road.z), 3, 'the street is behind the bridge’s band');
         assert.ok(thing('grandTree').z < B[2] && thing('store').z > B[3] && thing('store').z < B[4] && thing('church').z > B[5]);
         for (const n of Object.values(L.nodes)) if (n.door && n.at.z < 3) assert.equal(Logic.bandOf(n.z), 3, `whoever is at ${n.name}’s door is behind the lamps`);

@@ -199,7 +199,7 @@ const PaintedLogic = (() => {
             // The schoolhouse, up the alley between the store and the inn.
             if (on('school')) school = add('school', -24.7, 3.75, { w: 9, side: 1 }); else house(-24.7, 3.75, 'cape');
             // The rest of the street, for whoever has the room to see it.
-            for (const [x, z, style, kind] of [[106, ROW, 'colonial', shop], [124, ROW + 0.05, 'cape', shop], [-128, ROW + 0.02, 'cape'], [142, ROW + 0.02, 'farmhouse'], [-144, ROW, 'saltbox'], [160, ROW + 0.04, 'colonial'], [-161, ROW + 0.04, 'colonial']]) if (seen(x, 10, z)) { (kind || house)(x, z, style); if (on('lamps')) L.lamps.push({ x: x + (x < 0 ? 9 : -9), z: 2.4 }); }
+            for (const [x, z, style, kind] of [[106, ROW, 'colonial', shop], [124, ROW + 0.05, 'cape', shop], [-128, ROW + 0.02, 'cape'], [142, ROW + 0.02, 'farmhouse'], [-144, ROW, 'saltbox'], [160, ROW + 0.04, 'colonial'], [-161, ROW + 0.04, 'colonial']]) if (seen(x, 10, z)) { (kind || house)(x, z, style); const lx = x + (x < 0 ? 9 : -9); if (on('lamps') && Math.abs(lx) < cam.half(2.4) - 2) L.lamps.push({ x: lx, z: 2.4 }); }        // its lamp, if that is in the picture too: the street is nearer than the houses, so we see less of it
             // Three rows of houses behind, the last of them under the eaves of the woods.
             for (const [x, z, style] of [
                 [-68, 3.9, 'cottage'], [-50, 3.74, 'saltbox'], [-37.6, 3.93, 'colonial'], [-12, 3.78, 'cape'], [4.5, 3.95, 'colonial'], [20.5, 3.9, 'saltbox'], [53, 3.74, 'cape'], [69.5, 3.92, 'farmhouse'], [100, 3.74, 'saltbox'], [118, 3.9, 'cape'], [136, 3.74, 'colonial'], [154, 3.9, 'cottage'], [172, 3.76, 'cape'],
