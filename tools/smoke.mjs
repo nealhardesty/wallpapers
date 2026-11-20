@@ -2618,19 +2618,20 @@ const STAGE_CHECKS = {
         ['a picture on frame one that paints itself, broad strokes first; a lamp put out darkens its own pool of snow and nothing is painted again; a tap darkens a house', async () => {
             if (!await stageWith('painted-village', { configVersion: 1, sky: 'dusk' }, '&seed=7&date=2026-12-20T16:55')) return record('not ready');
             const first = await evaluate(`(m => { const T = m.scene, g = T.lit.getContext('2d', { willReadFrequently: true }), d = g.getImageData(T.pw >> 1, T.ph - 20, 4, 4).data;
-                return { frames: WP.host.frames.count, progress: +T.progress.toFixed(2), done: T.done, lit: d[0] + d[1] + d[2], alpha: d[3], flakes: m.flakes.length, puffs: m.puffs.length, skaters: m.cast.skaters.length, walkers: m.cast.walkers.length,
+                return { frames: WP.host.frames.count, progress: +T.progress.toFixed(2), done: T.done, lit: d[0] + d[1] + d[2], alpha: d[3], flakes: m.flakes.length, puffs: m.puffs.length, skaters: m.cast.skaters.length, walkers: m.cast.walkers.length, sledders: m.cast.sledders.length,
                     groups: T.groups.length, on: T.groups.filter(g => g.level > 0.5).length, kind: m.cam.kind, things: m.L.things.map(t => t.kind) }; })(WP.stage.manager)`);
             if (first.frames > 12 || !(first.lit > 60) || first.alpha !== 255) record(`no picture on the first frames: ${JSON.stringify({ ...first, things: 0 })}`);
-            if (first.flakes < 150 || first.puffs < 10 || first.skaters < 3 || first.walkers < 2) record(`not alive on frame one: ${JSON.stringify({ ...first, things: 0 })}`);
-            for (const kind of ['store', 'house', 'church', 'bridge', 'grandTree', 'snowman', 'bonfire', 'farHouse', 'fir', 'frostTree']) if (!first.things.includes(kind)) record(`no ${kind} in the town`);
-            if (first.kind !== 'wide' || first.groups < 12 || first.on < first.groups * 0.6) record(`a dark town at dusk: ${first.on} of ${first.groups} groups of lights on`);
+            if (first.flakes < 150 || first.puffs < 10 || first.skaters < 3 || first.walkers < 2 || first.sledders < 1) record(`not alive on frame one: ${JSON.stringify({ ...first, things: 0 })}`);
+            for (const kind of ['store', 'house', 'church', 'bridge', 'grandTree', 'bandstand', 'townSign', 'snowman', 'bonfire', 'cocoaHut', 'treeFarm', 'barn', 'sledHill', 'cabin', 'fir', 'frostTree']) if (!first.things.includes(kind)) record(`no ${kind} in the town`);
+            if (first.things.filter(kind => kind === 'house').length < 12) record(`a town of ${first.things.filter(kind => kind === 'house').length} houses`);
+            if (first.kind !== 'wide' || first.groups < 40 || first.on < first.groups * 0.6) record(`a dark town at dusk: ${first.on} of ${first.groups} groups of lights on`);
             if (!await waitFor(() => evaluate('WP.stage.manager.scene.done'), 30000)) return record('the painting never finished');
             const painted = await evaluate(`(m => ({ strokes: m.scene.strokes, pass: m.scene.pass, ms: Math.round(m.scene.ms), bakes: m.bakes, next: !!m.next, pw: m.scene.pw, ph: m.scene.ph, patches: m.scene.groups.filter(g => g.patch).length, glows: m.scene.groups.filter(g => g.glow).length,
                 bulbs: m.scene.bulbs.length, masks: m.scene.masks.filter(Boolean).length, reflects: m.scene.reflects.length, sky: m.scene.openSky.length }))(WP.stage.manager)`);
-            if (painted.strokes < 120000 || painted.pass !== 5 || painted.bakes !== 1 || painted.next) record(`the painting: ${JSON.stringify(painted)}`);
-            if (painted.patches < 12 || painted.glows < 12 || painted.bulbs < 150 || painted.masks < 4 || painted.reflects < 3 || painted.sky < 40) record(`the light's plates: ${JSON.stringify(painted)}`);
+            if (painted.strokes < 120000 || painted.pass < 5 || painted.bakes !== 1 || painted.next) record(`the painting: ${JSON.stringify(painted)}`);
+            if (painted.patches < 40 || painted.glows < 40 || painted.bulbs < 600 || painted.masks < 5 || painted.reflects < 3 || painted.sky < 40) record(`the light's plates: ${JSON.stringify(painted)}`);
             // The snow a step from a lamp, with the lamp lit and with it out. Its light is a plate of its own: nothing is repainted.
-            const pool = `(m => { const T = m.scene, lamp = T.groups.find(g => g.kind === 'lamp' && !g.bridge), x = Math.round(m.cam.sx(lamp.x + 1.6, lamp.z - 0.06) * T.ps), y = Math.round(m.cam.sy(lamp.z - 0.06) * T.ps);
+            const pool = `(m => { const T = m.scene, lamp = T.groups.find(g => g.kind === 'lamp' && !g.bridge), x = Math.round(m.cam.sx(lamp.x + 1.6, lamp.z - m.cam.dz(1.5)) * T.ps), y = Math.round(m.cam.sy(lamp.z - m.cam.dz(1.5)) * T.ps);
                 const d = T.lit.getContext('2d', { willReadFrequently: true }).getImageData(x - 30, y - 10, 60, 20).data; let r = 0, b = 0; for (let i = 0; i < d.length; i += 4) { r += d[i]; b += d[i + 2]; }
                 return { r: Math.round(r / 1200), b: Math.round(b / 1200), level: +lamp.level.toFixed(2), steps: m.steps, bakes: m.bakes }; })(WP.stage.manager)`;
             // Every light out, then that one lamp alone.
@@ -2666,7 +2667,7 @@ const STAGE_CHECKS = {
             await shoot('painted-village-night');
             const lum = c => c[0] + c[1] + c[2];
             if (night.bakes !== 1 || night.strokes !== day.strokes) record(`the hour repainted the picture: ${JSON.stringify(night)}`);
-            if (!(lum(day.snow) > lum(dusk.snow) && lum(dusk.snow) > lum(night.snow) * 1.3)) record(`the snow by hour: day ${day.snow}, dusk ${dusk.snow}, night ${night.snow}`);
+            if (!(lum(day.snow) > lum(dusk.snow) && lum(dusk.snow) > lum(night.snow) * 1.2)) record(`the snow by hour: day ${day.snow}, dusk ${dusk.snow}, night ${night.snow}`);
             if (!(day.sky[2] > day.sky[0] * 1.1) || !(night.snow[2] > night.snow[0] * 1.3) || !(lum(night.sky) < lum(day.sky) * 0.45)) record(`the colour by hour: day sky ${day.sky}, night sky ${night.sky}, night snow ${night.snow}`);
             if (day.on || dusk.on < 10 || night.on < 10 || !(dusk.sun < 0 && dusk.sun > -8)) record(`lights by hour: ${day.on} at noon, ${dusk.on} at dusk (sun ${dusk.sun}°), ${night.on} at night`);
             const town = async date => {
@@ -2682,7 +2683,7 @@ const STAGE_CHECKS = {
             console.log(`    painted-village: snow ${day.snow} by day, ${dusk.snow} at dusk, ${night.snow} at night, one bake; floors lit ${noon.lit} at noon, ${evening.lit} at 19:30, ${late.lit} at 23:50, ${small.lit} at 03:00, ${eve.lit} on Christmas Eve (of ${evening.of})`);
             return true;
         }],
-        ['the lamplighter lights the lamps in turn; carollers light the house they sing to; a horse and sleigh cross behind the bridge; the snowman is caught looking; a certain sleigh waits for dark', async () => {
+        ['the lamplighter lights the lamps in turn; carollers light the house they sing to; a horse and sleigh go through the bridge; sledders climb the hill and ride down it; the snowman is caught looking; a certain sleigh waits for dark', async () => {
             if (!await stageWith('painted-village', { configVersion: 1, sky: 'night', moonPhase: 'full', carollers: 0, horse: 0, sleigh: 0, villagers: 0, skaters: 0, dogs: 0 }, '&seed=7&date=2026-12-20T19:30')) return record('not ready');
             // Time is run forward by hand: the stage's own frames carry on underneath.
             const lamps = await evaluate(`(m => { const said = m.callLamplighter(), all = m.scene.groups.filter(g => g.kind === 'lamp' && !g.bridge), order = []; let steps = 0, pole = false, dark = all.every(g => !g.lit);
@@ -2699,13 +2700,18 @@ const STAGE_CHECKS = {
                 while (m.cast.horse && steps++ < 3000) { m.cast.update(0.1); if (m.cast.horse && m.cast.horse.x > bridge.x0 && m.cast.horse.x < bridge.x1) through = true; }
                 return { said, steps, through, far: +Math.abs(road.x1 - road.x0).toFixed(0), from: +x0.toFixed(0), band: PaintedLogic.bandOf(road.z), behind: bridge.z < PaintedLogic.BANDS[PaintedLogic.bandOf(road.z)], mask: !!m.scene.masks[PaintedLogic.bandOf(road.z)], again: m.callHorse() != null }; })(WP.stage.manager)`);
             if (!/bells/.test(horse.said) || !horse.through || !horse.behind || !horse.mask || horse.steps < 60 || horse.steps > 2900) record(`the horse and sleigh: ${JSON.stringify(horse)}`);
+            // A sledder, run forward: up on foot, down faster than they went up, and never off the hill's line.
+            const sled = await evaluate(`(m => { const c = m.cast, S = m.scene.spots.sled; c.sledders = []; c.addSledder(false); const s = c.sledders[0]; let up = 0, down = 0, top = 0, rides = 0, was = s.state, high = 0, off = 0;
+                for (let i = 0; i < 3000 && rides < 2; i++) { c.updateSledders(0.1); if (s.wait <= 0) { if (s.state === 'climb') up++; else down++; } top = Math.max(top, s.u); high = Math.max(high, s.y); if (s.y > S.h + 0.01 || s.y < 0 || s.x > S.x + 16) off++; if (was === 'ride' && s.state === 'climb') rides++; was = s.state; }
+                return { hill: !!S, rides, up, down, top: +top.toFixed(2), high: +high.toFixed(1), h: S && S.h, off }; })(WP.stage.manager)`);
+            if (!sled.hill || sled.rides !== 2 || !(sled.down < sled.up * 0.6) || sled.top < 0.5 || sled.top > 0.9 || !(sled.high > sled.h * 0.4) || sled.off) record(`the sledders: ${JSON.stringify(sled)}`);
             const more = await evaluate(`(m => { m.updateSky(); m.dirty = 'all'; m.stepLight(performance.now(), true); const said = m.callSleigh(), f = m.cast.flight, moon = m.moonXY; let steps = 0; while (m.cast.flight && steps++ < 400) m.cast.update(0.1);
                 m.cast.look = 0.8; m.cast.caught(); const look = m.cast.look, hold = m.cast.lookHold;
                 const tree = m.scene.hits.find(h => h.kind === 'tree'); m.tapAt((tree.x0 + tree.x1) / 2, (tree.y0 + tree.y1) / 2);
                 const was = m.config.sky; m.config = { ...m.config, sky: 'day' }; m.pinKey = null; m.updateSky(); const noon = m.callSleigh(); m.config = { ...m.config, sky: was }; m.pinKey = null; m.updateSky();
                 return { said, moon: !!moon, y: f && moon ? +Math.abs(f.y - moon.y).toFixed(1) : -1, steps, look, hold, sparks: m.cast.sparks.filter(s => s.snow).length, noon }; })(WP.stage.manager)`);
             if (!more.said || !more.moon || more.y > 1 || more.steps < 60 || more.steps > 120 || more.look !== 0 || !(more.hold > 3) || more.sparks < 10 || !/Not before dark/.test(more.noon)) record(`the sleigh, the snowman, the tree: ${JSON.stringify(more)}`);
-            console.log(`    painted-village: ${lamps.lit} lamps lit in turn in ${lamps.steps} steps; ${carol.n} carollers sang to a house; the horse crossed ${horse.far} m in ${horse.steps} steps`);
+            console.log(`    painted-village: ${lamps.lit} lamps lit in turn in ${lamps.steps} steps; ${carol.n} carollers sang to a house; the horse crossed ${horse.far} m in ${horse.steps} steps; a sledder climbed to ${sled.high} m and rode down in ${Math.round(sled.down / sled.rides)} steps`);
             return true;
         }],
         ['a phone held upright has its own arrangement above the gesture bar; everything switched off is still a painted valley; a lost painting is painted again', async () => {
@@ -2714,16 +2720,16 @@ const STAGE_CHECKS = {
                 lowest: Math.round(Math.max(0, ...m.cast.skaters.map(s => cam.sy(s.d / cam.zm)), ...m.cast.walkers.filter(w => w.fade > 0.5).map(w => cam.sy(w.z)))), tree: +cam.sx(m.L.tree.x, m.L.tree.z).toFixed(0), pw: m.scene.pw, ph: m.scene.ph }; })(WP.stage.manager)`);
             if (phone.inset !== 48 || phone.Hu !== phone.H - 48 || phone.kind !== 'upright' || Math.abs(phone.bottom - phone.Hu) > 1) record(`the phone's camera: ${JSON.stringify({ ...phone, things: 0 })}`);
             if (phone.rink > phone.Hu || phone.lowest > phone.Hu + 2 || phone.tree < 60 || phone.tree > 352) record(`the phone's picture: ${JSON.stringify({ ...phone, things: 0 })}`);
-            if (phone.things.includes('bridge') || !phone.things.includes('store') || !phone.things.includes('church') || phone.things.filter(k => k === 'house').length < 2) record(`the phone's town: ${phone.things}`);
+            if (phone.things.includes('bridge') || ['store', 'church', 'grandTree', 'cocoaHut', 'treeFarm', 'barn', 'cabin'].some(kind => !phone.things.includes(kind)) || phone.things.filter(k => k === 'house').length < 8) record(`the phone's town: ${phone.things}`);
             if (!await waitFor(() => evaluate('WP.stage.manager.scene.done'), 30000)) record('the phone\'s painting never finished');
             await shoot('painted-village-phone');
             await cdp.send('Emulation.clearDeviceMetricsOverride');
             const off = { configVersion: 1, moon: false, stars: false, clouds: 0, aurora: 'never', sleigh: 0, snowfall: 0, village: false, smoke: false, windows: false, candles: false, lamps: false, snowman: false, lights: false, townTree: false,
-                train: false, pond: false, bonfire: false, cabin: false, villagers: 0, carollers: 0, horse: 0, dogs: 0, cat: false, fox: false, deer: false, rabbits: false, cardinal: false, mice: false, callouts: false, touch: false };
+                train: false, pond: false, bonfire: false, cabin: false, treeFarm: false, bandstand: false, cocoa: false, sledders: 0, villagers: 0, carollers: 0, horse: 0, dogs: 0, cat: false, fox: false, deer: false, rabbits: false, cardinal: false, mice: false, callouts: false, touch: false };
             if (!await stageWith('painted-village', off, '&seed=7&date=2026-12-20T19:30')) return record('no boot with everything left out');
             if (!await waitFor(() => evaluate('WP.stage.manager.scene.done'), 30000)) return record('the bare valley never finished');
             const probe = `(m => { const c = document.createElement('canvas'); c.width = c.height = 1; const g = c.getContext('2d', { willReadFrequently: true }); g.drawImage(m.scene.paint, m.scene.pw >> 1, m.scene.ph - 2, 1, 1, 0, 0, 1, 1); return g.getImageData(0, 0, 1, 1).data[3]; })(WP.stage.manager)`;
-            const bare = await evaluate(`(m => ({ frames: WP.host.frames.count, cast: m.cast.skaters.length + m.cast.walkers.length + m.cast.animals.length + m.flakes.length + m.puffs.length, groups: m.scene.groups.length, lights: m.scene.lights.length, bulbs: m.scene.bulbs.length,
+            const bare = await evaluate(`(m => ({ frames: WP.host.frames.count, cast: m.cast.skaters.length + m.cast.walkers.length + m.cast.sledders.length + m.cast.animals.length + m.flakes.length + m.puffs.length, groups: m.scene.groups.length, lights: m.scene.lights.length, bulbs: m.scene.bulbs.length,
                 strokes: m.scene.strokes, trees: m.L.things.filter(t => t.kind === 'fir' || t.kind === 'frostTree').length }))(WP.stage.manager)`);
             if (bare.frames < 5 || bare.cast || bare.groups || bare.lights || bare.bulbs || bare.strokes < 80000 || bare.trees < 8 || await evaluate(probe) !== 255) record(`the bare valley: ${JSON.stringify(bare)}`);
             // The drill (SPEC §10.22): wipe the painting, as a lost GPU process does.

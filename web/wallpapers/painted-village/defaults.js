@@ -20,7 +20,7 @@ WP.defaults('painted-village', {
     brush: 1,               // × the width of every stroke: fine to bold
     // Village
     village: true,
-    houses: 12,             // at most (a narrow screen has room for fewer)
+    houses: 22,             // at most (a phone has room for fewer, a very wide screen for more)
     church: true,           // the meetinghouse, with its steeple and its clock
     bridge: true,           // the covered bridge
     smoke: true,            // chimney smoke
@@ -29,6 +29,8 @@ WP.defaults('painted-village', {
     lamps: true,            // street lamps
     lamplighter: true,      // somebody lights them, one by one, at dusk
     snowman: true,
+    bandstand: true,        // on the green, hung with garlands
+    treeFarm: true,         // Christmas trees in rows up the hill, and the barn that sells them
     cabin: true,            // one lit window up the mountain
     // Lights and trees
     lights: true,           // strings on the eaves, and bulbs on the grand tree
@@ -42,11 +44,13 @@ WP.defaults('painted-village', {
     train: true,            // the toy train round the foot of the grand tree
     // Pond
     pond: true,
-    skaters: 7,             // at High
+    skaters: 9,             // at High
     bonfire: true,
+    cocoa: true,            // the cocoa hut by the pond
     reflections: true,      // the town in the ice
     // People and animals
-    villagers: 7,           // out and about at once, at High (fewer late at night)
+    villagers: 10,          // out and about at once, at High (fewer late at night)
+    sledders: 3,            // on the hill by the farm, at High (0: no hill)
     carollers: 8,           // rounds an hour, after dark, with a lantern
     horse: 6,               // times an hour a horse and sleigh come over the bridge
     dogs: 8,                // dogs an hour
@@ -61,5 +65,5 @@ WP.defaults('painted-village', {
     callouts: true,         // toasts: the days to Christmas, the clock striking, sleigh bells
     touch: true,            // taps light houses, trip skaters, catch the snowman looking (off: touch is ignored)
     // Advanced
-    horizon: 0.39,          // where the land meets the sky, as a share of the height
+    horizon: 0.34,          // where the land meets the sky, as a share of the height
 });

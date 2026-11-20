@@ -28,9 +28,11 @@ test('camera: metres to pixels and back, the ground meeting the bottom of the pi
         }
         const [x, y] = cam.pt(2, 3, 2.5);
         assert.ok(Math.abs(x - cam.sx(2, 2.5)) < 1e-9 && Math.abs(y - (cam.sy(2.5) - 3 * cam.sc(2.5))) < 1e-9, 'pt is sx, and sy less the height');
+        assert.ok(Math.abs(cam.dz(cam.zm) - 1) < 1e-9, 'dz is metres of depth, as depth');
+        assert.ok(cam.eye > 20 && cam.sy(2.75) < cam.hor + 0.5 * cam.f, 'we stand on the hill, and the town is in the upper half of the ground');
         assert.equal(cam.kind, W / (H - bottom) < 0.9 ? 'upright' : W / (H - bottom) > 2.15 ? 'panorama' : 'wide');
     }
-    // A narrower screen stands further back, so the same town fits.
+    // A narrower screen stands higher, so the same town fits.
     const wide = Logic.camera(1600, 900), square = Logic.camera(1000, 900);
     assert.ok(Math.abs(wide.half(3) - square.half(3)) < wide.half(3) * 0.1, 'a 10:9 screen sees about as far to each side as a 16:9 one');
     assert.ok(square.eye > wide.eye);
@@ -62,56 +64,76 @@ test('light: no jumps from midnight to noon; warm against cool at dusk; a lamp c
     for (let alt = -30; alt <= 60; alt += 1) for (const moon of [0, 1]) { const l = Logic.light(alt, moon); for (const k of ['amb', 'keyA', 'keyB']) l[k].forEach(v => assert.ok(v >= 0 && v <= 2, `${k} is ${v} at ${alt}°`)); }
 });
 
-test('layout: three arrangements by the screen’s shape, everything in view, lanes that join up', () => {
+test('layout: three arrangements by the screen’s shape, the whole town in view, lanes that join up', () => {
     for (const [W, H, bottom] of SCREENS) {
-        const { cam, L } = scene(W, H, bottom), kinds = L.things.map(t => t.kind);
+        const { cam, L } = scene(W, H, bottom), kinds = L.things.map(t => t.kind), wide = L.kind !== 'upright';
         assert.equal(L.kind, cam.kind);
-        for (const kind of ['store', 'church', 'grandTree', 'snowman', 'bonfire']) assert.ok(kinds.includes(kind), `${kind} at ${W}×${H}`);
-        assert.equal(kinds.includes('bridge'), L.kind !== 'upright', 'the covered bridge needs a wide screen');
-        assert.ok(kinds.filter(k => k === 'house').length >= (L.kind === 'panorama' ? 3 : 1));
-        // The grand tree, the store's door and the bonfire are on the screen.
-        for (const t of L.things.filter(t => ['grandTree', 'snowman', 'bonfire'].includes(t.kind))) { const x = cam.sx(t.x, t.z), y = cam.sy(t.z); assert.ok(x > 0 && x < W && y > cam.hor && y <= H - bottom, `${t.kind} is in view at ${W}×${H}: ${Math.round(x)}, ${Math.round(y)}`); }
-        // The glow is behind the steeple.
-        const church = L.things.find(t => t.kind === 'church');
-        assert.ok(Math.abs(L.glow.x * W - cam.sx(church.x, church.z)) < 2 && L.glow.y < cam.hor);
+        // The original scene: the town, its green, the rink, the tree farm, the house up the mountain.
+        for (const kind of ['store', 'church', 'grandTree', 'snowman', 'bonfire', 'cocoaHut', 'treeFarm', 'barn', 'cabin']) assert.ok(kinds.includes(kind), `${kind} at ${W}×${H}`);
+        for (const kind of ['bridge', 'bandstand', 'townSign', 'sledHill']) assert.equal(kinds.includes(kind), wide, `${kind} needs a wide screen (${W}×${H})`);
+        assert.ok(kinds.filter(k => k === 'house').length >= (wide ? 12 : 8), `a town’s worth of houses at ${W}×${H}`);
+        // What the eye goes to is on the screen, with its foot above the inset.
+        for (const t of L.things.filter(t => ['grandTree', 'snowman', 'bonfire', 'store', 'church', 'cocoaHut', 'barn', 'bandstand', 'townSign'].includes(t.kind))) { const x = cam.sx(t.x, t.z), y = cam.sy(t.z); assert.ok(x > 0 && x < W && y > cam.hor && y <= H - bottom, `${t.kind} is in view at ${W}×${H}: ${Math.round(x)}, ${Math.round(y)}`); }
+        // The glow is in the sky, over the mountain.
+        assert.ok(L.glow.x > 0 && L.glow.x < 1 && L.glow.y < cam.hor - 40 * cam.u && L.glow.y > 0);
         // Far to near, for painting.
         for (let i = 1; i < L.things.length; i++) assert.ok(L.things[i - 1].z >= L.things[i].z);
         // Every lane's ends are places, every exit is off the picture, and every door can be walked to from every exit.
         const links = {};
         for (const [a, b] of L.edges) { assert.ok(L.nodes[a] && L.nodes[b], `lane ${a}-${b}`); (links[a] ||= []).push(b); (links[b] ||= []).push(a); }
         const exits = Object.values(L.nodes).filter(n => n.exit), doors = Object.values(L.nodes).filter(n => n.door);
-        assert.ok(exits.length >= 2 && doors.length >= 2);
-        for (const n of exits) { const x = cam.sx(n.x, n.z), y = cam.sy(n.z); assert.ok(x < 0 || x > W || y >= H - bottom - 1 || n.z > 8, `exit ${n.name} is out of the picture at ${W}×${H}`); }
+        assert.ok(exits.length >= (wide ? 3 : 2) && doors.length >= 3);
+        for (const n of exits) { const x = cam.sx(n.x, n.z), y = cam.sy(n.z); assert.ok(x < 0 || x > W || y >= H - bottom - 1, `exit ${n.name} is out of the picture at ${W}×${H}`); }
+        for (const n of doors) { const x = cam.sx(n.x, n.z); assert.ok(x > 0 && x < W && n.at && L.things.includes(n.at), `door ${n.name} is a building’s, in view at ${W}×${H}`); }
         const seen = new Set([exits[0].name]), queue = [exits[0].name];
         while (queue.length) for (const next of links[queue.shift()] || []) if (!seen.has(next)) { seen.add(next); queue.push(next); }
-        for (const n of [...doors, ...exits]) assert.ok(seen.has(n.name), `${n.name} is joined to the lanes at ${W}×${H}`);
+        for (const n of Object.values(L.nodes)) assert.ok(seen.has(n.name), `${n.name} is joined to the lanes at ${W}×${H}`);
         // The rink is on the pond, and in view.
         const r = L.pond.rink, at = z => { const line = L.pond.line; for (let i = 1; i < line.length; i++) if (z <= line[i - 1][0] && z >= line[i][0]) { const t = (z - line[i - 1][0]) / (line[i][0] - line[i - 1][0]); return [line[i - 1][1] + (line[i][1] - line[i - 1][1]) * t, line[i - 1][2] + (line[i][2] - line[i - 1][2]) * t]; } };
         for (const z of [r.z0, r.z, r.z1]) { const [x, hw] = at(z), k = z === r.z ? 1 : 0.2; assert.ok(Math.abs(r.x - x) + r.rx * k < hw + 0.6, `the rink is on the ice at depth ${z} at ${W}×${H}`); }
+        assert.ok(cam.sx(r.x - r.rx, r.z) > 0 && cam.sx(r.x + r.rx, r.z) < W, `the whole rink is on the screen at ${W}×${H}`);
         assert.ok(r.z0 > 1.05, 'nobody skates under the gesture bar');
         assert.ok(Math.abs(r.ellipse.ry - (r.z1 - r.z0) / 2 * cam.zm) < 1e-9);
+        // We look down on it: the far bank of the pond is well below the feet of the front row.
+        const row = L.things.find(t => t.kind === 'store');
+        assert.ok(cam.sy(r.z1) - cam.sy(row.z) > 0.12 * cam.Hu, `the green lies open between the pond and the store at ${W}×${H}`);
+        // The farm is rows of trees up the hill, left of the town.
+        const farm = L.things.find(t => t.kind === 'treeFarm');
+        assert.ok(farm.z1 - farm.z0 > cam.dz(60) && farm.x1 < row.x && farm.x0 < farm.x1);
     }
 });
 
 test('layout: every part has its switch, and what stands still stands just nearer than a band', () => {
-    const { L: bare } = scene(1600, 900, 0, { village: false, pond: false, snowman: false, cabin: false, mice: false, cardinal: false, rabbits: false });
+    const { L: bare } = scene(1600, 900, 0, { village: false, pond: false, snowman: false, cabin: false, mice: false, cardinal: false, rabbits: false, treeFarm: false, sledders: 0 });
     const left = new Set(bare.things.map(t => t.kind));
-    for (const kind of ['store', 'house', 'church', 'bridge', 'grandTree', 'farHouse', 'snowman', 'bonfire', 'cabin', 'picketFence']) assert.ok(!left.has(kind), `${kind} is left out`);
+    for (const kind of ['store', 'house', 'church', 'bridge', 'grandTree', 'snowman', 'bonfire', 'cabin', 'picketFence', 'bandstand', 'townSign', 'cocoaHut', 'bench', 'barn', 'treeFarm', 'sledHill']) assert.ok(!left.has(kind), `${kind} is left out`);
     assert.equal(bare.pond, null);
+    assert.equal(bare.brook, undefined);
     assert.equal(bare.lamps.length, 0);
+    assert.ok(!Object.values(bare.nodes).some(n => n.door), 'nobody lives in an empty valley');
     assert.ok(left.has('fir') && left.has('frostTree'), 'the valley keeps its trees');
-    assert.ok(!scene(1600, 900, 0, { church: false }).L.things.some(t => t.kind === 'church'));
-    assert.ok(!scene(1600, 900, 0, { townTree: false }).L.things.some(t => t.kind === 'grandTree'));
+    for (const [key, kind] of [['church', 'church'], ['townTree', 'grandTree'], ['bridge', 'bridge'], ['bandstand', 'bandstand'], ['cocoa', 'cocoaHut'], ['treeFarm', 'barn'], ['treeFarm', 'treeFarm'], ['bonfire', 'bonfire']]) assert.ok(!scene(1600, 900, 0, { [key]: false }).L.things.some(t => t.kind === kind), `${key} off leaves no ${kind}`);
+    assert.ok(!scene(1600, 900, 0, { sledders: 0 }).L.things.some(t => t.kind === 'sledHill'), 'no sledders, no hill');
     assert.equal(scene(1600, 900, 0, { lamps: false }).L.lamps.length, 0);
-    assert.equal(scene(2560, 1080, 0, { houses: 2 }).L.things.filter(t => t.kind === 'house' || t.kind === 'farHouse').length, 2, 'no more houses than asked for');
+    const few = scene(2560, 1080, 0, { houses: 2 }).L;
+    assert.equal(few.things.filter(t => t.kind === 'house').length, 2, 'no more houses than asked for');
+    assert.ok(few.things.filter(t => t.kind === 'house').every(t => t.z < 2.9), 'and the ones on the green are the last to go');
+    assert.ok(Object.values(few.nodes).filter(n => n.door).every(n => few.things.includes(n.at)), 'a house that is not there has no door');
     assert.ok(scene(2560, 1080, 0).L.things.filter(t => t.kind === 'house').length > scene(1600, 900, 0).L.things.filter(t => t.kind === 'house').length, 'a wider screen has more of the street');
-    // Lamps and the big things by the lanes stand in the half-metre before a band, so walkers behind them are hidden.
-    const { L } = scene(1600, 900, 0);
-    for (const lamp of L.lamps) assert.ok(Logic.BANDS.some(b => b - lamp.z > 0 && b - lamp.z < 0.07), `a lamp at depth ${lamp.z}`);
+    // Lamps and the big things by the lanes stand just nearer than a band, so walkers behind them are hidden.
+    for (const [W, H, bottom] of SCREENS) {
+        const { cam, L } = scene(W, H, bottom), B = Logic.BANDS, thing = kind => L.things.find(t => t.kind === kind);
+        for (const lamp of L.lamps) assert.ok(B.some(b => b - lamp.z > 0 && b - lamp.z < 0.07), `a lamp at depth ${lamp.z}`);
+        assert.equal(Logic.bandOf(L.road.z), 3, 'the street is behind the bridge’s band');
+        assert.ok(thing('grandTree').z < B[2] && thing('store').z > B[3] && thing('store').z < B[4] && thing('church').z > B[5]);
+        for (const n of Object.values(L.nodes)) if (n.door && n.at.z < 3) assert.equal(Logic.bandOf(n.z), 3, `whoever is at ${n.name}’s door is behind the lamps`);
+        const bridge = thing('bridge');
+        if (bridge) assert.ok(bridge.z < B[3] && L.road.z > bridge.z && L.road.z < bridge.z + cam.dz(5), 'the sleigh goes through the bridge, not past it');
+        const r = L.pond.rink;
+        assert.ok(r.z0 > B[0] && r.z1 < B[1], 'the skaters are behind the firs in the corners and in front of everything else');
+    }
     assert.equal(Logic.bandOf(1.0), -1);
-    assert.equal(Logic.bandOf(2.0), 0);
-    assert.equal(Logic.bandOf(L.road.z), 3, 'the back road is behind the bridge’s band');
-    assert.ok(L.things.find(t => t.kind === 'bridge').z < Logic.BANDS[3]);
+    assert.equal(Logic.bandOf(1.5), 0);
     assert.equal(Logic.bandOf(99), Logic.BANDS.length - 1);
 });
 

@@ -17,7 +17,7 @@ class PaintedCast {
         this.m = m;
         const T = this.T = m.scene, L = this.L = m.L;
         this.cam = m.cam;
-        this.walkers = []; this.skaters = []; this.animals = []; this.notes = []; this.sparks = [];
+        this.walkers = []; this.skaters = []; this.sledders = []; this.animals = []; this.notes = []; this.sparks = [];
         this.horse = null; this.lighter = null; this.carol = null; this.flight = null; this.star = null; this.train = null;
         this.look = 0; this.lookHold = 0;
         this.jingle = 0;            // seconds the grand tree's bulbs go on flashing after a tap
@@ -56,12 +56,13 @@ class PaintedCast {
         this.animals = [];
         if (cfg.cat && S.cat) this.animals.push({ kind: 'cat', x: S.cat.x, z: S.cat.z, y: S.cat.y, state: 'sleep', t: 0, dir: 1 });
         if (cfg.cardinal && S.cardinal) this.animals.push({ kind: 'cardinal', x: S.cardinal.x, z: S.cardinal.z, y: S.cardinal.y, home: { ...S.cardinal }, state: 'perch', t: this.rr(2, 6), dir: 1, hop: 0 });
-        if (cfg.rabbits && S.rabbits) for (let i = 0; i < 2; i++) this.animals.push({ kind: 'rabbit', x: S.rabbits.x + i * 0.7, z: S.rabbits.z + i * 0.03, y: 0, state: 'sit', t: this.rr(2, 8), dir: i ? -1 : 1, up: 0 });
+        if (cfg.rabbits && S.rabbits) for (let i = 0; i < 2; i++) this.animals.push({ kind: 'rabbit', x: S.rabbits.x + i * 0.7, z: S.rabbits.z + i * this.cam.dz(0.5), y: 0, state: 'sit', t: this.rr(2, 8), dir: i ? -1 : 1, up: 0 });
         this.train = cfg.train && S.tree && cfg.townTree !== false ? { a: this.rr(0, 6.28), cars: 4 } : null;
     }
     settings(old, cfg) {
         if (['cat', 'cardinal', 'rabbits', 'train'].some(k => old[k] !== cfg[k])) this.build();
         if (!cfg.pond) this.skaters = [];
+        if (!cfg.sledders) this.sledders = [];
     }
     trim() { /* counts follow density in populate() */ }
     stepped() {}
@@ -81,17 +82,23 @@ class PaintedCast {
             if (this.skaters.length < want && (seed || this.random() < dt * 0.5)) this.addSkater(seed);
             if (this.skaters.length > want && this.random() < dt * 0.25) { const s = this.skaters.find(s => !s.leaving); if (s) s.leaving = true; }
         }
+        const hill = this.T.spots.sled;
+        if (hill && cfg.sledders) {
+            const want = Math.round(cfg.sledders * dens * (this.bustle() >= 1 ? 1 : 0));
+            if (this.sledders.length < want && (seed || this.random() < dt * 0.4)) this.addSledder(seed);
+            if (this.sledders.length > want && this.random() < dt * 0.2) { const s = this.sledders.find(s => !s.leaving); if (s) s.leaving = true; }
+        }
         if (cfg.village !== false || this.ends.length) {
             const want = Math.round(cfg.villagers * dens * this.bustle());
             const out = this.walkers.filter(w => w.kind === 'walker').length;
             if (out < want && (seed || this.random() < dt * 0.35)) this.addWalker(seed);
         }
         const dawn = m.hour >= 5.2 && m.hour < 7.6 && cfg.deer, deer = this.animals.filter(a => a.kind === 'deer');
-        if (dawn && !deer.length && L.nodes.tree) for (let i = 0; i < 3; i++) this.animals.push({ kind: 'deer', x: L.nodes.tree.x - 1.5 + i * 1.7, z: L.nodes.tree.z - 0.06 + (i % 2) * 0.05, y: 0, state: 'graze', t: this.rr(2, 9), dir: i === 1 ? -1 : 1, head: 0, small: i === 2 });
+        if (dawn && !deer.length && L.nodes.tree) for (let i = 0; i < 3; i++) this.animals.push({ kind: 'deer', x: L.nodes.tree.x - 2 + i * 2.2, z: L.nodes.tree.z + this.cam.dz(-1 + (i % 2) * 1.4), y: 0, state: 'graze', t: this.rr(2, 9), dir: i === 1 ? -1 : 1, head: 0, small: i === 2 });
         if (!dawn && deer.length) for (const d of deer) if (d.state !== 'go') { d.state = 'go'; d.dir = -1; }
         const late = (m.hour >= 23.6 || m.hour < 5) && cfg.fox;
         if (late && !this.animals.some(a => a.kind === 'fox') && L.nodes.near && this.random() < dt / 45) {
-            const from = L.nodes.east || L.nodes.house || L.nodes.near, mid = L.pond ? { x: L.pond.rink.x + L.pond.rink.rx + 1.6, z: L.pond.rink.z + 0.3 } : L.nodes.near;
+            const from = L.nodes.east || L.nodes.house || L.nodes.near, mid = L.nodes.pondE || L.nodes.pondN || L.nodes.near;
             this.animals.push({ kind: 'fox', x: from.x, z: from.z, y: 0, state: 'trot', path: [mid, L.nodes.bank || L.nodes.near, L.nodes.near], t: 0, dir: -1, phase: 0, prints: 0 });
         }
     }
@@ -101,6 +108,27 @@ class PaintedCast {
         const coat = this.pick(PaintedCast.COATS);
         this.skaters.push({ kind: 'skater', x: e.cx + Math.cos(a) * e.rx * k, d: e.cy + Math.sin(a) * e.ry * k, a: a + Math.PI / 2, want: this.rr(0.3, 0.82), turn: this.random() < 0.75 ? 1 : -1, v: this.rr(3.2, 5.6) * (kid ? 0.75 : 1),
             k: kid ? 0.68 : this.rr(0.92, 1.05), phase: this.rr(0, 6.28), coat, hat: this.pick(PaintedCast.HATS), scarf: this.random() < 0.7 ? this.pick(PaintedCast.SCARVES) : null, skirt: this.random() < 0.4, hop: 0, down: 0, mark: 0, fade: seed ? 1 : 0, lt: 0, L: [1, 1, 1, 0] });
+    }
+
+    // Somebody small with a sled: up the hill on foot, down it faster.
+    addSledder(seed) {
+        const top = this.rr(0.55, 0.82);
+        this.sledders.push({ kind: 'sledder', u: seed ? this.rr(0, top) : 0, top, state: seed && this.random() < 0.4 ? 'ride' : 'climb', v: seed ? this.rr(2, 5) : 0, lane: this.rr(-5, 5), wait: 0, x: 0, z: 0, y: 0, dir: -1, k: this.rr(0.64, 0.82), phase: this.rr(0, 6.28),
+            coat: this.pick(PaintedCast.COATS), hat: this.pick(PaintedCast.HATS), scarf: this.random() < 0.7 ? this.pick(PaintedCast.SCARVES) : null, sled: this.pick([[0.72, 0.14, 0.12], [0.16, 0.34, 0.6], [0.5, 0.34, 0.2]]), fade: seed ? 1 : 0, lt: 0, L: [1, 1, 1, 0] });
+    }
+    updateSledders(dt) {
+        const S = this.T.spots.sled, cam = this.cam;
+        if (!S) return;
+        for (let i = this.sledders.length - 1; i >= 0; i--) {
+            const s = this.sledders[i];
+            s.fade = Math.max(0, Math.min(1, s.fade + (s.leaving && s.state === 'climb' ? -dt : dt) * 0.8));
+            if (s.leaving && s.fade <= 0) { this.sledders.splice(i, 1); continue; }
+            if (s.wait > 0) s.wait -= dt;
+            else if (s.state === 'climb') { s.u += dt * 1.25 / S.w; s.phase += dt * 8; s.dir = -1; if (s.u >= s.top) { s.state = 'ride'; s.v = 0.6; s.wait = this.rr(0.5, 2.5); } }
+            else { s.v += dt * (s.u > 0.04 ? 1.7 * Math.sin(Math.min(1, s.u) * Math.PI) + 0.25 : -3.4); s.u -= s.v * dt / S.w; s.dir = 1; if (s.v <= 0.2 && s.u < 0.05) { s.state = 'climb'; s.wait = this.rr(1, 3); s.top = this.rr(0.55, 0.82); } }
+            s.x = S.x - S.w * s.u; s.y = s.u > 0 ? S.h * Math.sin(Math.min(2, s.u) * Math.PI / 2) ** 2 : 0; s.z = S.z + cam.dz(s.lane);
+            s.down = s.state === 'ride' && s.wait <= 0 ? 1 : 0;
+        }
     }
 
     addWalker(seed, o = {}) {
@@ -149,11 +177,11 @@ class PaintedCast {
         const lamps = this.T.groups.filter(g => g.kind === 'lamp' && !g.bridge && !g.lit).sort((a, b) => a.x - b.x);
         if (!lamps.length || this.lighter) return;
         const edge = this.cam.half(lamps[0].z) + 2;
-        this.lighter = { kind: 'lighter', x: -edge, z: lamps[0].z + 0.07, stops: lamps, at: 0, wait: 0, v: 1.7, k: 1.02, phase: 0, dir: 1, coat: [0.20, 0.22, 0.30], hat: [0.12, 0.12, 0.14], scarf: [0.7, 0.2, 0.16], fade: 1, lt: 0, L: [1, 1, 1, 0], pole: 0, prints: 0 };
+        this.lighter = { kind: 'lighter', x: -edge, z: lamps[0].z + this.cam.dz(1.2), stops: lamps, at: 0, wait: 0, v: 2.6, k: 1.02, phase: 0, dir: 1, coat: [0.20, 0.22, 0.30], hat: [0.12, 0.12, 0.14], scarf: [0.7, 0.2, 0.16], fade: 1, lt: 0, L: [1, 1, 1, 0], pole: 0, prints: 0 };
     }
 
     callCarollers() {
-        const m = this.m, doors = Object.values(this.L.nodes).filter(n => n.door);
+        const m = this.m, doors = Object.values(this.L.nodes).filter(n => n.door && !n.quiet);
         if (this.carol) return '🎶 They are already singing';
         if (!doors.length || this.ends.length < 2) return '🎶 Nobody to sing to';
         const from = this.pick(this.ends.filter(n => n.exit)) || this.ends[0], door = this.pick(doors);
@@ -236,6 +264,7 @@ class PaintedCast {
         if (m.light.stars > 0.6 && !this.flight && m.chance(cfg.sleigh * (eve ? 6 : 1), dt)) { const say = this.callSleigh(); if (say && cfg.callouts) m.host.toast(say, 3000); }
 
         this.updateSkaters(dt);
+        this.updateSledders(dt);
         this.updateWalkers(dt);
         this.updateCarol(dt);
         this.updateLighter(dt);
@@ -248,7 +277,7 @@ class PaintedCast {
             // The rabbits sit up as it passes.
             else for (const a of this.animals) if (a.kind === 'rabbit' && Math.abs(h.x - a.x) < 14) a.up = Math.max(a.up, 1.5);
         }
-        if (this.train) this.train.a += dt * 0.55;
+        if (this.train) this.train.a += dt * 0.4;
         if (this.flight && (this.flight.t += dt / 9) >= 1) this.flight = null;
         if (this.star && (this.star.t += dt / 0.9) >= 1) this.star = null;
         this.jingle = Math.max(0, this.jingle - dt);
@@ -323,8 +352,8 @@ class PaintedCast {
             if (!n) { this.walkers.splice(i, 1); continue; }
             const last = w.at === w.path.length - 1;
             w.fade = Math.min(1, w.fade + dt * 1.6);
-            if (this.stride(w, n.x + (n.door ? 0 : w.lane * 0.5) - (w.back || 0) * w.dir * 0, n.z + (n.door || n.exit ? 0 : w.lane * 0.012), dt)) {
-                if (n.name === w.via) w.wait = this.rr(6, 18);
+            if (this.stride(w, n.x + (n.door ? 0 : w.lane * 0.5) - (w.back || 0) * w.dir * 0, n.z + (n.door || n.exit ? 0 : w.lane * this.cam.dz(0.6)), dt)) {
+                if (n.name === w.via) { w.wait = this.rr(6, 18); if (n.name === 'farm') w.tree = true; }
                 if (last) { if (w.kind === 'caroller') continue; this.walkers.splice(i, 1); continue; }
                 w.at++;
             }
@@ -362,7 +391,7 @@ class PaintedCast {
         const g = l.stops[l.at];
         if (!g) { if (this.stride(l, cam.half(l.z) + 3, l.z, dt)) { this.lighter = null; this.timers.lighter = 2; } return; }
         if (g.lit) { l.at++; return; }
-        if (this.stride(l, g.x - 0.75, g.z + 0.07, dt)) { l.wait = 1.8; l.pole = 1.8; l.target = g; l.dir = 1; l.at++; }
+        if (this.stride(l, g.x - 0.9, g.z + cam.dz(1.2), dt)) { l.wait = 1.8; l.pole = 1.8; l.target = g; l.dir = 1; l.at++; }
     }
 
     updateAnimals(dt) {
@@ -461,20 +490,21 @@ class PaintedCast {
         const list = [];
         for (const s of this.skaters) list.push(s);
         for (const w of this.walkers) list.push(w);
+        for (const s of this.sledders) list.push(s);
         if (this.lighter) list.push(this.lighter);
         if (this.horse) list.push(this.horse);
         for (const a of this.animals) if (!a.gone) list.push(a);
         if (this.train) {
             const S = T.spots.tree, r = S.r * 0.92;
-            for (let i = 0; i < this.train.cars; i++) { const a = this.train.a - i * 0.33; list.push({ kind: 'car', i, x: S.x + Math.cos(a) * r, z: S.z + Math.sin(a) * r / cam.zm, dir: -Math.sin(a) >= 0 ? 1 : -1, turn: Math.abs(Math.cos(a)), L: (this.trainL ||= [1, 1, 1, 0]), lt: 1 }); }
-            if ((this.trainT = (this.trainT || 0) - dt) <= 0) { this.trainT = 0.3; T.lightAt(m.light, S.x, S.z - 0.2, 0.4, this.trainL); }
+            for (let i = 0; i < this.train.cars; i++) { const a = this.train.a - i * 0.42; list.push({ kind: 'car', i, x: S.x + Math.cos(a) * r, z: S.z + Math.sin(a) * r / cam.zm, dir: -Math.sin(a) >= 0 ? 1 : -1, turn: Math.abs(Math.cos(a)), L: (this.trainL ||= [1, 1, 1, 0]), lt: 1 }); }
+            if ((this.trainT = (this.trainT || 0) - dt) <= 0) { this.trainT = 0.3; T.lightAt(m.light, S.x, S.z - cam.dz(S.r), 0.4, this.trainL); }
         }
         if (T.spots.fire) list.push({ kind: 'fire', x: T.spots.fire.x, z: T.spots.fire.z - 0.005 });
         if (T.spots.snowman) list.push({ kind: 'face', x: T.spots.snowman.x, z: T.spots.snowman.z - 0.005 });
         list.sort((a, b) => b.z - a.z);
         ctx.lineCap = 'round'; ctx.lineJoin = 'round';
         for (const a of list) {
-            const s = cam.sc(a.z) * (a.k || 1) * (a.kind === 'car' || a.kind === 'fire' || a.kind === 'face' ? 1 : size), px = cam.sx(a.x, a.z), py = cam.sy(a.z);
+            const s = cam.sc(a.z) * (a.k || 1) * (a.kind === 'car' ? 2.4 : a.kind === 'fire' || a.kind === 'face' ? 1 : size), px = cam.sx(a.x, a.z), py = cam.sy(a.z);
             if (px < -160 || px > m.W + 160) continue;
             if (a.kind !== 'car' && a.kind !== 'fire' && a.kind !== 'face') { if (!a.L) { a.L = [1, 1, 1, 0]; a.lt = 0; } this.relight(a, dt, a.kind === 'horse' ? 1.3 : 1); }
             const alpha = a.fade ?? 1;
@@ -491,6 +521,18 @@ class PaintedCast {
                 if (a.lantern && dark > 0.12) this.glow(ctx, px + a.dir * 0.52 * s, py - 1.5 * s, 0.9 * s, [1, 0.8, 0.45], 0.75 * dark);
                 if (a.dog) { const dx = px - a.dir * 1.0 * s; ctx.save(); ctx.translate(dx, py); ctx.scale(s * a.dir, -s); this.dog(ctx, a, a.dog.coat); ctx.restore(); ctx.strokeStyle = this.tone(a, [0.2, 0.16, 0.14]); ctx.lineWidth = Math.max(0.6, 0.02 * s); ctx.beginPath(); ctx.moveTo(px - a.dir * 0.3 * s, py - 0.95 * s); ctx.lineTo(dx + a.dir * 0.36 * s, py - 0.5 * s); ctx.stroke(); box = [px - 1.7 * s, box[1], 3.4 * s, box[3]]; }
                 if (a.kind === 'lighter') box = [px - 1.2 * s, py - 3.9 * s, 2.6 * s, 4.1 * s];
+                if (a.tree && a.wait <= 0) {        // a tree from the farm, going home
+                    const tx = px - a.dir * 0.5 * s, ty = py - 0.12 * s;
+                    ctx.fillStyle = this.tone(a, [0.14, 0.3, 0.22]); ctx.beginPath(); ctx.moveTo(tx, ty - 0.3 * s); ctx.lineTo(tx - a.dir * 2.1 * s, ty); ctx.lineTo(tx, ty + 0.3 * s); ctx.closePath(); ctx.fill();
+                    box = [px - 2.8 * s, box[1], 5.6 * s, box[3]];
+                }
+            } else if (a.kind === 'sledder') {
+                const s0 = cam.sc(a.z), ly = py - a.y * s0, col = this.tone(a, a.sled);
+                ctx.fillStyle = `rgba(36,44,92,${0.2 * alpha})`; ctx.beginPath(); ctx.ellipse(px, ly + 0.03 * s, 0.5 * s, 0.1 * s, 0, 0, 6.2832); ctx.fill();
+                const sx0 = a.down ? px : px + 1.0 * s;      // ridden, or pulled behind on a string
+                ctx.strokeStyle = col; ctx.lineWidth = Math.max(1, 0.1 * s); ctx.beginPath(); ctx.moveTo(sx0 - 0.5 * s, ly - 0.06 * s); ctx.lineTo(sx0 + 0.5 * s, ly - 0.06 * s); ctx.stroke();
+                ctx.save(); ctx.translate(px, ly - (a.down ? 0.08 * s : 0)); ctx.scale(s * a.dir, -s); this.person(ctx, a, false); ctx.restore();
+                box = [px - 1.6 * s, ly - 2.3 * s, 3.2 * s, 2.5 * s];
             } else if (a.kind === 'horse') {
                 if (dark > 0.2) this.pool(ctx, a.x + a.dir * 2.2, a.z, 7, [1, 0.74, 0.36], 0.85);
                 ctx.fillStyle = 'rgba(36,44,92,0.2)'; ctx.beginPath(); ctx.ellipse(px - a.dir * 1.6 * s, py + 0.03 * s, 3.2 * s, 0.16 * s, 0, 0, 6.2832); ctx.fill();
@@ -498,7 +540,7 @@ class PaintedCast {
                 if (dark > 0.12) this.glow(ctx, px - a.dir * 2.25 * s, py - 1.25 * s, 0.8 * s, [1, 0.8, 0.45], 0.8 * dark);
                 box = [px - 5.2 * s, py - 2.6 * s, 10.4 * s, 2.8 * s];
             } else if (a.kind === 'car') {
-                if (a.i === 0 && dark > 0.2) this.pool(ctx, a.x + a.dir * 0.7 * a.turn, a.z, 2.2, [1, 0.8, 0.45], 0.8);
+                if (a.i === 0 && dark > 0.2) this.pool(ctx, a.x + a.dir * 2 * a.turn, a.z, 5, [1, 0.8, 0.45], 0.8);
                 ctx.save(); ctx.translate(px, py); ctx.scale(s * a.dir, -s); this.car(ctx, a); ctx.restore();
                 box = [px - 0.6 * s, py - 0.8 * s, 1.2 * s, 0.9 * s];
             } else if (a.kind === 'fire') { this.fire(ctx, T.spots.fire); continue; }
@@ -675,7 +717,7 @@ class PaintedCast {
         const lv = F.group.level, m = this.m;
         if (lv < 0.03) return;
         const t = m.time, s = F.s, flick = 0.55 + 0.25 * Math.sin(t * 11) + 0.2 * Math.sin(t * 23 + 1);
-        this.pool(ctx, F.x, F.z, 4.2, [1, 0.5, 0.16], 0.5 * flick * lv);
+        this.pool(ctx, F.x, F.z, 9, [1, 0.5, 0.16], 0.5 * flick * lv);
         ctx.globalCompositeOperation = 'lighter';
         // Tongues of flame: a broad orange one behind, narrower yellow ones in front, each a leaf that leans with the wind.
         for (let i = 0; i < 7; i++) {

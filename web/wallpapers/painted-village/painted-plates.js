@@ -37,7 +37,7 @@ const PaintedPlates = (() => {
             this.R = rng(seed);
             this.sil = null;                                      // while set, shapes go there as silhouettes and nowhere else
             this.o = {};
-            this.groups = []; this.lights = []; this.bulbs = []; this.smokes = []; this.solids = []; this.queue = []; this.hits = []; this.spots = {};
+            this.groups = []; this.lights = []; this.bulbs = []; this.smokes = []; this.solids = []; this.queue = []; this.hits = []; this.letters = []; this.spots = {};
             this.set({ foot: cam.H, cls: CLS.GROUND, haze: 0, ang: null, size: 13, m: MAT.SNOW });
         }
         rr(a, b) { return a + (b - a) * this.R(); }
@@ -100,15 +100,8 @@ const PaintedPlates = (() => {
             const xs = pts.map(p => p[0]), ys = pts.map(p => p[1]), x = Math.min(...xs), y = Math.min(...ys);
             group.glass.push({ col, pts, x, y, w: Math.max(...xs) - x, h: Math.max(...ys) - y });
         }
-        // Lettering, on something already drawn.
-        text(col, str, x, y, px, o = {}) {
-            if (this.sil) return;
-            for (const [g, style] of [[this.alb, Array.isArray(col) ? css(col) : col], [this.geo, this.geoFill], [this.mat, this.matFill]]) {
-                g.save(); g.font = `${o.weight || 700} ${px}px ${o.family || 'Georgia, "Times New Roman", serif'}`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = style;
-                if (o.squeeze) { g.translate(x, y); g.scale(o.squeeze, 1); g.fillText(str, 0, 0); } else g.fillText(str, x, y);
-                g.restore();
-            }
-        }
+        // Lettering too small for a brush: the signwriter's, put on when the painting is done.
+        letter(col, str, x, y, px, o = {}) { if (!this.sil) this.letters.push({ col, str, x, y, px, ...o }); }
         glowEll(group, col, x, y, rx, ry) { if (this.sil) return; const g = this.emit; g.fillStyle = col; g.beginPath(); g.ellipse(x, y, rx, ry, 0, 0, TAU); g.fill(); group.glass.push({ col, x: x - rx, y: y - ry, w: rx * 2, h: ry * 2, round: true }); }
         halo(group, x, y, r) { if (!this.sil) group.halos.push({ x, y, r }); }
         // A bulb on a string: `set` is which string or tree, `foot` the row it stands on.

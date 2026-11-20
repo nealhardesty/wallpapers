@@ -151,7 +151,7 @@
               { keys: ['d'], label: 'A dog gets loose', run: village => village.callDog() },
               { keys: ['m'], label: 'What time is it in Evergreen Hollow?', run: village => village.report() },
           ] },
-        // The same town at street level, as a painting. harvest-sky.js gives it the real sun and moon,
+        // The same town from the same hill, as a painting. harvest-sky.js gives it the real sun and moon,
         // village-logic.js the calendar and the windows' hours.
         { id: 'painted-village', name: 'Painted Village', icon: '🖼️', accent: '#ffb86a', background: '#1a2148',
           scripts: ['harvest/harvest-sky.js', 'christmas-village/village-logic.js', 'painted-village/painted-logic.js', 'painted-village/painted-plates.js', 'painted-village/painted-art.js',

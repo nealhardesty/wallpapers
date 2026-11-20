@@ -1,7 +1,8 @@
-// Painted Village: Evergreen Hollow at street level, as a painting. A
-// general store, a covered bridge, a white meetinghouse against the last
-// of the light, a pond coming down to the bottom of the picture, and every
-// window and lamp lighting the snow in front of it (SPEC §10.41).
+// Painted Village: Evergreen Hollow from the hill above the pond, as a
+// painting. The rink at our feet, the green and its grand tree, the store,
+// the meetinghouse and the rows of houses, the tree farm up the left, the
+// woods, the mountain and the house on it, and every window and lamp
+// lighting the snow in front of it (SPEC §10.41).
 //
 // The picture is brush strokes, laid once (painted-bake.js) and lit by
 // arithmetic on canvases, so the hour can turn without repainting:
@@ -93,7 +94,7 @@ class PaintedVillageAnimationManager {
         this.config = config;
         if (!this.running) return;
         const changed = keys => keys.some(k => JSON.stringify(old[k]) !== JSON.stringify(config[k]));
-        if (changed(['village', 'houses', 'church', 'bridge', 'pond', 'bonfire', 'cabin', 'horizon', 'townTree', 'townTreeSize', 'lights', 'decorate', 'snowman', 'lamps', 'candles', 'brush', 'mice', 'cardinal', 'rabbits'])) { this.rebuildAt = performance.now() + 300; return; }      // once a slider has stopped moving
+        if (changed(['village', 'houses', 'church', 'bridge', 'pond', 'bonfire', 'cabin', 'horizon', 'townTree', 'townTreeSize', 'lights', 'decorate', 'snowman', 'lamps', 'candles', 'brush', 'mice', 'cardinal', 'rabbits', 'treeFarm', 'bandstand', 'cocoa']) || !old.sledders !== !config.sledders) { this.rebuildAt = performance.now() + 300; return; }      // once a slider has stopped moving
         if (changed(['sky', 'moonPhase', 'cycleMinutes'])) { this.pinKey = null; this.cycleBase = this.host.now().getTime() - this.time * 1000 * 86400 / (config.cycleMinutes * 60); }
         if (changed(['clouds'])) this.buildClouds();
         if (changed(['stars'])) this.buildStars();
@@ -140,9 +141,8 @@ class PaintedVillageAnimationManager {
         const P = new PaintedPlates.Plates(cam, pw, ph, Math.round(W * 7 + H * 13) + 20261119, { x: L.glow.x * W, y: L.glow.y });
         this.season = VillageLogic.season(this.host.now());
         P.share = config.decorate === 'advent' ? this.season.advent : 1;
-        PaintedBuildings.reset();
         PaintedArt.compose(P, L, config);
-        const gen = PaintedBake.bake(P, { seed: Math.round(W + H * 3), brush: config.brush, passes: tier === 'low' ? 4 : 5, ridge: tier !== 'low', weave: tier !== 'low' });
+        const gen = PaintedBake.bake(P, { seed: Math.round(W + H * 3), brush: config.brush, passes: tier === 'low' ? 4 : tier === 'medium' ? 5 : 6, ridge: tier !== 'low', weave: tier !== 'low' });
         const T = gen.next().value;
         this.next = { gen, T, P, L, cam };
         this.day = this.host.now().toDateString();

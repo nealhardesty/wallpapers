@@ -107,12 +107,13 @@ const PaintedBake = (() => {
             }
             g.globalCompositeOperation = 'lighter'; g.drawImage(this.tmp, 0, 0, hw, hh, 0, 0, hw * 2, hh * 2);
             g.globalCompositeOperation = 'source-over';
-            if (this.ice && fx.reflections !== 0) this.stepIce(g, l, fx.reflections ?? 1);
             // Light off the glass and round the lamps.
             g.globalCompositeOperation = 'lighter';
             for (const p of this.groups) if (p.glow && p.level > 0.004) { g.globalAlpha = clamp(p.level * (0.45 + 0.3 * l.warm)); g.drawImage(p.glow, p.gx, p.gy, p.glow.width * 2, p.glow.height * 2); }
             g.globalAlpha = 1; g.globalCompositeOperation = 'source-over';
             if (fx.sets) this.stepBulbs(g, fx.sets, fx.palette);
+            // The ice last: it shows the lamps and the bulbs too.
+            if (this.ice && fx.reflections !== 0) this.stepIce(g, l, fx.reflections ?? 1);
             c.restore(); t.restore(); g.restore();
         }
 
@@ -180,7 +181,7 @@ const PaintedBake = (() => {
     }
 
     // ---- The bake ---------------------------------------------------------------
-    // opts: { seed, brush (× stroke widths), passes (how many of the five), ridge, weave }
+    // opts: { seed, brush (× stroke widths), passes (how many of the six), ridge, weave }
     function* bake(P, opts = {}) {
         const T = new Painting(P, opts), t0 = performance.now();
         const { cam, pw: W, ph: H, hw, hh, ps } = P;
@@ -243,7 +244,8 @@ const PaintedBake = (() => {
             const hi = ((y >> 1) * hw + (x >> 1)) * 4;
             let nx, ny, nz, top = false;
             if (ground) {
-                const bx = (Bm[hi + dB * 4] - Bm[hi - dB * 4]) / 255 / dB * U, by = (Bm[hi + dB * hw * 4] - Bm[hi - dB * hw * 4]) / 255 / dB * U, kb = 9 * Math.min(3, Math.sqrt(z));
+                const bi = (clamp(y >> 1, dB, hh - 1 - dB) * hw + clamp(x >> 1, dB, hw - 1 - dB)) * 4;      // kept off the edges: the slope is read a few pixels each way
+                const bx = (Bm[bi + dB * 4] - Bm[bi - dB * 4]) / 255 / dB * U, by = (Bm[bi + dB * hw * 4] - Bm[bi - dB * hw * 4]) / 255 / dB * U, kb = 9 * Math.min(3, Math.sqrt(z));
                 nx = -bx * kb; nz = by * kb * 1.6; const len = Math.hypot(nx, 1, nz); nx /= len; ny = 1 / len; nz /= len;
             } else { const n = NORMAL[cls] || NORMAL[CLS.UP]; nx = n[0]; ny = n[1]; nz = n[2]; top = ny > 0.5; }
             const lies = ground || top, shA = lies ? ShA[hi + 3] / 255 : 0, shB = lies ? ShB[hi + 3] / 255 : 0;
@@ -304,7 +306,7 @@ const PaintedBake = (() => {
         const hzc = T.hz.getContext('2d'); hzc.setTransform(h, 0, 0, h, 0, 0); hzc.lineCap = 'round';
         const skc = T.skym.getContext('2d'); skc.setTransform(h, 0, 0, h, 0, 0); skc.lineCap = 'round';
         const grey = v => { const n = clamp(v) * 255 | 0; return `rgb(${n},${n},${n})`; };
-        const widths = [30, 15, 8, 4.4, 2.4].slice(0, opts.passes || 5).map(w => w * U * (opts.brush || 1));
+        const widths = [30, 15, 8, 4.4, 2.4, 1.4].slice(0, opts.passes || 6).map(w => w * U * (opts.brush || 1));
         const ridge = opts.ridge !== false;
 
         for (let pass = 0; pass < widths.length; pass++) {
@@ -429,6 +431,13 @@ const PaintedBake = (() => {
         // Places where the sky is open, for the stars that twinkle.
         T.openSky = [];
         for (let i = 0; i < 600; i++) { const x = R() * cam.W, y = R() * cam.hor, q = ((y * ps | 0) * W + (x * ps | 0)) * 4; if (G[q + 1] === CLS.SELF && M[q + 2] === 0) T.openSky.push({ x, y, v: R() }); }
+        // The signwriter's lettering, over the brushwork, unless something stands in front of it.
+        for (const t of P.letters) {
+            const x = clamp(t.x * ps | 0, 0, W - 1), y = clamp(t.y * ps | 0, 0, H - 1), i = (y * W + x) * 4;
+            if (G[i + 1] !== CLS.GROUND && footOf(G[i], cam) > (t.foot ?? 0) + 3 * cam.u) continue;
+            g.save(); g.globalAlpha = 0.95; g.font = `700 ${t.px * ps}px Georgia, "Times New Roman", serif`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = css(t.col);
+            g.translate(t.x * ps, t.y * ps); g.scale(t.squeeze || 1, 1); g.fillText(t.str, 0, 0); g.restore();
+        }
         // The weave of the canvas, once, into the painting.
         if (opts.weave !== false) {
             const t = canvas(128, 128), tc = t.getContext('2d'), id = tc.createImageData(128, 128);

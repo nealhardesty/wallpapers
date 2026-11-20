@@ -31,9 +31,9 @@ const PaintedBuildings = (() => {
     // its middle, v up), S(u, v) on the side wall (u metres back from the
     // front), and what stands in each of them.
     function frame(P, t, d, haze = 0) {
-        const cam = P.cam, z = t.z, lift = (t.rise || 0) * cam.u, side = t.side || 1, hw = t.w / 2, xs = t.x + side * hw;
-        const B = { t, z, d, side, hw, xs, haze, lift, fy: cam.sy(z), s: cam.sc(z), zb: z + d / cam.zm, zmid: z + d / 2 / cam.zm };
-        B.at = (x, v, depth) => { const p = cam.pt(x, v, depth); p[1] -= lift; return p; };
+        const cam = P.cam, z = t.z, side = t.side || 1, hw = t.w / 2, xs = t.x + side * hw;
+        const B = { t, z, d, side, hw, xs, haze, fy: cam.sy(z), s: cam.sc(z), zb: z + d / cam.zm, zmid: z + d / 2 / cam.zm };
+        B.at = (x, v, depth) => cam.pt(x, v, depth);
         B.F = (u, v) => B.at(t.x + u, v, z);
         B.S = (u, v) => B.at(xs, v, z + u / cam.zm);
         B.front = () => P.set({ cls: CLS.UP, foot: B.fy, haze });
@@ -322,9 +322,9 @@ const PaintedBuildings = (() => {
             porch(P, B, col, { depth: 2.2, v: 3.3, steps: 0, goods });
             // The sign.
             B.front(); P.set({ m: MAT.WOOD, size: 1.4, ang: 0 });
-            P.fill([0.90, 0.72, 0.30], g => poly(g, quad(B.F, -3.3, 3.86, 3.3, 4.62)));
-            P.fill([0.10, 0.20, 0.16], g => poly(g, quad(B.F, -3.2, 3.94, 3.2, 4.54)));
-            const sp = B.F(0, 4.24); P.set({ m: MAT.FIG, size: 1.2 }); P.text([0.96, 0.80, 0.36], 'GENERAL STORE', sp[0], sp[1], 0.42 * s, { squeeze: 0.92 });
+            P.fill([0.90, 0.72, 0.30], g => poly(g, quad(B.F, -4.3, 3.8, 4.3, 4.68)));
+            P.fill([0.10, 0.20, 0.16], g => poly(g, quad(B.F, -4.18, 3.9, 4.18, 4.58)));
+
             // The roof: the slope on the side we see, and the lips of snow up both rakes.
             const zo = B.z - 0.4 / P.cam.zm;
             P.set({ cls: side > 0 ? CLS.TOPR : CLS.TOPL, foot: fy, m: MAT.ROOF, size: fine(P, s * 0.16, 4, 9), ang: 0.5 * side, haze: 0 });
@@ -337,6 +337,7 @@ const PaintedBuildings = (() => {
         };
         const top = B.at(t.x, r + 2.2, B.z)[1];
         P.solid(t.z, B.fx, fy, body, {});
+        P.letter([0.96, 0.82, 0.40], 'GENERAL STORE', B.F(0, 4.24)[0], B.F(0, 4.24)[1], 0.56 * s, { foot: fy, squeeze: 0.86 });
         const x0 = Math.min(B.F(-hw, 0)[0], B.S(d, 0)[0]), x1 = Math.max(B.F(hw, 0)[0], B.S(d, 0)[0]);
         P.hit('house', x0, top, x1, fy, { groups: [grp.down, grp.up, grp.porch], name: 'store' });
         (P.spots.houses ||= []).push({ name: 'store', x: t.x, z: t.z, door: [t.x, t.z], groups: grp, style: 'store' });
@@ -345,14 +346,10 @@ const PaintedBuildings = (() => {
     // ---- The meetinghouse ---------------------------------------------------------
 
     function church(P, t) {
-        const w = 12, e = 8.6, r = 12.6, d = 20, haze = 0.3;
+        const w = 12, e = 8.6, r = 12.6, d = 20, haze = 0;
         t.w = w; t.side = t.x < 0 ? 1 : -1;
         const B = frame(P, t, d, haze), { hw, side, s, fy } = B, white = [0.90, 0.89, 0.92];
         const grp = P.group('church', { kind: 'window', house: 'church', church: true });
-        // The rise it stands on.
-        const cx = B.fx + side * 8 * s;
-        P.set({ cls: CLS.TOP, foot: fy, m: MAT.SNOW, size: 6, ang: 0, haze: 0.42 });
-        P.fill([0.94, 0.94, 1], g => ell(g, cx, fy - B.lift + 6 * P.cam.u, 34 * s, B.lift + 14 * P.cam.u));
         const tall = { trim: white, cols: 2, rows: 5, arch: true, curtains: false, grp, gain: 1.3 };
         const body = () => {
             B.sideW();
@@ -362,7 +359,7 @@ const PaintedBuildings = (() => {
             boards(P, B.F, white, 0, r, v => v <= e ? [-hw, hw] : [-hw * (r - v) / (r - e), hw * (r - v) / (r - e)], 2.6, 0.5);
             for (const u of [-hw * 0.66, hw * 0.66]) win(P, B, B.F, u, 4.3, 1.2, 4.0, tall);
             // The roof's near slope.
-            P.set({ cls: side > 0 ? CLS.TOPR : CLS.TOPL, foot: fy, m: MAT.ROOF, size: 3, ang: 0.5 * side, haze: haze + 0.1 });
+            P.set({ cls: side > 0 ? CLS.TOPR : CLS.TOPL, foot: fy, m: MAT.ROOF, size: 3, ang: 0.5 * side, haze });
             P.fill([0.93, 0.94, 1], g => poly(g, [B.at(B.xs + side * 0.4, e - 0.1, B.z), B.at(B.xs + side * 0.4, e - 0.1, B.zb), B.at(t.x, r, B.zb), B.at(t.x, r, B.z)]));
             P.set({ cls: CLS.TOP });
             P.line(SNOW, 0.5 * s, g => { const a = B.F(-hw - 0.4, e - 0.1), b = B.F(0, r + 0.1), c = B.F(hw + 0.4, e - 0.1); g.moveTo(a[0], a[1]); g.lineTo(b[0], b[1]); g.lineTo(c[0], c[1]); });
@@ -397,7 +394,7 @@ const PaintedBuildings = (() => {
             P.set({ cls: CLS.UP, m: MAT.WOOD, size: 1.4 }); P.line(DARK, Math.max(1, 0.1 * s), g => { g.moveTo(apex[0], apex[1]); g.lineTo(apex[0], apex[1] - 1.6 * s); g.moveTo(apex[0] - 0.5 * s, apex[1] - 1.0 * s); g.lineTo(apex[0] + 0.5 * s, apex[1] - 1.0 * s); });
             P.set({ cls: CLS.TOP, m: MAT.ROOF, size: 2.2 }); P.line(SNOW, 0.3 * s, g => { const a = T(-2.6, 17.4), b = T(2.6, 17.4); g.moveTo(a[0], a[1]); g.lineTo(b[0], b[1]); const c = bel(-2.4, 21.8), d2 = bel(2.4, 21.8); g.moveTo(c[0], c[1]); g.lineTo(d2[0], d2[1]); });
         };
-        P.solid(t.z, B.fx, fy - B.lift, body, { shadow: 0.5, flat: true });
+        P.solid(t.z, B.fx, fy, body, { shadow: 0.7 });
         const top = B.at(t.x, 33, B.z)[1];
         P.hit('church', B.F(-hw, 0)[0], top, Math.max(B.F(hw, 0)[0], B.S(d, 0)[0]), fy, { groups: [grp], name: 'church' });
         (P.spots.houses ||= []).push({ name: 'church', x: t.x, z: t.z, door: [t.x, t.z], groups: { down: grp }, style: 'church' });
@@ -456,31 +453,146 @@ const PaintedBuildings = (() => {
         P.hit('bridge', B.F(-hw, 0)[0], top, B.F(hw, 0)[0], fy, { group: grp });
     }
 
-    // ---- Up the hill behind -----------------------------------------------------------
+    // ---- The barn at the tree farm ------------------------------------------------------
 
-    let farCount = 0;
-    function farHouse(P, t) {
-        const { sx, sy, sc, u } = P.cam, fx = sx(t.x, t.z), fy = sy(t.z) - (t.rise || 0) * u, s = sc(t.z), X = x => fx + x * s, Y = y => fy - y * s, w = t.w || 4;
-        const haze = clamp(0.1 + (t.z - 6) * 0.05, 0.05, 0.4), name = 'far' + (farCount++ % 3);
-        const grp = P.groups.find(g => g.name === name) || P.group(name, { kind: 'window', house: name, far: true });
-        const wall = P.pick([[0.52, 0.42, 0.40], [0.60, 0.50, 0.42], [0.44, 0.40, 0.46], [0.70, 0.68, 0.70]]);
-        P.solid(t.z, fx, sy(t.z), () => {
-            P.set({ cls: CLS.TOP, foot: sy(t.z), m: MAT.SNOW, size: 5, ang: 0, haze: haze + 0.1 });
-            P.fill([0.94, 0.94, 1], g => ell(g, fx, fy + 3 * u, (w + 4) * s, 2.4 * s));
-            P.set({ cls: CLS.UP, foot: sy(t.z), m: MAT.WALL, size: 2.4, ang: Math.PI / 2, haze });
-            P.fill(wall, g => poly(g, [[X(-w), Y(0)], [X(w), Y(0)], [X(w), Y(3.2)], [X(0), Y(6.6)], [X(-w), Y(3.2)]]));
-            P.set({ cls: CLS.TOP, m: MAT.ROOF, size: 2.6 });
-            P.line([0.94, 0.95, 1], 0.5 * s, g => { g.moveTo(X(-w - 0.4), Y(3.0)); g.lineTo(X(0), Y(6.8)); g.lineTo(X(w + 0.4), Y(3.0)); });
-            P.set({ cls: CLS.UP, m: MAT.STONE }); P.fill([0.40, 0.36, 0.38], g => g.rect(X(w * 0.45), Y(6.9), 0.8 * s, 2.2 * s));
-            for (const [cx, cy] of [[-w * 0.5, 1.5], [w * 0.5, 1.5], [0, 4.2]]) {
-                P.set({ cls: CLS.SELF, m: MAT.GLASS, size: 2, haze: haze * 0.4 });
-                P.fill(P.pick(['#ffd67a', '#ffc45a', '#ffe09a']), g => g.rect(X(cx - 0.6), Y(cy + 0.7), 1.2 * s, 1.4 * s));
-                P.glowRect(grp, 'rgba(255,190,90,0.9)', X(cx - 0.6), Y(cy + 0.7), 1.2 * s, 1.4 * s);
-                P.light(grp, { x: t.x + cx, y: cy, z: t.z, c: WINDOW, I: 9, face: [0, -1], r2: 0.6 });
+    // Red boards, a gambrel roof, its gable and its big doors to the street.
+    function barn(P, t, config) {
+        const e = 4.4, k = 6.7, r = 8.5, d = 13, col = [0.56, 0.16, 0.14], trim = [0.94, 0.93, 0.89], B = frame(P, t, d), { hw, side, s, fy } = B, kx = hw * 0.6;
+        const grp = P.group('barn', { kind: 'window', house: 'barn', shop: true }), lampG = P.group('barn.porch', { kind: 'porch', house: 'barn' });
+        const topAt = u => { const a = Math.abs(u); return a <= kx ? r - (r - k) * a / kx : k - (k - e) * (a - kx) / (hw - kx); };
+        const body = () => {
+            B.sideW(); P.set({ m: MAT.WALL, size: fine(P, s * 0.1, 2.4, 4), ang: Math.PI / 2 });
+            for (let u = 0; u < d - 0.01; u += 0.5) P.fill(P.vary(col.map(c => c * 0.88), 0.07, 0.01), g => poly(g, quad(B.S, u, 0, Math.min(d, u + 0.52), e)));
+            for (const u of [d * 0.3, d * 0.7]) win(P, B, B.S, u, 2.2, 1.0, 1.1, { trim, rows: 2, grp });
+            B.front(); P.set({ m: MAT.WALL, size: fine(P, s * 0.1, 2.4, 4), ang: Math.PI / 2 });
+            for (let u = -hw; u < hw - 0.01; u += 0.5) { const u1 = Math.min(hw, u + 0.52); P.fill(P.vary(col, 0.07, 0.01), g => poly(g, [B.F(u, 0), B.F(u1, 0), B.F(u1, topAt(u1)), B.F(u, topAt(u))])); }
+            // The doors stand open on the light inside; the loft door over them.
+            P.set({ m: MAT.WOOD, size: 2, ang: Math.PI / 2 }); P.fill(trim, g => poly(g, quad(B.F, -2.1, 0, 2.1, 3.9)));
+            const gl = quad(B.F, -1.85, 0.1, 1.85, 3.65), ctr = B.F(0, 1.6);
+            P.set({ cls: CLS.SELF, m: MAT.GLASS, size: 2, ang: Math.PI / 2 });
+            const gr = P.alb.createRadialGradient(ctr[0], ctr[1], 0, ctr[0], ctr[1], 3.2 * s); gr.addColorStop(0, '#ffe9a6'); gr.addColorStop(0.5, '#ffbf56'); gr.addColorStop(1, '#d9741f');
+            P.fill(gr, g => poly(g, gl));
+            P.fill('rgba(40,74,42,0.92)', g => { for (const u of [-1.2, 1.15]) poly(g, [B.F(u - 0.5, 0.1), B.F(u, 2.3), B.F(u + 0.5, 0.1)]); });        // trees for sale, inside
+            P.glowPoly(grp, 'rgba(255,190,90,0.95)', gl);
+            P.light(grp, { x: t.x, y: 1.9, z: B.z, c: WINDOW, I: 26, face: [0, -1], r2: 0.6 });
+            B.front(); P.set({ m: MAT.WOOD, size: 2, ang: Math.PI / 2 });
+            for (const sgn of [-1, 1]) {
+                P.fill(trim, g => poly(g, quad(B.F, sgn * 2.1, 0.1, sgn * 3.9, 3.7)));
+                P.fill(col, g => poly(g, quad(B.F, sgn * 2.3, 0.3, sgn * 3.7, 3.5)));
+                P.line(trim, Math.max(1, 0.14 * s), g => { const a = B.F(sgn * 2.3, 0.3), b = B.F(sgn * 3.7, 3.5), c = B.F(sgn * 3.7, 0.3), d2 = B.F(sgn * 2.3, 3.5); g.moveTo(a[0], a[1]); g.lineTo(b[0], b[1]); g.moveTo(c[0], c[1]); g.lineTo(d2[0], d2[1]); });
             }
-        }, { shadow: 0.4, flat: true });
-        P.smoke(X(w * 0.45 + 0.4), Y(7.0), s, t.z);
+            P.fill(trim, g => poly(g, quad(B.F, -0.95, 4.9, 0.95, 6.7))); P.fill([0.20, 0.10, 0.10], g => poly(g, quad(B.F, -0.75, 5.05, 0.75, 6.55)));
+            wreath(P, B, B.F(0, 4.35), 0.42 * s);
+            const lp = B.F(2.9, 4.2); lantern(P, lampG, lp[0], lp[1], s * 1.1, { x: t.x + 2.9, y: 4.2, z: B.z }, 9);
+            // The roof: two slopes on the side we see, snow up the rakes.
+            const zo = B.z - 0.4 / P.cam.zm, ex = B.xs + side * 0.35, kxw = t.x + side * kx;
+            P.set({ cls: side > 0 ? CLS.TOPR : CLS.TOPL, foot: fy, m: MAT.ROOF, size: fine(P, s * 0.16, 3, 7), ang: 0.5 * side, haze: 0 });
+            P.fill([0.90, 0.91, 0.99], g => poly(g, [B.at(ex, e - 0.1, zo), B.at(ex, e - 0.1, B.zb), B.at(kxw, k, B.zb), B.at(kxw, k, zo)]));
+            P.fill([0.94, 0.95, 1], g => poly(g, [B.at(kxw, k, zo), B.at(kxw, k, B.zb), B.at(t.x, r, B.zb), B.at(t.x, r, zo)]));
+            snowBand(P, [B.at(t.x - hw - 0.4, e - 0.14, zo), B.at(t.x - kx, k + 0.05, zo), B.at(t.x, r + 0.06, zo), B.at(t.x + kx, k + 0.05, zo), B.at(t.x + hw + 0.4, e - 0.14, zo)], 0.3 * s, { icicles: true, size: 3.4 });
+            if (config.lights !== false) for (const [a, b] of [[[-hw, e - 0.2], [-kx, k - 0.2]], [[-kx, k - 0.2], [0, r - 0.25]], [[0, r - 0.25], [kx, k - 0.2]], [[kx, k - 0.2], [hw, e - 0.2]]]) string(P, B.at(t.x + a[0], a[1], zo), B.at(t.x + b[0], b[1], zo), fy, Math.max(1.1 * P.cam.u, 0.05 * s));
+            drift(P, B, B.S, 0.4, d); drift(P, B, B.F, -hw - 0.4, -2.2); drift(P, B, B.F, 2.2, hw + 0.4);
+        };
+        const top = B.at(t.x, r + 1, B.z)[1];
+        P.solid(t.z, B.fx, fy, body, {});
+        P.letter([0.96, 0.93, 0.84], 'TREES', B.F(0, 7.35)[0], B.F(0, 7.35)[1], 0.8 * s, { foot: fy, squeeze: 0.9 });
+        const x0 = Math.min(B.F(-hw, 0)[0], B.S(d, 0)[0]), x1 = Math.max(B.F(hw, 0)[0], B.S(d, 0)[0]);
+        P.hit('house', x0, top, x1, fy, { groups: [grp, lampG], name: 'barn' });
     }
 
-    return { house, store, church, bridge, farHouse, reset() { farCount = 0; } };
+    // ---- By the pond: cocoa, at a hatch ---------------------------------------------------
+
+    function cocoaHut(P, t, config) {
+        const e = 2.7, r = 4.1, d = 3.6, col = [0.44, 0.29, 0.20], trim = [0.95, 0.93, 0.86];
+        t.side = t.x < 0 ? 1 : -1;
+        const B = frame(P, t, d), { hw, side, s, fy } = B, zm = P.cam.zm;
+        const grp = P.group('cocoa', { kind: 'window', house: 'cocoa', shop: true }), lampG = P.group('cocoa.porch', { kind: 'porch', house: 'cocoa' });
+        const body = () => {
+            B.sideW(); boards(P, B.S, col.map(c => c * 0.86), 0, e, () => [0, d], 2.4, 0.34);
+            B.front(); boards(P, B.F, col, 0, r - 0.05, v => v <= e ? [-hw, hw] : [-hw * (r - v) / (r - e), hw * (r - v) / (r - e)], 2.4, 0.34);
+            // The hatch, and who is serving.
+            P.set({ m: MAT.WOOD, size: 1.8, ang: 0 }); P.fill(trim, g => poly(g, quad(B.F, -hw + 0.5, 0.95, hw - 0.5, 2.35)));
+            const gl = quad(B.F, -hw + 0.68, 1.12, hw - 0.68, 2.22), ctr = B.F(0, 1.7);
+            P.set({ cls: CLS.SELF, m: MAT.GLASS, size: 1.8, ang: Math.PI / 2 });
+            const gr = P.alb.createRadialGradient(ctr[0], ctr[1], 0, ctr[0], ctr[1], 2.2 * s); gr.addColorStop(0, '#fff0b4'); gr.addColorStop(0.55, '#ffc65a'); gr.addColorStop(1, '#e88a2a');
+            P.fill(gr, g => poly(g, gl));
+            P.fill('rgba(70,40,30,0.9)', g => { ell(g, B.F(-0.5, 1.95)[0], B.F(-0.5, 1.95)[1], 0.2 * s, 0.22 * s); poly(g, quad(B.F, -0.82, 1.12, -0.18, 1.72)); poly(g, quad(B.F, 0.6, 1.12, 1.0, 1.62)); });
+            P.glowPoly(grp, 'rgba(255,196,96,0.95)', gl);
+            P.light(grp, { x: t.x, y: 1.7, z: B.z, c: WINDOW, I: 20, face: [0, -1], r2: 0.5 });
+            // The counter, and a striped awning over it.
+            const zf = B.z - 1.0 / zm, A = (u, v) => B.at(t.x + u, v, zf);
+            B.front(); P.set({ cls: CLS.TOP, m: MAT.WOOD, size: 1.8, ang: 0 }); P.fill([0.70, 0.56, 0.40], g => poly(g, [B.F(-hw + 0.4, 1.0), B.F(hw - 0.4, 1.0), B.at(t.x + hw - 0.4, 1.0, B.z - 0.5 / zm), B.at(t.x - hw + 0.4, 1.0, B.z - 0.5 / zm)]));
+            P.set({ cls: CLS.TOP, m: MAT.FIG, size: 1.8, ang: Math.PI / 2 });
+            const n = 8; for (let i = 0; i < n; i++) { const u0 = -hw + 0.3 + (t.w - 0.6) * i / n, u1 = -hw + 0.3 + (t.w - 0.6) * (i + 1) / n; P.fill(i % 2 ? [0.94, 0.93, 0.90] : [0.76, 0.14, 0.13], g => poly(g, [B.F(u0, 2.75), B.F(u1, 2.75), A(u1, 2.3), A(u0, 2.3)])); }
+            P.set({ cls: CLS.TOP, m: MAT.ROOF, size: 2 }); P.line(SNOW, 0.14 * s, g => { const a = B.F(-hw + 0.3, 2.78), b = B.F(hw - 0.3, 2.78); g.moveTo(a[0], a[1]); g.lineTo(b[0], b[1]); });
+            B.front(); P.set({ m: MAT.WOOD, size: 1.4, ang: 0 }); P.fill([0.16, 0.10, 0.09], g => poly(g, quad(B.F, -1.25, 3.0, 1.25, 3.62)));
+            // The roof, a stovepipe, snow.
+            const zo = B.z - 0.35 / zm, ex = B.xs + side * 0.3;
+            P.set({ cls: side > 0 ? CLS.TOPR : CLS.TOPL, foot: fy, m: MAT.ROOF, size: 3, ang: 0.5 * side, haze: 0 });
+            P.fill([0.92, 0.93, 1], g => poly(g, [B.at(ex, e - 0.1, zo), B.at(ex, e - 0.1, B.zb), B.at(t.x, r, B.zb), B.at(t.x, r, zo)]));
+            snowBand(P, [B.at(t.x - hw - 0.3, e - 0.12, zo), B.at(t.x, r + 0.05, zo), B.at(t.x + hw + 0.3, e - 0.12, zo)], 0.26 * s, { size: 3, icicles: true });
+            const pp = B.at(t.x - side * 0.9, r + 0.7, B.zmid);
+            B.front(); P.set({ m: MAT.WOOD, size: 1.6, ang: Math.PI / 2 }); P.fill(DARK, g => g.rect(pp[0] - 0.13 * s, pp[1], 0.26 * s, 1.5 * s));
+            P.smoke(pp[0], pp[1], s * 0.9, B.z);
+            const lp = B.F(side * (hw - 0.15), 2.5); lantern(P, lampG, lp[0], lp[1], s * 1.1, { x: t.x + side * (hw - 0.15), y: 2.5, z: B.z }, 9);
+            if (config.lights !== false) string(P, A(-hw + 0.3, 2.22), A(hw - 0.3, 2.22), fy, Math.max(1.1 * P.cam.u, 0.06 * s));
+            drift(P, B, B.S, 0.3, d);
+        };
+        const top = B.at(t.x, r + 1.6, B.z)[1];
+        P.solid(t.z, B.fx, fy, body, { reflect: [B.F(-hw - 0.4, 0)[0], top, B.F(hw + 0.4, 0)[0], fy] });
+        P.letter([0.98, 0.86, 0.50], 'COCOA', B.F(0, 3.3)[0], B.F(0, 3.3)[1], 0.52 * s, { foot: fy, squeeze: 0.9 });
+        P.hit('house', B.F(-hw, 0)[0], top, B.F(hw, 0)[0], fy, { groups: [grp, lampG], name: 'cocoa' });
+        P.spots.cocoa = { x: t.x, z: t.z };
+    }
+
+    // ---- The bandstand on the green ----------------------------------------------------------
+
+    function bandstand(P, t, config) {
+        const cam = P.cam, R = 3.4, base = 0.75, eave = 3.7, apex = 6.3, z = t.z, fy = cam.sy(z), s = cam.sc(z), fx = cam.sx(t.x, z);
+        const at = (a, rad, v) => cam.pt(t.x + Math.cos(a) * rad, v, z + Math.sin(a) * rad / cam.zm);
+        const A = Array.from({ length: 8 }, (_, i) => (i + 0.5) * TAU / 8), ring = (rad, v) => A.map(a => at(a, rad, v));
+        const grp = P.group('bandstand', { kind: 'porch' });
+        const far = A.map((a, i) => i).sort((i, j) => Math.sin(A[j]) - Math.sin(A[i]));          // far posts first
+        const body = () => {
+            const r0 = ring(R, 0), r1 = ring(R, base), white = [0.15, 0.30, 0.24];
+            P.set({ cls: CLS.UP, foot: fy, m: MAT.STONE, size: 2.2, ang: 0, haze: 0 });
+            for (let i = 0; i < 8; i++) { const j = (i + 1) % 8; P.fill(P.vary([0.56, 0.54, 0.58], 0.08), g => poly(g, [r0[i], r0[j], r1[j], r1[i]])); }
+            P.set({ cls: CLS.TOP, m: MAT.WOOD, size: 2.4, ang: 0 }); P.fill([0.62, 0.58, 0.58], g => poly(g, r1));
+            const post = i => { const a = at(A[i], R - 0.2, base), b = at(A[i], R - 0.2, eave); P.set({ cls: CLS.UP, m: MAT.WALL, size: 1.6, ang: Math.PI / 2 }); P.line(white, Math.max(1.2, 0.2 * s), g => { g.moveTo(a[0], a[1]); g.lineTo(b[0], b[1]); }); };
+            const rail = (i, j) => { const a = at(A[i], R - 0.2, base + 0.95), b = at(A[j], R - 0.2, base + 0.95); P.set({ cls: CLS.UP, m: MAT.WALL, size: 1.6, ang: 0 }); P.line(white, Math.max(1, 0.1 * s), g => { g.moveTo(a[0], a[1]); g.lineTo(b[0], b[1]); }); };
+            for (const i of far.slice(0, 4)) post(i);
+            for (let i = 0; i < 8; i++) if (Math.sin(A[i]) + Math.sin(A[(i + 1) % 8]) > 0) rail(i, (i + 1) % 8);
+            const lp = at(0, 0, eave - 0.9); lantern(P, grp, lp[0], lp[1], s * 1.5, { x: t.x, y: eave - 0.9, z }, 16);
+            for (const i of far.slice(4)) post(i);
+            for (let i = 0; i < 8; i++) { const j = (i + 1) % 8, m = Math.sin(A[i]) + Math.sin(A[j]); if (m < 0 && Math.abs(Math.cos(A[i]) + Math.cos(A[j])) > 0.6) rail(i, j); }
+            // The roof: eight slopes to a point, the near ones over the far.
+            const e = ring(R + 0.55, eave), top = at(0, 0, apex);
+            for (const i of far) {
+                const j = (i + 1) % 8, mid = (A[i] + A[j]) / 2 + (j === 0 ? Math.PI : 0), cx = Math.cos(mid);
+                P.set({ cls: cx < -0.5 ? CLS.TOPL : cx > 0.5 ? CLS.TOPR : CLS.TOP, foot: fy, m: MAT.ROOF, size: 3, ang: Math.PI / 2 + cx * 0.5 });
+                P.fill(P.vary([0.20, 0.36, 0.30], 0.06), g => poly(g, [e[i], e[j], top]));
+                const k = 0.72, a = [top[0] + (e[i][0] - top[0]) * k, top[1] + (e[i][1] - top[1]) * k], b = [top[0] + (e[j][0] - top[0]) * k, top[1] + (e[j][1] - top[1]) * k];
+                P.fill(P.vary([0.93, 0.94, 1], 0.02), g => poly(g, [a, b, top]));
+            }
+            P.set({ cls: CLS.UP, m: MAT.WOOD, size: 1.4, ang: Math.PI / 2 }); P.line(DARK, Math.max(1, 0.1 * s), g => { g.moveTo(top[0], top[1]); g.lineTo(top[0], top[1] - 0.9 * s); });
+            // Garlands from post to post, and bulbs round the eave.
+            for (let i = 0; i < 8; i++) {
+                const j = (i + 1) % 8; if (Math.sin(A[i]) + Math.sin(A[j]) > 0.1) continue;
+                const a = at(A[i], R - 0.2, eave - 0.1), b = at(A[j], R - 0.2, eave - 0.1);
+                P.set({ cls: CLS.UP, m: MAT.FIR, size: 1.6, ang: null }); P.line([0.12, 0.30, 0.18], Math.max(1.2, 0.2 * s), g => { g.moveTo(a[0], a[1]); g.quadraticCurveTo((a[0] + b[0]) / 2, (a[1] + b[1]) / 2 + 0.8 * s, b[0], b[1]); });
+                P.set({ m: MAT.FIG }); P.fill([0.80, 0.12, 0.10], g => ell(g, a[0], a[1], 0.2 * s, 0.16 * s));
+                if (config.lights !== false) string(P, e[i], e[j], fy, Math.max(1.1 * P.cam.u, 0.06 * s));
+            }
+            // Steps, toward us.
+            P.set({ cls: CLS.TOP, m: MAT.ROOF, size: 2, ang: 0 });
+            P.fill([0.88, 0.88, 0.96], g => poly(g, [at(-Math.PI / 2 - 0.3, R, base), at(-Math.PI / 2 + 0.3, R, base), at(-Math.PI / 2 + 0.24, R + 1.3, 0), at(-Math.PI / 2 - 0.24, R + 1.3, 0)]));
+        };
+        const topY = at(0, 0, apex + 1)[1];
+        P.solid(z, fx, fy, body, { shadow: 0.7 });
+        P.hump(fx, fy, 5 * s, 0.8 * s, 0.35);
+        P.hit('bandstand', fx - (R + 1) * s, topY, fx + (R + 1) * s, fy, { group: grp });
+        P.spots.bandstand = { x: t.x, z: t.z };
+    }
+
+    return { house, store, church, bridge, barn, cocoaHut, bandstand };
 })();

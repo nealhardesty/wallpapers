@@ -47,8 +47,8 @@ wallpapers' only home. They run in three hosts:
 > third wallpaper drawn with WebGL, makes 48.
 > Christmas Village (§10.40, 2026-11-19), a New England town in the snow
 > with a skating pond, a tree farm and a cabin up the mountain, makes 49.
-> Painted Village (§10.41, 2026-11-19), the same town at street level as a
-> painting, brush strokes lit by every window and lamp, makes 50.
+> Painted Village (§10.41, 2026-11-19), the same town from the same hill as
+> a painting, brush strokes lit by every window and lamp, makes 50.
 > Phase 10, the clock overlay (§4.9), was built 2026-10-28; §10 holds the
 > other ideas.
 > Windows (§10.25): the W0 spikes passed, and W1 (the desktop core: behind
@@ -161,7 +161,7 @@ Added for Christmas, drawn in code (designs in §10.27–§10.30):
 | `frost` | frost-logic.js, frost-art.js, frost.js | ~1k lines | Interactive (drag to draw in the frost, tap to breathe on it); fern frost grown tip by tip on an occupancy grid, the window and the doodles (`FrostLogic`), unit-tested; follows `host.now()` (Christmas Eve and Day); keys B, D, T |
 | `small-christmas` | small-christmas-logic.js, small-christmas-art.js, small-christmas.js | ~800 lines | Interactive (tap the tree, the train, the floor); pixel art at its own resolution, scaled up pixelated; palettes, blink patterns, the train's oval and the hops (`SmallXmasLogic`), unit-tested; follows `host.now()` (the sleigh on Christmas Eve, presents on Christmas Day); keys T, M, L, S |
 | `christmas-village` | village-logic.js, village-art.js, village-buildings.js, village-scene.js, village-actors.js, christmas-village.js (and Harvest's harvest-sky.js) | ~3.9k lines | Interactive (tap a cat, a skater, a house, a tree, the cabin, the sky); a New England town painted in code at daylight colour and washed with the hour; the light, the calendar, the windows' hours, the layout and the skaters' steering (`VillageLogic`), unit-tested; follows `host.now()` (the real sun and moon, the church clock, Christmas Eve) (§10.40) |
-| `painted-village` | painted-logic.js, painted-plates.js, painted-art.js, painted-buildings.js, painted-bake.js, painted-cast.js, painted-village.js (and Harvest's harvest-sky.js, Christmas Village's village-logic.js) | ~3.2k lines | Interactive (tap a house, a lamp, a skater, the grand tree, the snowman, the cat, the cardinal, the night sky); the town at street level, in metres, as about 300,000 brush strokes laid once and lit by canvas arithmetic: the sky's light, two key lights, and a patch of light for every lamp and every floor of windows; the camera, the hour's light, the layout for three shapes of screen and the plates' arithmetic (`PaintedLogic`), unit-tested; follows `host.now()` (the real sun and moon, the meetinghouse clock, the lamplighter at dusk, Christmas Eve) (§10.41) |
+| `painted-village` | painted-logic.js, painted-plates.js, painted-art.js, painted-buildings.js, painted-bake.js, painted-cast.js, painted-village.js (and Harvest's harvest-sky.js, Christmas Village's village-logic.js) | ~3.5k lines | Interactive (tap a house, a lamp, a skater, the grand tree, the snowman, the cat, the cardinal, the night sky); §10.40's whole town from the hill above the pond, in metres, as about 320,000 brush strokes laid once and lit by canvas arithmetic: the sky's light, two key lights, and a patch of light for every lamp and every floor of windows; the camera, the hour's light, the layout for three shapes of screen and the plates' arithmetic (`PaintedLogic`), unit-tested; follows `host.now()` (the real sun and moon, the meetinghouse clock, the lamplighter at dusk, Christmas Eve) (§10.41) |
 | `sky-island` | sky-island-logic.js, sky-island-art.js, sky-island-land.js, sky-island-actors.js, sky-island.js (and Harvest's harvest-sky.js) | ~3.5k lines | Interactive (tap a cat, a person, the lake, a house at night, the sky); 16-bit pixel art at its own resolution (a pixel is 2 CSS px on a laptop or 1080p), scaled up pixelated; a terraced island seen from above and in front, its underside, the sea of cloud and the ground far below all baked; the calendar (seasons, holidays, Easter, the owner's dates), the names and the island's three-tier layout from a seed (`SkyIslandLogic`), unit-tested over 240 layouts; follows `host.now()` (the hour, the season, every holiday); keys N, P, V, O, B, W, S, H |
 | `ice-patrol` | ice-logic.js, ice-gl.js, ice-cockpit.js, ice-patrol.js | ~3k lines | The first on WebGL (§10.34): an endless snowfield from two baked noise fields, the same height formula in JavaScript and in the shaders (`IceLogic`), unit-tested; a 2D cockpit (struts, a winged console, switches that keep house) whose centre screen is a live scan of the real terrain; a 2D ridgeline fallback without WebGL; its own watch on the GPU; interactive (fly it by hand: keys and a drag; the autopilot takes it back after 5 s); keys W A S D, arrows, Q, E, X, T, V, R |
 | `sumo` | sumo-logic.js, sumo-art.js, sumo.js | ~1.3k lines | No network; a league of invented wrestlers kept in `host.storage`, written in Japanese with an English gloss (§10.35); bouts and tournaments pure and seeded (`SumoLogic`), unit-tested; interactive (a tap throws a cushion); evening by `host.now()`; keys N, B |
@@ -892,7 +892,7 @@ and the commits.
 | small-christmas | — | The canvas is the picture's own pixels (a few hundred across), scaled up by CSS with `image-rendering: pixelated`, so a frame is tiny; 12 fps by default (a setting), idleUntil between frames; sky, moon and snow floor one baked layer; every sprite baked per palette; scanlines a baked overlay canvas; snow × density |
 | harvest | `mist`, `beams` (medium) | Land is one baked layer per resize; trees, leaves, apples, geese and clouds are baked sprites; the world is washed once per frame with the hour's light; leaves, apples, smoke, sparks and flocks × density; squirrels × (0.5 + 0.5 density) |
 | christmas-village | `reflections`, `aurora` (medium) | The land is one baked painting per layout, washed into a second canvas only when the hour's colour has moved a step; lit windows and lamps are one layer repainted when a window goes on or off; every string bulb is on one of two layers faded against each other (the twinkle costs two blits); the cast is a few filled shapes apiece in colours toned for the hour, the trees among them sprites toned the same way; far snow is one path of squares, near flakes a sprite. 5.4% busy on Low, 7.0% on Medium, 15.1% on High at 4× throttle |
-| painted-village | `reflections`, `moving-lights`, `aurora` (medium) | The picture is brush strokes baked once per layout into plates (in slices of a third of a frame, shown as it goes); the hour is about a dozen canvas blends when its colour has moved, most at half size, and only a patch's rectangle when a window or lamp changes; a frame is one blit, the cast (a dozen dabs each, lit in JavaScript a few times a second, the lit picture put back over whoever is behind something), smoke sprites, a few bulbs and the snow as two paths. The picture's size is capped by tier (0.8, 1.4, 2.5 megapixels) and a change of render scale repaints nothing. 6.2% busy on Low, 17.1% on Medium, 22.1% on High at 4× throttle, the bake included (§10.41) |
+| painted-village | `reflections`, `moving-lights`, `aurora` (medium) | The picture is brush strokes baked once per layout into plates (in slices of a third of a frame, shown as it goes); the hour is about a dozen canvas blends when its colour has moved, most at half size, and only a patch's rectangle when a window or lamp changes; a frame is one blit, the cast (a dozen dabs each, lit in JavaScript a few times a second, the lit picture put back over whoever is behind something), smoke sprites, a few bulbs and the snow as two paths. The picture's size is capped by tier (0.8, 1.4, 2.5 megapixels) and a change of render scale repaints nothing. 4.2% busy on Low, 12.0% on Medium, 18.6% on High at 4× throttle, the bake included (§10.41) |
 | sky-island | — | The canvas is the picture's own pixels (2 CSS px each on a laptop or 1080p, 3 at 1440p, 4 at 4K, 1 on a phone), scaled up pixelated; the terrain (three tiers, their cliffs, the underside, the water) is one bake per season, the roots three sway frames, the sea of cloud two tileable strips and the ground one, rebaked with the light; everything that stands still (houses, trees, lamps, props, trimmings) is baked into one layer per street band, drawn in turn with whoever moves (trees are drawn live, swaying, only on High); the sky is a dithered bake redone as the light changes, the stars four baked twinkle frames; the night is one `source-atop` wash over the island's scratch, with the lit windows and lamps one glow layer redone only when the lit set changes; a passing island is one bake with a few live bits; 20 fps by default (a setting), 12 on Low, paced on a steady timeline through idleUntil; folk × (0.4 + 0.6 density), strays, wildlife, rain, snow, leaves, fireflies × density. Bench 2026-11-11 (v2): Low 21%, Medium 38%, High 46% |
 | ice-patrol | `shadows`, `sparkle` (medium) | WebGL: one grid drawn nine times (96, 64 or 48 cells a side by density), heights and slopes from two noise textures; shadows ten marched steps on High, six on Medium, compiled out when shed (after fading); flakes × density, wrapped in the vertex shader; the cockpit frame painted per light step, the gauges at 15 Hz (8 on Low) on a strip of their own, each instrument only when its reading changes; the terrain scan a 144² map (80² on Low) scrolled by cells, four rows (two) rescanned a tick; lamp halos one sprite a colour; a few dozen height lookups a frame on the main thread. The GPU is watched by the wallpaper itself (late frames give up shadows, then render scale to 0.4), since the governor only times callbacks; software renderers start there. No WebGL: 34 ridgelines a frame in 2D |
 | sumo | — | The hall is one cached canvas (rebuilt on resize, tier and at dusk); a frame draws it, three jointed figures and a few marks. The crowd's rows and the cushions thrown follow density |
@@ -6075,11 +6075,23 @@ England** buildings (clapboard, a white meetinghouse, a covered bridge, a
 general store); **no particular year** (sleighs and gas lamps, no cars);
 **Live** by default, with **Dusk**, the paintings' hour, one choice away.
 
+The first build (2026-11-19) took the references at their word and stood
+in the street: a store, a bridge and one house, large. The owner, on
+seeing it: "the aesthetic is much better. But what happened to the
+original scene? I thought we would still have skaters, and a perspective
+of the town including the full town, a town square, the skating rink, the
+mountain house, the Christmas tree lot… basically, the original, in the
+new painting style." So the picture was laid out again (2026-11-20) as
+§10.40's: **the whole town from the hill above the pond**, with every
+part of it, painted and lit by this section's method. What was asked for
+was a new look, not a smaller scene. The street-level arrangement is in
+the history (commit `9d830da`) and nowhere else.
+
 #### 10.41.1 Why §10.40 reads as clip art, and what this does instead
 
 | | §10.40 | What the paintings do | Painted Village |
 |---|---|---|---|
-| Where we stand | A model-railway height; a house is 60 px tall, a villager 14 | In the street, a little above head height; a house is a third of the picture's height | An eye 5 m up, a world in metres; a near, a middle and a far distance; the ice leads the eye to the glow behind the steeple |
+| Where we stand | A hill above the pond, drawn without perspective: a house is 60 px tall wherever it stands | Many stand in the street; the village views stand on a hill | The same hill, and the same town, in true perspective: an eye 26 m up, a world in metres, skaters twice the size of the villagers on the green, the glow behind the mountain |
 | Light | The picture is painted in daylight and washed one colour for the hour; windows are yellow rectangles | Light is the subject: every window and lamp lights the snow in front of it | Each stroke is lit by the sky, by a key light and by every lamp near it, by distance and facing |
 | Colour | One cold blue | Warm against cool | The sky's light is cool, the lamps' warm; snow has no colour of its own, so it takes both |
 | Edges | Every edge is a vector's | Brushwork: edges are lost and found | About 300,000 strokes, broad to fine, each stopping where the colour under it changes |
@@ -6107,8 +6119,10 @@ WebGL, no pixel read after the bake.
    - The eight kinds are spaced (0, 37, 83, 127, 167, 199, 229, 255) so
      that an antialiased edge between two of them is seldom a third; the
      bake gives any pixel that is not a kind a neighbour's values.
-2. **The strokes** (`bake`, a generator). Five passes, 30 px wide down to
-   2.4 (× the picture's height / 900 × *Brushwork*), on a jittered grid. A
+2. **The strokes** (`bake`, a generator). Six passes, 30 px wide down to
+   1.4 (× the picture's height / 900 × *Brushwork*), on a jittered grid:
+   the last is for windows, shutters and figures, which from the hill are
+   a few pixels each. A
    place takes no stroke finer than it asks for. A stroke runs along its
    direction until the colour under it has changed by more than 54 in 765
    or the kind of surface is another (`PaintedLogic.run`, unit-tested), so
@@ -6118,7 +6132,7 @@ WebGL, no pixel read after the bake.
 3. **What a stroke is painted into.** Not one picture: plates.
    - `paint`, full size: its local colour × (1 − the air in front of it).
    - `S`, `A`, `B`, half size, greys: how much it takes of the sky's
-     light, of the low light from behind the steeple (the afterglow, and
+     light, of the low light from behind the mountain (the afterglow, and
      after it the moon) and of the day's sun over our left shoulder.
      Shadows are in `A` and `B`; frost lets `A` through; the ground's
      normal comes from the humps.
@@ -6162,17 +6176,24 @@ WebGL, no pixel read after the bake.
    foot through its silhouette, the lot run down by scaling to a seventh
    of the height and back, kept to a mask painted with the ice's own
    strokes (bare ice shows it, blown snow does not), and laid over the
-   lit ice at two thirds.
+   lit ice at two thirds. It is the step's last blend, so the ice shows
+   the bulbs on the grand tree too.
 6. **A frame**: one blit of `lit`, then the cast, smoke, a few bulbs
    brighter, the falling snow.
-7. **Who walks behind what.** The depths in `PaintedLogic.BANDS` (1.3,
-   2.55, 3.12, 4.36, 6.2) cut the picture into "everything nearer than
+7. **Who walks behind what.** The depths in `PaintedLogic.BANDS` (1.17,
+   1.79, 2.12, 2.44, 2.95, 3.45: the firs in the corners, the pond's
+   bank, the grand tree, the street's lamps and the bridge, the front
+   row, the back rows) cut the picture into "everything nearer than
    this": a half-size mask each, from the silhouettes. After an actor is
    drawn, the lit picture is put back over them through the mask of the
    last band not beyond them. So the horse and sleigh go into the covered
    bridge and come out, and nobody walks in front of the tree they are
    behind. The rule that makes it work is the layout's: what stands by a
-   lane stands just nearer than a band (unit-tested for the lamps).
+   lane stands just nearer than a band (unit-tested for the lamps, the
+   doors, the bridge and the rink). Lettering too small for a brush
+   (the town's sign, the store's, the barn's, the cocoa hut's) is the
+   signwriter's: laid over the finished strokes (`Plates.letter`), unless
+   something stands in front of it.
 8. **Moving light** (effect `moving-lights`): the carollers' lantern, the
    sleigh's lamp, the toy train's headlamp, the bonfire's flicker. A
    rectangle of `paint`, multiplied by a pool sprite, cut to an ellipse,
@@ -6200,34 +6221,59 @@ broad passes. `P` paints it again.
 
 #### 10.41.3 The picture (`painted-logic.js`, `painted-art.js`, `painted-buildings.js`)
 
-- **The camera** (`PaintedLogic.camera`): the eye 5 m up, the horizon at
-  39% (a setting), depth `z` 1 at the bottom of the usable picture (above
-  the host's inset), about 17 m to the unit. A screen narrower than 16:9
-  stands further back (a higher eye), so the same town fits.
+- **The camera** (`PaintedLogic.camera`): the eye 26 m up on the hill
+  above the pond, looking level; the horizon at 34% (a setting); depth
+  `z` 1 at the bottom of the usable picture (above the host's inset),
+  about 48 m to the unit on a 16:9 screen. A screen narrower than 16:9
+  stands higher, so the same town fits. It is §10.40's viewpoint with
+  one difference: true perspective, so the pond at our feet is large and
+  the back rows small, and a roof shows more of itself the nearer it is.
+- **The town, in rows** (depths in brackets): the firs we look down
+  between, lit, in the bottom corners (1.1); the pond and its rink (1.2
+  to 1.75) with the bonfire, a bench and the cocoa hut on its banks; the
+  green, with the grand tree, the bandstand, the snowman and the town's
+  sign (2.0 to 2.3); the street (2.5), from the west edge past the farm's
+  gate and through the covered bridge over the brook that leaves the
+  pond; the front row (2.75): the barn, the general store, the inn, a
+  colonial behind its picket fence, a cape; the meetinghouse (3.5), its
+  steeple against the woods; two more rows of houses up the hill; the
+  tree farm in rows up the left, behind its fence; the sledding hill
+  under the farm; then the woods in ranks, the mountain, and the log
+  house in its clearing on the mountain's shoulder.
 - **Three arrangements** (`PaintedLogic.layout`, unit-tested on seven
   screens):
-  - *wide*: the general store left, the grand tree on the green, the
-    meetinghouse behind them against the glow, the covered bridge in the
-    middle distance with houses up the hill over its roof, a colonial
-    right with its picket fence and the snowman, the pond coming down to
-    the bottom edge, a fir and a rail fence in the near corner, boughs
-    across the top corner;
+  - *wide*: all of the above, about seventeen houses;
   - *panorama* (wider than 2.15:1): the same, and the street carries on
-    out both sides (the inn, a cape, a saltbox, more lamps), as far as
+    out both sides (more houses in every row, more lamps), as far as
     there is room to see them;
-  - *upright* (narrower than 0.9:1): a lane climbing between the store
-    and a colonial to the grand tree and the meetinghouse, two more
-    houses behind, a corner of the pond. No bridge.
+  - *upright* (narrower than 0.9:1): the pond across the bottom, the
+    grand tree over it between the store and a colonial, the
+    meetinghouse up the middle, eight more houses behind, the farm and
+    its barn climbing the hill, the cabin large on the mountain. No
+    bridge, bandstand, sign or sledding hill: there is no room.
+- **Far things have no foot on the ground we can see**, so each is given
+  the row of a depth that puts the right air in front of it (`farFoot`):
+  the mountain about two thirds dissolved, the woods a half, the cabin
+  less. The mountain's faces are two kinds of surface, so the day's sun
+  lights the ones that look left and the afterglow leaves it a
+  silhouette.
 - **Buildings** are boxes in the world in true perspective: a front
   square on and the side that faces the middle of the picture running
   back, clapboards as rows that vary, windows with glazing bars, shutters,
   wreaths, candles, curtains, a tree in one, a cat in another, snow on
   every sill, a lip of snow and icicles on every eave, drifts against the
-  walls, a chimney that smokes. The store has a porch with barrels, a
-  sled, a sign that can be read, and two windows full of things.
+  walls, a chimney that smokes. The store has a porch with barrels and a
+  sled, and two windows full of things; the barn a gambrel roof and its
+  doors open on the light inside; the cocoa hut a hatch, a counter and a
+  striped awning; the bandstand eight posts, garlands and a lantern.
+- **Things seen from a hill are small**, so what must read is drawn
+  larger than life: lamps (1.5 ×), the snowman (1.5 ×), the bonfire
+  (2.4 ×), the toy train (2.4 ×: one to ride on).
 - **Lanes** (`L.nodes`, `L.edges`): where people walk, as a small graph
-  with doors, exits off the edges, and places to linger (the fire, the
-  tree). Trodden snow is painted along them.
+  with doors (each a building's: a house left out by *Houses* has none),
+  exits off the edges, and places to linger (the fire, the tree, the
+  bandstand, the cocoa hut, the farm). Trodden snow is painted along
+  them, and the street is packed by runners.
 - **Every part has its switch**, and with everything off it is still a
   painted valley (smoke-checked).
 
@@ -6236,17 +6282,22 @@ broad passes. `P` paints it again.
 - **Skaters** (`VillageLogic.skate` on a rink in metres), with the ice
   showing them; a tap makes one jump, or sit down suddenly.
 - **Villagers** on the lanes, door to door or through, some with a dog on
-  a lead, lingering at the fire and the tree; fewer late, almost nobody
-  in the small hours.
-- **The lamplighter.** At dusk he walks the street with a pole and each
+  a lead, lingering at the fire, the tree, the bandstand and the cocoa
+  hut; fewer late, almost nobody in the small hours. Whoever lingers at
+  the **tree farm** leaves dragging a tree home.
+- **Sledders** on the hill under the farm: up on foot with the sled on a
+  string, down faster, a run-out on the flat, and up again
+  (smoke-checked: down in well under the time it took to climb).
+- **The lamplighter.** At dusk he walks the town with a pole and each
   lamp comes on as he reaches it, its pool with it (`L` sends him round).
   The windows come on a floor at a time by each household's hours
-  (`VillageLogic.windowHabits`); the store shuts at nine; the
-  meetinghouse is lit of an evening and late on Christmas Eve.
+  (`VillageLogic.windowHabits`); the store, the barn and the cocoa hut
+  shut at nine; the meetinghouse is lit of an evening and late on
+  Christmas Eve.
 - **Carollers** with a lantern that lights the snow as they go; the house
   they sing to lights every floor (`H`).
-- **A horse and sleigh** on the back road, through the covered bridge,
-  lamp lit, twice the height of anyone (`B`). The rabbits sit up.
+- **A horse and sleigh** along the street and through the covered bridge,
+  lamp lit (`B`). The rabbits sit up.
 - **The toy train** round the grand tree, its headlamp on the snow.
 - **The bonfire**: flames that lean with the wind, sparks, its light
   going up and down on the bank.
@@ -6254,31 +6305,33 @@ broad passes. `P` paints it again.
   a cardinal on the rail fence, gone at night, off round the fir at a
   tap; two rabbits by the fence; three deer by the tree before anyone is
   up; a fox along the bank after midnight; mice with a lit window, a red
-  door and a wisp of smoke at the foot of the big fir.
+  door and a wisp of smoke at the foot of the fir in the corner.
 - **The snowman** turns to watch whoever is nearest. A tap catches him
   and he looks straight ahead for a few seconds.
 - **The sky:** the real sun and moon, the meetinghouse clock at the real
   time (it strikes, as a toast), stars, drifting cloud, northern lights
   (`A`), a certain sleigh across the moon after dark (`S`; far more often
   on Christmas Eve), a shooting star where the night sky is tapped.
-- **Decorations:** strings along the eaves and the bridge and bulbs on
-  the grand tree in the chosen colours, a few twinkling; with *A little
-  more each day*, houses decorate through December (§10.40's calendar).
+- **Decorations:** strings along the eaves, the bridge, the barn, the
+  bandstand and the farm's fence, bulbs and a star on the grand tree and
+  on the firs in the corners, in the chosen colours, a few twinkling;
+  with *A little more each day*, houses decorate through December
+  (§10.40's calendar).
 
 #### 10.41.5 Cost
 
 - **A frame**, `make bench` (a phone's size, 4× slower CPU, 6 s from a
-  cold start, so the bake is in the numbers): **6.2% busy on Low, 17.1% on
-  Medium, 22.1% on High**. On the owner's Mac a frame is about 1.3 ms with
-  the sky cycling a day a minute (8 light steps a second).
-- **The bake:** 317,000 strokes at 1600 × 900 in about 1.5 s of work,
-  2.7 s as shown; 82,000 at a phone's 464 × 1030 on Medium in 0.8 s. The
-  picture's own size is the screen's up to 2.5, 1.4 or 0.8 megapixels by
-  tier, and it is blitted to whatever the canvas is: a change of render
-  scale repaints nothing. Low lays four passes, without the ridge or the
-  canvas weave.
+  cold start, so the bake is in the numbers): **4.2% busy on Low, 12.0% on
+  Medium, 18.6% on High**.
+- **The bake:** 320,000 strokes at 1600 × 900 in about 2 s of work,
+  3.5 s as shown; 84,000 on a phone held upright in a little over a
+  second. The picture's own size is the screen's up to 2.5, 1.4 or 0.8
+  megapixels by tier, and it is blitted to whatever the canvas is: a
+  change of render scale repaints nothing. High lays all six passes,
+  Medium five, Low four, without the ridge or the canvas weave.
 - **Memory:** two full-size canvases, seven at half size, a patch and a
-  glow per group (18 groups on a 16:9 screen), five masks at half size.
+  glow per group (about 75 groups on a 16:9 screen, each the size of its
+  reach, which from the hill is small), six masks at half size.
 - **Effects, shed in this order:** `reflections`, `moving-lights`,
   `aurora`, all `medium`.
 - **Lost canvases** (§10.22): the painting is opaque everywhere, so one
@@ -6288,19 +6341,22 @@ broad passes. `P` paints it again.
 #### 10.41.6 Tests
 
 - **Unit** (`tools/painted-village.test.mjs`, 6): the camera's round
-  trips and the ground meeting the inset; the light with no jumps from
-  midnight to noon, warm against cool at dusk, within what a plate holds;
-  the layout on seven screens (everything in view, the glow behind the
-  steeple, lanes that join every door to every exit, the rink on the ice
-  above the gesture bar); every switch, and lamps just nearer than a
-  band; the plates' encodings; a stroke's run.
+  trips, the ground meeting the inset, and that we stand on a hill; the
+  light with no jumps from midnight to noon, warm against cool at dusk,
+  within what a plate holds; the layout on seven screens (the whole town
+  there and in view, the green open between the pond and the store, the
+  farm up the left, lanes that join every place, every door a
+  building's, the rink on the ice above the gesture bar); every switch,
+  and lamps, doors, the bridge and the rink on the right side of their
+  bands; the plates' encodings; a stroke's run.
 - **Stage** (`tools/smoke.mjs`, 4): a picture by frame 12 that finishes
-  painting, and **a lamp lit alone raises its patch of snow by more than
-  15%, warmer, with nothing painted again**; one bake for noon, dusk and
-  night, the windows' hours, Christmas Eve; the lamplighter in turn,
-  carollers, the horse behind the bridge's band, the snowman, the sleigh
-  waiting for dark; a phone's arrangement above the bar, the bare valley,
-  a lost painting.
+  painting, every part of the town in it, and **a lamp lit alone raises
+  its patch of snow by more than 15%, warmer, with nothing painted
+  again**; one bake for noon, dusk and night, the windows' hours,
+  Christmas Eve; the lamplighter in turn, carollers, the horse through
+  the bridge, a sledder up and down, the snowman, the sleigh waiting for
+  dark; a phone's arrangement above the bar, the bare valley, a lost
+  painting.
 
 #### 10.41.7 What it is, what it is not, and what was not built
 
@@ -6308,16 +6364,33 @@ It is a painted picture with real light in it, that moves: closer to a
 good gouache illustration lit like the references than to an oil
 painting. It will not pass for one of them at arm's length: the strokes
 are one kind of mark, the drawing is geometry, and figures have no faces.
+From the hill a house is about 70 pixels tall on a 1600-pixel screen, so
+it is dabs: a window is a touch of light, not a drawing of a window.
 
-Proposed and not built: the bandstand, the cocoa hut, the tree farm and
-the sledders of §10.40 (the street-level picture has no room that does
-not crowd it); an owl; cats on the warm side of things; the bake in a
+Hard-won, 2026-11-20:
+
+- **A shape's corners must be fixed before it is filled.** `Plates.fill`
+  runs the path once per plate, so a random number inside the path gives
+  each plate a different shape. On the ground against the ground that is
+  harmless; a rock on the mountain against the sky was sky in one plate
+  and stone in another, and came out as a dark dot on the ridge.
+- **The slope of the ground is read a few pixels each way**, and at the
+  bottom edge of a dense picture (more than about 1.7 picture pixels to
+  the design pixel: a phone at High) that was past the end of the array:
+  black gaps between the strokes along the bottom. The read is kept off
+  the edges.
+- **A depth written as a number is a number of screens, not of metres.**
+  The cast's small offsets in `z` were tuned at 17 m to the unit and
+  were three times too large at 48: they are `cam.dz(metres)` now.
+
+Proposed and not built: §10.40's families sawing a tree down (here they
+carry one home); an owl; cats on the warm side of things; the bake in a
 worker (a worker cannot be started from `file://`, which is how several
 hosts load the page, and the slices proved enough); a grey noon in heavy
 snow. The other road, painted plates from an illustrator or an image
 model relit in code, was not taken: the public-repo rule (`AGENTS.md`:
 art drawn in code, a clear licence for anything else; §7.3), megabytes of
-images where this is 240 KB of script, and a plate cannot be re-laid for
+images where this is 260 KB of script, and a plate cannot be re-laid for
 a phone, lose its church at a switch, or decorate a little more each day.
 
 If the owner later wants one village: this one can take §10.40's id and

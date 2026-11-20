@@ -11,18 +11,18 @@ const PaintedLogic = (() => {
     const mix = (a, b, t) => a.map((v, i) => v + (b[i] - v) * t);
 
     // ---- The camera -------------------------------------------------------------
-    // We stand in the street, the eye a few metres up, looking level. Depth
-    // is `z`: 1 at the bottom of the picture, growing toward the horizon,
-    // `zm` metres to the unit. Ground at depth z is drawn at sy(z); a thing
-    // standing there is sc(z) pixels to the metre. A screen narrower than
-    // 16:9 stands further back (a higher eye, the same picture, smaller); a
-    // phone held upright gets its own arrangement (layout).
-    function camera(W, H, bottom = 0, horizon = 0.39) {
+    // We stand on the hill above the pond, the eye some way up, looking level
+    // over the town. Depth is `z`: 1 at the bottom of the picture, growing
+    // toward the horizon, `zm` metres to the unit. Ground at depth z is drawn
+    // at sy(z); a thing standing there is sc(z) pixels to the metre. A screen
+    // narrower than 16:9 stands higher (the same town, smaller); a phone held
+    // upright gets its own arrangement (layout).
+    function camera(W, H, bottom = 0, horizon = 0.34) {
         const Hu = H - bottom, aspect = W / Hu;
         const kind = aspect < 0.9 ? 'upright' : aspect > 2.15 ? 'panorama' : 'wide';
-        const hor = Hu * (kind === 'upright' ? horizon - 0.07 : horizon), f = Hu - hor, u = Hu / 900;
-        const eye = kind === 'upright' ? 8.2 : 5 * clamp(1.74 / aspect, 1, 1.9);
-        const ppm = f / eye, foc = 1900 * u, zm = eye * foc / f;
+        const hor = Hu * (kind === 'upright' ? horizon - 0.08 : horizon), f = Hu - hor, u = Hu / 900;
+        const eye = kind === 'upright' ? 34 : 26 * clamp(1.74 / aspect, 1, 1.6);
+        const ppm = f / eye, foc = 1100 * u, zm = eye * foc / f;
         const cam = { W, H, Hu, aspect, kind, hor, f, u, eye, ppm, zm };
         cam.sy = z => hor + f / z;
         cam.sc = z => ppm / z;
@@ -31,6 +31,7 @@ const PaintedLogic = (() => {
         cam.xAt = (px, z) => (px - W / 2) * z / ppm;                 // metres across, for a pixel at depth z
         cam.at = (frac, z) => (frac - 0.5) * W * z / ppm;            // metres across, for a share of the width
         cam.half = z => W / 2 * z / ppm;                             // how far to each side we can see at depth z
+        cam.dz = m => m / zm;                                        // metres of depth, as depth
         cam.pt = (x, y, z) => [W / 2 + x * ppm / z, hor + f / z - y * ppm / z];
         return cam;
     }
@@ -70,7 +71,7 @@ const PaintedLogic = (() => {
             glow: [1, 1, 1], glowIn: [1, 1, 1], cloudTop0: [0.98, 0.98, 1], cloudTop1: [1, 0.99, 0.97], cloudLow0: [0.76, 0.80, 0.88], cloudLow1: [0.82, 0.84, 0.90],
             ice: [0.40, 0.50, 0.68], smoke0: [0.92, 0.93, 0.97], smoke1: [0.98, 0.98, 1], vignette: [0.76, 0.78, 0.88], glowA: 0, warm: 0.08, veil: 0 },
     ];
-    const MOON_KEY = [0.80, 1.0, 1.6], MOON_AMB = [0.11, 0.15, 0.24], MOON_SKY = [0.05, 0.07, 0.11];
+    const MOON_KEY = [0.50, 0.64, 1.05], MOON_AMB = [0.08, 0.11, 0.18], MOON_SKY = [0.05, 0.07, 0.11];
 
     function light(sunAlt, moonLight = 0) {
         let i = 1;
@@ -98,121 +99,153 @@ const PaintedLogic = (() => {
 
     // ---- What is where ----------------------------------------------------------
     // Everything is in metres across (x, 0 under the middle of the picture)
-    // and depth units (z). Moving things keep to lanes; what stands still
-    // stands just nearer than one of BANDS, so that whoever walks behind it
-    // is hidden by it (the bands are the depths at which the picture is cut
-    // into "everything nearer than this").
-    const BANDS = [1.3, 2.55, 3.12, 4.36, 6.2];
+    // and depth units (z). The town is in rows: the pond nearest (z 1.2 to
+    // 1.75), the green and its tree, the street (2.5), the front row of
+    // houses (2.75), the meetinghouse and the back rows, the tree farm up
+    // the left, then woods and the mountain. Moving things keep to lanes;
+    // what stands still stands just nearer than one of BANDS, so that
+    // whoever walks behind it is hidden by it (the bands are the depths at
+    // which the picture is cut into "everything nearer than this").
+    const BANDS = [1.17, 1.79, 2.12, 2.44, 2.95, 3.45];
+    const STREET = 2.5, ROW = 2.75;
 
     function layout(cam, config, random) {
-        const L = { kind: cam.kind, things: [], lamps: [], nodes: {}, edges: [], doors: [], bands: BANDS };
+        const L = { kind: cam.kind, things: [], lamps: [], nodes: {}, edges: [], bands: BANDS };
         const on = key => config[key] !== false;
         const add = (kind, x, z, o = {}) => { const t = { kind, x, z, ...o }; L.things.push(t); return t; };
         const node = (name, x, z, o = {}) => { L.nodes[name] = { name, x, z, ...o }; };
-        const edge = (...names) => { for (let i = 1; i < names.length; i++) L.edges.push([names[i - 1], names[i]]); };
-        const village = on('village');
+        const edge = (...names) => { for (let i = 1; i < names.length; i++) if (L.nodes[names[i - 1]] && L.nodes[names[i]]) L.edges.push([names[i - 1], names[i]]); };
+        const village = on('village'), up = cam.kind === 'upright', dz = cam.dz;
+        const edgeX = z => cam.half(z) + 2.5, seen = (x, w, z) => Math.abs(x) - w / 2 < cam.half(z) - 2;
+        const house = (x, z, style, w, tint) => add('house', x, z, { style, w, tint, side: x < 0 ? 1 : -1 });
+        const door = (name, t, o = {}) => { if (t) node(name, t.x, t.z - dz(1.6), { door: true, at: t, ...o }); };
+        const size = config.townTreeSize || 1;
+        L.glow = { x: up ? 0.5 : 0.5, y: cam.hor - 150 * Math.min(cam.u, cam.hor / 300) };
+        if (on('cabin')) add('cabin', 0, 0, { fx: up ? 0.74 : 0.83, up: up ? 84 : 62 });
 
-        if (cam.kind === 'upright') {
-            // A lane climbing from the bottom edge between two houses to the
-            // meetinghouse, the grand tree where it widens, a corner of ice.
-            L.glow = { x: 0.5, y: cam.hor - 26 * cam.u };
-            if (village && on('church')) add('church', 0, 12.5, { rise: 20 });
-            L.pond = on('pond') ? { line: [[2.6, 6.2, 0.6], [2.1, 5.0, 2.2], [1.6, 4.6, 3.4], [1.2, 4.6, 3.9], [0.95, 4.8, 4.0], [0.8, 5.0, 4.0]], rink: { x: 4.6, z: 1.45, rx: 2.4, z0: 1.12, z1: 1.9 } } : null;
+        if (up) {
+            // A phone held upright: the pond across the bottom, the tree and
+            // the store over it, the meetinghouse up the middle, the farm
+            // climbing the hill behind.
+            L.pond = on('pond') ? { wob: 2.5, line: [[1.79, 0, 2], [1.74, 0, 9], [1.6, 0, 13.4], [1.42, 0, 14.2], [1.28, 0, 13], [1.19, 0, 8], [1.16, 0, 1.5]], rink: { x: 0, rx: 11.5, z0: 1.21, z1: 1.71 } } : null;
+            let store = null, home = null, church = null;
             if (village) {
-                add('store', -7.4, 3.0, { w: 8.5, side: 1 });
-                add('house', 7.6, 3.4, { style: 'colonial', w: 9, side: -1, tint: 0 });
-                add('house', -7.8, 5.6, { style: 'cape', w: 8, side: 1, tint: 1 });
-                add('house', 8.4, 6.4, { style: 'saltbox', w: 8, side: -1, tint: 2 });
-                if (on('townTree')) add('grandTree', -0.4, 4.3, { h: 8.5 * (config.townTreeSize || 1) });
-                if (on('lamps')) { L.lamps.push({ x: -2.6, z: 3.08 }, { x: 3.4, z: 2.5 }, { x: 2.8, z: 6.1 }); }
-                for (const [x, z, rise] of [[-5, 9, 60], [6.5, 9.6, 70], [-11, 8.4, 40], [13, 8.2, 44]]) add('farHouse', x, z, { rise });
+                store = add('store', -20.5, ROW, { w: 10, side: 1 });
+                home = house(20.5, ROW + 0.02, 'colonial', 11, 0);
+                if (on('church')) church = add('church', 2, 3.5, {});
+                house(-34, 3.75, 'saltbox', 9, 4); house(-16.5, 3.92, 'colonial', 10.5, 1); house(22, 3.78, 'cape', 9.5, 5); house(37, 3.95, 'colonial', 10.5, 2);
+                house(16, 5.0, 'cape', 9.5, 3); house(46, 4.9, 'saltbox', 9, 1); house(-6, 5.15, 'colonial', 10.5, 4); house(31, 6.1, 'cape', 9.5, 2);
+                if (on('townTree')) add('grandTree', 6, 2.06, { h: 16 * size });
+                if (on('lamps')) L.lamps.push({ x: -11.5, z: 2.4 }, { x: 13.5, z: 2.4 }, { x: -13.4, z: 1.77 }, { x: 8.5, z: 1.77 });
+                if (on('cocoa') && L.pond) add('cocoaHut', 14.6, 1.76, { w: 4.6 });
             }
-            if (on('snowman')) add('snowman', -3.4, 2.5);
-            if (on('bonfire') && L.pond) add('bonfire', 1.2, 1.72);
-            for (const [x, z, h] of [[-9.5, 4.4, 11], [10.5, 5.0, 12], [-3.6, 7.4, 10], [4.6, 7.8, 11], [-12, 7, 11], [12.5, 7.4, 12]]) add('frostTree', x, z, { h });
-            for (const [x, z, h] of [[-11.5, 6.6, 9], [11.8, 4.2, 9.5], [-4.6, 10.5, 8], [9, 11, 8]]) add('fir', x, z, { h });
-            add('fir', cam.at(0.02, 1.24), 1.24, { h: 8.2, near: true, mice: on('mice') });
-            add('boughs', 0, 1, { side: 1 });
-            add('railFence', 0, 0, { from: [cam.at(0.0, 1.06), 1.06], to: [-4.4, 2.2], cardinal: on('cardinal'), rabbits: on('rabbits') });
-            node('store', -7.4, 2.5, { door: true }); node('lane0', -1.6, 2.5); node('lane1', -1.2, 3.3); node('house', 6.6, 3.2, { door: true });
-            node('green', -1.8, 4.0); node('lane2', 0.8, 5.0); node('lane3', 0.6, 6.4); node('top', 0.4, 9.5, { exit: true });
-            node('fire', -0.2, 1.74, { linger: true }); node('near', -2.2, 1.0, { exit: true });
-            edge('store', 'lane0', 'lane1', 'green', 'lane2', 'lane3', 'top'); edge('lane1', 'house'); edge('lane0', 'fire', 'near');
-            L.road = null;
-            L.tree = L.things.find(t => t.kind === 'grandTree') || null;
+            if (on('treeFarm')) { add('treeFarm', 0, 0, { z0: 4.5, z1: 8.2, x0: -70, x1: -22, spread: 22, slant: 5 }); add('barn', -33, 4.42, { w: 9, side: 1 }); }
+            if (on('snowman')) add('snowman', -8.5, 2.03);
+            if (on('bonfire') && L.pond) add('bonfire', -11.8, 1.66);
+            for (const [x, z, h] of [[-30, 3.2, 11], [-6, 3.3, 10], [32, 3.25, 11], [-26, 4.6, 10], [6, 4.5, 10], [38, 4.6, 11], [-44, 3.5, 11], [50, 3.6, 11]]) add('frostTree', x, z, { h });
+            for (const [x, z, h] of [[-31, 2.9, 9], [31, 2.92, 9.5], [12, 3.05, 8], [-44, 4.3, 9], [58, 4.4, 10], [3, 5.6, 9], [44, 5.6, 9]]) add('fir', x, z, { h });
+            add('fir', cam.at(0.085, 1.07), 1.07, { h: 6.6, near: true, lit: true, mice: on('mice') });
+            add('fir', cam.at(0.925, 1.1), 1.1, { h: 5.8, near: true, lit: true });
+            add('railFence', 0, 0, { from: [cam.at(0.0, 2.2) - 1, 2.2], to: [-14.5, 2.16], cardinal: on('cardinal'), rabbits: on('rabbits') });
+            node('west', -edgeX(STREET), STREET, { exit: true }); node('storeF', -20.5, STREET); node('green', -3, STREET); node('houseF', 20.5, STREET); node('east', edgeX(STREET), STREET, { exit: true });
+            door('store', store); door('house', home); if (church) { node('lych', 2.5, 2.98); door('church', church, { quiet: true }); }
+            node('tree', -1.5, 2.15, { linger: on('townTree') && village }); node('snow', -9.5, 2.2); node('fire', -8.6, 1.76, { linger: on('bonfire') && !!L.pond });
+            node('pondN', -1, 1.9); node('cocoa', 11.5, 1.86, { linger: on('cocoa') && village && !!L.pond });
+            edge('west', 'storeF', 'green', 'houseF', 'east'); edge('storeF', 'store'); edge('houseF', 'house'); edge('green', 'lych', 'church');
+            edge('green', 'tree', 'snow', 'fire'); edge('tree', 'pondN', 'cocoa', 'houseF'); edge('snow', 'pondN');
+            L.road = { z: STREET - dz(1), x0: -edgeX(STREET) - 6, x1: edgeX(STREET) + 6 };
             return finish(L, cam, config);
         }
 
-        // Wide: the store and the green left of the middle, the meetinghouse
-        // behind them against the glow, the covered bridge in the middle
-        // distance, a house right, and the pond coming down to the bottom
-        // edge right of the middle. Wider than 2:1, the street carries on out
-        // both sides.
-        const church = village && on('church') ? add('church', -24, 10, { rise: 14 }) : null;
-        L.glow = { x: 0.5 + (church ? church.x * cam.sc(church.z) : -24 * cam.sc(10)) / cam.W, y: cam.hor - 30 * cam.u };
-        L.pond = on('pond') ? { line: [[9, 5.5, 1.3], [6.5, 3.0, 1.8], [5.0, 1.6, 2.3], [4.3, 0.9, 2.6], [3.6, 0.9, 3.2], [3.0, 1.6, 4.2], [2.5, 2.5, 5.9], [2.0, 2.9, 6.6], [1.5, 2.6, 7.0], [1.15, 2.2, 6.4], [0.92, 1.9, 6.0], [0.78, 1.8, 5.8]],
-            rink: { x: 2.8, z: 1.8, rx: 5.0, z0: 1.26, z1: 2.44 } } : null;
+        // Wide: the pond right of the middle at our feet, the grand tree on
+        // the green above it, the store and the inn left of the tree, the
+        // meetinghouse behind it, more houses right and the covered bridge
+        // beyond them; the tree farm and its barn up the left, the sledding
+        // hill under it. Wider than 2:1, the street carries on both ways.
+        L.pond = on('pond') ? { wob: 5, line: [[1.79, 4, 3], [1.75, 4, 19], [1.6, 4, 29], [1.42, 4, 30], [1.27, 5, 25], [1.19, 6, 13], [1.16, 6, 2]], rink: { x: 4, rx: 25, z0: 1.21, z1: 1.72 } } : null;
+        // The brook that leaves it, under the bridge and away up the valley.
+        if (L.pond) L.brook = [[33, 1.5, 2.6], [49, 1.76, 2.2], [60, 2.1, 2.0], [66.3, 2.46, 1.8], [72, 3.0, 1.6], [86, 3.7, 1.4], [110, 4.6, 1.2]];
+        let store = null, inn = null, home = null, cape = null, church = null, barn = null;
         if (village) {
-            add('store', -14.5, 2.75, { w: 10, side: 1 });
-            add('house', 14.8, 3.0, { style: 'colonial', w: 11, side: -1, tint: 0 });
-            if (on('bridge')) add('bridge', 0.6, 4.3, { len: 16.5 });
-            if (on('townTree')) add('grandTree', -4.3, 3.0, { h: 9.5 * (config.townTreeSize || 1) });
-            for (const [x, z, rise, w] of [[6.5, 8.4, 92, 4], [15.5, 7.6, 84, 4.4], [-4.5, 9.2, 76, 3.6], [25, 8.2, 74, 4], [-12, 8.6, 44, 4], [34, 7, 50, 4.2], [-38, 7.4, 8, 4]]) add('farHouse', x, z, { rise, w });
-            if (on('lamps')) L.lamps.push({ x: -8.4, z: 3.08 }, { x: 8.0, z: 3.08 }, { x: 11.6, z: 2.5 });
-            add('picketFence', 0, 2.52, { from: 9.4, to: 21.5, gate: 14.8 });
+            store = add('store', -27.5, ROW, { w: 11, side: 1 });
+            inn = house(-7.5, ROW + 0.03, 'inn', 13.5, 3);
+            home = house(40, ROW + 0.01, 'colonial', 11, 0);
+            cape = house(55.5, ROW + 0.05, 'cape', 9.5, 2);
+            add('picketFence', 0, ROW - 0.075, { from: 33.4, to: 46.6, gate: 40 });
+            if (on('church')) church = add('church', 37, 3.5, {});
+            // The back rows, and the houses up the hill.
+            house(-51, 3.72, 'saltbox', 9, 4); house(-33.5, 3.92, 'colonial', 10.5, 1); house(-15.5, 3.76, 'cape', 9.5, 5); house(3.5, 3.95, 'colonial', 10.5, 2);
+            house(53, 3.74, 'cape', 9.5, 3); house(69, 3.92, 'colonial', 10.5, 4); house(87, 3.72, 'saltbox', 9, 1);
+            house(-24, 5.0, 'cape', 9.5, 0); house(-2, 5.3, 'saltbox', 9, 3); house(42, 5.1, 'colonial', 10.5, 5); house(66, 5.3, 'cape', 9.5, 0); house(96, 5.0, 'saltbox', 9, 2);
+            if (on('bridge') && L.brook) add('bridge', 66.3, 2.4, { len: 15 });
+            if (on('townTree')) add('grandTree', 13, 2.06, { h: 18 * size });
+            if (on('bandstand')) add('bandstand', 1.5, 2.3);
+            add('townSign', -19.5, 2.2);
+            if (on('lamps')) L.lamps.push({ x: -40.5, z: 2.4 }, { x: -17.5, z: 2.4 }, { x: 27, z: 2.4 }, { x: 47.5, z: 2.4 }, { x: -13, z: 1.77 }, { x: 24.5, z: 1.77 });
+            if (on('cocoa') && L.pond) add('cocoaHut', 36.5, 1.76, { w: 5.2 });
+            if (L.pond) add('bench', 27.5, 1.83);
             // The rest of the street, for whoever has the room to see it.
-            const more = [['house', -27.5, 2.95, { style: 'inn', w: 13, side: 1, tint: 3 }], ['house', 27.5, 3.05, { style: 'cape', w: 9.5, side: -1, tint: 1 }], ['house', 39.5, 3.0, { style: 'saltbox', w: 9, side: -1, tint: 2 }],
-                ['house', -41, 3.05, { style: 'colonial', w: 10.5, side: 1, tint: 4 }], ['house', 51, 3.05, { style: 'cape', w: 9.5, side: -1, tint: 5 }], ['house', -53, 3.0, { style: 'saltbox', w: 9, side: 1, tint: 1 }]];
-            for (const [kind, x, z, o] of more) if (Math.abs(x) - o.w / 2 < cam.half(z) - 3) { add(kind, x, z, o); if (on('lamps')) L.lamps.push({ x: x + (x < 0 ? 8.2 : -8.2), z: 3.08 }); }
+            const more = [[90, ROW + 0.04, 'saltbox', 9, 3], [106, ROW, 'colonial', 10.5, 1], [-128, ROW + 0.02, 'cape', 9.5, 2], [124, ROW + 0.05, 'cape', 9.5, 4], [-144, ROW, 'saltbox', 9, 0], [142, ROW + 0.02, 'inn', 13, 5], [-161, ROW + 0.04, 'colonial', 10.5, 3]];
+            for (const [x, z, style, w, tint] of more) if (seen(x, w, z)) { house(x, z, style, w, tint); if (on('lamps')) L.lamps.push({ x: x + (x < 0 ? 9 : -9), z: 2.4 }); }
+            for (const [x, z, style, w, tint] of [[108, 3.9, 'cape', 9.5, 0], [128, 3.74, 'colonial', 10.5, 2], [150, 3.9, 'saltbox', 9, 4], [172, 3.76, 'cape', 9.5, 1], [118, 5.2, 'colonial', 10.5, 3], [146, 5.0, 'cape', 9.5, 5]]) if (seen(x, w, z)) house(x, z, style, w, tint);
         }
-        if (on('snowman')) add('snowman', 9.9, 2.5);
-        if (on('bonfire') && L.pond) add('bonfire', -4.6, 2.0);
-        if (on('cabin')) add('cabin', 0, 0, { fx: 0.81, up: 64 });
-        for (const [x, z, h] of [[-9.6, 5.0, 12], [-1.2, 5.7, 11], [11.6, 5.6, 12], [21.5, 4.25, 13], [-21, 5.4, 11], [6.4, 6.6, 10], [-16, 6.4, 11], [28, 5.6, 12], [-33, 5, 12], [36, 4.6, 13], [-45, 4.8, 12], [47, 5.2, 12]]) {
-            if (Math.abs(x) < cam.half(z) + 6) add('frostTree', x, z, { h });
+        if (on('treeFarm')) { add('treeFarm', 0, 0, { z0: 2.68, z1: 5.7, x0: -116, x1: -61, spread: 30, slant: 26 }); barn = add('barn', -51, ROW + 0.03, { w: 10, side: 1 }); add('railFence', 0, 0, { from: [-118, 2.62], to: [-61, 2.62], snowy: true }); }
+        if (on('sledders') && config.sledders !== 0) add('sledHill', -36, 2.0, { w: 40, h: 5 });
+        if (on('snowman')) add('snowman', -6.5, 2.03);
+        if (on('bonfire') && L.pond) add('bonfire', -22, 1.62);
+        for (const [x, z, h] of [[-40, 3.25, 11], [-21, 3.3, 10], [12, 3.28, 11], [47, 3.25, 11], [76, 3.3, 12], [-4, 4.55, 10], [37, 4.6, 11], [-42, 4.5, 10], [58, 4.55, 10], [98, 3.3, 11], [80, 4.6, 11], [-64, 3.2, 10], [118, 3.3, 11], [-98, 3.3, 11], [140, 4.5, 11], [-124, 3.25, 11], [160, 3.3, 11]]) {
+            if (Math.abs(x) < cam.half(z) + 6 && !(on('treeFarm') && x < -58 && x > -124)) add('frostTree', x, z, { h });
         }
-        for (const [x, z, h] of [[-21.8, 3.08, 8.2], [22.8, 3.08, 9], [17.5, 6.2, 9], [-12, 7.2, 8.5], [26, 6.8, 9.5], [2, 9.5, 8], [-33, 3.1, 9], [34, 3.1, 9.5], [-47, 3.1, 9], [45, 3.1, 9]]) {
-            if (Math.abs(x) < cam.half(z) + 4) add('fir', x, z, { h });
+        for (const [x, z, h] of [[-37.5, 2.93, 9], [-17.5, 2.96, 8.5], [48.5, 2.93, 9], [62, 2.97, 10], [21, 4.4, 9], [-11, 4.45, 9], [78, 3.05, 9], [94, 3.9, 10], [-60, 4.3, 9], [50, 4.5, 9], [10, 5.6, 9], [-36, 5.6, 9], [84, 5.6, 10], [-84, 2.93, 9.5], [100, 2.93, 9], [116, 2.96, 10], [-120, 2.95, 9]]) {
+            if (Math.abs(x) < cam.half(z) + 4 && !(on('treeFarm') && x < -58 && x > -124)) add('fir', x, z, { h });
         }
-        add('fir', cam.at(0.012, 1.18), 1.18, { h: 8.5, near: true, mice: on('mice') });
-        add('boughs', 0, 1, { side: 1 });
-        add('railFence', 0, 0, { from: [cam.at(0.03, 1.0), 1.0], to: [cam.at(0.03, 1.0) - 2.1, 2.2], cardinal: on('cardinal'), rabbits: on('rabbits') });
+        // The lit firs we look down between, in the bottom corners.
+        for (const [fx, z, h, mice] of [[0.03, 1.08, 10.5, true], [0.11, 1.15, 9], [0.2, 1.3, 7.2], [0.895, 1.17, 8.4], [0.945, 1.08, 11], [0.985, 1.24, 7.6]]) add('fir', cam.at(fx, z), z, { h, near: true, lit: true, mice: !!mice && on('mice') });
+        add('railFence', 0, 0, { from: [cam.at(0.0, 1.5) - 1, 1.5], to: [cam.at(0.0, 1.5) + 11, 1.62], cardinal: on('cardinal'), rabbits: on('rabbits') });
 
         // Where people walk. Doors are where they come from and go to; exits
         // are off the edges of the picture.
-        const edgeX = z => cam.half(z) + 2.5;
-        node('store', -14.5, 2.5, { door: village }); node('green', -9.0, 2.5); node('tree', -5.8, 2.5, { linger: on('townTree') });
-        node('fire', -5.9, 2.06, { linger: on('bonfire') }); node('bank', -5.6, 1.6); node('near', -5.3, 1.0, { exit: true });
-        node('west', -edgeX(2.45), 2.45, { exit: true });
-        node('up', -9.4, 3.3); node('roadW', -9.8, 4.42); node('roadE', 10.2, 4.42); node('farW', -edgeX(4.42), 4.42, { exit: true }); node('farE', edgeX(4.42), 4.42, { exit: true });
-        node('down', 9.6, 3.3); node('gateW', 10.6, 2.44); node('gate', 14.8, 2.44); node('house', 14.8, 2.94, { door: village }); node('east', edgeX(2.44), 2.44, { exit: true });
-        edge('west', 'store', 'green', 'tree', 'fire', 'bank', 'near'); edge('green', 'up', 'roadW', 'roadE', 'down', 'gateW', 'gate', 'east');
-        edge('gate', 'house'); edge('farW', 'roadW'); edge('roadE', 'farE');
-        L.road = { z: 4.42, x0: -edgeX(4.42) - 4, x1: edgeX(4.42) + 4 };
-        L.tree = L.things.find(t => t.kind === 'grandTree') || null;
+        node('west', -edgeX(STREET), STREET, { exit: true }); node('farmGate', -51, STREET); node('storeF', -27.5, STREET); node('innF', -7.5, STREET);
+        node('green', 3, STREET); node('churchF', 29, STREET); node('houseF', 40, STREET); node('capeF', 55.5, STREET);
+        node('roadW', 57.8, STREET); node('roadE', 74.8, STREET); node('east', edgeX(STREET), STREET, { exit: true });
+        door('barn', barn, { quiet: true }); door('store', store); door('inn', inn); door('house', home); door('cape', cape);
+        if (church) { node('lych', 30.5, 3.0); door('church', church, { quiet: true }); }
+        node('farm', -66, 3.05, { linger: on('treeFarm') });
+        node('snow', -10.5, 2.17); node('band', -3.5, 2.2, { linger: on('bandstand') && village }); node('tree', 5.5, 2.15, { linger: on('townTree') && village });
+        node('fire', -19.6, 1.7, { linger: on('bonfire') && !!L.pond }); node('bank', -28.5, 1.5); node('low', -23, 1.2); node('near', -10, 1, { exit: true });
+        node('pondW', -13.5, 1.9); node('pondN', 9, 1.9); node('cocoa', 32, 1.85, { linger: on('cocoa') && village && !!L.pond }); node('pondE', 34, 2.0);
+        edge('west', 'farmGate', 'storeF', 'innF', 'green', 'churchF', 'houseF', 'capeF', 'roadW', 'roadE', 'east');
+        edge('farmGate', 'barn'); edge('farmGate', 'farm'); edge('storeF', 'store'); edge('innF', 'inn'); edge('houseF', 'house'); edge('capeF', 'cape'); edge('churchF', 'lych', 'church');
+        edge('innF', 'snow', 'fire', 'bank', 'low', 'near'); edge('snow', 'pondW', 'pondN', 'cocoa', 'pondE', 'houseF');
+        edge('green', 'band', 'tree', 'pondN'); edge('snow', 'band');
+        L.road = { z: STREET - dz(1), x0: -edgeX(STREET) - 6, x1: edgeX(STREET) + 6 };
         return finish(L, cam, config);
     }
 
     function finish(L, cam, config) {
         // The pond's two banks, far to near, in metres and depth.
         if (L.pond) {
-            const left = [], right = [], line = L.pond.line;
+            const left = [], right = [], line = L.pond.line, wob = L.pond.wob || 1;
             for (let i = 0; i < line.length - 1; i++) for (let t = 0; t < 1; t += 0.125) {
                 const a = line[i], b = line[i + 1], e = t * t * (3 - 2 * t);
                 const z = a[0] + (b[0] - a[0]) * t, x = a[1] + (b[1] - a[1]) * e, hw = a[2] + (b[2] - a[2]) * e;
-                const wob = 0.25 * Math.sin(z * 7.3) + 0.15 * Math.sin(z * 17);
-                left.push([x - hw + wob, z]); right.push([x + hw + wob * 0.6, z]);
+                const w = wob * Math.min(1, hw / 8) * (0.25 * Math.sin(z * 43) + 0.15 * Math.sin(z * 97));
+                left.push([x - hw + w, z]); right.push([x + hw + w * 0.6, z]);
             }
             L.pond.left = left; L.pond.right = right;
             // The rink, as an ellipse in metres both ways, for VillageLogic.skate.
             const r = L.pond.rink;
-            r.ellipse = { cx: r.x, cy: (r.z0 + r.z1) / 2 * cam.zm, rx: r.rx, ry: (r.z1 - r.z0) / 2 * cam.zm };
+            r.z = (r.z0 + r.z1) / 2;
+            r.ellipse = { cx: r.x, cy: r.z * cam.zm, rx: r.rx, ry: (r.z1 - r.z0) / 2 * cam.zm };
         }
-        // Whoever is asked for at most: far houses first to go.
+        // Whoever is asked for at most: the houses furthest up the hill are first to go.
         const cap = Math.max(0, Math.round(config.houses ?? 99));
-        const houses = L.things.filter(t => t.kind === 'house' || t.kind === 'farHouse').sort((a, b) => (a.kind === 'farHouse') - (b.kind === 'farHouse') || Math.abs(a.x) - Math.abs(b.x));
+        const houses = L.things.filter(t => t.kind === 'house').sort((a, b) => a.z - b.z || Math.abs(a.x) - Math.abs(b.x));
         for (const h of houses.slice(cap)) L.things.splice(L.things.indexOf(h), 1);
+        // A door nobody lives behind is no door.
+        for (const n of Object.values(L.nodes)) if (n.door && n.at && !L.things.includes(n.at)) n.door = false;
         L.things.sort((a, b) => b.z - a.z);
+        L.tree = L.things.find(t => t.kind === 'grandTree') || null;
         return L;
     }
 
