@@ -1019,7 +1019,8 @@ const WayLogic = (() => {
     // small to see from there) with farSize and farCoat, size; rare: the share of its chances it takes (a bear is not behind every tree); n: how many together; young: [who, how many] that follow the first of them;
     // where: land (the default), water, shore, tree, air; keep: no nearer the road's middle than this, ever; range: how
     // far it wanders from home; pace and run (metres a second); shy: it is off when the traveller comes this near (on the
-    // wing, if it has `wing`); act: what it does between whiles; hours: 'day' or 'night' for those only out then.
+    // wing, if it has `wing`); act: what it does between whiles; hours: 'day' or 'night' for those only out then;
+    // stays: it keeps to its own side of the road, never crossing.
     const WILD = {
         bear: { tall: 1.25, rig: 'grizzly', far: 'bear', rare: 0.3, n: [1, 1], keep: 20, range: 14, pace: 0.7, act: 'amble', big: 1 },
         // The same bear at the water's edge, after fish.
@@ -1032,7 +1033,7 @@ const WayLogic = (() => {
         hedgehog: { tall: 0.15, rig: 'hedgehog', far: 'rabbit', farSize: 0.7, farCoat: [150, 126, 100], n: [1, 1], keep: 6, range: 4, pace: 0.25, act: 'graze', see: 35 },
         hare: { tall: 0.45, rig: 'brownhare', far: 'rabbit', farSize: 1.5, n: [2, 2], keep: 7, range: 3, pace: 2, shy: 16, run: 8, act: 'box', see: 90 },
         squirrel: { tall: 0.22, rig: 'squirrel', far: 'cat', farSize: 0.5, farCoat: [196, 96, 46], n: [1, 2], where: 'tree', keep: 6, pace: 2.2, act: 'climb', see: 45 },
-        wildpony: { tall: 1.3, rig: 'wildpony', far: 'wildpony', n: [3, 6], keep: 8, range: 6, pace: 0.6, shy: 8, run: 6, act: 'graze', big: 1 },
+        wildpony: { tall: 1.3, rig: 'wildpony', far: 'wildpony', n: [3, 6], keep: 8, range: 6, pace: 0.6, shy: 8, run: 6, act: 'graze', big: 1, stays: true },
         ibex: { tall: 1.05, rig: 'ibex', far: 'ibex', n: [3, 5], keep: 7, range: 8, pace: 0.5, act: 'graze' },
         marmot: { tall: 0.35, rig: 'marmot', far: 'rabbit', farSize: 1.3, farCoat: [176, 144, 98], n: [1, 3], keep: 6.5, range: 3, pace: 0.9, shy: 12, run: 4, act: 'sentry', see: 50 },
         moonhare: { tall: 0.45, rig: 'hare', far: 'rabbit', farSize: 1.4, n: [1, 2], keep: 7, range: 6, pace: 1.6, shy: 13, run: 7, act: 'graze', glow: [0.5, 0.7, 1], see: 90 },
@@ -1074,6 +1075,8 @@ const WayLogic = (() => {
         meadow: ['stag', 'stag', 'stag', 'wildpony'], farm: ['stag', 'stag', 'heron'], forest: ['stag', 'stag', 'stag', 'stag', 'bear'], deepwood: ['stag', 'stag', 'stag', 'bear'],
         lake: ['heron', 'swan', 'stag', 'stag', 'bearfishing'], coast: ['heron', 'seal', 'wildpony', 'wildpony'], moor: ['wildpony', 'wildpony', 'stag'], pass: ['ibex', 'ibex', 'ibex', 'bear'], grove: ['moonstag', 'moonstag', 'stag'],
     };
+    // What stands on a verge that nothing walks through: a crossing waits for a stretch without them.
+    const VERGE = new Set(['fence', 'drywall', 'lamp', 'milestone', 'shrine', 'logs', 'camp', 'cart', 'bench', 'sign', 'cairn', 'wall', 'house', 'stall', 'board', 'well', 'clutter']);
     // How much of it there is: the share of the places that could hold somebody that do.
     const WILD_LEVELS = { none: 0, few: 0.15, some: 0.6, plenty: 0.96 };
     // (The line of a bough over the road, height and reach, as WayModels builds it: a squirrel's way out along one.)
@@ -1091,6 +1094,15 @@ const WayLogic = (() => {
             cache.set(cz, out = []);
             const z0 = cz * CHUNK;
             let trees = null;
+            // Whether the way over the road at z is clear for a party standing d from its middle: no fence, wall, lamp or
+            // the like on either verge for them to walk through.
+            const seen = new Map(), scatter = (i, j) => { const key = i + ',' + j; if (!seen.has(key)) seen.set(key, w.scatter(i, j)); return seen.get(key); };
+            const clearAcross = (z, d) => {
+                const cx = Math.floor(w.at(z).x / CHUNK);
+                for (let j = Math.floor((z - 7) / CHUNK); j <= Math.floor((z + 7) / CHUNK); j++) for (let i = cx - 1; i <= cx + 1; i++)
+                    for (const it of scatter(i, j)) if (VERGE.has(it.k) && Math.abs(it.z - z) < (it.len || 1.5) / 2 + 4 && Math.abs(w.lateral(it.x, it.z)) < Math.abs(d) + 1) return false;
+                return true;
+            };
             const fits = (K, x, z) => {
                 const r = w.at(z), d = (x - r.x) * r.cos, ad = Math.abs(d), p = r.near, where = K.where || 'land';
                 if (ad < Math.max(K.keep, where === 'air' ? 0 : 6) || ad > (where === 'air' ? 110 : 85)) return null;
@@ -1137,7 +1149,7 @@ const WayLogic = (() => {
                     const party = { kind, n, x, z, y: ok.y, d: ok.d, roll, v: h(7), biome: b.biome };
                     // Some will cross the road when the traveller is still a long way off (those with dry ground to go to
                     // on the other side, and no bridge to cross by): the most that wildlife can do to be seen.
-                    if (!K.bird && K.rig !== 'grizzly' && K.act !== 'follow' && h(9) < (show ? 0.6 : 0.4) && w.bridge(z) === null) { const over = w.place(z, -ok.d)[0]; if (fits(K, over, z)) party.cross = true; }
+                    if (!K.bird && !K.stays && K.rig !== 'grizzly' && K.act !== 'follow' && h(9) < (show ? 0.6 : 0.4) && w.bridge(z) === null) { const over = w.place(z, -ok.d)[0]; if (fits(K, over, z) && clearAcross(z, ok.d)) party.cross = true; }
                     // The big ones stand where they can be seen coming: a clear line from the road forty metres back.
                     if (show) { const from = [w.place(z - 40, 0.9)[0], 0, z - 40]; from[1] = w.surface(from[0], from[2]) + 2.5; const dx = x - from[0], dy = ok.y + 1 - from[1], dz = z - from[2], far = Math.hypot(dx, dy, dz); if (sightline(w, from, [dx / far, dy / far, dz / far], far) < far - 1.3) { fallback ??= party; continue; } }
                     if (kind === 'bear') { const cx = Math.floor(x / CHUNK); let best = 15; for (const it of [cx - 1, cx, cx + 1].flatMap(c => w.scatter(c, cz))) if (it.k === 'tree' && it.kind !== 'snag' && Math.abs(w.lateral(it.x, it.z)) > K.keep) { const far = Math.hypot(it.x - x, it.z - z); if (far < best) { best = far; party.post = { x: it.x, z: it.z, r: 0.5 * it.s * 1.25 }; } } }
