@@ -4815,7 +4815,9 @@ shaders (unchanged on a WebGL 2 context), no extensions.
   behind), the traveller and one another, and anything that still comes
   within two paces of the lens thins out to nothing in the shader, so no
   head or branch fills a corner of the picture. A drag turns the view and it eases back after four
-  seconds; `onScroll` turns it with Android's pages.
+  seconds (the page is `touch-action: none` while *Touch* is on, or a
+  phone's browser takes the finger for a pan a few pixels in and cancels
+  the drag: each swipe moved it only a little, 2026-11-17); `onScroll` turns it with Android's pages.
 - **Keys:** `V` camera, `T` time of day, `X` weather, `N` on to the next
   place (the walk jumps to just short of it, through the same dip).
 
@@ -5336,7 +5338,10 @@ creature, marking or design is taken from one.
     the parties with dry ground opposite cross the road, once, when the
     traveller is 40 to 62 m short of them, at a walk (and at a run if the
     traveller is within 32 m while they are on it; a unit test holds them
-    14 m clear). Swallows by day and bats by night are about the roofs in
+    14 m clear). They cross only where the verge is open: no fence, dry
+    wall, lamp or the like within a few metres either side (2026-11-17: the
+    owner saw them walk through the walls), and wild ponies never cross at
+    all. Swallows by day and bats by night are about the roofs in
     a town. Butterflies and swallows are drawn half as big again. Nobody
     appears at full size at the edge of sight: they grow over the last of
     the distance. New: the bear fishing at a lake's edge and scratching

@@ -112,6 +112,8 @@ class WayfarerAnimationManager {
                 this.glance.pitch = WayLogic.clamp(from.pitch + (from.y - y) / this.height * 1.2, -0.5, 0.7);
                 this.glance.idle = 0;
             };
+            // (Without this a phone's browser takes the finger for a page pan a few pixels in, and cancels the drag.)
+            document.documentElement.style.touchAction = this.config.touch ? 'none' : '';
             this.stopGestures = this.host.gestures({
                 start: (x, y) => {
                     // In orbit a drag turns the camera about the traveller and it stays; otherwise it turns the head, which eases back.
@@ -144,6 +146,7 @@ class WayfarerAnimationManager {
         cancelAnimationFrame(this.animationId);
         window.removeEventListener('resize', this.onResize);
         this.stopGestures?.();
+        document.documentElement.style.touchAction = '';
         document.removeEventListener('wheel', this.onWheel);
         this.canvas?.removeEventListener('webglcontextlost', this.onLost);
         this.canvas?.removeEventListener('webglcontextrestored', this.onRestored);
@@ -253,6 +256,7 @@ class WayfarerAnimationManager {
         if (before.traveller !== config.traveller) { this.shift = WayLogic.shiftStart(this.world.seed); this.stealth = WayLogic.stealthStart(this.world.seed); }
         if (before.camera !== config.camera) { this.cut = 0; this.shot.t = 0; this.shot.z0 = this.journey.z; this.snap = true; }
         if (!config.touch) this.glance.yaw = this.glance.pitch = 0;
+        if (this.stopGestures) document.documentElement.style.touchAction = config.touch ? 'none' : '';
         if (before.orbitAzimuth !== config.orbitAzimuth || before.orbitElevation !== config.orbitElevation || before.orbitDistance !== config.orbitDistance) this.orbit = this.orbitFrom(config);
     }
 

@@ -1129,6 +1129,23 @@ test('wildlife: each country has its own, in the same places every time, off the
     assert.ok(fled > 0, 'nobody shy was ever startled');
 });
 
+test('wild animals cross the road only where the verge is open, and wild ponies never do', () => {
+    let crossings = 0;
+    for (const biome of ['meadow', 'moor', 'farm', 'coast']) {
+        const w = L.world(7, { biomes: [biome] });
+        for (let cz = 1700; cz < 1900; cz++) for (const g of w.wildlife(cz)) {
+            if (!g.cross) continue;
+            crossings++;
+            assert.ok(!L.WILD[g.kind].stays, `a ${g.kind} crosses the road`);
+            const cx = Math.floor(w.at(g.z).x / 64);
+            for (let j = Math.floor((g.z - 7) / 64); j <= Math.floor((g.z + 7) / 64); j++) for (let i = cx - 1; i <= cx + 1; i++) for (const it of w.scatter(i, j)) {
+                if ((it.k === 'fence' || it.k === 'drywall' || it.k === 'lamp') && Math.abs(it.z - g.z) < (it.len || 1.5) / 2 + 3.9) assert.ok(Math.abs(w.lateral(it.x, it.z)) > Math.abs(g.d), `a ${g.kind} crosses ${biome}'s road through a ${it.k}`);
+            }
+        }
+    }
+    assert.ok(crossings > 20, `only ${crossings} crossings`);
+});
+
 test('wildlife is seen: with the camera behind the traveller, a wild animal is plainly in the picture most of the time on the open road, more of the time the more there is', async () => {
     const { sight } = await import('./wayfarer-sight.mjs');
     // (Measured 2026-11-16 over 2 km and two seeds: on the open road at some, 76% in the meadow, 89% on the moor, 53% in
