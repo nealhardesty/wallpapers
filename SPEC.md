@@ -3103,9 +3103,18 @@ plan has been corrected to match.
   playback to the newest visible stage. The others pause, keep their
   last frame and release the decoder, so ten new tabs don't mean ten
   decoders and ten soundtracks.
+  - Only a stage someone can see claims: `document.hidden` *or* the
+    stage's own pause. On Android `document.hidden` is never true (the
+    wallpaper and the settings screen are WebViews that stay "visible"
+    behind other apps; visibility arrives as `WP.power({ hidden })`), so
+    without the second check a hidden WebView reacting to a settings
+    change took playback from the one on screen and kept it.
+  - A tap on "Playing in another tab" takes playback back.
 - **Audio (`startMuted`, on by default):** every start is muted, and a
-  small 🔇 shows for a few seconds. `m` toggles, as does a tap on the
-  icon. With `startMuted` off, the wallpaper tries to play with sound and
+  small 🔇 shows for a few seconds. `m` toggles, as does a tap anywhere
+  on the video (`tapForSound`, on by default; off, only a tap on the
+  icon): a phone has no `m`, and the icon is gone after 4 s. Switching
+  `startMuted` in the panel applies to what's playing. With `startMuted` off, the wallpaper tries to play with sound and
   falls back to muted if the browser's autoplay policy refuses (it will
   without a recent user gesture), then offers a "tap for sound" toast.
   Volume is a setting, and is remembered.
@@ -3328,7 +3337,7 @@ default is to spend as little as possible.
 **Settings** (suggested keys)
 - `server`, `source`, `playlistId`, `libraryId`, `libraryFilter`,
   `order` (shuffle), `segment`
-- `startMuted` (on), `volume`
+- `startMuted` (on), `volume`, `tapForSound` (on)
 - `subtitles` (always), `subtitleLanguage` (`eng`), `burnInImageSubs`
 - `frame` (Old TV), `fit`, `showTitle`
 - `bigTvWood` (walnut), `bigTvStyle` (seventies), `bigTvControls`

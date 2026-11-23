@@ -47,8 +47,9 @@
           options: [[1, '1 minute'], [3, '3 minutes'], [10, '10 minutes']] },
 
         { group: '🔈 Sound and subtitles' },
-        { key: 'startMuted', label: 'Start muted', type: 'toggle', help: 'M or a tap on 🔇 turns the sound on. Browsers only allow sound after you click or tap.' },
+        { key: 'startMuted', label: 'Start muted', type: 'toggle', help: 'M or a tap turns the sound on. Browsers only allow sound after you click or tap.' },
         { key: 'volume', label: 'Volume', type: 'range', min: 0, max: 1, step: 0.05, scale: 100, unit: '%' },
+        { key: 'tapForSound', label: 'Tap for sound', type: 'toggle', help: 'A tap anywhere on the video turns the sound on or off. Off, only a tap on 🔇 does, so stray taps on a home screen stay quiet.' },
         { key: 'subtitles', label: 'Subtitles', type: 'select', options: [['always', '💬 Always'], ['forced', '🪧 Forced only (signs and foreign speech)'], ['off', '🚫 Off']],
           help: 'With audio in another language, forced only shows full subtitles. S steps through the tracks, and remembers your pick.' },
         { key: 'subtitleLanguage', label: 'Language', type: 'select', options: LANGUAGES, when: config => config.subtitles !== 'off' },

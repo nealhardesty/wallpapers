@@ -14,6 +14,7 @@ WP.defaults('jellyfin', {
     clipMinutes: 3,            // a clip's length: 1, 3 or 10 minutes
     startMuted: true,          // every start is muted; m or a tap for sound
     volume: 0.6,
+    tapForSound: true,         // a tap anywhere on the video switches the sound (else only the 🔇 badge)
     subtitles: 'always',       // always, forced (only forced tracks), off
     subtitleLanguage: 'eng',   // ISO 639-2
     burnInImageSubs: true,     // image subtitles need the server to burn them in (a transcode)
