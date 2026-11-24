@@ -960,8 +960,9 @@ const WayLogic = (() => {
         const r = w.at(j.z), ease = (v, to, secs) => v + (to - v) * (1 - Math.exp(-dt / secs));
         const inTown = r.near.radius && Math.abs(r.dz) < r.near.radius ? 1 : 0;
         let want = WALK * options.pace * (inTown ? 0.8 : 1), lookTo = 0, sitTo = 0, dTo = 0;
-        // Which way the traveller walks, as an angle from the road's line (j.face): by default toward the road's middle a few paces on.
-        let faceTo = Math.atan2(-j.d, 3.5), across = 0, left = 0;
+        // Which way the traveller walks, as an angle from the road's line (j.face): by default toward the road's middle a few
+        // paces on, or toward the right-hand side of it (options.keep, metres) while somebody passes.
+        let faceTo = Math.atan2((j.mode === 'walk' ? options.keep || 0 : 0) - j.d, 3.5), across = 0, left = 0;
         j.sinceRest += dt;
         j.sinceGaze += dt;
         if (j.mode === 'walk') {
@@ -1186,12 +1187,13 @@ const WayLogic = (() => {
             const to = Math.atan2(dx, dz);
             a.yaw = turnTo(a.yaw, to, dt * 5, most);
             const step = Math.min(speed * Math.max(0.1, Math.cos(Math.min(Math.abs(turnTo(0, to - a.yaw, 1)), Math.PI / 2))) * dt, left);
-            a.x += Math.sin(a.yaw) * step; a.z += Math.cos(a.yaw) * step; a.gait += step; a.moving = ease(a.moving, 1, 0.2);
+            a.x += Math.sin(a.yaw) * step; a.z += Math.cos(a.yaw) * step; a.gait += step; a.vel = step / Math.max(dt, 1e-3); a.moving = ease(a.moving, 1, 0.2);
             return left - step;
         };
         const dry = (x, z) => Math.abs(w.lateral(x, z)) >= K.keep && w.ground(x, z) > w.water(x, z) + 0.4;
         a.alert = ease(a.alert, near < (K.shy || 8) + 12 ? 1 : 0, 0.5);
         a.timer -= dt;
+        a.vel = 0;          // how fast it is going this step, for its gait (go() says)
         if (K.swarm) return a;
         if (act === 'climb') {
             // Up the trunk (or out along the bough), a look about, and down again to forage at the foot of it.
@@ -1633,7 +1635,7 @@ const WayLogic = (() => {
             // Standing or shuffling, it faces the fire if it has a place by one, and down the road otherwise.
             const gone = dt > 1e-4 ? Math.hypot(c.x - x0, c.z - z0) / dt : 0;
             if (!going) c.yaw = turnTo(c.yaw, spot && (rest > 0.5 || gap < 0.6) ? spot.face : c.mode === 'go' && !camping ? ahead0 : c.yaw, dt * 3, most);
-            c.gait += Math.min(gone, kind.top) * dt;
+            c.gait += Math.min(gone, kind.top) * dt; c.vel = Math.min(gone, kind.top);
             c.alt = ease(c.alt, 0, 0.3); c.wing = ease(c.wing, 0, 0.3);
             if (c.speed > 0.3) rest = 0;
         }
@@ -1800,6 +1802,57 @@ const WayLogic = (() => {
         return c;
     }
 
+    // ---- Four feet (the eighth pass) ----------------------------------------------------------------
+    // How a four-legged thing puts its feet down. Each gait: when each foot goes (fore left, fore right, hind left,
+    // hind right, as a share of a turn), the share of the turn a foot is on the ground (duty), how high it lifts (a share
+    // of the hip's height), how much of what the leg can reach a stance sweeps (reach), and the shortest turn, in hip
+    // heights, for those that spend part of it in the air (least). A turn is as long as the stance's sweep makes it: a
+    // foot on the ground goes back under the body exactly as fast as the body goes forward, so it stays where it was put.
+    const GAIT = {
+        walk: { feet: [0, 0.5, 0.75, 0.25], duty: 0.64, lift: 0.1, reach: 0.92, least: 0 },
+        trot: { feet: [0, 0.5, 0.5, 0], duty: 0.46, lift: 0.15, reach: 0.96, least: 0 },
+        gallop: { feet: [0.5, 0.6, 0, 0.1], duty: 0.32, lift: 0.17, reach: 1, least: 2.6 },
+        bound: { feet: [0, 0.08, 0.5, 0.58], duty: 0.34, lift: 0.14, reach: 1, least: 2.2 },
+        hop: { feet: [0, 0.04, 0.42, 0.46], duty: 0.3, lift: 0.08, reach: 1, least: 2.0 },
+        plod: { feet: [0, 0.5, 0.75, 0.25], duty: 0.74, lift: 0.06, reach: 0.85, least: 0 },
+        waddle: { feet: [0, 0.5, 0.5, 0], duty: 0.6, lift: 0.08, reach: 0.9, least: 0 },
+        scuttle: { feet: [0, 0.5, 0.5, 0], duty: 0.5, lift: 0.1, reach: 0.9, least: 0 },
+    };
+    // Which gaits, and how much of each, at a speed: a walker or a trotter walks, trots and gallops (or bounds) by its
+    // Froude number (speed² over g × leg), as real animals change gait at the same Froude number whatever their size;
+    // hoppers, waddlers and the rest keep their own. Without a speed, the kind's own gait. Into `out`, as [name, weight].
+    const gaitMixOut = [['walk', 1], ['trot', 0], ['gallop', 0]];
+    function gaitMix(base, fast, speed, hip) {
+        const out = gaitMixOut;
+        if ((base !== 'walk' && base !== 'trot') || !(speed >= 0)) { out[0][0] = base; out[0][1] = 1; out[1][1] = 0; out[2][1] = 0; return out; }
+        const fr = speed * speed / (9.8 * Math.max(0.03, hip)), gallop = smooth(1.5, 2.6, fr), walk = (1 - smooth(0.22, 0.5, fr)) * (1 - gallop);
+        out[0][0] = 'walk'; out[0][1] = walk; out[1][0] = 'trot'; out[1][1] = Math.max(0, 1 - walk - gallop); out[2][0] = fast; out[2][1] = gallop;
+        return out;
+    }
+    // Where foot i of a gait is at `cycles` of that gait: [forward of where it stands, up, swing (0 on the ground,
+    // rising to 1 at the top of a step)], for a stance that sweeps from +half to -half.
+    const footOut = [0, 0, 0];
+    function gaitFoot(name, cycles, i, half, lift) {
+        const G = GAIT[name] || GAIT.walk, ph = cycles + G.feet[i], f = ph - Math.floor(ph), d = G.duty;
+        if (f < d) { footOut[0] = half * (1 - 2 * f / d); footOut[1] = 0; footOut[2] = 0; return footOut; }
+        const u = (f - d) / (1 - d), e = u * u * (3 - 2 * u), s = Math.sin(Math.PI * u);
+        footOut[0] = half * (2 * e - 1); footOut[1] = lift * s; footOut[2] = s;
+        return footOut;
+    }
+    // Two bones from a hip to a foot in the plane of the leg: (dy, dz) is where the foot is from the hip (y up, z
+    // forward), l1 and l2 the bones. A limb's angle is how far it is turned back from straight down. bend +1 puts the
+    // joint forward of the line and folds the lower bone back (a fore leg's wrist, which is its "knee"); -1 puts it
+    // behind and folds the lower bone forward (a hind leg's hock). Out of reach, the leg points at the foot, straight.
+    // Returns [upper angle, the joint's turn].
+    const legOut = [0, 0];
+    function legSolve(dy, dz, l1, l2, bend) {
+        const R = Math.hypot(dy, dz) || 1e-6, D = clamp(R, Math.abs(l1 - l2) + 1e-4, (l1 + l2) * 0.9995), a = Math.atan2(-dz, -dy);
+        const b = Math.acos(clamp((l1 * l1 + D * D - l2 * l2) / (2 * l1 * D), -1, 1)), up = a - bend * b;
+        const ty = dy * D / R, tz = dz * D / R, ky = -l1 * Math.cos(up), kz = -l1 * Math.sin(up);
+        legOut[0] = up; legOut[1] = wrapPi(Math.atan2(-(tz - kz), -(ty - ky)) - up);
+        return legOut;
+    }
+
     return {
         RAD, TAU, SLOT, CHUNK, RUN, BIOMES, LAND, SEASONS, ROAD, GRAND, WEATHER, WALK, SHOTS, beyondWall,
         clamp, mix, mix3, smooth, hash, noise1, noise2,
@@ -1807,5 +1860,6 @@ const WayLogic = (() => {
         WILD, WILDLIFE, WILD_SHOW, WILD_LEVELS, wildStart, wildStep, wildSeen, waterSeen,
         COMPANIONS, COMPANION, GROUPS, PARTY_MAX, party, partyStart, partyChange, companionStart, companionStep, FORMS, SHIFT, shiftStart, shiftStep, stealthStart, stealthStep, spook, fenceAt, vault,
         journeyStart, journeyStep, standing, sight, camera, ORBIT, orbitStart, orbitGrab, orbitDrag, orbitStep, orbitCamera, sightline, inOpen, wrapPi,
+        GAIT, gaitMix, gaitFoot, legSolve,
     };
 })();

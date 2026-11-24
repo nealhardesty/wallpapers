@@ -214,8 +214,19 @@ const WayActors = (() => {
         seal: { len: 1.5, tall: 0.3, girth: 0.3, neck: [0.3, 0.5], head: 0.19, coat: [120, 124, 134], face: [120, 124, 134], legs: [100, 104, 114], tail: 0.3, ears: 0 },
         rabbit: { len: 0.3, tall: 0.16, girth: 0.09, neck: [0.05, 0.8], head: 0.075, coat: [176, 150, 120], face: [176, 150, 120], legs: [176, 150, 120], tail: 0.05, brush: [250, 250, 250], ears: 3 },
     };
+    // The legs as the near rig has them (WayCompanions' legsOf): a hip a little nearer the ground than the leg is long,
+    // so a fore leg stands all but straight and a hind leg in its zig-zag; how far a foot can go under its hip, and how
+    // long a turn of each gait is.
+    function beastLegs(b) {
+        if (b.bones) return b.bones;
+        const hip = b.tall - 0.6 * b.girth, shin = b.tall * 0.42, fore = Math.max(shin * 0.8, hip / 0.975 - shin), hind = Math.max(shin * 0.8, hip / 0.93 - shin);
+        const halfOf = (l, slide) => { const r = 0.995 * (l + shin); return Math.sqrt(Math.max(0, r * r - hip * hip)) / (1 - slide); };
+        const half = Math.min(halfOf(fore, 0.4), halfOf(hind, 0.15)), cycle = {};
+        for (const name in L.GAIT) { const G = L.GAIT[name]; cycle[name] = Math.max(2 * half * G.reach / G.duty, G.least * hip, 1e-3); }
+        return (b.bones = { hip, shin, fore, hind, half, cycle });
+    }
     function beastParts(kind) {
-        const b = BEASTS[kind], k = 'beast:' + kind;
+        const b = BEASTS[kind], k = 'beast:' + kind, LG = beastLegs(b);
         return {
             body: part(k + ':body', s => {
                 s.paint(C.white, 1).fx(0).blob(0, 0, 0, b.girth, b.girth * 0.95, b.len / 2, { segs: 7, bands: 4, lump: b.wool || 0.04, seed: 0.4, under: 0.6 });
@@ -239,27 +250,54 @@ const WayActors = (() => {
                     if (b.antlers) for (let i = 0; i < 3; i++) s.paint([150, 124, 96], 0).prism(3, x * b.head * 0.4, b.head * 0.6 + i * 0.13, -i * 0.04, 0.022, b.head * 0.6 + i * 0.13 + 0.26, 0.006, { dx: x * (0.1 + 0.1 * i), dz: i === 1 ? 0.14 : -0.06 });
                 }
             }),
-            upper: part(k + ':upper', s => s.paint(C.white, 1).fx(0).prism(4, 0, -b.tall * 0.42, 0, b.girth * 0.2, 0, b.girth * 0.34, { foot: 0.85 })),
-            lower: part(k + ':lower', s => s.paint(b.legs, 0).fx(0).prism(4, 0, -b.tall * 0.42, 0, b.girth * 0.17, 0, b.girth * 0.2)),
+            fore: part(k + ':fore', s => s.paint(C.white, 1).fx(0).prism(5, 0, -LG.fore - b.girth * 0.1, 0, b.girth * 0.2, b.girth * 0.1, b.girth * 0.34, { foot: 0.85 })),
+            hind: part(k + ':hind', s => s.paint(C.white, 1).fx(0).prism(5, 0, -LG.hind - b.girth * 0.1, 0, b.girth * 0.22, b.girth * 0.1, b.girth * 0.4, { foot: 0.85 })),
+            lower: part(k + ':lower', s => s.paint(b.legs, 0).fx(0).prism(5, 0, -LG.shin, 0, b.girth * 0.15, 0, b.girth * 0.2).prism(5, 0, -LG.shin - 0.004, 0.01, b.girth * 0.17, -LG.shin + b.girth * 0.22, b.girth * 0.15, { cap: true })),
             tail: part(k + ':tail', s => {
                 s.paint(b.mane || C.white, b.mane ? 0 : 1).fx(0).prism(5, 0, 0, 0, b.girth * (b.brush ? 0.34 : 0.14), b.tail * 0.6, b.girth * (b.brush ? 0.5 : 0.12), { cap: true });
                 s.paint(b.brush || b.mane || C.white, b.brush || b.mane ? 0 : 1).prism(5, 0, b.tail * 0.6, 0, b.girth * (b.brush ? 0.5 : 0.12), b.tail, 0);
             }),
         };
     }
-    // pose: { yaw, gait (0 to 1 a stride), moving, graze (head down), t, size, sit }.
+    // pose: { yaw, gait (turns of its stride), stride (metres to a turn), speed (metres a second), base (its own gait),
+    // moving, graze (head down), t, size, sit }. The feet are put down and the legs solved as the near rig's are
+    // (WayCompanions.quad), so an animal walks the same as it comes nearer and changes to its finer model.
+    const MIX = [['walk', 0], ['walk', 0], ['walk', 0]], FEET = [[-1, 1], [1, 1], [-1, -1], [1, -1]];
     function beast(out, st, kind, x, y, z, pose, coat) {
-        const b = BEASTS[kind], p = beastParts(kind), size = pose.size || 1, tau = pose.gait * TAU, mv = pose.moving || 0, sit = pose.sit || 0;
+        const b = BEASTS[kind], p = beastParts(kind), LG = beastLegs(b), size = pose.size || 1, mv = pose.moving || 0, sit = pose.sit || 0;
+        const base = pose.base || (kind === 'rabbit' ? 'hop' : 'walk'), metres = (pose.gait || 0) * (pose.stride || 1.3) / size;
+        const m = L.gaitMix(base, 'gallop', pose.bound ? Math.max(pose.speed || 0, 9) : pose.speed, b.tall * size);
+        for (let k = 0; k < 3; k++) { MIX[k][0] = m[k][0]; MIX[k][1] = m[k][1]; }
+        let bob = 0, pitch = 0, hop = 0;
+        for (const [name, w] of MIX) {
+            if (w <= 0) continue;
+            const a = TAU * metres / LG.cycle[name];
+            bob += w * 0.02 * Math.sin(a * 2); if (name === 'gallop' || name === 'bound' || name === 'hop') { pitch += w * (name === 'hop' ? 0.3 : 0.18) * Math.cos(a); hop += w * Math.max(0, Math.sin(a)) * (name === 'hop' ? 0.5 : 0.12); }
+        }
         tints[1] = coat || b.coat;
         const put = model => out.stamp(model, st.top, tints);
-        const hop = kind === 'rabbit' || pose.bound ? Math.abs(Math.sin(tau)) * 0.5 * b.tall * mv : 0;
-        st.reset(x, y, z, pose.yaw, size).move(0, b.tall - b.girth * 0.25 + 0.02 * Math.sin(tau * 2) * mv + hop, 0).rx(-0.28 * sit + (pose.bound ? -0.25 * Math.cos(tau) * mv : 0));
+        const Hb = b.tall - b.girth * 0.25 + bob * mv * b.tall + hop * b.tall * mv, theta = -0.28 * sit - pitch * mv;
+        st.reset(x, y, z, pose.yaw, size).move(0, Hb, 0).rx(theta);
         put(p.body);
-        for (const [sx, sz, ph] of [[-1, 1, 0], [1, 1, Math.PI], [-1, -1, Math.PI], [1, -1, 0]]) {
-            const a = tau + ph + (pose.bound ? (sz > 0 ? 0 : 0.6) - ph : 0), swing = 0.5 * Math.sin(a) * mv, knee = 0.7 * Math.max(0, Math.cos(a)) * mv;
-            st.push().move(sx * b.girth * 0.55, -b.girth * 0.35, sz * b.len * 0.36).rx(-swing + (sz < 0 ? 1.15 * sit : -0.25 * sit) + 0.28 * sit);
-            put(p.upper);
-            st.move(0, -b.tall * 0.4, 0).rx(knee * (sz > 0 ? -1 : 1) + (sz < 0 ? -2.0 * sit : 0));
+        const c = Math.cos(theta), sn = Math.sin(theta), ik = 1 - sit;
+        for (let i = 0; i < 4; i++) {
+            const [sx, sz] = FEET[i], fore = sz > 0, l1 = fore ? LG.fore : LG.hind, hy = -b.girth * 0.35, hz0 = sz * b.len * 0.36;
+            let up = sz < 0 ? 1.15 * sit + 0.28 * sit : -0.25 * sit + 0.28 * sit, knee = sz < 0 ? -2.0 * sit : 0, hz = hz0;
+            if (ik > 0) {
+                let fz = 0, fy = 0;
+                for (const [name, w] of MIX) {
+                    if (w <= 0) continue;
+                    const G = L.GAIT[name], cyc = LG.cycle[name], f = L.gaitFoot(name, metres / cyc, i, Math.min(0.5 * G.duty * cyc, LG.half) * mv, G.lift * LG.hip * mv);
+                    fz += w * f[0]; fy += w * f[1];
+                }
+                hz = hz0 + ik * (fore ? 0.4 : 0.15) * fz;
+                const py = Hb + hy * c - hz * sn, pz = hy * sn + hz * c, dy = fy + hop * b.tall * mv * 0.5 - py, dz = hz0 + fz - pz;
+                const [u, k] = L.legSolve(dy * c + dz * sn, -dy * sn + dz * c, l1, LG.shin, fore ? 1 : -1);
+                up = L.mix(up, u, ik); knee = L.mix(knee, k, ik);
+            }
+            st.push().move(sx * b.girth * 0.55, hy, hz).rx(up);
+            put(fore ? p.fore : p.hind);
+            st.move(0, -l1, 0).rx(knee);
             put(p.lower);
             st.pop();
         }
