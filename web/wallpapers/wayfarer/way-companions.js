@@ -111,7 +111,7 @@ const WayCompanions = (() => {
     });
     function quadParts(id, lite = false) {
         const F = lite ? (path => path) : finer;
-        const q = KINDS[id], g = q.girth * (1 + 0.16 * (q.fluff || 0)), len = q.len, h = q.head, legL = q.tall * 0.42, leg = q.leg, deep = q.deep ?? 1.04, k = `quad:${id}:${lite ? 'lite' : 'fine'}:`;
+        const q = KINDS[id], g = q.girth * (1 + 0.16 * (q.fluff || 0)), len = q.len, h = q.head, leg = q.leg, deep = q.deep ?? 1.04, k = `quad:${id}:${lite ? 'lite' : 'fine'}:`;
         const dye = name => (x, y, z) => (q.mark && q.mark(name, x, y, z)) || (name === 'body' && q.under && y < -0.42 * g ? q.under : null);
         const furry = q.shag || q.fluff ? shag : null, LG = legsOf(q);
         return {
@@ -311,7 +311,7 @@ const WayCompanions = (() => {
                 // the hip to where the fetlock must be, in the body's own frame (the body is pitched by theta).
                 hz = hz0 + ik * SLIDE[fore ? 0 : 1] * fz;
                 const py = Hb + hy * c - hz * sn + hx * sr, pz = hy * sn + hz * c;
-                const ty = LG.contact + fy + air * mv * q.tall * 0.5, tz = hz0 + (fore ? 0.03 : -0.02) * hipH + fz;
+                const ty = LG.contact * Math.cos(splay) + fy + air * mv * q.tall * 0.5, tz = hz0 + (fore ? 0.03 : -0.02) * hipH + fz;
                 const dy = ty - py, dz = tz - pz, by = (dy * c + dz * sn) / Math.cos(splay), bz = -dy * sn + dz * c;
                 const [u, k] = L.legSolve(by, bz, l1, LG.shin, fore ? 1 : -1);
                 up = L.mix(up, u, ik); knee = L.mix(knee, k, ik);

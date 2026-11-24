@@ -547,6 +547,7 @@ class WayfarerAnimationManager {
     // Everyone's own small life.
     stepActors(dt, me) {
         const L = WayLogic, w = this.world, t = this.seconds, cam = this.cam;
+        const ease = (v, to) => (v || 0) + (to - (v || 0)) * (dt > 1e-4 ? 1 - Math.exp(-dt / 0.25) : 0);          // (an animal's speed, for its gait: a quarter of a second behind)
         // A sidestep: whoever is on foot gives way to the camera, the traveller and each other, and comes back after,
         // walked out to the side of the road (WayLogic.giveWay).
         const folk = [];
@@ -607,7 +608,7 @@ class WayfarerAnimationManager {
                 if (shy && a.state !== 'flee' && near < (a.kind === 'hen' ? 3 : 14)) { a.state = 'flee'; a.timer = a.kind === 'hen' ? 1.2 : 4.5; a.turn = Math.atan2(-dx, -dz) + (a.v - 0.5); }
                 if (a.state === 'flee') {
                     const speed = a.kind === 'deer' ? 7 : a.kind === 'hen' ? 2 : 4;
-                    a.x += Math.sin(a.turn) * speed * dt; a.z += Math.cos(a.turn) * speed * dt; a.yaw = a.turn; a.gait += speed * dt / this.farGait(a.kind, 0).stride; a.vel = speed; a.moving = 1; a.graze = 0;
+                    a.x += Math.sin(a.turn) * speed * dt; a.z += Math.cos(a.turn) * speed * dt; a.yaw = a.turn; a.gait += speed * dt / this.farGait(a.kind, 0).stride; a.vel = ease(a.vel, speed); a.moving = 1; a.graze = 0;
                     if (a.timer < 0) { a.state = 'idle'; a.timer = 6; a.x0 = a.x; a.z0 = a.z; }
                     continue;
                 }
@@ -625,9 +626,9 @@ class WayfarerAnimationManager {
                     if (turn < -Math.PI) turn += 2 * Math.PI;
                     a.yaw += turn * Math.min(1, dt * 2);
                     const speed = a.kind === 'rabbit' ? 1.6 : 0.55;
-                    a.x += Math.sin(a.yaw) * speed * dt; a.z += Math.cos(a.yaw) * speed * dt; a.gait += speed * dt / this.farGait(a.kind, 0).stride; a.vel = speed;
+                    a.x += Math.sin(a.yaw) * speed * dt; a.z += Math.cos(a.yaw) * speed * dt; a.gait += speed * dt / this.farGait(a.kind, 0).stride; a.vel = ease(a.vel, speed);
                 } else {
-                    a.vel = 0;
+                    a.vel = ease(a.vel, 0);
                 }
                 if (alert) a.head = L.clamp(Math.atan2(dx, dz) - a.yaw, -1.2, 1.2); else a.head = 0;
             }

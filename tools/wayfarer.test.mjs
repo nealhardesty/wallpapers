@@ -1183,11 +1183,13 @@ test('four feet (the eighth pass): wrists fold back and hocks forward, a foot on
     }
     // Every four-legged kind, near and lite, at the speeds of a walk, a trot and a run.
     const out = new Soup(), st = new Stack();
+    let checked = 0;
     // (Every kind at 30 fps; a few of every size at 10 and 120 too; the lite rigs at a trot.)
     const FEW = ['deer', 'horse', 'cat', 'piglet', 'hedgehog', 'grizzly'];
     for (const id of Object.keys(K.KINDS)) for (const lite of [false, true]) for (const fr of lite ? [0.6] : [0.1, 0.6, 3]) {
         const q = K.KINDS[id], size = q.size || 1, speed = Math.sqrt(fr * 9.8 * q.tall * size);
-        for (const fps of fr === 0.6 && !lite && FEW.includes(id) ? [10, 30, 120] : [30]) {
+        // (A trot's or a gallop's foot is down for a few frames at 30 fps: those are checked at 60 and 120.)
+        for (const fps of fr === 0.6 && !lite && FEW.includes(id) ? [10, 30, 120] : fr > 0.3 ? [60] : [30]) {
             const dt = 1 / fps, runs = [[], [], [], []];
             let z = 0;
             for (let f = 0; f < 6 * fps; f++) {
@@ -1209,10 +1211,12 @@ test('four feet (the eighth pass): wrists fold back and hocks forward, a foot on
     // (Of a foot's time on the ground, the middle half: it is put down and lifted on the ends.)
     function check(zs, id, speed, fps) {
         if (zs.length < 6) return;
+        checked++;
         const mid = zs.slice(Math.floor(zs.length / 4), Math.ceil(zs.length * 3 / 4)), drift = Math.max(...mid) - Math.min(...mid), K0 = K.KINDS[id];
         const hop = ['hop', 'bound'].includes(K0.gait) || (speed * speed / (9.8 * K0.tall * (K0.size || 1)) > 1.5);
         assert.ok(drift < (hop ? 0.25 : 0.02) * K0.tall * (K0.size || 1), `${id} at ${speed.toFixed(1)} m/s, ${fps} fps: a planted foot slid ${(drift * 100).toFixed(1)} cm`);
     }
+    assert.ok(checked > 600, `only ${checked} steps on the ground were checked`);
     // Which gait: by the Froude number, the same for a cat as for a horse.
     const top = (base, v, h) => [...L.gaitMix(base, 'gallop', v, h)].sort((a, b) => b[1] - a[1])[0][0];
     for (const h of [0.27, 1.0, 1.42]) { assert.equal(top('walk', Math.sqrt(0.1 * 9.8 * h), h), 'walk'); assert.equal(top('trot', Math.sqrt(0.8 * 9.8 * h), h), 'trot'); assert.equal(top('walk', Math.sqrt(3 * 9.8 * h), h), 'gallop'); }

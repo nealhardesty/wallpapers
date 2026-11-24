@@ -266,7 +266,7 @@ const WayActors = (() => {
     function beast(out, st, kind, x, y, z, pose, coat) {
         const b = BEASTS[kind], p = beastParts(kind), LG = beastLegs(b), size = pose.size || 1, mv = pose.moving || 0, sit = pose.sit || 0;
         const base = pose.base || (kind === 'rabbit' ? 'hop' : 'walk'), metres = (pose.gait || 0) * (pose.stride || 1.3) / size;
-        const m = L.gaitMix(base, 'gallop', pose.bound ? Math.max(pose.speed || 0, 9) : pose.speed, b.tall * size);
+        const m = L.gaitMix(base, 'gallop', pose.speed, b.tall * size);
         for (let k = 0; k < 3; k++) { MIX[k][0] = m[k][0]; MIX[k][1] = m[k][1]; }
         let bob = 0, pitch = 0, hop = 0;
         for (const [name, w] of MIX) {

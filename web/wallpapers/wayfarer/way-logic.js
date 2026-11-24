@@ -1178,7 +1178,15 @@ const WayLogic = (() => {
     // One step of one wild animal's small life. ctx: { t, night (0 to 1), me: { x, z } (the traveller), random, party
     // (the others of its party) }. Those on the ground walk the way they face, turn no faster than their size allows,
     // and never come nearer the road than their kind keeps (so never onto it).
+    // How fast it is going (a.vel, for its gait) follows what go() walks, a quarter of a second behind, and dies away
+    // when it stops; a frame with no time in it changes nothing.
     function wildStep(a, dt, w, ctx) {
+        a.went = false;
+        wildLife(a, dt, w, ctx);
+        if (!a.went && dt > 1e-4) a.vel = (a.vel || 0) * Math.exp(-dt / 0.25);
+        return a;
+    }
+    function wildLife(a, dt, w, ctx) {
         const K = a.K, g = a.g, me = ctx.me, random = ctx.random, act = K.act, dxm = a.x - me.x, dzm = a.z - me.z, near = Math.hypot(dxm, dzm);
         const ease = (v, to, secs) => v + (to - v) * (1 - Math.exp(-dt / secs)), rate = (K.big ? 1.4 : 3.2) * dt;
         const go = (tx, tz, speed, most = rate) => {
@@ -1187,13 +1195,12 @@ const WayLogic = (() => {
             const to = Math.atan2(dx, dz);
             a.yaw = turnTo(a.yaw, to, dt * 5, most);
             const step = Math.min(speed * Math.max(0.1, Math.cos(Math.min(Math.abs(turnTo(0, to - a.yaw, 1)), Math.PI / 2))) * dt, left);
-            a.x += Math.sin(a.yaw) * step; a.z += Math.cos(a.yaw) * step; a.gait += step; a.vel = step / Math.max(dt, 1e-3); a.moving = ease(a.moving, 1, 0.2);
+            a.x += Math.sin(a.yaw) * step; a.z += Math.cos(a.yaw) * step; a.gait += step; if (dt > 1e-4) a.vel = (a.vel || 0) + (step / dt - (a.vel || 0)) * (1 - Math.exp(-dt / 0.25)); a.went = true; a.moving = ease(a.moving, 1, 0.2);
             return left - step;
         };
         const dry = (x, z) => Math.abs(w.lateral(x, z)) >= K.keep && w.ground(x, z) > w.water(x, z) + 0.4;
         a.alert = ease(a.alert, near < (K.shy || 8) + 12 ? 1 : 0, 0.5);
         a.timer -= dt;
-        a.vel = 0;          // how fast it is going this step, for its gait (go() says)
         if (K.swarm) return a;
         if (act === 'climb') {
             // Up the trunk (or out along the bough), a look about, and down again to forage at the foot of it.
@@ -1585,7 +1592,7 @@ const WayLogic = (() => {
             if (!offDuty) { tx = me.x; tz = me.z; haste = 2.5; }
             const close = Math.hypot(c.x - me.x, c.z - me.z) < 0.9;
             c.riding = ease(c.riding, !offDuty && (close || c.riding > 0.5) ? 1 : 0, 0.3);
-            if (c.riding > 0.5) { c.x = me.x; c.z = me.z; c.yaw = turnTo(c.yaw, me.heading, dt * 6); c.speed = 0; rest = 1; }
+            if (c.riding > 0.5) { c.x = me.x; c.z = me.z; c.yaw = turnTo(c.yaw, me.heading, dt * 6); c.speed = 0; c.vel = 0; rest = 1; }
         } else c.riding = 0;
         if (air) {
             // Fliers go round a point that moves with the traveller; they come down when the walk stops.
@@ -1597,6 +1604,7 @@ const WayLogic = (() => {
             const k = 1 - Math.exp(-dt / (role === 'hover' ? 0.45 : 0.9)), nx = c.x + (ox - c.x) * k, nz = c.z + (oz - c.z) * k, moved = Math.hypot(nx - c.x, nz - c.z);
             if (moved > 1e-4) { const to = Math.atan2(nx - c.x, nz - c.z); c.bank = ease(c.bank, clamp((((to - c.yaw) % TAU) + TAU + Math.PI) % TAU - Math.PI, -1, 1) * (landed ? 0 : 0.9), 0.4); c.yaw = turnTo(c.yaw, role === 'hover' && moved / Math.max(dt, 1e-3) < 0.6 ? me.heading : to, dt * 5, dt * 6); }
             c.speed = moved / Math.max(dt, 1e-3);
+            c.vel = 0;          // (a flier's legs are folded: no gait)
             c.x = nx; c.z = nz;
             c.alt = ease(c.alt, high, landed ? 0.7 : 1.1);
             c.wing = ease(c.wing, c.alt > 0.25 || role === 'hover' ? 1 : 0, 0.3);
@@ -1635,7 +1643,7 @@ const WayLogic = (() => {
             // Standing or shuffling, it faces the fire if it has a place by one, and down the road otherwise.
             const gone = dt > 1e-4 ? Math.hypot(c.x - x0, c.z - z0) / dt : 0;
             if (!going) c.yaw = turnTo(c.yaw, spot && (rest > 0.5 || gap < 0.6) ? spot.face : c.mode === 'go' && !camping ? ahead0 : c.yaw, dt * 3, most);
-            c.gait += Math.min(gone, kind.top) * dt; c.vel = Math.min(gone, kind.top);
+            c.gait += Math.min(gone, kind.top) * dt; if (dt > 1e-4) c.vel = (c.vel || 0) + (Math.min(gone, kind.top) - (c.vel || 0)) * (1 - Math.exp(-dt / 0.25));
             c.alt = ease(c.alt, 0, 0.3); c.wing = ease(c.wing, 0, 0.3);
             if (c.speed > 0.3) rest = 0;
         }
@@ -1810,7 +1818,7 @@ const WayLogic = (() => {
     // the way they step, with their legs going; whoever is sitting stays put, and nobody goes more than 3.2 m off their
     // place (into a wall). `cut`: the camera has just cut, and they are already out of the way.
     function giveWay(a, dt, heading, pushers, cut = false) {
-        if (a.role === 'sit' || a.role === 'fish') { a.ox = a.oz = a.side = a.slide = a.stepping = 0; return a; }
+        if (a.role === 'sit' || a.role === 'fish') { a.ox = a.oz = a.side = a.slide = a.stepping = a.veer = 0; return a; }
         const hx = Math.sin(heading), hz = Math.cos(heading), nx = hz, nz = -hx, side = a.side || 0;
         const ax = a.x + nx * side, az = a.z + nz * side, mine = side || (a.v < 0.5 ? -1 : 1);
         let want = 0, pushed = false;

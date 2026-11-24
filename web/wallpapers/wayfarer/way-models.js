@@ -1037,7 +1037,7 @@ const WayModels = (() => {
                 const woods = item.b === 'deepwood' || item.b === 'forest' || item.b === 'grove';
                 // (Where the trees stand thick, the fine ones are only those right by the road; the deep forest's fine work is its boughs.)
                 const close = !far && detail > 0 && item.b !== 'deepwood' && item.b !== 'grove' && Math.abs(w.lateral(item.x, item.z)) < (woods ? band * 0.5 : band);
-                const m = far ? farTree(cone || item.kind === 'poplar') : close ? WayDetail.tree(bare ? 'snag' : item.kind, Math.floor(v * 3)) : tree(bare ? 'snag' : item.kind, Math.floor(v * 3), detail > 1 && !far ? (woods ? 0.6 : 1) : 0);          // (in the thick of the woods, fewer leaves to a crown: there are more crowns)
+                const m = far ? farTree(cone || item.kind === 'poplar') : close ? WayDetail.tree(bare ? 'snag' : item.kind, Math.floor(v * 3), detail > 1) : tree(bare ? 'snag' : item.kind, Math.floor(v * 3), detail > 1 ? (woods ? 0.6 : 1) : 0);          // (in the thick of the woods, fewer leaves to a crown: there are more crowns)
                 props.stamp(m, place(lx, item.y - 0.1, lz, item.yaw, far ? sc * 1.3 : sc, far ? sc * 1.2 : sc * (0.9 + 0.3 * rnd(v, 5))), TINT, Math.max(season.snow, w.cold(item.z)) * 0.6, phase);
                 if (!far) { darken(item.x, item.z, 3.4 * sc, 0.34); if (item.kind === 'glade' || item.kind === 'shroom') lights.push([item.x, item.y + 3.5 * sc, item.z, 5, 0.3, 0.9, 0.8, 1]); }
                 continue;

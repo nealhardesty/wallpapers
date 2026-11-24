@@ -19,7 +19,8 @@ const WayDetail = (() => {
     // ---- Trees ------------------------------------------------------------------------------
     // The same kinds, sizes and leans as WayModels' trees (so one can stand in for the other), with more to them.
     // Slot 1 is the leaf, 2 the trunk, 3 blossom or fruit.
-    const tree = (kind, variant) => M.model(`fine:${kind}:${variant}`, s => {
+    // leafy (High): leaves on the clumps and fronds on a fir; without (Medium), the six sprays a clump had before.
+    const tree = (kind, variant, leafy = true) => M.model(`fine:${kind}:${variant}${leafy ? '' : ':plain'}`, s => {
         const r = k => M.rnd(variant + 1, k + kind.length * 3), lean = (r(1) - 0.5) * 0.5, lz = (r(2) - 0.5) * 0.4;
         const bark = (i, k) => (k % 2 ? 0.74 : 1.04) * (0.86 + 0.2 * hashf(i * 7 + k, variant + 1));          // ridged
         const trunk = (h, r0, r1, col = C.trunk, roots = 4) => {
@@ -32,6 +33,14 @@ const WayDetail = (() => {
         let crown = null;
         const clump = (x, y, z, rx, ry, rz, sway, n, tone = 1, o = {}) => {
             s.paint([255 * tone, 255 * tone, 255 * tone], 1).fx(sway).blob(x + lean, y, z + lz, rx, ry, rz, { segs: 8, bands: 5, lump: 0.17, seed: variant + n * 0.37 + 0.1, under: 0.55, crown, ...o });
+            if (!leafy) {
+                for (let i = 0; i < 6; i++) {
+                    const a = i * 2.4 + n, up = 0.9 - 1.5 * hashf(i, n + variant), c = Math.sqrt(Math.max(0, 1 - up * up)), ox = Math.sin(a) * c, oz = Math.cos(a) * c, t2 = tone * (0.86 + 0.3 * hashf(i, n + 7));
+                    const px = x + lean + ox * rx * 0.94, py = y + up * ry * 0.94, pz = z + lz + oz * rz * 0.94, w = 0.34 * Math.min(rx, 2.2) / 1.6, tx = -oz * w, tz = ox * w;
+                    s.paint([255 * t2, 255 * t2, 255 * t2], 1).fx(Math.min(255, sway + 50)).tri([px - tx, py - 0.1, pz - tz], [px + tx, py + 0.1, pz + tz], [px + ox * w * 2.4, py + up * w * 2.4 + 0.1, pz + oz * w * 2.4], [ox, up * 0.6 + 0.4, oz], [0.8, 0.8, 1]);
+                }
+                return;
+            }
             s.fx(Math.min(255, sway + 30)).leaves(x + lean, y, z + lz, rx * 1.05, ry * 1.05, rz * 1.05, Math.round(L.clamp((rx + rz) * ry * 9, 24, 70)), o.leaf || Math.min(0.95, 0.4 + rx * 0.15), { seed: variant * 3 + n, crown, thin: o.thin, droop: o.droop });
         };
         if (kind === 'oak' || kind === 'apple') {
@@ -62,7 +71,7 @@ const WayDetail = (() => {
                 for (let k = 0; k < 6; k++) {
                     const y = 1.9 + k * 1.42, R = 2.35 - 0.36 * k, tone = 0.86 + 0.22 * r(40 + k), x = lean * (0.2 + k * 0.14), z = lz * (0.2 + k * 0.14);
                     s.paint([255 * tone, 255 * tone, 255 * tone], 1).fx(20 + k * 14).tube([[x, y + 1.9, z, 0.12, 1], [x, y + 1.0, z, R * 0.58, 1], [x, y, z, R, 1]], 9, { turn: k * 0.7 + r(5), rag: (i, kk) => i === 2 ? 0.74 + 0.4 * hashf(kk, k + variant) : 1, k: (i, kk) => 1 - 0.16 * (i === 1) + 0.1 * hashf(kk, i + k), ao: i => i === 2 ? 0.6 : 1 });
-                    M.fronds(s, x, y, z, R, 12 - k, k * 0.7 + r(5) + 0.2, 20 + k * 14);          // boughs of needles hung round its hem
+                    if (leafy) M.fronds(s, x, y, z, R, 12 - k, k * 0.7 + r(5) + 0.2, 20 + k * 14);          // boughs of needles hung round its hem
                 }
                 s.paint(C.white, 1).fx(110).prism(6, lean, 10.0, lz, 0.42, 11.6, 0, { foot: 0.7 });
             }

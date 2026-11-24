@@ -5437,7 +5437,8 @@ creature, marking or design is taken from one.
     reach, so nobody's feet slide however big they are. `gaitMix` changes
     gait by the Froude number (speed² over g × height), as real animals do
     whatever their size: a stag walks at 1 m/s, trots at 3 and gallops at 6,
-    crossfading between them. A walker nods with its steps. Settled poses
+    crossfading between them, by a speed that follows the real one a quarter
+    of a second behind (so a gait never pops for a frame). A walker nods with its steps. Settled poses
     (sitting, lying, curled, flying) and climbing are the old ones with the
     joints the right way round. Callers pass the speed they actually go
     (`a.vel`, `c.vel`), and the herds' and far beasts' gaits advance by the
@@ -5472,9 +5473,11 @@ creature, marking or design is taken from one.
     the skin by a golden spiral, each turned and tipped its own way, in tones
     a little apart, fluttering), a fir's tiers hung with drooping fronds of
     needles (`WayModels.fronds`) and a willow's curtain in withies; 60% of
-    the leaves where the woods are thick. The fine trees by the road have
-    the leaves in place of the six sprays a clump had (up to 1,600
-    triangles a tree), fronds, and needles on the pine.
+    the leaves where the woods are thick. On High the fine trees by the road
+    have the leaves in place of the six sprays a clump had (up to 1,600
+    triangles a tree), fronds, and needles on the pine; on Medium they keep
+    the sprays (`WayDetail.tree`'s `leafy`), so Medium's triangles are as
+    they were.
   - *Buildings.* On High near the traveller (`rich`) and by the road
     (`fine`): timbers stand 7 cm off the plaster with their edges; windows
     sit in frames that stand out from the wall, the glass back in its opening
@@ -5484,7 +5487,9 @@ creature, marking or design is taken from one.
     of every course of tiles, a board along each eave and up each verge, and
     by the road the rafters' ends), a ridge in the round and a capped
     chimney; stone houses by the road have dressed corner blocks. Plain
-    houses (Medium, Low, further off) are as they were.
+    houses (Medium, Low, further off) are as they were, triangle for
+    triangle, but for their shutters, a centimetre out from the window's
+    frame they used to share a plane with.
   - *The light.* The cel steps are pulled a fifth of the way in, not two
     fifths (they banded every clump and every curve into facets); leaves are
     lit with a wider wrap (light gets in among them) and glow where the sun
