@@ -394,6 +394,22 @@
               { keys: ['x'], label: 'Next weather (comes and goes, clear, flurries, snow, fog)', run: run => run.nextWeather() },
               { keys: ['g'], label: 'The lead rider swaps skis for a board, or back', run: run => run.swapGear() },
           ] },
+        // A great library, painted as Painted Village is (its plates, bake and light), with the real sun's shafts
+        // across the floor; harvest-sky.js for the sun and moon.
+        { id: 'reading-room', name: 'The Reading Room', icon: '📚', accent: '#e8b45a', background: '#2a1c14',
+          scripts: ['harvest/harvest-sky.js', 'painted-village/painted-logic.js', 'painted-village/painted-plates.js', 'painted-village/painted-bake.js',
+              'reading-room/reading-logic.js', 'reading-room/reading-art.js', 'reading-room/reading-cast.js', 'reading-room/reading-room.js'],
+          make: host => new ReadingRoomAnimationManager(host), cost: 'medium', interactive: true,
+          effects: [['shafts', 'medium'], ['dust', 'medium']],
+          keys: [
+              { keys: ['a'], label: 'A cat: whoever is about stretches and goes somewhere else', run: room => room.callCat() },
+              { keys: ['p'], label: 'A paper plane from the top gallery', run: room => room.callPlane() },
+              { keys: ['o'], label: 'The owl goes round under the vault', run: room => room.callOwl() },
+              { keys: ['l'], label: 'The librarian goes down the hall (lighting the lamps at dusk)', run: room => room.callLibrarian() },
+              { keys: ['b'], label: 'A book flies home to its shelf', run: room => room.callBook() },
+              { keys: ['m'], label: 'What time is it in the Reading Room?', run: room => room.report() },
+              { keys: ['r'], label: 'Paint it again', run: room => room.repaint() },
+          ] },
         { id: 'bing', name: 'Bing Image of the Day', icon: '🖼️', accent: '#8ab4ff', scripts: ['bing/bing.js'],
           make: host => new BingWallpaperManager(host), cost: 'none', network: ['www.bing.com'] },
     ];

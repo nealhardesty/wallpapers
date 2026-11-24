@@ -325,6 +325,7 @@ still draws offline). 📅 **Seasonal** isn't one itself: it picks one by date.
 | ⚾ [The Never-Ending Baseball Season](https://nealhardesty.github.io/wallpapers/?w=baseball) | 👆 | A whole pixel-art league, a pitch at a time |
 | 🥾 [Wayfarer](https://nealhardesty.github.io/wallpapers/?w=wayfarer) | 👆 | An endless walk through a cosy fantasy world (WebGL) |
 | ⛷️ [Fresh Tracks](https://nealhardesty.github.io/wallpapers/?w=ski-run) | 👆 | An endless ski run; ride it yourself (WebGL) |
+| 📚 [The Reading Room](https://nealhardesty.github.io/wallpapers/?w=reading-room) | 👆 | A grand university library, painted: the real sun's shafts across the floor, lamps lit at dusk, and cats |
 | 🖼️ [Bing Image of the Day](https://nealhardesty.github.io/wallpapers/?w=bing) | 📡 | Bing's photo of the day, with its credit |
 
 Each one's full story is in SPEC.md §2 and §10.

@@ -34,6 +34,7 @@ WP.costs = {
     'quest': 1,
     'rain': 1,
     'rainy-window': 1,
+    'reading-room': 3,
     'satellites': 1,
     'sky-island': 3,
     'small-christmas': 1,

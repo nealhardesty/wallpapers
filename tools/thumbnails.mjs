@@ -52,6 +52,8 @@ const OVERRIDES = {
     'christmas-village': { configVersion: 1, sky: 'night', moonPhase: 'full', scale: 1.3, horizon: 0.36 },
     // The paintings' hour, with the town out.
     'painted-village': { configVersion: 1, sky: 'dusk', snowfall: 0.6 },
+    // A winter morning, the great window's panes laid across the floor in sun; the lamps not yet out.
+    'reading-room': { configVersion: 1, time: 'live', lamps: 'always' },
 };
 // URL parameters for a better picture: satellites as its sample station
 // passes overhead before dawn, weather's sample at a golden dusk (thumb mode never fetches, so it's the sample),
@@ -61,6 +63,8 @@ SETTLE_MS.fireworks = 2600;
 SETTLE_MS.harvest = 4000;
 SETTLE_MS['sky-island'] = 3000;
 SETTLE_MS['painted-village'] = 9000;   // it paints itself: wait for the last stroke
+SETTLE_MS['reading-room'] = 12000;     // the same, and a few more strokes
+PARAMS['reading-room'] = '&date=2026-12-10T10:30&seed=7';
 SETTLE_MS.sumo = 2600;            // out of the crouch and into the bout
 SETTLE_MS['ice-patrol'] = 9000;    // headless Chrome draws its WebGL in software: a frame takes a second or two
 SETTLE_MS.wayfarer = 9000;         // the same: a few frames, so the smoke is up and the camera has settled
