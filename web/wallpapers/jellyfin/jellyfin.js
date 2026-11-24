@@ -111,8 +111,9 @@ class JellyfinAnimationManager {
 
     onResume() {
         if (!this.running || this.state === 'demo') return;
-        if (this.state === 'away' || this.state === 'playing' || this.state === 'poster') this.claim();
-        if (this.state === 'away') this.replay();
+        const away = this.state === 'away';   // claim() turns away into loading
+        if (away || this.state === 'playing' || this.state === 'poster') this.claim();
+        if (away) this.replay();
         else if (this.state === 'playing' && !this.userPaused) this.video?.play().catch(() => {});
     }
 
@@ -120,6 +121,8 @@ class JellyfinAnimationManager {
         const before = this.config;
         this.config = config;
         if (this.video) this.video.volume = config.volume;
+        // Start muted, switched in the panel, takes effect on what's playing now.
+        if (before.startMuted !== config.startMuted && this.video && this.muted !== config.startMuted) this.toggleMute();
         const changed = keys => keys.some(key => JSON.stringify(before[key]) !== JSON.stringify(config[key]));
         // A frame's own options (xmas… for the Christmas frames, bigTv… for the Big Old TV) repaint it.
         if (changed(['frame', 'fit', ...Object.keys(config).filter(key => /^(xmas|bigTv)[A-Z]/.test(key))])) { this.pickFrame(); this.resize(); }
@@ -737,8 +740,13 @@ class JellyfinAnimationManager {
 
     // ---- One tab at a time ---------------------------------------------------------
 
+    // Only a stage someone can see claims. On Android document.hidden is
+    // never true (the wallpaper and the settings screen are WebViews that
+    // stay "visible" behind other apps), so the stage's own pause counts
+    // too: otherwise a hidden WebView reacting to a settings change would
+    // take playback from the one on screen, and keep it.
     claim() {
-        if (document.hidden || this.state === 'demo') return;
+        if (document.hidden || WP.stage?.paused || this.state === 'demo') return;
         this.host.storage.set('claim', { tab: this.tab, at: Date.now() });
         if (this.state === 'away') this.set('loading');
     }
@@ -757,10 +765,18 @@ class JellyfinAnimationManager {
 
     // ---- Keys and taps --------------------------------------------------------------
 
+    // A tap on "Playing in another tab" takes playback back. Otherwise a tap
+    // switches the sound (or only the 🔇 badge does, with tapForSound off):
+    // on a phone there's no M key, and the badge shows for just a few seconds.
     tap(x, y) {
+        if (this.state === 'away') {
+            this.claim();
+            return this.replay();
+        }
+        if (!this.video || this.state !== 'playing') return;
         const b = this.badge;
-        if (this.video && (this.muted && b && performance.now() < this.badgeUntil && Math.hypot(x - b.x - b.size / 2, y - b.y - b.size / 2) < b.size)) return this.toggleMute();
-        if (this.video && this.soundAllowed === false && this.muted) return this.toggleMute();
+        const onBadge = this.muted && b && performance.now() < this.badgeUntil && Math.hypot(x - b.x - b.size / 2, y - b.y - b.size / 2) < b.size;
+        if (onBadge || this.config.tapForSound || (this.soundAllowed === false && this.muted)) this.host.toast(this.toggleMute(), 1500);
     }
 
     togglePause() {

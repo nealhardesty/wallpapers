@@ -173,8 +173,9 @@ cinema, Christmas frames and more).
    stored).
 3. Pick what to play. Sign out tells the server to forget this device.
 
-It starts muted (`M` for sound), resumes where it left off, picks subtitles
-for you, and plays in one tab at a time. The sign-in never leaves the device
+It starts muted (`M` or a tap for sound), resumes where it left off, picks
+subtitles for you, and plays in one tab at a time (tap "Playing in another
+tab" to take it back). The sign-in never leaves the device
 (Export skips it). From the hosted https copy, allow Chrome's "local network"
 prompt and use the server's IP address for an http server; on Android allow
 "Nearby devices". Details in SPEC §10.21 (Jellyfin).

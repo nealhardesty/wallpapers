@@ -3807,6 +3807,33 @@ const STAGE_CHECKS = {
             await shoot('jellyfin-two-tabs');
             return true;
         }],
+        ['a paused stage never claims (Android: hidden but not document.hidden); a tap on "another tab" takes it back; a tap anywhere switches the sound', async () => {
+            const mock = jellyfinServer();
+            await fresh(`${WEB}/stage.html?w=jellyfin`, jellyfinSignedIn(mock, { order: 'inOrder', subtitles: 'off' }));
+            if (!await waitFor(() => counts(`m.state === 'playing' && m.video.currentTime > 0.2`), 10000)) return record('never played');
+            const key = 'wp:jellyfin:claim', other = JSON.stringify({ tab: 'elsewhere', at: Date.now() });
+            // Another WebView takes over while this one is paused, then this one plays something (a settings change).
+            await evaluate(`localStorage.setItem('${key}', '${other}'); WP.stage.manager.claimed({ key: '${key}', newValue: '${other}' }); WP.stage.pause(); WP.stage.manager.claim()`);
+            if (await evaluate(`localStorage.getItem('${key}')`) !== other) record('a paused stage claimed playback');
+            await evaluate('WP.stage.resume()');
+            if (!await waitFor(() => counts(`m.state === 'playing' && JSON.parse(localStorage.getItem('${key}')).tab === m.tab`), 6000)) record(`resuming didn't take playback back: ${JSON.stringify(await counts(`({ state: m.state, t: m.video?.currentTime, paused: WP.stage.paused, claim: localStorage.getItem('${key}'), tab: m.tab })`))}`);
+            // Away again, and a real tap takes it back.
+            await evaluate(`WP.stage.manager.claimed({ key: '${key}', newValue: '${other}' })`);
+            if (await counts('m.state') !== 'away') return record('didn\'t go away');
+            await mouse('mousePressed', 400, 300); await mouse('mouseReleased', 400, 300); await sleep(150);
+            if (!await waitFor(() => counts(`m.state === 'playing' && m.video.currentTime > 0.2`), 6000)) return record(`a tap on "another tab" left it ${await counts('m.state')}`);
+            // A tap anywhere: sound on, then off.
+            if (!await counts('m.video.muted')) record('didn\'t start muted');
+            await mouse('mousePressed', 300, 500); await mouse('mouseReleased', 300, 500); await sleep(150);
+            if (await counts('m.video.muted || m.video.paused')) record('a tap didn\'t turn the sound on');
+            await sleep(400);
+            await mouse('mousePressed', 300, 500); await mouse('mouseReleased', 300, 500); await sleep(150);
+            if (!await counts('m.video.muted')) record('a second tap didn\'t turn it off');
+            // Start muted, switched off in the panel, applies now.
+            await counts(`m.applySettings({ ...m.config, startMuted: false })`);
+            if (await counts('m.video.muted')) record('Start muted off left it muted');
+            return true;
+        }],
         ['every frame: landscape and portrait, the video\'s shape kept, art built once per resize', async () => {
             jellyfinServer();
             const frames = [];
