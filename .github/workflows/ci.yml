@@ -222,7 +222,7 @@ jobs:
       id-token: write
     environment:
       name: github-pages
-      url: ${{ steps.deploy.outputs.page_url }}
+      url: ${{ steps.deploy.outputs.page_url || steps.deploy-again.outputs.page_url }}
     concurrency:
       group: pages
       cancel-in-progress: false
@@ -235,7 +235,17 @@ jobs:
       - uses: actions/upload-pages-artifact@v5
         with:
           path: dist/site
+      # deploy-pages looks the artifact up straight after the upload, and
+      # GitHub's artifact list can lag behind it: on 2026-11-21 to 23 every
+      # nightly run failed with 'No artifacts named "github-pages"' (it saw
+      # the older two of three), and a re-run passed. So once more, later.
       - id: deploy
+        uses: actions/deploy-pages@v5
+        continue-on-error: true
+      - if: steps.deploy.outcome == 'failure'
+        run: sleep 30
+      - id: deploy-again
+        if: steps.deploy.outcome == 'failure'
         uses: actions/deploy-pages@v5
       # The site as people get it: every wallpaper and the player, with real
       # network and Bing. Daily too, through the schedule. Once more after a

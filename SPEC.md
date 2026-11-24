@@ -1412,6 +1412,9 @@ spec has a stated price:
     `make site` (`tools/build.mjs site`: `web/` plus `bing.json` from
     `tools/bing.mjs`) and deploys with `actions/deploy-pages`. Bing being
     down doesn't stop a deploy; the wallpaper then shows its note.
+    The deploy runs once more after 30 s if it fails: GitHub's artifact
+    list can lag the upload, and `deploy-pages` then says `No artifacts
+    named "github-pages"` (every nightly run, 2026-11-21 to 23).
   - Pages is set to "GitHub Actions" as its source. GitHub turns off
     scheduled workflows after 60 days without commits; a manual run (or any
     push) turns the daily refresh back on.
