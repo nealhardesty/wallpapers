@@ -19,7 +19,8 @@ const WayDetail = (() => {
     // ---- Trees ------------------------------------------------------------------------------
     // The same kinds, sizes and leans as WayModels' trees (so one can stand in for the other), with more to them.
     // Slot 1 is the leaf, 2 the trunk, 3 blossom or fruit.
-    const tree = (kind, variant) => M.model(`fine:${kind}:${variant}`, s => {
+    // leafy (High): leaves on the clumps and fronds on a fir; without (Medium), the six sprays a clump had before.
+    const tree = (kind, variant, leafy = true) => M.model(`fine:${kind}:${variant}${leafy ? '' : ':plain'}`, s => {
         const r = k => M.rnd(variant + 1, k + kind.length * 3), lean = (r(1) - 0.5) * 0.5, lz = (r(2) - 0.5) * 0.4;
         const bark = (i, k) => (k % 2 ? 0.74 : 1.04) * (0.86 + 0.2 * hashf(i * 7 + k, variant + 1));          // ridged
         const trunk = (h, r0, r1, col = C.trunk, roots = 4) => {
@@ -27,17 +28,24 @@ const WayDetail = (() => {
             for (let i = 0; i < roots; i++) { const a = i / roots * TAU + r(30) * 6; s.tube([[Math.sin(a) * r0 * 0.5, 0.55, Math.cos(a) * r0 * 0.5, r0 * 0.42, 1], [Math.sin(a) * r0 * 1.7, 0.04, Math.cos(a) * r0 * 1.7, r0 * 0.3, 1], [Math.sin(a) * r0 * 2.8, -0.3, Math.cos(a) * r0 * 2.8, r0 * 0.1, 1]], 5, { k: bark, ao: () => 0.7 }); }
         };
         const bough = (from, to, r0, col = C.trunk) => s.paint(col, 2).fx(0).tube([[from[0], from[1], from[2], r0, 1], [(from[0] + to[0]) / 2, (from[1] + to[1]) / 2 + 0.25, (from[2] + to[2]) / 2, r0 * 0.7, 1], [to[0], to[1], to[2], r0 * 0.34, 1]], 5, { k: bark });
+        // A clump of leaf, lit as part of the whole crown, with its own leaves standing out of it (the eighth pass: they
+        // took the place of six sprays), so its edge against the sky is leaves and not a ball.
+        let crown = null;
         const clump = (x, y, z, rx, ry, rz, sway, n, tone = 1, o = {}) => {
-            s.paint([255 * tone, 255 * tone, 255 * tone], 1).fx(sway).blob(x + lean, y, z + lz, rx, ry, rz, { segs: 8, bands: 5, lump: 0.17, seed: variant + n * 0.37 + 0.1, under: 0.55, ...o });
-            // Sprays of leaves standing out of it, so its edge against the sky is leaves and not a ball.
-            for (let i = 0; i < 6; i++) {
-                const a = i * 2.4 + n, up = 0.9 - 1.5 * hashf(i, n + variant), c = Math.sqrt(Math.max(0, 1 - up * up)), ox = Math.sin(a) * c, oz = Math.cos(a) * c, t2 = tone * (0.86 + 0.3 * hashf(i, n + 7));
-                const px = x + lean + ox * rx * 0.94, py = y + up * ry * 0.94, pz = z + lz + oz * rz * 0.94, w = 0.34 * Math.min(rx, 2.2) / 1.6, tx = -oz * w, tz = ox * w;
-                s.paint([255 * t2, 255 * t2, 255 * t2], 1).fx(Math.min(255, sway + 50)).tri([px - tx, py - 0.1, pz - tz], [px + tx, py + 0.1, pz + tz], [px + ox * w * 2.4, py + up * w * 2.4 + 0.1, pz + oz * w * 2.4], [ox, up * 0.6 + 0.4, oz], [0.8, 0.8, 1]);
+            s.paint([255 * tone, 255 * tone, 255 * tone], 1).fx(sway).blob(x + lean, y, z + lz, rx, ry, rz, { segs: 8, bands: 5, lump: 0.17, seed: variant + n * 0.37 + 0.1, under: 0.55, crown, ...o });
+            if (!leafy) {
+                for (let i = 0; i < 6; i++) {
+                    const a = i * 2.4 + n, up = 0.9 - 1.5 * hashf(i, n + variant), c = Math.sqrt(Math.max(0, 1 - up * up)), ox = Math.sin(a) * c, oz = Math.cos(a) * c, t2 = tone * (0.86 + 0.3 * hashf(i, n + 7));
+                    const px = x + lean + ox * rx * 0.94, py = y + up * ry * 0.94, pz = z + lz + oz * rz * 0.94, w = 0.34 * Math.min(rx, 2.2) / 1.6, tx = -oz * w, tz = ox * w;
+                    s.paint([255 * t2, 255 * t2, 255 * t2], 1).fx(Math.min(255, sway + 50)).tri([px - tx, py - 0.1, pz - tz], [px + tx, py + 0.1, pz + tz], [px + ox * w * 2.4, py + up * w * 2.4 + 0.1, pz + oz * w * 2.4], [ox, up * 0.6 + 0.4, oz], [0.8, 0.8, 1]);
+                }
+                return;
             }
+            s.fx(Math.min(255, sway + 30)).leaves(x + lean, y, z + lz, rx * 1.05, ry * 1.05, rz * 1.05, Math.round(L.clamp((rx + rz) * ry * 9, 24, 70)), o.leaf || Math.min(0.95, 0.4 + rx * 0.15), { seed: variant * 3 + n, crown, thin: o.thin, droop: o.droop });
         };
         if (kind === 'oak' || kind === 'apple') {
             const b = kind === 'oak' ? 1 : 0.62;
+            crown = [lean, 5.3 * b, lz, 0.55, 3.6 * b];
             trunk(3.5 * b, 0.5 * b, 0.32 * b);
             clump(0, 5.7 * b, 0, 2.5 * b, 2.0 * b, 2.5 * b, 50, 1, 1, { segs: 8, bands: 5 });
             for (let i = 0; i < 6; i++) {
@@ -48,28 +56,33 @@ const WayDetail = (() => {
             clump(0.5 * b, 7.0 * b, -0.3 * b, 1.5 * b, 1.0 * b, 1.5 * b, 80, 9, 1.08);
             if (kind === 'apple') for (let i = 0; i < 9; i++) { const a = i * 2.4, y = 2.6 + 1.9 * r(10 + i), rr = 1.9 + 0.5 * r(20 + i); s.paint(C.white, 3).fx(60).blob(Math.sin(a) * rr + lean, y, Math.cos(a) * rr, 0.22, 0.22, 0.22, { segs: 5, bands: 3, lump: 0 }); }
         } else if (kind === 'poplar') {
+            crown = [lean, 6.6, lz, 0.5, 3.2];
             trunk(3.0, 0.32, 0.2, C.trunk, 3);
             for (let i = 0; i < 6; i++) { const a = i * 2.2 + r(5) * 6, y = 2.9 + i * 1.55, w = 1.3 * (1 - Math.abs(i - 2.2) * 0.13); clump(Math.sin(a) * 0.3, y, Math.cos(a) * 0.3, w, 1.25, w, 70 + i * 8, 1 + i, 0.9 + 0.18 * r(20 + i)); }
             clump(0, 11.4, 0, 0.6, 0.9, 0.6, 120, 8, 1.05);
         } else if (kind === 'fir' || kind === 'pine') {
             if (kind === 'pine') {
+                crown = [lean, 6.8, lz, 0.5, 2.8];
                 trunk(6.2, 0.36, 0.2, C.bark, 4);
-                for (const [x, y, z, w, n] of [[0.4, 7.2, 0, 2.5, 1], [-1.0, 6.2, 0.7, 1.7, 2], [1.3, 5.6, -0.8, 1.5, 3], [-0.3, 7.9, -0.5, 1.5, 4], [0.9, 6.7, 1.0, 1.3, 5]]) { clump(x, y, z, w, 0.62, w * 0.94, 40, n, 0.9 + 0.18 * r(n + 20)); bough([lean * 0.9, y - 1.3, lz * 0.9], [x * 0.8 + lean, y - 0.35, z * 0.8 + lz], 0.11, C.bark); }
+                for (const [x, y, z, w, n] of [[0.4, 7.2, 0, 2.5, 1], [-1.0, 6.2, 0.7, 1.7, 2], [1.3, 5.6, -0.8, 1.5, 3], [-0.3, 7.9, -0.5, 1.5, 4], [0.9, 6.7, 1.0, 1.3, 5]]) { clump(x, y, z, w, 0.62, w * 0.94, 40, n, 0.9 + 0.18 * r(n + 20), { leaf: 0.8, thin: 0.3 }); bough([lean * 0.9, y - 1.3, lz * 0.9], [x * 0.8 + lean, y - 0.35, z * 0.8 + lz], 0.11, C.bark); }
             } else {
                 // Boughs in tiers, each a skirt hanging lower at its hem, ragged; the trunk shows between them.
                 trunk(9.6, 0.36, 0.06, C.bark, 3);
                 for (let k = 0; k < 6; k++) {
                     const y = 1.9 + k * 1.42, R = 2.35 - 0.36 * k, tone = 0.86 + 0.22 * r(40 + k), x = lean * (0.2 + k * 0.14), z = lz * (0.2 + k * 0.14);
                     s.paint([255 * tone, 255 * tone, 255 * tone], 1).fx(20 + k * 14).tube([[x, y + 1.9, z, 0.12, 1], [x, y + 1.0, z, R * 0.58, 1], [x, y, z, R, 1]], 9, { turn: k * 0.7 + r(5), rag: (i, kk) => i === 2 ? 0.74 + 0.4 * hashf(kk, k + variant) : 1, k: (i, kk) => 1 - 0.16 * (i === 1) + 0.1 * hashf(kk, i + k), ao: i => i === 2 ? 0.6 : 1 });
+                    if (leafy) M.fronds(s, x, y, z, R, 12 - k, k * 0.7 + r(5) + 0.2, 20 + k * 14);          // boughs of needles hung round its hem
                 }
                 s.paint(C.white, 1).fx(110).prism(6, lean, 10.0, lz, 0.42, 11.6, 0, { foot: 0.7 });
             }
         } else if (kind === 'birch') {
+            crown = [lean, 5.6, lz, 0.5, 2.4];
             s.mark((x, y, z) => hashf(Math.round(y * 5), Math.round(Math.atan2(x, z) * 2)) > 0.72 ? [70, 66, 64] : null);
             trunk(5.6, 0.2, 0.1, C.birch, 3);
             s.mark(null);
             for (const [x, y, z, w, n] of [[0, 6.3, 0, 1.5, 1], [0.95, 4.9, 0.3, 1.1, 2], [-0.85, 5.2, -0.5, 1.15, 3], [0.3, 5.5, -0.9, 1.0, 4], [-0.4, 4.4, 0.8, 0.95, 5], [0.2, 7.3, 0.2, 0.9, 6]]) { clump(x, y, z, w, w * 1.05, w, 110, n, 0.9 + 0.2 * r(n + 20), { lump: 0.26 }); if (n > 1 && n < 6) bough([lean * 0.7, y - 1.0, lz * 0.7], [x * 0.7 + lean, y - 0.3, z * 0.7 + lz], 0.06, C.birch); }
         } else if (kind === 'willow') {
+            crown = [lean, 5.1, lz, 0.5, 3.6];
             trunk(3.1, 0.62, 0.42, C.trunk, 5);
             clump(0, 5.0, 0, 3.3, 1.8, 3.3, 40, 1, 1, { segs: 9, bands: 5 });
             clump(1.3, 5.7, 0.6, 1.8, 1.1, 1.8, 50, 2, 1.08); clump(-1.2, 5.6, -0.9, 1.9, 1.1, 1.9, 50, 3, 0.92);
@@ -84,6 +97,7 @@ const WayDetail = (() => {
             trunk(4.8, 0.36, 0.12, grey, 4);
             for (let i = 0; i < 5; i++) { const a = i * 1.9 + r(7) * 3, y = 2.0 + i * 0.6, len = 1.7 - i * 0.15, tip = [lean * 0.6 + Math.sin(a) * len, y + 1.5, lz * 0.6 + Math.cos(a) * len]; bough([lean * (y / 4.8), y, lz * (y / 4.8)], tip, 0.12 - i * 0.012, grey); if (i < 3) bough([(lean * 0.6 + tip[0]) / 2, y + 0.95, (lz * 0.6 + tip[2]) / 2], [tip[0] + Math.cos(a) * 0.6, y + 2.0, tip[2] - Math.sin(a) * 0.6], 0.05, grey); }
         } else if (kind === 'glade') {
+            crown = [lean, 5.8, lz, 0.55, 3.4];
             trunk(4.3, 0.46, 0.26, [92, 70, 110], 5);
             clump(0, 6.2, 0, 3.0, 1.6, 3.0, 60, 1, 1, { segs: 9, bands: 5 });
             for (const [x, y, z, n] of [[1.7, 5.0, 0.6, 2], [-1.6, 5.2, -0.8, 3], [0.4, 5.0, -1.8, 4], [-0.5, 5.3, 1.8, 5], [0.3, 7.3, 0.2, 6]]) { clump(x, y, z, 1.6, 1.05, 1.6, 80, n, 0.88 + 0.22 * r(n + 20)); if (n < 6) bough([lean * 0.8, 3.6, lz * 0.8], [x * 0.7 + lean, y - 0.4, z * 0.7 + lz], 0.14, [92, 70, 110]); }

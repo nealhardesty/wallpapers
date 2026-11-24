@@ -55,13 +55,13 @@ const WayCompanions = (() => {
         fox: Q({ len: 0.68, tall: 0.38, girth: 0.13, neck: [0.15, 0.75], head: 0.115, muzzle: [0.13, 0.045], ears: ['prick', 1.5], tail: ['brush', 0.52, 0.2], coat: [222, 120, 50], under: [250, 244, 232], mark: (p, x, y, z) => p === 'shin' || p === 'paw' ? [56, 42, 40] : p === 'muzzle' && y < -0.03 ? [250, 244, 232] : p === 'tail' && y > 0.4 ? [250, 244, 232] : p === 'ear' && y > 0.14 ? [50, 38, 36] : p === 'neck' && z > 0.02 ? [250, 244, 232] : null, stride: 0.62, rest: 'curl' }),
         badger: Q({ len: 0.7, tall: 0.3, girth: 0.17, deep: 0.9, neck: [0.12, 0.3], head: 0.11, muzzle: [0.13, 0.05], ears: ['round', 0.7], tail: ['stub', 0.16, 0.2], coat: [124, 124, 128], under: [44, 42, 46], shag: true, mark: (p, x, y, z) => p === 'leg' || p === 'shin' || p === 'paw' ? [40, 38, 42] : p === 'head' || p === 'muzzle' ? (Math.abs(Math.abs(x) - 0.045) < 0.022 ? [34, 32, 36] : [246, 244, 240]) : null, leg: 1.2, stride: 0.42, gait: 'waddle', rest: 'lie' }),
         otter: Q({ len: 0.78, tall: 0.24, girth: 0.11, neck: [0.16, 0.5], head: 0.092, muzzle: [0.05, 0.05], ears: ['round', 0.5], tail: ['thick', 0.46, 0.05], coat: [112, 78, 54], under: [214, 186, 150], mark: (p, x, y, z) => (p === 'muzzle' || (p === 'neck' && z > 0.01)) ? [224, 200, 166] : null, stride: 0.6, gait: 'bound', rest: 'lie' }),
-        hedgehog: Q({ len: 0.24, tall: 0.1, girth: 0.07, neck: [0.02, 0.2], head: 0.045, muzzle: [0.045, 0.02], ears: ['round', 0.6], tail: ['none', 0, 0], coat: [196, 170, 136], spines: true, stride: 0.14, gait: 'scuttle', rest: 'curl' }),
+        hedgehog: Q({ splay: 0.45, len: 0.24, tall: 0.1, girth: 0.07, neck: [0.02, 0.2], head: 0.045, muzzle: [0.045, 0.02], ears: ['round', 0.6], tail: ['none', 0, 0], coat: [196, 170, 136], spines: true, stride: 0.14, gait: 'scuttle', rest: 'curl' }),
         hare: Q({ len: 0.46, tall: 0.26, girth: 0.11, hip: 1.15, neck: [0.07, 0.9], head: 0.075, muzzle: [0.04, 0.035], ears: ['long', 1.35], tail: ['stub', 0.07, 1.0], coat: [246, 246, 250], mark: (p, x, y, z) => p === 'ear' && y > 0.2 ? [40, 38, 44] : null, eye: [30, 24, 28], nose: PINK, haunch: 1.4, stride: 0.9, gait: 'hop', rest: 'sit' }),
         fawn: Q({ len: 0.84, tall: 0.72, girth: 0.16, neck: [0.34, 1.05], head: 0.1, muzzle: [0.09, 0.04], ears: ['prick', 1.6], tail: ['stub', 0.12, 0.9], coat: [196, 140, 88], under: [246, 238, 222], mark: (p, x, y, z) => p === 'paw' ? [50, 40, 36] : (p === 'body' && y > 0.02 && patch(x, y, z, 34, 4) > 0.69) ? [250, 244, 230] : p === 'tail' ? [250, 244, 230] : null, leg: 0.8, hoof: true, stride: 0.95, rest: 'lie' }),
         cub: Q({ len: 0.72, tall: 0.42, girth: 0.21, belly: 1.08, neck: [0.14, 0.5], head: 0.14, muzzle: [0.09, 0.062], ears: ['round', 1.0], tail: ['stub', 0.08, 0.3], coat: [112, 78, 54], shag: true, mark: (p) => p === 'muzzle' ? [190, 150, 110] : null, leg: 1.35, stride: 0.6, gait: 'waddle', rest: 'sit' }),
         squirrel: Q({ len: 0.2, tall: 0.1, girth: 0.045, hip: 1.2, neck: [0.02, 0.9], head: 0.04, muzzle: [0.02, 0.018], ears: ['tuft', 1.2], tail: ['plume', 0.24, 1.9], coat: [196, 96, 46], under: [248, 238, 220], stride: 0.3, gait: 'bound', rest: 'sit' }),
-        tortoise: Q({ len: 0.6, tall: 0.22, girth: 0.2, deep: 0.62, neck: [0.16, 0.25], head: 0.07, muzzle: [0.04, 0.045], ears: ['none', 0], tail: ['stub', 0.06, -0.6], coat: [126, 136, 84], shell: true, mark: (p, x, y, z) => hashf(Math.round(x * 60), Math.round((y + z) * 60)) > 0.6 ? [104, 114, 70] : null, leg: 1.7, stride: 0.34, gait: 'plod', rest: 'tuck' }),
-        frog: Q({ len: 0.26, tall: 0.1, girth: 0.085, deep: 0.8, hip: 0.8, chest: 1.1, neck: [0.02, 0.3], head: 0.07, muzzle: [0.03, 0.06], ears: ['none', 0], tail: ['none', 0, 0], coat: [110, 170, 70], under: [232, 232, 180], mark: (p, x, y, z) => p === 'body' && y > 0.02 && patch(x, y, z, 30, 2) > 0.66 ? [60, 110, 50] : null, eye: [230, 190, 60], popeyed: true, haunch: 1.6, stride: 0.8, gait: 'hop', rest: 'sit' }),
+        tortoise: Q({ splay: 0.7, len: 0.6, tall: 0.22, girth: 0.2, deep: 0.62, neck: [0.16, 0.25], head: 0.07, muzzle: [0.04, 0.045], ears: ['none', 0], tail: ['stub', 0.06, -0.6], coat: [126, 136, 84], shell: true, mark: (p, x, y, z) => hashf(Math.round(x * 60), Math.round((y + z) * 60)) > 0.6 ? [104, 114, 70] : null, leg: 1.7, stride: 0.34, gait: 'plod', rest: 'tuck' }),
+        frog: Q({ splay: 0.6, len: 0.26, tall: 0.1, girth: 0.085, deep: 0.8, hip: 0.8, chest: 1.1, neck: [0.02, 0.3], head: 0.07, muzzle: [0.03, 0.06], ears: ['none', 0], tail: ['none', 0, 0], coat: [110, 170, 70], under: [232, 232, 180], mark: (p, x, y, z) => p === 'body' && y > 0.02 && patch(x, y, z, 30, 2) > 0.66 ? [60, 110, 50] : null, eye: [230, 190, 60], popeyed: true, haunch: 1.6, stride: 0.8, gait: 'hop', rest: 'sit' }),
         // What grazes and runs along the road, seen close (WayActors' plainer beasts stand in further off).
         sheep: Q({ len: 1.0, tall: 0.66, girth: 0.3, neck: [0.22, 0.6], head: 0.13, muzzle: [0.11, 0.06], ears: ['flop', 0.7], tail: ['stub', 0.14, -0.4], coat: [240, 236, 224], wool: true, mark: p => p === 'paw' || p === 'shin' ? [60, 52, 52] : null, face: [60, 52, 52], hoof: true, stride: 0.8, gait: 'walk', rest: 'graze' }),
         cow: Q({ len: 1.8, tall: 1.28, girth: 0.44, belly: 1.1, neck: [0.46, 0.25], head: 0.23, muzzle: [0.2, 0.12], ears: ['flop', 0.6], tail: ['tuft', 0.8, -0.85], coat: [150, 96, 60], mark: (p, x, y, z) => p === 'paw' ? [60, 50, 46] : p === 'muzzle' ? [240, 222, 210] : (p === 'body' || p === 'head') && patch(x, y, z, 2.6, 12) > 0.56 ? [244, 238, 226] : null, horns: 0.16, hoof: true, nose: [226, 170, 170], stride: 1.6, gait: 'walk', rest: 'graze' }),
@@ -111,9 +111,9 @@ const WayCompanions = (() => {
     });
     function quadParts(id, lite = false) {
         const F = lite ? (path => path) : finer;
-        const q = KINDS[id], g = q.girth * (1 + 0.16 * (q.fluff || 0)), len = q.len, h = q.head, legL = q.tall * 0.42, leg = q.leg, deep = q.deep ?? 1.04, k = `quad:${id}:${lite ? 'lite' : 'fine'}:`;
+        const q = KINDS[id], g = q.girth * (1 + 0.16 * (q.fluff || 0)), len = q.len, h = q.head, leg = q.leg, deep = q.deep ?? 1.04, k = `quad:${id}:${lite ? 'lite' : 'fine'}:`;
         const dye = name => (x, y, z) => (q.mark && q.mark(name, x, y, z)) || (name === 'body' && q.under && y < -0.42 * g ? q.under : null);
-        const furry = q.shag || q.fluff ? shag : null;
+        const furry = q.shag || q.fluff ? shag : null, LG = legsOf(q);
         return {
             body: part(k + 'body', s => {
                 // A rump, a waist behind the ribs, a barrel of a chest, and the root of the neck; a shoulder and a haunch each side.
@@ -144,13 +144,20 @@ const WayCompanions = (() => {
                 if (q.druid) for (const x of [-1, 1]) for (let i = 0; i < 3; i++) s.paint([120, 255, 200], 0).fx(0, 230).blob(x * g * (0.9 - 0.04 * i), g * (0.34 - 0.14 * i), len * (0.26 - 0.07 * i), 0.012, g * 0.11, g * 0.2, { segs: 6, bands: 3, lump: 0, under: 1 }).fx(0);       // her marks, on the shoulder
                 if (q.ridge) for (let i = 0; i < 7; i++) { const z = len * 0.36 - i * len * 0.12; s.paint([240, 190, 90], 0).prism(4, 0, g * deep * 0.94, z, 0.022, g * deep * 0.94 + 0.055 - 0.004 * i, 0, { squash: 1.6, flat: true }); }
             }),
-            fore: part(k + 'fore', s => { s.mark(dye('leg')).paint(q.coat, 0).fx(0).tube(F([[0, 0.1 * g, 0, g * 0.42 * leg, 1.1], [0, -legL * 0.3, 0.01, g * 0.36 * leg, 1.1], [0, -legL * 0.7, 0, g * 0.26 * leg, 1], [0, -legL * 1.04, 0, g * 0.21 * leg, 1]]), lite ? 6 : 10, { k: furry, cap: 3 }); ball(s, 0, -legL, -g * 0.02, g * 0.23 * leg, g * 0.22 * leg, g * 0.25 * leg, 8, 4); s.mark(null); }),
-            hind: part(k + 'hind', s => { s.mark(dye('leg')).paint(q.coat, 0).fx(0).tube(F([[0, 0.14 * g, 0, g * 0.5 * leg * (q.haunch || 1), 1.3], [0, -legL * 0.3, 0.02 * g, g * 0.46 * leg * (q.haunch || 1), 1.25], [0, -legL * 0.72, -0.01 * g, g * 0.28 * leg, 1.1], [0, -legL * 1.04, 0, g * 0.21 * leg, 1]]), lite ? 6 : 10, { k: furry, cap: 3 }); ball(s, 0, -legL, g * 0.03, g * 0.23 * leg, g * 0.22 * leg, g * 0.26 * leg, 8, 4); s.mark(null); }),
+            // The legs (the eighth pass): an upper bone to the wrist or hock, a lower to the fetlock, and the foot (a hoof,
+            // or a paw with toes) on a joint of its own, so it can stand flat on the ground while the leg above it swings.
+            fore: part(k + 'fore', s => { const l = LG.fore; s.mark(dye('leg')).paint(q.coat, 0).fx(0).tube(F([[0, 0.1 * g, 0, g * 0.42 * leg, 1.1], [0, -l * 0.3, 0.01, g * 0.36 * leg, 1.1], [0, -l * 0.7, 0, g * 0.26 * leg, 1], [0, -l * 1.04, 0, g * 0.21 * leg, 1]]), lite ? 6 : 10, { k: furry, cap: 3 }); ball(s, 0, -l, -g * 0.02, g * 0.23 * leg, g * 0.22 * leg, g * 0.25 * leg, 8, 4); s.mark(null); }),
+            hind: part(k + 'hind', s => { const l = LG.hind; s.mark(dye('leg')).paint(q.coat, 0).fx(0).tube(F([[0, 0.14 * g, 0, g * 0.5 * leg * (q.haunch || 1), 1.3], [0, -l * 0.3, 0.02 * g, g * 0.46 * leg * (q.haunch || 1), 1.25], [0, -l * 0.72, -0.01 * g, g * 0.28 * leg, 1.1], [0, -l * 1.04, 0, g * 0.21 * leg, 1]]), lite ? 6 : 10, { k: furry, cap: 3 }); ball(s, 0, -l, -g * 0.05, g * 0.23 * leg, g * 0.22 * leg, g * 0.27 * leg, 8, 4); s.mark(null); }),
             shin: part(k + 'shin', s => {
-                s.mark(dye('shin')).paint(q.coat, 0).fx(0).tube(F([[0, 0.04, 0, g * 0.21 * leg, 1], [0, -legL * 0.3, 0, g * 0.19 * leg, 1], [0, -legL * 0.62, 0, g * 0.155 * leg, 1], [0, -legL * 0.9, 0.004, g * 0.17 * leg, 1]]), lite ? 6 : 10, { cap: 1 });
+                const f = LG.shin;
+                s.mark(dye('shin')).paint(q.coat, 0).fx(0).tube(F([[0, 0.04, 0, g * 0.21 * leg, 1], [0, -f * 0.33, 0, g * 0.19 * leg, 1], [0, -f * 0.7, 0, g * 0.155 * leg, 1], [0, -f * 1.04, 0.004, g * 0.17 * leg, 1]]), lite ? 6 : 10, { cap: 1 });
+                s.mark(null);
+            }),
+            foot: part(k + 'foot', s => {
+                const c = LG.contact;
                 s.mark(dye('paw'));
-                if (q.hoof) s.paint([56, 48, 46], 0).prism(7, 0, -legL * 1.0, g * 0.02, g * 0.2 * leg, -legL * 0.86, g * 0.17 * leg, { cap: true });
-                else { ball(s.paint(q.coat, 0), 0, -legL * 0.94, g * 0.1 * leg, g * 0.22 * leg, g * 0.14 * leg, g * 0.3 * leg, 9, 5); if (!lite) for (const x of [-1, 0, 1]) ball(s, x * g * 0.13 * leg, -legL * 0.96, g * 0.33 * leg, g * 0.075 * leg, g * 0.08 * leg, g * 0.1 * leg, 5, 3); }
+                if (q.hoof) { s.paint(q.coat, 0).fx(0).blob(0, 0, 0.004, g * 0.18 * leg, g * 0.16 * leg, g * 0.18 * leg, { segs: 7, bands: 3, lump: 0, under: 0.8 }); s.paint([56, 48, 46], 0).prism(7, 0, -c, g * 0.03, g * 0.2 * leg, -c * 0.42, g * 0.17 * leg, { cap: true }); }
+                else { ball(s.paint(q.coat, 0).fx(0), 0, -c + g * 0.14 * leg, g * 0.1 * leg, g * 0.22 * leg, g * 0.14 * leg, g * 0.3 * leg, 9, 5); if (!lite) for (const x of [-1, 0, 1]) ball(s, x * g * 0.13 * leg, -c + g * 0.12 * leg, g * 0.33 * leg, g * 0.075 * leg, g * 0.08 * leg, g * 0.1 * leg, 5, 3); }
                 s.mark(null);
             }),
             neck: part(k + 'neck', s => {
@@ -221,44 +228,118 @@ const WayCompanions = (() => {
             }),
         };
     }
-    // How each gait moves: when each foot goes (fore left, fore right, hind left, hind right, as a share of a turn),
-    // how far the legs swing, how the body bobs, rolls and pitches, and how high it leaves the ground.
+    // How each gait moves the body: how far the legs swing when nothing better can place them (climbing a trunk), how
+    // it bobs, rolls and pitches, and how high it leaves the ground. When each foot goes is WayLogic.GAIT's.
     const GAITS = {
-        trot: { feet: [0, 0.5, 0.5, 0], swing: 0.5, bob: 0.03, roll: 0, pitch: 0, hop: 0 },
-        walk: { feet: [0, 0.5, 0.75, 0.25], swing: 0.42, bob: 0.015, roll: 0.03, pitch: 0, hop: 0 },
-        plod: { feet: [0, 0.5, 0.75, 0.25], swing: 0.5, bob: 0.01, roll: 0.06, pitch: 0, hop: 0 },
-        waddle: { feet: [0, 0.5, 0.5, 0], swing: 0.42, bob: 0.02, roll: 0.13, pitch: 0, hop: 0 },
-        scuttle: { feet: [0, 0.5, 0.5, 0], swing: 0.7, bob: 0.01, roll: 0.05, pitch: 0, hop: 0 },
-        bound: { feet: [0, 0.08, 0.5, 0.58], swing: 0.7, bob: 0, roll: 0, pitch: 0.24, hop: 0.45 },
-        hop: { feet: [0, 0.04, 0.42, 0.46], swing: 0.9, bob: 0, roll: 0, pitch: 0.3, hop: 1.2 },
+        trot: { swing: 0.5, bob: 0.03, roll: 0, pitch: 0, hop: 0 },
+        walk: { swing: 0.42, bob: 0.015, roll: 0.03, pitch: 0, hop: 0 },
+        gallop: { swing: 0.6, bob: 0.02, roll: 0, pitch: 0.1, hop: 0.1 },
+        plod: { swing: 0.5, bob: 0.01, roll: 0.06, pitch: 0, hop: 0 },
+        waddle: { swing: 0.42, bob: 0.02, roll: 0.13, pitch: 0, hop: 0 },
+        scuttle: { swing: 0.7, bob: 0.01, roll: 0.05, pitch: 0, hop: 0 },
+        bound: { swing: 0.7, bob: 0, roll: 0, pitch: 0.24, hop: 0.45 },
+        hop: { swing: 0.9, bob: 0, roll: 0, pitch: 0.3, hop: 1.2 },
     };
-    // pose: { yaw, gait (turns of its stride), moving (0 to 1), rest (0 to 1, settled), down (head to the ground),
-    // head (a turn of it), alarm, alt, wing, ride, t, size }.
+    for (const name in GAITS) GAITS[name].feet = L.GAIT[name].feet;
+    // How long each bone of a leg is: standing, a fore leg is all but straight and a hind leg stands in its zig-zag
+    // (the hock behind, the cannon upright), because its hip is nearer the ground than the leg is long. How far a foot
+    // can go either side of under its hip and still be on the ground (half), with the shoulder blade carrying the top
+    // of a fore leg part of the way (SLIDE), and so how long a turn of each gait is (cycle, in its own measure).
+    const SLIDE = [0.4, 0.15];
+    function legsOf(q) {
+        if (q.bones) return q.bones;
+        const legL = q.tall * 0.42, g = q.girth, hip = q.tall - 0.59 * g, contact = q.hoof ? 0.14 * legL : 0.1 * legL + 0.14 * g * q.leg, shin = (q.hoof ? 0.86 : 0.84) * legL, stand = hip - contact;
+        const fore = L.clamp(stand / 0.975 - shin, 0.8 * legL, 1.5 * legL), hind = L.clamp(stand / 0.93 - shin, 0.8 * legL, 1.5 * legL);
+        const halfOf = (l, slide) => { const r = 0.995 * (l + shin); return Math.sqrt(Math.max(0, r * r - stand * stand)) / (1 - slide); };
+        const half = Math.min(halfOf(fore, SLIDE[0]), halfOf(hind, SLIDE[1])), cycle = {};
+        for (const name in L.GAIT) { const G = L.GAIT[name]; cycle[name] = Math.max(2 * half * G.reach / G.duty, G.least * hip, 1e-3); }
+        return (q.bones = { hip, contact, shin, fore, hind, half, cycle });
+    }
+    const FEET = [[-1, 1], [1, 1], [-1, -1], [1, -1]], MIX = [['walk', 0], ['walk', 0], ['walk', 0]];
+    // Copy WayLogic.gaitMix's answer (it is one shared array) and the turn of each gait's own cycle.
+    function mixOf(q, speed, size) {
+        const m = L.gaitMix(q.gait, q.cat ? 'bound' : 'gallop', speed, q.tall * size);
+        for (let k = 0; k < 3; k++) { MIX[k][0] = m[k][0]; MIX[k][1] = m[k][1]; }
+        return MIX;
+    }
+    // pose: { yaw, gait (turns of its stride), speed (metres a second, if known: it picks walk, trot or gallop), moving
+    // (0 to 1), rest (0 to 1, settled), down (head to the ground), head (a turn of it), alarm, alt, wing, ride, t, size,
+    // feet (an array: where each hip, joint, fetlock and toe went, for the tests) }.
     function quad(out, st, id, x, y, z, pose) {
         const q = KINDS[id], P = pose.lite ? q.lite || (q.lite = quadParts(id, true)) : q.parts || (q.parts = quadParts(id)), size = (q.size || 1) * (pose.size || 1), g = q.girth, len = q.len, G = GAITS[q.gait], t = pose.t || 0;
-        const tau = pose.gait * TAU, mv = pose.moving || 0, rest = pose.rest || 0, style = q.rest, legL = q.tall * 0.42;
-        const sit = style === 'sit' ? rest : 0, lie = style === 'sit' || style === 'graze' ? 0 : rest, belly = style === 'belly' ? L.smooth(0.5, 1, rest) : 0, curl = style === 'curl' ? rest : 0, tuck = style === 'tuck' ? rest : 0, fly = pose.wing || 0;
+        const turns = pose.gait || 0, tau = turns * TAU, mv = pose.moving || 0, rest = pose.rest || 0, style = q.rest, LG = legsOf(q);
+        // Riding on a shoulder (pose.ride, 0 to 1) takes the place of whatever it does at rest.
+        const ride = pose.ride || 0, keep = 1 - ride, settled = rest * keep;
+        const sit = style === 'sit' ? settled : 0, lie = style === 'sit' || style === 'graze' ? 0 : settled, belly = style === 'belly' ? L.smooth(0.5, 1, settled) : 0, curl = style === 'curl' ? settled : 0, tuck = style === 'tuck' ? settled : 0, fly = pose.wing || 0;
         const put = model => out.stamp(model, st.top, null);
-        const air = G.hop ? Math.max(0, Math.sin(tau)) * mv : 0, gambol = pose.alarm ? Math.abs(Math.sin(t * 9)) * pose.alarm * 0.12 : 0;
-        const base = L.mix(q.tall - g * 0.25, g * (q.shell ? 0.35 : 0.96), lie) - sit * q.tall * 0.17;
-        st.reset(x, y + (pose.alt || 0), z, pose.yaw, size).move(0, base + G.bob * Math.sin(tau * 2) * mv * q.tall + air * G.hop * q.tall + gambol + 0.03 * fly * Math.sin(t * 9), 0)
-            .rz(G.roll * Math.sin(tau) * mv + Math.PI * belly + (pose.bank || 0) * 0.5 * fly).rx(-0.52 * sit - G.pitch * Math.cos(tau) * mv - 0.2 * fly - (pose.pitch || 0));
+        // The body moves with whichever gaits are going, each at its own turn.
+        const mix = mixOf(q, pose.speed, size), metres = turns * q.stride / size;          // walked, in its own measure
+        let bob = 0, roll = 0, pitch = 0, air = 0, nod = 0;
+        for (const [name, w] of mix) {
+            if (w <= 0) continue;
+            const B = GAITS[name], a = TAU * metres / LG.cycle[name];
+            bob += w * B.bob * Math.sin(a * 2); if (name === 'walk' || name === 'plod') nod += w * 0.08 * Math.sin(a * 2 + 0.6);          // a walker nods with its steps
+            roll += w * B.roll * Math.sin(a); pitch += w * B.pitch * Math.cos(a); air += w * B.hop * Math.max(0, Math.sin(a));
+        }
+        const gambol = pose.alarm ? Math.abs(Math.sin(t * 9)) * pose.alarm * 0.12 : 0;
+        const base = L.mix(L.mix(q.tall - g * 0.25, g * (q.shell ? 0.35 : 0.96), lie) - sit * q.tall * 0.17, g * 0.92, ride);
+        const Hb = base + bob * mv * q.tall + air * mv * q.tall + gambol + 0.03 * fly * Math.sin(t * 9);
+        // A rider keeps its balance against the walk beneath it: a lean the other way to each step, and back.
+        const rollA = roll * mv + Math.PI * belly + (pose.bank || 0) * 0.5 * fly - ride * 0.07 * (pose.swayK ?? 1) * Math.sin(pose.sway || 0), theta = -0.52 * sit - pitch * mv - 0.2 * fly - (pose.pitch || 0);
+        st.reset(x, y + (pose.alt || 0), z, pose.yaw, size).move(0, Hb, 0).rz(rollA).rx(theta);
         put(P.body);
-        const feet = [[-1, 1, G.feet[0]], [1, 1, G.feet[1]], [-1, -1, G.feet[2]], [1, -1, G.feet[3]]];
-        for (const [sx, sz, ph] of feet) {
-            const a = tau + ph * TAU, swing = G.swing * Math.sin(a) * mv * (1 - fly), knee = 0.8 * Math.max(0, Math.cos(a)) * mv;
-            st.push().move(sx * g * 0.56, -g * 0.34, sz * len * 0.34);
-            // Settled: a sitter folds its hind legs under and props itself on the fore; a lier tucks all four; a flier trails them.
-            const fore = sz > 0, up = fore ? -swing + 0.52 * sit - 1.35 * lie * (1 - tuck) + 0.9 * fly : -swing + 1.6 * sit + 1.25 * lie + 1.0 * fly;
-            st.rx(up).rz(sx * (0.5 * belly + 0.9 * tuck));
+        // The legs. Walking or standing, each foot is put where the gait says on the ground under it, and the leg is
+        // solved to it: the wrist of a fore leg forward and folding back, the hock of a hind leg behind and folding
+        // forward, the foot flat on the ground. Settled (sitting, lying, curled, flying) or up a trunk, the old poses.
+        const settle = Math.max(sit, lie), ik = (1 - settle) * (1 - fly) * keep * (1 - L.smooth(0.3, 0.7, Math.abs(pose.pitch || 0)));
+        const c = Math.cos(theta), sn = Math.sin(theta), sr = Math.sin(rollA), hipH = LG.hip, splay = q.splay || 0;
+        for (let i = 0; i < 4; i++) {
+            const [sx, sz] = FEET[i], fore = sz > 0, l1 = fore ? LG.fore : LG.hind, hx = sx * g * 0.56, hy = -g * 0.34, hz0 = sz * len * 0.34;
+            let hz = hz0;
+            // The old swing, its joints now the right way round, for what the solved leg does not cover.
+            const a = tau + G.feet[i] * TAU, swing = G.swing * Math.sin(a) * mv * (1 - fly), bend = 0.8 * Math.max(0, Math.cos(a)) * mv;
+            let up = fore ? -swing + 0.52 * sit - 1.35 * lie * (1 - tuck) + 0.9 * fly : -swing + 1.6 * sit + 1.25 * lie + 1.0 * fly;
+            let knee = fore ? bend - 0.1 * sit + 0.2 * lie : -bend - 2.3 * sit - 2.3 * lie - 0.6 * fly, foot = 0;
+            if (ik > 0) {
+                let fz = 0, fy = 0, fs = 0;
+                for (const [name, w] of mix) {
+                    if (w <= 0) continue;
+                    const gg = L.GAIT[name], cyc = LG.cycle[name], f = L.gaitFoot(name, metres / cyc, i, Math.min(0.5 * gg.duty * cyc, LG.half) * mv, gg.lift * hipH * mv);
+                    fz += w * f[0]; fy += w * f[1]; fs += w * f[2];
+                }
+                // The shoulder blade (and, less, the pelvis) carries the top of the leg part of the way with the foot. From
+                // the hip to where the fetlock must be, in the body's own frame (the body is pitched by theta).
+                hz = hz0 + ik * SLIDE[fore ? 0 : 1] * fz;
+                const py = Hb + hy * c - hz * sn + hx * sr, pz = hy * sn + hz * c;
+                const ty = LG.contact * Math.cos(splay) + fy + air * mv * q.tall * 0.5, tz = hz0 + (fore ? 0.03 : -0.02) * hipH + fz;
+                const dy = ty - py, dz = tz - pz, by = (dy * c + dz * sn) / Math.cos(splay), bz = -dy * sn + dz * c;
+                const [u, k] = L.legSolve(by, bz, l1, LG.shin, fore ? 1 : -1);
+                up = L.mix(up, u, ik); knee = L.mix(knee, k, ik);
+                foot = ik * L.clamp(-(theta + u + k) + (fore ? 1.2 : 0.45) * fs, -1.2, 1.9);
+            }
+            if (ride > 0) {
+                // On a shoulder: the outside fore paw hangs down over the front of it, the other is tucked under the chest,
+                // and the hind legs are folded under on the shoulder (or the top of the pack).
+                const hang = fore && sx > 0, ru = hang ? -theta + 0.12 + 0.08 * Math.sin(t * 1.1 + 2) : fore ? -1.3 : 1.25, rk = hang ? 0.3 : fore ? 0.25 : -2.3;
+                up = L.mix(up, ru, ride); knee = L.mix(knee, rk, ride); foot = L.mix(foot, hang ? 0.6 : 0, ride);
+            }
+            st.push().move(hx, hy, hz);
+            if (pose.feet) pose.feet[i] = { fore, hip: [st.top[3], st.top[7], st.top[11]] };
+            st.rz(sx * splay).rx(up).rz(sx * (0.5 * belly + 0.9 * tuck));
             if (tuck < 0.9) put(fore ? P.fore : P.hind);
-            st.move(0, -legL, 0).rx(fore ? -knee - 0.1 * sit + 0.2 * lie : knee - 2.3 * sit - 2.3 * lie - 0.6 * fly);
+            st.move(0, -l1, 0);
+            if (pose.feet) pose.feet[i].joint = [st.top[3], st.top[7], st.top[11]];
+            st.rx(knee);
             if (tuck < 0.9) put(P.shin);
+            st.move(0, -LG.shin, 0).rx(foot);
+            if (pose.feet) { const m = st.top; pose.feet[i].ankle = [m[3], m[7], m[11]]; pose.feet[i].toe = [m[3] - m[1] * LG.contact, m[7] - m[5] * LG.contact, m[11] - m[9] * LG.contact]; }
+            if (tuck < 0.9) put(P.foot);
             st.pop();
         }
         if (q.tail[0] !== 'none') {
             const wag = q.wag && rest < 0.5 ? 0.45 * Math.sin(t * q.wag) : 0.14 * Math.sin(t * 1.7 + size * 9);
-            st.push().move(0, g * 0.25, -len * 0.47).rz(wag + 1.5 * curl * (q.cat || id === 'fox' ? 1 : 0.4)).rx(-Math.PI / 2 + q.tail[2] * (1 - 0.5 * mv * (q.cat ? 0 : 0.4)) - 0.9 * curl - 0.5 * lie + 0.5 * sit + 0.1 * Math.sin(t * 2.3 + 1));
+            // (A rider's hangs down behind it and swings, slowly, as a cat's does.)
+            st.push().move(0, g * 0.25, -len * 0.47).rz(wag * keep + 1.5 * curl * (q.cat || id === 'fox' ? 1 : 0.4) + ride * 0.3 * Math.sin(t * 1.3 + 1)).rx(-Math.PI / 2 + q.tail[2] * (1 - 0.5 * mv * (q.cat ? 0 : 0.4)) * keep - 0.9 * curl - 0.5 * lie + 0.5 * sit + 0.1 * Math.sin(t * 2.3 + 1) - ride * (0.9 + theta));
             put(P.tail);
             st.pop();
         }
@@ -268,10 +349,12 @@ const WayCompanions = (() => {
             st.pop();
         }
         // The neck and head: down to graze or sniff, tucked round when curled, up and about when something is afoot.
-        const down = Math.max(pose.down || 0, style === 'graze' ? rest * (0.15 + 0.85 * L.smooth(-0.3, 0.3, Math.sin(t * 0.21 + size * 5))) : 0, curl * 0.8, belly * 0.5), lift = q.neck[1] * (1 - down) - 0.7 * down + 0.3 * (pose.alarm || 0) * (1 - down);
+        const down = Math.max(pose.down || 0, style === 'graze' ? settled * (0.15 + 0.85 * L.smooth(-0.3, 0.3, Math.sin(t * 0.21 + size * 5))) : 0, curl * 0.8, belly * 0.5), lift = q.neck[1] * (1 - down) - 0.7 * down + 0.3 * (pose.alarm || 0) * (1 - down) + nod * mv * (1 - down) + ride * (theta + 0.1);
+        // A rider looks about from up there, and now and then turns to rub its cheek on the traveller's.
+        const rub = ride * L.smooth(0.82, 0.9, (t / 13 + size) % 1) * (1 - L.smooth(0.96, 1, (t / 13 + size) % 1)), look = (pose.head || 0) + ride * (0.45 * Math.sin(t * 0.37) + 0.25 * Math.sin(t * 0.91 + 1) - 1.1 * rub);
         st.move(0, g * 0.28, len * 0.4).rx(Math.PI / 2 - lift + 0.5 * sit).ry(-1.1 * curl * (1 - 0.5 * down));
         if (tuck < 0.9 || !q.shell) put(P.neck);
-        st.move(0, q.neck[0], 0).rx(-(Math.PI / 2 - lift) - 0.35 * sit + 0.5 * down + 0.05 * Math.sin(t * 5) * down - 0.5 * belly).ry((pose.head || 0) + 0.25 * Math.sin(t * 0.7 + size * 3) * rest * (1 - curl));
+        st.move(0, q.neck[0], 0).rx(-(Math.PI / 2 - lift) - 0.35 * sit + 0.5 * down + 0.05 * Math.sin(t * 5) * down - 0.5 * belly + 0.25 * rub).ry(look + 0.25 * Math.sin(t * 0.7 + size * 3) * settled * (1 - curl));
         if (tuck < 0.9 || !q.shell) put(P.head);
     }
 
