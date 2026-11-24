@@ -52,15 +52,18 @@ const OVERRIDES = {
     'christmas-village': { configVersion: 1, sky: 'night', moonPhase: 'full', scale: 1.3, horizon: 0.36 },
     // The paintings' hour, with the town out.
     'painted-village': { configVersion: 1, sky: 'dusk', snowfall: 0.6 },
+    // Dusk, the line of torches halfway down, a few more of them so the ribbon reads in a tile.
+    torchlight: { configVersion: 1, sky: 'dusk', torches: 36, spacing: 7, snowfall: 0.4 },
 };
 // URL parameters for a better picture: satellites as its sample station
 // passes overhead before dawn, weather's sample at a golden dusk (thumb mode never fetches, so it's the sample),
 // World Clock near the June solstice, Europe in its long evening; the Orrery tilted, on a fixed night.
-const PARAMS = { baseball: '&date=2026-06-20T18:40&seed=7', sumo: '&date=2026-06-20T14:00&seed=7', 'sky-island': '&date=2026-06-20T11:00', satellites: '&date=2026-10-14T04:47:15', 'pixel-room': '&date=2026-10-22T18:20', 'rainy-window': '&date=2026-10-22T21:00', harvest: '&date=2026-11-20T15:50', neko: '&date=2026-06-10T12:00', weather: '&date=2026-11-05T17:50', 'world-clock': '&date=2026-06-21T19:30:00Z', orrery: '&date=2026-11-05T21:00', 'christmas-village': '&date=2026-12-20T19:30&seed=7', 'painted-village': '&date=2026-12-20T17:00&seed=7' };
+const PARAMS = { baseball: '&date=2026-06-20T18:40&seed=7', sumo: '&date=2026-06-20T14:00&seed=7', 'sky-island': '&date=2026-06-20T11:00', satellites: '&date=2026-10-14T04:47:15', 'pixel-room': '&date=2026-10-22T18:20', 'rainy-window': '&date=2026-10-22T21:00', harvest: '&date=2026-11-20T15:50', neko: '&date=2026-06-10T12:00', weather: '&date=2026-11-05T17:50', 'world-clock': '&date=2026-06-21T19:30:00Z', orrery: '&date=2026-11-05T21:00', 'christmas-village': '&date=2026-12-20T19:30&seed=7', 'painted-village': '&date=2026-12-20T17:00&seed=7', torchlight: '&date=2026-12-20T17:00&seed=7' };
 SETTLE_MS.fireworks = 2600;
 SETTLE_MS.harvest = 4000;
 SETTLE_MS['sky-island'] = 3000;
 SETTLE_MS['painted-village'] = 9000;   // it paints itself: wait for the last stroke
+SETTLE_MS.torchlight = 9000;           // the same
 SETTLE_MS.sumo = 2600;            // out of the crouch and into the bout
 SETTLE_MS['ice-patrol'] = 9000;    // headless Chrome draws its WebGL in software: a frame takes a second or two
 SETTLE_MS.wayfarer = 9000;         // the same: a few frames, so the smoke is up and the camera has settled

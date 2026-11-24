@@ -2810,6 +2810,97 @@ const STAGE_CHECKS = {
             return true;
         }],
     ],
+    torchlight: [
+        ['at dusk, a picture on frame one and torches already on the mountain; every torch lights the snow it passes; the painting finishes once and is never painted again for the light', async () => {
+            if (!await stageWith('torchlight', { configVersion: 1, sky: 'dusk' }, '&seed=7&date=2026-12-20T17:00')) return record('not ready');
+            const first = await evaluate(`(m => { const T = m.scene, d = T.lit.getContext('2d', { willReadFrequently: true }).getImageData(T.pw >> 1, T.ph - 20, 4, 4).data, p = m.cast.proc;
+                return { frames: WP.host.frames.count, lit: d[0] + d[1] + d[2], alpha: d[3], flakes: m.flakes.length, puffs: m.puffs.length, phase: p && p.phase, skiing: p ? p.sk.filter(k => k.state === 'ski').length : 0, cats: m.cast.cats.length, dog: !!m.cast.dog, groups: T.groups.length, on: T.groups.filter(g => g.level > 0.5).length, kind: m.cam.kind }; })(WP.stage.manager)`);
+            if (first.frames > 12 || !(first.lit > 60) || first.alpha !== 255) record(`no picture on the first frames: ${JSON.stringify(first)}`);
+            if (first.phase !== 'down' || first.skiing < 8 || first.flakes < 100 || first.puffs < 10 || first.cats < 3 || !first.dog) record(`not alive on frame one: ${JSON.stringify(first)}`);
+            if (first.kind !== 'wide' || first.groups < 20 || first.on < first.groups * 0.8) record(`a dark valley at dusk: ${first.on} of ${first.groups} groups lit`);
+            if (!await waitFor(() => evaluate('WP.stage.manager.scene.done'), 30000)) return record('the painting never finished');
+            const painted = await evaluate(`(m => ({ strokes: m.scene.strokes, pass: m.scene.pass, bakes: m.bakes, patches: m.scene.groups.filter(g => g.patch).length, masks: m.scene.masks.filter(Boolean).length, sky: m.scene.openSky.length, half: !!m.scene.paintHalf, len: Math.round(m.scene.track.length) }))(WP.stage.manager)`);
+            if (painted.strokes < 150000 || painted.pass < 5 || painted.bakes !== 1 || painted.patches < 15 || painted.masks < 4 || painted.sky < 40 || !painted.half) record(`the painting: ${JSON.stringify(painted)}`);
+            // The snow about the leader's torch, on screen, with the torches' light and without it (the moving-lights effect).
+            const around = `(m => { const p = m.cast.proc, k = p.sk.filter(q => q.state === 'ski').sort((a, b) => b.s - a.s)[0], at = TorchLogic.at(m.scene.track, k.s, m.cam), r = Math.max(6, 6 * at.sc);
+                const c = document.createElement('canvas'); c.width = 24; c.height = 12; const g = c.getContext('2d', { willReadFrequently: true }); g.drawImage(m.canvas, (at.x - r * 2) * m.dpr, (at.y - r) * m.dpr, r * 4 * m.dpr, r * 2 * m.dpr, 0, 0, 24, 12);
+                const d = g.getImageData(0, 0, 24, 12).data; let R = 0, B = 0; for (let i = 0; i < d.length; i += 4) { R += d[i]; B += d[i + 2]; } return { r: Math.round(R / 288), b: Math.round(B / 288) }; })(WP.stage.manager)`;
+            await evaluate(`(m => { m.cast.proc.hold = { t: 30 }; m.fx.glints = m.fxTarget.glints = 1; })(WP.stage.manager)`);
+            await sleep(500);
+            const lit = await evaluate(around);
+            await evaluate(`(m => { m.fx.glints = m.fxTarget.glints = 0; })(WP.stage.manager)`);
+            await sleep(500);
+            const dark = await evaluate(around);
+            await evaluate(`(m => { m.fx.glints = m.fxTarget.glints = 1; m.cast.proc.hold = null; })(WP.stage.manager)`);
+            if (!(lit.r > dark.r * 1.12) || !(lit.r - dark.r > (lit.b - dark.b) * 1.2)) record(`a torch's pool: lit ${JSON.stringify(lit)}, without ${JSON.stringify(dark)}`);
+            if (await evaluate('WP.stage.manager.bakes') !== 1) record('painted again for the light');
+            console.log(`    torchlight: ${painted.strokes} strokes, a run of ${painted.len} m, ${painted.patches} patches of light; the snow by a torch ${lit.r}/${lit.b} lit, ${dark.r}/${dark.b} without`);
+            await shoot('torchlight-dusk');
+            return true;
+        }],
+        ['a whole descent: lit at the hut, down in order, the torches planted in a heart, a cat to the warm, everyone in at the inn; a tap on the hut sends the next; taps on a cat and the dog; nothing saved', async () => {
+            if (!await stageWith('torchlight', { configVersion: 1, sky: 'night', descents: 'tap', tumbles: 1, finale: 'heart', torches: 16 }, '&seed=7&date=2026-12-20T20:00')) return record('not ready');
+            await sleep(400);
+            if (await evaluate('!!WP.stage.manager.cast.proc')) record('a descent with descents set to only when asked');
+            // A tap on the hut sends them.
+            const hut = await evaluate(`(m => { const h = m.scene.hits.find(h => h.kind === 'hut'); return h && { x: (h.x0 + h.x1) / 2, y: (h.y0 + h.y1) / 2 }; })(WP.stage.manager)`);
+            if (!hut) return record('no hut');
+            await mouse('mousePressed', hut.x, hut.y); await mouse('mouseReleased', hut.x, hut.y);
+            await sleep(300);
+            const sent = await evaluate(`(m => m.cast.proc && { n: m.cast.proc.n, phase: m.cast.proc.phase })(WP.stage.manager)`);
+            if (!sent || sent.phase !== 'gather') return record(`a tap on the hut sent nobody: ${JSON.stringify(sent)}`);
+            // Fast forward, a tenth of a second at a time, watching.
+            const run = await evaluate(`(m => { const c = m.cast, p = c.proc, seen = { phases: [], falls: 0, guideCat: false, maxPlanted: 0, warmCat: false };
+                for (let i = 0; i < 12000 && !p.done; i++) {
+                    c.update(0.1);
+                    if (seen.phases[seen.phases.length - 1] !== p.phase) seen.phases.push(p.phase);
+                    seen.falls = Math.max(seen.falls, p.sk.filter(k => k.fall > 0).length);
+                    seen.maxPlanted = Math.max(seen.maxPlanted, c.planted.length);
+                    if (c.cats.some(k => k.kind === 'roam' && k.at === 'finish')) seen.warmCat = true;
+                }
+                return { ...seen, done: p.done, planted: c.planted.length, inPlace: p.sk.every(k => k.planted && Math.abs(k.planted.x - c.spots[k.i].x) < 1e-9), n: p.n };
+            })(WP.stage.manager)`);
+            if (!run.done || run.phases.join() !== 'gather,down,planted,leave' || run.maxPlanted !== run.n || !run.inPlace) record(`the descent: ${JSON.stringify(run)}`);
+            if (run.falls < 1) record('with tumbles at 1, nobody sat down in the snow');
+            // A cat by the planted torches (they are warm), a heart for a tap on one, the dog on his feet for a tap.
+            const pet = await evaluate(`(m => { const c = m.cast.cats.find(k => k.kind === 'roam'), d = m.cast.dog; return { cat: c && { x: m.cam.sx(c.x, c.z), y: m.cam.sy(c.z) - 0.4 * m.cam.sc(c.z) * c.k }, dog: d && { x: m.cam.sx(d.x, d.z), y: m.cam.sy(d.z) - 0.5 * m.cam.sc(d.z) * 1.5 } }; })(WP.stage.manager)`);
+            if (pet.cat) { await mouse('mousePressed', pet.cat.x, pet.cat.y); await mouse('mouseReleased', pet.cat.x, pet.cat.y); }
+            if (pet.dog) { await mouse('mousePressed', pet.dog.x, pet.dog.y); await mouse('mouseReleased', pet.dog.x, pet.dog.y); }
+            await sleep(200);
+            const after = await evaluate(`(m => ({ hearts: m.cast.hearts.length, wag: m.cast.dog.wag, saved: localStorage.getItem('wp:torchlight') }))(WP.stage.manager)`);
+            if (!(after.hearts > 0) || !(after.wag > 0)) record(`a tap on a cat or the dog: ${JSON.stringify(after)}`);
+            if (!/"descents":"tap"/.test(after.saved || '') || /innName|torches":28/.test(after.saved)) record(`storage changed: ${after.saved}`);
+            return true;
+        }],
+        ['New Year’s Eve: the grand descent spells the year on the mountain at midnight and the fireworks go up; by day there are skiers, and no torches', async () => {
+            if (!await stageWith('torchlight', { configVersion: 1, sky: 'live' }, '&seed=7&date=2026-12-31T23:59:56')) return record('not ready');
+            await sleep(600);
+            const spell = await evaluate(`(m => { const p = m.cast.proc; return p && { grand: p.grand, spelling: p.spelling, n: p.n, figure: m.cast.figure ? m.cast.figure.length : 0, onFigure: p.sk.filter(k => k.fig > 0.95).length, year: m.cal.year }; })(WP.stage.manager)`);
+            if (!spell || !spell.grand || !spell.spelling || spell.n < 40 || spell.figure !== spell.n || spell.onFigure < spell.n * 0.6 || spell.year !== 2027) record(`the year on the mountain: ${JSON.stringify(spell)}`);
+            if (!await waitFor(() => evaluate('WP.stage.manager.cast.sparks.length > 30'), 15000)) record('no fireworks at midnight');
+            await shoot('torchlight-new-year');
+            if (!await stageWith('torchlight', { configVersion: 1, sky: 'day' }, '&seed=7&date=2026-12-20T12:00')) return record('not ready by day');
+            await sleep(800);
+            const day = await evaluate(`(m => ({ proc: !!m.cast.proc, skiers: m.cast.day.length, on: m.scene.groups.filter(g => g.level > 0.5).length, dark: m.light.dark }))(WP.stage.manager)`);
+            if (day.proc || day.skiers < 2 || day.on > 0 || day.dark > 0.05) record(`by day: ${JSON.stringify(day)}`);
+            return true;
+        }],
+        ['a phone held upright: the mountain, the inn and the finish above the gesture bar; everything left out still paints a valley', async () => {
+            await cdp.send('Emulation.setDeviceMetricsOverride', { width: 412, height: 915, deviceScaleFactor: 2, mobile: true });
+            try {
+                if (!await stageWith('torchlight', { configVersion: 1, sky: 'dusk' }, '&seed=7&date=2026-12-20T17:00&host=android')) return record('not ready on a phone');
+                const phone = await evaluate(`(m => ({ kind: m.cam.kind, inset: m.bottom, finish: m.cam.sy(m.L.finish.z), H: m.H, inn: !!m.L.inn, skiing: m.cast.proc ? m.cast.proc.sk.filter(k => k.state === 'ski').length : 0 }))(WP.stage.manager)`);
+                if (phone.kind !== 'upright' || !(phone.inset > 0) || phone.finish > phone.H - phone.inset || !phone.inn || phone.skiing < 5) record(`upright: ${JSON.stringify(phone)}`);
+                await shoot('torchlight-phone');
+            } finally { await cdp.send('Emulation.clearDeviceMetricsOverride'); }
+            const off = { configVersion: 1, sky: 'night', inn: false, chapel: false, chalets: 0, lamps: false, tree: 'never', candles: 'never', snowcat: false, lift: false, dog: false, cats: 0, windowCat: false, backpackCat: false, daySkiers: false, descents: 'tap', snowfall: 0, smoke: false, clouds: 0 };
+            if (!await stageWith('torchlight', off, '&seed=7&date=2026-12-20T20:00')) return record('no boot with everything left out');
+            if (!await waitFor(() => evaluate('WP.stage.manager.scene.done'), 30000)) return record('the bare valley never finished painting');
+            const bare = await evaluate(`(m => ({ strokes: m.scene.strokes, cats: m.cast.cats.length, dog: !!m.cast.dog, proc: !!m.cast.proc, flakes: m.flakes.length, alpha: m.scene.lit.getContext('2d', { willReadFrequently: true }).getImageData(10, m.scene.ph - 10, 1, 1).data[3] }))(WP.stage.manager)`);
+            if (bare.strokes < 50000 || bare.cats || bare.dog || bare.proc || bare.flakes || bare.alpha !== 255) record(`the bare valley: ${JSON.stringify(bare)}`);
+            return true;
+        }],
+    ],
     'ski-run': [
         ['on the mountain on the first frame: the lead and two friends on the snow, tracks behind them, the land about them', async () => {
             if (!await stageWith('ski-run', null, '&seed=7')) return record('not ready');

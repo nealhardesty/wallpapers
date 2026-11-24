@@ -298,6 +298,7 @@ still draws offline). 📅 **Seasonal** isn't one itself: it picks one by date.
 | 🎄 [A Very Small Christmas](https://nealhardesty.github.io/wallpapers/?w=small-christmas) | 👆 | A tiny pixel tree with a toy train |
 | ☃️ [Christmas Village](https://nealhardesty.github.io/wallpapers/?w=christmas-village) | 👆 | A New England town in the snow: skaters, a grand tree, cats |
 | 🖼️ [Painted Village](https://nealhardesty.github.io/wallpapers/?w=painted-village) | 👆 | The whole village from the hill, as a painting: lamplight on snow, a toy train, a sledding hill, bears in the woods |
+| 🔥 [Torchlight Descent](https://nealhardesty.github.io/wallpapers/?w=torchlight) | 👆 | An alpine valley at nightfall, painted: skiers with torches snake down the mountain, a cat rides in a rucksack, and on New Year's Eve they spell the year |
 | 🏝️ [Sky Island](https://nealhardesty.github.io/wallpapers/?w=sky-island) | 👆 | A pixel village on a floating island, new each load |
 | ⚔️ [Pixel Quest](https://nealhardesty.github.io/wallpapers/?w=quest) | 👆 | A self-playing 8-bit adventure; take over the hero |
 | 🌇 [Synthwave](https://nealhardesty.github.io/wallpapers/?w=synthwave) | | The endless neon drive |
