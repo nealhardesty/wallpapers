@@ -169,6 +169,16 @@
               { keys: ['p'], label: 'Paint it again', run: village => village.repaint() },
               { keys: ['m'], label: 'What time is it in the village?', run: village => village.report() },
           ] },
+        { id: 'snow-globe', name: 'Snow Globe', icon: '🔮', accent: '#ffcf8a', background: '#120e18',
+          scripts: ['snow-globe/globe-logic.js', 'snow-globe/globe-art.js', 'snow-globe/snow-globe.js'],
+          make: host => new SnowGlobeAnimationManager(host), cost: 'medium', interactive: true,
+          effects: [['refraction', 'medium'], ['glints', 'medium']],
+          keys: [
+              { keys: ['s'], label: 'Shake it', run: globe => globe.keyShake() },
+              { keys: ['w'], label: 'Wind the music box', run: globe => globe.keyWind() },
+              { keys: ['b'], label: 'The cat takes a swipe at it', run: globe => globe.keyBat() },
+              { keys: ['n'], label: 'The next scene inside', run: globe => globe.keyScene() },
+          ] },
         // harvest-sky.js (the sun and the moon) loads first: Sky Island shares Harvest Valley's astronomy.
         { id: 'sky-island', name: 'Sky Island', icon: '🏝️', accent: '#7cc4ff', background: '#5a8fd0',
           scripts: ['harvest/harvest-sky.js', 'sky-island/sky-island-logic.js', 'sky-island/sky-island-art.js', 'sky-island/sky-island-land.js', 'sky-island/sky-island-actors.js', 'sky-island/sky-island.js'],

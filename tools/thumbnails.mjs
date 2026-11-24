@@ -65,6 +65,8 @@ SETTLE_MS.sumo = 2600;            // out of the crouch and into the bout
 SETTLE_MS['ice-patrol'] = 9000;    // headless Chrome draws its WebGL in software: a frame takes a second or two
 SETTLE_MS.wayfarer = 9000;         // the same: a few frames, so the smoke is up and the camera has settled
 SETTLE_MS['ski-run'] = 12000;      // the same, with a few hundred thousand triangles of trees
+SETTLE_MS['snow-globe'] = 6000;    // it paints itself, and the snow is still coming down
+OVERRIDES['snow-globe'] = { configVersion: 1, cat: 'harry', scene: 'cottage' };     // the same cat and scene whatever the date
 
 const { chrome, profile, cdp } = await launch({ width: 1280, height: 800 });
 try {
