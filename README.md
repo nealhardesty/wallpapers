@@ -216,10 +216,10 @@ Run `make` (that's `make help`) to list every target with its description.
 |---|---|
 | Run it | `open` (opens `web/index.html`; `PAGE='?w=harvest'`), `serve-http` (:8000; `HOST=0.0.0.0` for the LAN), `serve-https` (:8443, self-signed; `make serve` is the same), `cert` |
 | Check | `lint`, `audit`, `audit-staged`, `audit-history`, `test`, `smoke` (screenshots in `dist/smoke/`), `smoke-clock`, `smoke-live` (against the deployed site), `ci` (everything CI runs) |
-| Performance | `bench` (every wallpaper, every tier, simulated phone; writes the ⚡ badges), `bench-clock`, `android-bench` (on a real phone), `wayfarer-sight` |
+| Performance | `bench` (every wallpaper, every tier, simulated phone; writes the ⚡ badges), `bench-clock`, `android-bench` (on a real phone), `wayfarer-sight`, `wayfarer-budget` (Wayfarer's triangles a frame, by tier and place) |
 | Generated, committed | `thumbnails`, `screenshots`, `icons`, `world-land`, `world-atlas`, `jellyfin-fixtures` (review the diffs) |
 | Build | `extension`, `site` (GitHub Pages copy), `bing-json`, `docker-build`, `docker-run`, `clean` |
-| Debug aids | `ski-filmstrip` (Fresh Tracks motion as frames and plots), `jellyfin-media`, `jellyfin-dev` (Docker Jellyfin at :8096, user and password `wallpapers`), `jellyfin-stop`, `jellyfin-mock` (fixture API at :8097) |
+| Debug aids | `ski-filmstrip` (Fresh Tracks motion as frames and plots), `wayfarer-gait` (Wayfarer's animals walking, as frames), `wayfarer-models` (Wayfarer's trees and houses at each level of detail), `jellyfin-media`, `jellyfin-dev` (Docker Jellyfin at :8096, user and password `wallpapers`), `jellyfin-stop`, `jellyfin-mock` (fixture API at :8097) |
 | Android | `android-build`, `android-install`, `android-logcat`, `android-emulator` (`AVD=`), `android-keystore` (once, ever), `android-release` |
 | macOS | `mac-build`, `mac-run`, `mac-dev` (from this checkout's `web/`), `mac-test`, `mac-release`, `mac-install`, `mac-uninstall`, `mac-saver-test`, `mac-saver-live`, `mac-saver-log` |
 | Windows | `win-build`, `win-run` (from WSL), `win-dev`, `win-reload`, `win-unit`, `win-test`, `win-test-zip`, `win-release`, `win-sign`, `win-sign-tools`, `win-install`, `win-uninstall`, `win-saver`, `win-log` (`FLAVOR=`, `FOLLOW=1`) |

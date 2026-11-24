@@ -1802,6 +1802,36 @@ const WayLogic = (() => {
         return c;
     }
 
+    // ---- Giving way (the eighth pass) --------------------------------------------------------------
+    // One of the townsfolk (a: x, z, role, yaw, v, and what this keeps: side, slide, ox, oz, veer, stepping, stride)
+    // gives way to whoever is within reach of them (pushers: [x, z, reach]) on a road whose heading here is `heading`,
+    // and comes back after. It is walked: out to the side of the road, never back along it (a give-way straight away
+    // from a camera ahead of the traveller read as somebody sliding backwards as they passed), at a walking pace, turned
+    // the way they step, with their legs going; whoever is sitting stays put, and nobody goes more than 3.2 m off their
+    // place (into a wall). `cut`: the camera has just cut, and they are already out of the way.
+    function giveWay(a, dt, heading, pushers, cut = false) {
+        if (a.role === 'sit' || a.role === 'fish') { a.ox = a.oz = a.side = a.slide = a.stepping = 0; return a; }
+        const hx = Math.sin(heading), hz = Math.cos(heading), nx = hz, nz = -hx, side = a.side || 0;
+        const ax = a.x + nx * side, az = a.z + nz * side, mine = side || (a.v < 0.5 ? -1 : 1);
+        let want = 0, pushed = false;
+        for (const [x, z, reach] of pushers) {
+            const dx = ax - x, dz = az - z, along = dx * hx + dz * hz, lat = dx * nx + dz * nz;
+            if (along * along + lat * lat >= reach * reach) continue;
+            want += Math.sign(lat || mine) * Math.sqrt(reach * reach - along * along) - lat; pushed = true;
+        }
+        const to = pushed ? clamp(side + want, -3.2, 3.2) : 0, most = (pushed ? 1.4 : 0.6) * dt;
+        a.side = cut ? to : side + clamp(to - side, -most, most);
+        a.slide = dt > 0 && !cut ? (a.side - side) / dt : 0;
+        a.ox = nx * a.side; a.oz = nz * a.side;
+        // Turned the way they are going (along their beat and out to the side together), and stepping.
+        const along = a.role === 'stroll' ? 0.95 : 0, fx = Math.sin(a.yaw) * along + nx * a.slide, fz = Math.cos(a.yaw) * along + nz * a.slide;
+        const veer = Math.hypot(fx, fz) > 0.05 ? wrapPi(Math.atan2(fx, fz) - a.yaw) * Math.min(1, Math.abs(a.slide) / 0.5) : 0;
+        a.veer = (a.veer || 0) + (veer - (a.veer || 0)) * Math.min(1, dt * 6);
+        if (a.role !== 'stroll' && a.role !== 'child') a.stride = (a.stride || 0) + Math.abs(a.slide) * dt / 1.4;
+        a.stepping = Math.min(1, Math.abs(a.slide) / 0.6);
+        return a;
+    }
+
     // ---- Four feet (the eighth pass) ----------------------------------------------------------------
     // How a four-legged thing puts its feet down. Each gait: when each foot goes (fore left, fore right, hind left,
     // hind right, as a share of a turn), the share of the turn a foot is on the ground (duty), how high it lifts (a share
@@ -1860,6 +1890,6 @@ const WayLogic = (() => {
         WILD, WILDLIFE, WILD_SHOW, WILD_LEVELS, wildStart, wildStep, wildSeen, waterSeen,
         COMPANIONS, COMPANION, GROUPS, PARTY_MAX, party, partyStart, partyChange, companionStart, companionStep, FORMS, SHIFT, shiftStart, shiftStep, stealthStart, stealthStep, spook, fenceAt, vault,
         journeyStart, journeyStep, standing, sight, camera, ORBIT, orbitStart, orbitGrab, orbitDrag, orbitStep, orbitCamera, sightline, inOpen, wrapPi,
-        GAIT, gaitMix, gaitFoot, legSolve,
+        GAIT, gaitMix, gaitFoot, legSolve, giveWay,
     };
 })();

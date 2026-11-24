@@ -29,11 +29,12 @@ vec3 atmosphere(vec3 d) {
     float toward = max(dot(dxz, sxz), 0.0), sd = max(dot(d, uSunDir), 0.0);
     return c + uGlow * (pow(1.0 - h, 5.0) * (0.2 + 0.8 * toward * toward * toward) * 0.7 + pow(sd, 20.0) * 0.35);
 }
-// Soft cel light: a wrapped terminator pulled part of the way into three steps.
+// Soft painted light: a wrapped terminator pulled a little of the way into three steps (a fifth since the eighth
+// pass; it was two fifths, which banded every clump of leaf and every curve into flat facets).
 vec3 lit(vec3 albedo, vec3 n, float aoSigned, float sun) {
     float ao = abs(aoSigned);
     float k = smoothstep(-0.14, 0.44, dot(n, uLightDir));
-    k = mix(k, floor(k * 3.0 + 0.5) / 3.0, 0.4);
+    k = mix(k, floor(k * 3.0 + 0.5) / 3.0, 0.2);
     // Where things meet (the foot of a wall, under the eaves, under a tree) the sky does not reach.
     return albedo * (uLight * (k * sun * (0.45 + 0.55 * ao) + 0.06) + mix(uBounce, uFill, n.y * 0.5 + 0.5) * (0.16 + 0.84 * ao * ao));
 }
@@ -221,6 +222,12 @@ void main() {
     }
     float sun = shadowed(vRel, n);
     vec3 col = lit(albedo, n, vColour.a, sun) + albedo * lamps(vRel, n);
+    // Leaves: lit softly all the way round the crown (light gets in among them), and glowing where the sun is behind
+    // them, as leaves held up to the light do.
+    vec3 toEye = normalize(-vRel);
+    float occL = abs(vColour.a), wrapL = smoothstep(-0.55, 0.85, dot(n, uLightDir));
+    col = mix(col, albedo * (uLight * (wrapL * sun * (0.4 + 0.6 * occL) + 0.06) + mix(uBounce, uFill, n.y * 0.5 + 0.5) * (0.2 + 0.8 * occL * occL)) + albedo * lamps(vRel, n), 0.55 * leafy);
+    col += leafy * albedo * vec3(1.0, 1.05, 0.7) * uLight * sun * pow(max(dot(-toEye, uLightDir), 0.0), 3.0) * (0.25 + 0.5 * occL);
     // Whoever walks is rounder than the scenery: the light falls off all the way across a limb, not in steps.
     float ndl = dot(n, uLightDir), soft = smoothstep(-0.3, 0.95, ndl);
     float occ = abs(vColour.a);

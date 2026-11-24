@@ -769,7 +769,7 @@ test('fine models: what stands by the road near the traveller is built finer, wi
     const find = want => [...Array(300).keys()].map(i => world.leg(i + 100)).find(want);
     for (const kind of ['oak', 'apple', 'poplar', 'fir', 'pine', 'birch', 'willow', 'snag', 'glade', 'shroom']) for (let v = 0; v < 3; v++) {
         const fine = D.tree(kind, v);
-        assert.ok(fine.n % 3 === 0 && fine.n > 600 && fine.n < 3600, `${kind}: ${fine.n} vertices`);
+        assert.ok(fine.n % 3 === 0 && fine.n > 600 && fine.n < 4800, `${kind}: ${fine.n} vertices`);          // (the eighth pass gave them leaves)
         let top = -Infinity, wide = 0;
         for (let i = 0; i < fine.n; i++) { top = Math.max(top, fine.F[i * 6 + 1]); wide = Math.max(wide, Math.hypot(fine.F[i * 6], fine.F[i * 6 + 2])); }
         assert.ok(top > 3.5 && top < 13 && wide < 5.2, `${kind}: ${top.toFixed(1)} m tall, ${wide.toFixed(1)} m wide`);
@@ -785,7 +785,9 @@ test('fine models: what stands by the road near the traveller is built finer, wi
     // A house close to: the same house, trimmed. And a gloss on what is metal, in the colour's fourth byte.
     const near = new Soup(), usual = new Soup(), plot = { w: 8, dp: 6.5, floors: 2, roof: 1, v: 0.37, jetty: true, stoneBase: true };
     M.house(near, { ...plot, fine: true }); M.house(usual, plot);
-    assert.ok(near.n > usual.n * 1.15 && near.n < usual.n * 3, `${usual.n} vertices, ${near.n} trimmed`);
+    assert.ok(near.n > usual.n * 1.15 && near.n < usual.n * 5.5, `${usual.n} vertices, ${near.n} trimmed`);          // (since the eighth pass: timbers, frames and roof boards with depth)
+    const rich = new Soup(); M.house(rich, { ...plot, rich: true });
+    assert.ok(rich.n > usual.n * 1.5 && rich.n < near.n, `rich: ${rich.n} vertices, between ${usual.n} and ${near.n}`);
     const s = new Soup();
     s.paint(M.C.gold, 0).box(0, 0, 0, 1, 1, 1).paint(M.C.stone, 0).course(true).box(0, 0, 0, 1, 1, 1).course(false).paint([255, 255, 255], 0).tube([[0, 0, 0, 1, 1], [0, 2, 0, 0.5, 1]], 8, { cap: 3, k: () => 1.4 });
     assert.ok(s.B[19] < 80 && s.B[30 * 24 + 19] === 255 && (s.B[30 * 24 + 15] << 24 >> 24) < 0 && (s.B[15] << 24 >> 24) > 0 && s.B[60 * 24 + 16] === 255, 'gloss, courses, and a colour that does not wrap');
@@ -1170,4 +1172,111 @@ test('the coast is a coast: the sea on one hand all the way and at one level, th
     const sea = waters(['coast'], 7, 1.5), lake = waters(['lake'], 7, 1.5);
     assert.ok(sea.openSeen / sea.open > 0.62, `the sea in ${(100 * sea.openSeen / sea.open).toFixed(0)}% of the pictures`);
     assert.ok(lake.openSeen / lake.open > 0.22, `the lake in ${(100 * lake.openSeen / lake.open).toFixed(0)}% of the pictures`);
+});
+
+test('four feet (the eighth pass): wrists fold back and hocks forward, a foot on the ground stays where it was put down, and the gait goes walk, trot, gallop with speed, at 10, 30 and 120 fps', () => {
+    // The two-bone solve reaches what it can, with the joint on the side asked for.
+    for (const [dy, dz] of [[-0.8, 0], [-0.7, 0.25], [-0.75, -0.3], [-0.5, 0.1]]) for (const bend of [1, -1]) {
+        const [up, knee] = L.legSolve(dy, dz, 0.45, 0.42, bend), ky = -0.45 * Math.cos(up), kz = -0.45 * Math.sin(up), fy = ky - 0.42 * Math.cos(up + knee), fz = kz - 0.42 * Math.sin(up + knee);
+        assert.ok(Math.hypot(fy - dy, fz - dz) < 1e-6, `reached (${dy}, ${dz}) at (${fy.toFixed(3)}, ${fz.toFixed(3)})`);
+        assert.ok(bend > 0 ? knee >= 0 : knee <= 0, `bend ${bend}: the joint turned ${knee.toFixed(2)}`);
+    }
+    // Every four-legged kind, near and lite, at the speeds of a walk, a trot and a run.
+    const out = new Soup(), st = new Stack();
+    // (Every kind at 30 fps; a few of every size at 10 and 120 too; the lite rigs at a trot.)
+    const FEW = ['deer', 'horse', 'cat', 'piglet', 'hedgehog', 'grizzly'];
+    for (const id of Object.keys(K.KINDS)) for (const lite of [false, true]) for (const fr of lite ? [0.6] : [0.1, 0.6, 3]) {
+        const q = K.KINDS[id], size = q.size || 1, speed = Math.sqrt(fr * 9.8 * q.tall * size);
+        for (const fps of fr === 0.6 && !lite && FEW.includes(id) ? [10, 30, 120] : [30]) {
+            const dt = 1 / fps, runs = [[], [], [], []];
+            let z = 0;
+            for (let f = 0; f < 6 * fps; f++) {
+                z += speed * dt;
+                const feet = [];
+                K.quad(out.clear(), st, id, 0, 0, z, { yaw: 0, gait: z / q.stride, speed, moving: 1, lite, feet });
+                feet.forEach((ft, i) => {
+                    // The joint is forward of the line from hip to fetlock on a fore leg, behind it on a hind.
+                    const t = (ft.joint[1] - ft.hip[1]) / (ft.ankle[1] - ft.hip[1]), off = ft.joint[2] - (ft.hip[2] + t * (ft.ankle[2] - ft.hip[2]));
+                    assert.ok(ft.fore ? off > -0.002 : off < 0.002, `${id} at ${speed.toFixed(1)} m/s: its ${ft.fore ? 'wrist' : 'hock'} bends the wrong way (${off.toFixed(3)} m)`);
+                    // (A quick small animal at 10 fps can lift and put a foot down between two frames: a jump is a new step.)
+                    const run = runs[i], jumped = run.length && Math.abs(ft.toe[2] - run[run.length - 1]) > 0.3 * speed * dt + 0.01;
+                    if (run.length && (ft.toe[1] >= 0.002 || jumped)) { check(run, id, speed, fps); runs[i] = []; }
+                    if (ft.toe[1] < 0.002) runs[i].push(ft.toe[2]);
+                });
+            }
+        }
+    }
+    // (Of a foot's time on the ground, the middle half: it is put down and lifted on the ends.)
+    function check(zs, id, speed, fps) {
+        if (zs.length < 6) return;
+        const mid = zs.slice(Math.floor(zs.length / 4), Math.ceil(zs.length * 3 / 4)), drift = Math.max(...mid) - Math.min(...mid), K0 = K.KINDS[id];
+        const hop = ['hop', 'bound'].includes(K0.gait) || (speed * speed / (9.8 * K0.tall * (K0.size || 1)) > 1.5);
+        assert.ok(drift < (hop ? 0.25 : 0.02) * K0.tall * (K0.size || 1), `${id} at ${speed.toFixed(1)} m/s, ${fps} fps: a planted foot slid ${(drift * 100).toFixed(1)} cm`);
+    }
+    // Which gait: by the Froude number, the same for a cat as for a horse.
+    const top = (base, v, h) => [...L.gaitMix(base, 'gallop', v, h)].sort((a, b) => b[1] - a[1])[0][0];
+    for (const h of [0.27, 1.0, 1.42]) { assert.equal(top('walk', Math.sqrt(0.1 * 9.8 * h), h), 'walk'); assert.equal(top('trot', Math.sqrt(0.8 * 9.8 * h), h), 'trot'); assert.equal(top('walk', Math.sqrt(3 * 9.8 * h), h), 'gallop'); }
+    assert.equal(top('hop', 9, 0.2), 'hop');
+    // The plain far rigs solve theirs the same way.
+    for (const kind of Object.keys(A.BEASTS)) for (const speed of [0.6, 2.5, 7]) {
+        const feet = [];
+        A.beast(out.clear(), st, kind, 0, 0, 3, { yaw: 0, gait: 1.7, stride: 1.3, base: 'walk', speed, moving: 1, feet });
+        for (const ft of feet) {
+            const t = (ft.joint[1] - ft.hip[1]) / (ft.toe[1] - ft.hip[1]), off = ft.joint[2] - (ft.hip[2] + t * (ft.toe[2] - ft.hip[2]));
+            assert.ok(ft.fore ? off > -0.002 : off < 0.002, `far ${kind}: the joint bends the wrong way`);
+            assert.ok(ft.toe[1] > -0.01, `far ${kind}: a foot under the ground`);
+        }
+    }
+});
+
+test('keeping right while somebody passes is walked, turned that way: nobody slides across the road', () => {
+    const w = L.world(7), j = L.journeyStart(w, 360 * 40 + 20), dt = 1 / 30;
+    let slide = 0, across = 0;
+    for (let i = 0; i < 30 * 30; i++) {
+        const before = L.standing(j, w), keep = i < 450 ? 0.9 : 0;
+        L.journeyStep(j, dt, w, { pace: 1, night: 0, camps: false, rests: false, keep });
+        const after = L.standing(j, w), dx = after.x - before.x, dz = after.z - before.z;
+        slide += Math.abs(dx * Math.cos(after.travel) - dz * Math.sin(after.travel));
+        if (i === 449) across = j.d;
+    }
+    assert.ok(across > 0.7, `kept ${across.toFixed(2)} m to the right`);
+    assert.ok(Math.abs(j.d) < 0.2, `and back to the middle: ${j.d.toFixed(2)} m`);
+    assert.ok(slide < 0.05, `${slide.toFixed(3)} m walked sideways`);
+});
+
+test('a cat on the shoulder lies along it, on top: level across, the outside paw over the front, the tail hanging behind', () => {
+    const out = new Soup(), st = new Stack();
+    K.pose('ibbie', out, st, 0, 0, 0, { yaw: 0, gait: 0, moving: 0, rest: 1, ride: 1, pitch: -0.12, sway: 0, swayK: 1, t: 3 }, 0);
+    let lo = Infinity, hi = -Infinity, front = -Infinity, back = Infinity, left = Infinity, right = -Infinity;
+    for (let i = 0; i < out.n; i++) { const x = out.F[i * 6], y = out.F[i * 6 + 1], z = out.F[i * 6 + 2]; lo = Math.min(lo, y); hi = Math.max(hi, y); front = Math.max(front, z); back = Math.min(back, z); left = Math.min(left, x); right = Math.max(right, x); }
+    // (Feet at 0, the shoulder's top: the body lies on it, a paw and the tail hang lower, nothing sprawls to one side.)
+    assert.ok(hi < 0.4 && hi > 0.12, `her top is ${hi.toFixed(2)} m above the shoulder`);
+    assert.ok(lo > -0.42 && lo < -0.05, `the lowest of her (a paw, the tail) is ${lo.toFixed(2)} m below it`);
+    assert.ok(right - left < 0.42 && Math.abs(right + left) < 0.12, `${left.toFixed(2)} to ${right.toFixed(2)} m across: lopsided`);
+    assert.ok(front > 0.18 && back < -0.2, `she lies along the shoulder, ${back.toFixed(2)} to ${front.toFixed(2)} m`);
+});
+
+test('giving way: the townsfolk step out to the side of the road and back, at a walking pace, turned the way they step; never back along it; the seated stay put', () => {
+    for (const fps of [10, 30, 120]) for (const heading of [0, 0.6]) {
+        const dt = 1 / fps, hx = Math.sin(heading), hz = Math.cos(heading);
+        const folk = { x: 1, z: 0, role: 'stand', yaw: heading + Math.PI, v: 0.3, stride: 0 }, sitter = { x: -1, z: 0, role: 'sit', yaw: 0, v: 0.7 };
+        let worstAlong = 0, fastest = 0, turned = 0, out = 0, prev = [0, 0];
+        for (let i = 0; i < 16 * fps; i++) {
+            // A camera coming up the road from 12 m behind them at a walk, and on past.
+            const d = -12 + 1.75 * i * dt, cam = [d * hx, d * hz, 6.2];
+            L.giveWay(folk, dt, heading, [cam]); L.giveWay(sitter, dt, heading, [cam]);
+            const step = [folk.ox - prev[0], folk.oz - prev[1]];
+            worstAlong = Math.max(worstAlong, Math.abs(step[0] * hx + step[1] * hz));
+            fastest = Math.max(fastest, Math.hypot(...step) / dt);
+            if (folk.stepping > 0.5) turned = Math.max(turned, Math.abs(folk.veer));
+            out = Math.max(out, Math.hypot(folk.ox, folk.oz));
+            prev = [folk.ox, folk.oz];
+            assert.ok(sitter.ox === 0 && sitter.oz === 0, 'somebody sitting was moved');
+        }
+        assert.ok(worstAlong < 1e-9, `${fps} fps: moved ${worstAlong} m along the road in a step`);
+        assert.ok(fastest < 1.41, `${fps} fps: stepped aside at ${fastest.toFixed(2)} m/s`);
+        assert.ok(out > 2.5 && out <= 3.2 + 1e-9, `${fps} fps: stepped ${out.toFixed(2)} m aside`);
+        assert.ok(turned > 0.8, `${fps} fps: turned only ${turned.toFixed(2)} rad to step aside`);
+        assert.ok(Math.hypot(folk.ox, folk.oz) < 2.9 && folk.stride > 0.5, `${fps} fps: on its way back (${Math.hypot(folk.ox, folk.oz).toFixed(2)} m off), its legs going`);
+    }
 });

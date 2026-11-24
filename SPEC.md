@@ -5078,8 +5078,8 @@ creature, marking or design is taken from one.
   - *The company keeps out of a low camera's way* (`ctx.avoid`), as the
     townsfolk do; the dissolve is for accidents.
 - **Measured** (triangles a frame, shadow pass included, software renderer;
-  follow camera / an orbit from 40 m). Targets: High 450k, Medium 220k,
-  Low 100k.
+  follow camera / an orbit from 40 m). Targets: High 450k (800k since the
+  eighth pass, below), Medium 220k, Low 100k.
 
   | | High | Medium | Low |
   |---|---|---|---|
@@ -5413,6 +5413,106 @@ creature, marking or design is taken from one.
     harbour, a wreck, beach huts: the sea is the water there was (the
     mirror on Medium and High), nearer and in sight. The lighthouse, the
     boats and the gulls were there already.
+- **An eighth pass (2026-11-24): "more realistic at least for the buildings, trees", and the wildlife "walks very weird (alien almost), I think mostly because the knees bend in the wrong direction".**
+  - *The knees did bend the wrong way*, on both rigs (`WayCompanions.quad` and
+    `WayActors.beast`): a fore leg's lower bone folded forward and a hind
+    leg's backward, as a person's knee does. A four-legged animal's fore
+    "knee" is its wrist, which folds the hoof back and up, and the hind joint
+    you see is the hock, which points back and brings the foot forward. And
+    the legs were posts that swung on a sine, so a foot on the ground slid,
+    and the herds' and the far beasts' legs ran on the clock or at a stride
+    not their own (a cow's at three times its pace), which looks like skating.
+  - *Now each foot is put down and the leg solved to it.* `WayLogic.GAIT`
+    says when each foot goes in a walk, trot, gallop, bound, hop, plod, waddle
+    and scuttle, how long it is on the ground and how high it lifts;
+    `gaitFoot` says where a foot is at a moment of its gait (on the ground it
+    goes back under the body exactly as fast as the body goes forward, so it
+    stays where it was put); `legSolve` is a two-bone solve with the joint on
+    the side asked for (wrist forward and folding back, hock behind and
+    folding forward). The foot is a third joint, kept flat on the ground and
+    flicked up in a step. The bones are long enough for the hip that a hind
+    leg stands in its zig-zag and a fore leg all but straight (`legsOf`), the
+    shoulder blade carries the top of a fore leg part of the way with the
+    foot, and the length of a turn of each gait comes from how far a foot can
+    reach, so nobody's feet slide however big they are. `gaitMix` changes
+    gait by the Froude number (speed² over g × height), as real animals do
+    whatever their size: a stag walks at 1 m/s, trots at 3 and gallops at 6,
+    crossfading between them. A walker nods with its steps. Settled poses
+    (sitting, lying, curled, flying) and climbing are the old ones with the
+    joints the right way round. Callers pass the speed they actually go
+    (`a.vel`, `c.vel`), and the herds' and far beasts' gaits advance by the
+    ground they cover at the near rig's own stride, so an animal keeps step
+    as it changes from its far model to its near one. The companions share
+    the rig and got the same (they were "fine", the owner said; the fix was
+    wanted for them too).
+  - *"When passing, people seem to slide backwards."* Two causes. The
+    townsfolk's give-way offset pushed them straight away from the camera
+    (6.2 m in front of the lens), and for someone walking toward a follow
+    camera that is straight back, with their feet still: now (`WayLogic.giveWay`,
+    pure) they step out to the side of the road and back, at a walking pace, turned the way they
+    step, with their legs going; whoever is sitting stays put (the near-lens
+    fade is for them), and nobody steps more than 3.2 m off their place. And
+    the traveller kept right for oncoming traffic by having the road offset
+    set directly, a slide across: it is now `journeyStep`'s `options.keep`,
+    walked like the way to a fire.
+  - *The cat on the shoulder* ("hanging lopsided off the back") lay on top of
+    the pack in its curled rest, turned half a radian, and hung off it. Now a
+    four-legged rider (`pose.ride`) lies along the right shoulder, out past
+    the hood (measured off the figure: the shoulder's top is 1.44 to 1.51 m
+    up, 0.28 m out), facing the way they walk, a little nose-down onto the
+    pack's strap; the outside fore paw hangs over the front of the shoulder,
+    the other is tucked, the hind legs are folded under, the tail hangs and
+    swings; it leans against each step, looks about, and every thirteen
+    seconds or so turns to rub its cheek on the traveller's.
+  - *Trees.* Every clump of leaf is now lit as part of the whole crown (its
+    normals bent toward the crown's, darker deep inside it: `blob`'s
+    `crown`), free on every tier. On High, in the 3×3 squares about the
+    traveller, the plain trees are `rich`: rounder clumps with leaves standing
+    out of them (`WaySoup.leaves`, pointed ovals in two triangles spread over
+    the skin by a golden spiral, each turned and tipped its own way, in tones
+    a little apart, fluttering), a fir's tiers hung with drooping fronds of
+    needles (`WayModels.fronds`) and a willow's curtain in withies; 60% of
+    the leaves where the woods are thick. The fine trees by the road have
+    the leaves in place of the six sprays a clump had (up to 1,600
+    triangles a tree), fronds, and needles on the pine.
+  - *Buildings.* On High near the traveller (`rich`) and by the road
+    (`fine`): timbers stand 7 cm off the plaster with their edges; windows
+    sit in frames that stand out from the wall, the glass back in its opening
+    behind four faces in shade, with a mullion and a transom (and leading and
+    a lintel by the road); doors the same, and by the road a little tiled
+    roof on brackets over some of them; the roof has its thickness (the edge
+    of every course of tiles, a board along each eave and up each verge, and
+    by the road the rafters' ends), a ridge in the round and a capped
+    chimney; stone houses by the road have dressed corner blocks. Plain
+    houses (Medium, Low, further off) are as they were.
+  - *The light.* The cel steps are pulled a fifth of the way in, not two
+    fifths (they banded every clump and every curve into facets); leaves are
+    lit with a wider wrap (light gets in among them) and glow where the sun
+    is behind them.
+  - *Measured* (`make wayfarer-budget`: triangles a frame, shadow pass
+    included, after the land is whole; follow / a 40 m orbit at 150°, 32°;
+    seed 7). Before → after:
+
+    | | forest road | deep forest | village | grand gate | grand square |
+    |---|---|---|---|---|---|
+    | High | 535k / 341k → 664k / 446k | 408k / 492k → 601k / 716k | 363k / 420k → 489k / 566k | 340k / 364k → 457k / 455k | 386k / 462k → 572k / 703k |
+    | Medium | 263k / 204k → 264k / 205k | 210k / 246k → 209k / 248k | 196k / 208k → 197k / 211k | 184k / 171k → 183k / 172k | 199k / 233k → 206k / 243k |
+    | Low | 102k / 74k → 103k / 75k | 77k / 91k → 77k / 92k | 88k / 84k → 89k / 85k | 93k / 81k → 94k / 82k | 88k / 99k → 89k / 100k |
+
+    High's target is now 800k (the owner: "ok to raise high"); Medium and
+    Low keep 220k and 100k and are where they were (these spots, measured
+    this way, were already a little over on both before the pass). A real
+    GPU draws 800k triangles without noticing; the GPU watch above still
+    steps down a machine that struggles.
+  - *Tools.* `make wayfarer-gait` (`tools/wayfarer-gait.mjs`): rows of
+    frames of any kind at a walk, trot and gallop from the side, with the
+    feet's marks on the ground (a planted foot is a dot), and the cat on the
+    shoulder from four sides. `make wayfarer-models`: every tree plain, rich
+    and fine and four houses lite, plain, rich and fine, with their
+    triangles. Both pose the wallpaper's own triangles in Node and fill them
+    with a small z-buffer (`tools/wayfarer-raster.mjs`): no browser, the same
+    sheet every time. `make wayfarer-budget`: the table above.
+  - *Not verified* as the rest of this section: on a real GPU, at speed.
 - **Settings added:** `orbitMode`, `orbitAzimuth`, `orbitElevation`,
   `orbitDistance`, `companions`, `companionPick`, `companionChoice`,
   `warpaint`, `craft`, `biomePick`, `biomeChoice`, `wildlife`. `companion` (the one
@@ -5423,7 +5523,7 @@ creature, marking or design is taken from one.
   fallback draws every traveller as the same cut-out in their own colours,
   and none of the company.
 
-**Tests.** Unit (`tools/wayfarer.test.mjs`, 28; the fourth pass added the boughs over the deep forest's road, the bow's string, the company changing on the road and nobody spinning; the fifth, the walk to a fire and back, and wildlife; the sixth, wildlife seen; the seventh, the coast (33 now); the third pass added the country chosen and honoured, autumn in the woods, and the border that does not change its mind; the six before that: the orbit in clear air at 48 bearings and heights for an hour, its drag, fixed and turning at 10 and 120 fps; every companion posed, the count, the named cats against the roster, the seed; the company on the road, by the fire and at any frame rate; every traveller, the druid's changes and the rogue's hiding; grand cities; fine models and budgets). Smoke adds: the orbit's drag, wheel, overhead, grass and a village at four bearings; six companions, none, the barbarian's brand, the druid there and back, the rogue unseen and back; a grand city before its gate, in its square at five bearings, on its drawbridge and from down the road at night. The original sixteen: the road never jumps or
+**Tests.** Unit (`tools/wayfarer.test.mjs`, 28; the fourth pass added the boughs over the deep forest's road, the bow's string, the company changing on the road and nobody spinning; the fifth, the walk to a fire and back, and wildlife; the sixth, wildlife seen; the seventh, the coast; the eighth, four feet (the joints, a planted foot at 10, 30 and 120 fps, the gaits by speed, the far rigs), keeping right, giving way, and the cat on the shoulder (37 now); the third pass added the country chosen and honoured, autumn in the woods, and the border that does not change its mind; the six before that: the orbit in clear air at 48 bearings and heights for an hour, its drag, fixed and turning at 10 and 120 fps; every companion posed, the count, the named cats against the roster, the seed; the company on the road, by the fire and at any frame rate; every traveller, the druid's changes and the rogue's hiding; grand cities; fine models and budgets). Smoke adds: the orbit's drag, wheel, overhead, grass and a village at four bearings; six companions, none, the barbarian's brand, the druid there and back, the rogue unseen and back; a grand city before its gate, in its square at five bearings, on its drawbridge and from down the road at night. The original sixteen: the road never jumps or
 doubles back, is level across and no steeper than a third along; the
 ground is continuous and the road is never awash; every round has all
 the countries (nine now), never two stretches the same running, and every kind of place

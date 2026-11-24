@@ -260,7 +260,7 @@ const WayActors = (() => {
         };
     }
     // pose: { yaw, gait (turns of its stride), stride (metres to a turn), speed (metres a second), base (its own gait),
-    // moving, graze (head down), t, size, sit }. The feet are put down and the legs solved as the near rig's are
+    // moving, graze (head down), t, size, sit, feet (an array: where each hip, joint and foot went, for the tests) }. The feet are put down and the legs solved as the near rig's are
     // (WayCompanions.quad), so an animal walks the same as it comes nearer and changes to its finer model.
     const MIX = [['walk', 0], ['walk', 0], ['walk', 0]], FEET = [[-1, 1], [1, 1], [-1, -1], [1, -1]];
     function beast(out, st, kind, x, y, z, pose, coat) {
@@ -295,10 +295,15 @@ const WayActors = (() => {
                 const [u, k] = L.legSolve(dy * c + dz * sn, -dy * sn + dz * c, l1, LG.shin, fore ? 1 : -1);
                 up = L.mix(up, u, ik); knee = L.mix(knee, k, ik);
             }
-            st.push().move(sx * b.girth * 0.55, hy, hz).rx(up);
+            st.push().move(sx * b.girth * 0.55, hy, hz);
+            if (pose.feet) pose.feet[i] = { fore, hip: [st.top[3], st.top[7], st.top[11]] };
+            st.rx(up);
             put(fore ? p.fore : p.hind);
-            st.move(0, -l1, 0).rx(knee);
+            st.move(0, -l1, 0);
+            if (pose.feet) pose.feet[i].joint = [st.top[3], st.top[7], st.top[11]];
+            st.rx(knee);
             put(p.lower);
+            if (pose.feet) { const m = st.top; pose.feet[i].toe = pose.feet[i].ankle = [m[3] - m[1] * LG.shin, m[7] - m[5] * LG.shin, m[11] - m[9] * LG.shin]; }
             st.pop();
         }
         st.push().move(0, b.girth * 0.3, -b.len * 0.47).rx(-Math.PI / 2 + (b.tailUp ?? -0.9) + 0.25 * Math.sin((pose.t || 0) * (kind === 'dog' ? 9 : 2) + size * 7) + 0.3 * sit);

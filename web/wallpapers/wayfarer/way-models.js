@@ -166,10 +166,18 @@ class WaySoup {
         const h = (i, j) => { const s = Math.sin((i % segs) * 127.1 + j * 311.7 + seed * 74.7) * 43758.5453; return s - Math.floor(s); };
         const put = (i, j) => {
             const lat = j / bands * Math.PI, a = turn + i / segs * 6.2831853, pole = j === 0 || j === bands;
-            const k = 1 + (pole ? 0 : (h(i, j) - 0.5) * 2 * lump), nx = Math.sin(lat) * Math.sin(a), ny = Math.cos(lat), nz = Math.sin(lat) * Math.cos(a), t = ny * 0.5 + 0.5;
+            const k = 1 + (pole ? 0 : (h(i, j) - 0.5) * 2 * lump), x = cx + Math.sin(lat) * Math.sin(a) * rx * k, y = cy + Math.cos(lat) * ry * k, z = cz + Math.sin(lat) * Math.cos(a) * rz * k;
+            let nx = Math.sin(lat) * Math.sin(a), ny = Math.cos(lat), nz = Math.sin(lat) * Math.cos(a), t = ny * 0.5 + 0.5, hollow = 1;
+            if (o.crown) {
+                // Part of a crown: lit as the whole tree is (its normal bent toward the crown's own), and darker deep inside it.
+                const [qx, qy, qz, kk, R] = o.crown, dx = x - qx, dy = (y - qy) * 1.2, dz = z - qz, d = Math.hypot(dx, dy, dz) || 1;
+                nx = nx * (1 - kk) + dx / d * kk; ny = ny * (1 - kk) + dy / d * kk; nz = nz * (1 - kk) + dz / d * kk;
+                const l = Math.hypot(nx, ny, nz) || 1; nx /= l; ny /= l; nz /= l; t = ny * 0.5 + 0.5;
+                hollow = 0.55 + 0.45 * Math.min(1, d / R);
+            }
             const keep = this.col;
             this.col = [keep[0] * (0.7 + 0.3 * t), keep[1] * (0.72 + 0.28 * t), keep[2] * (0.78 + 0.22 * t)];      // cooler and darker underneath
-            this.v(cx + nx * rx * k, cy + ny * ry * k, cz + nz * rz * k, nx, ny, nz, under + (1 - under) * t);
+            this.v(x, y, z, nx, ny, nz, (under + (1 - under) * t) * hollow);
             this.col = keep;
         };
         for (let j = 0; j < bands; j++) {
@@ -178,6 +186,36 @@ class WaySoup {
                 if (j > 0) { put(i, j); put(i + 1, j + 1); put(i + 1, j); }
             }
         }
+        return this;
+    }
+    // Leaves on a clump of leaf (the eighth pass), so its edge against the sky is leaves and not a ball: n leaf-shaped
+    // cards (a pointed oval in two triangles) spread over the clump's skin and a little out from it, each turned its own
+    // way and tilted out so that some stand edge-on and some flat, in tones a little apart; lit as the crown is
+    // (o.crown, as blob's) and fluttering in the shaders. size is a leaf's length; o.thin narrows it (needles); o.droop
+    // hangs it down (a willow's, a fir's); o.up keeps them off the clump's underside.
+    leaves(cx, cy, cz, rx, ry, rz, n, size, o = {}) {
+        const seed = o.seed || 0, thin = o.thin || 0.55, droop = o.droop || 0, up = o.up ?? -0.55, keep = this.col, e = this.e;
+        const h = k => { const s = Math.sin(k * 91.7 + seed * 47.3) * 43758.5453; return s - Math.floor(s); };
+        this.e = [e[0], e[1], Math.max(e[2], 60), e[3]];
+        const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]], unit = a => { const l = Math.hypot(a[0], a[1], a[2]) || 1; return [a[0] / l, a[1] / l, a[2] / l]; };
+        for (let i = 0; i < n; i++) {
+            // A point on the skin by a golden spiral (so they spread evenly, none on the underside below `up`), jittered out.
+            const ny0 = Math.max(up, 1 - 2 * (i + 0.5) / n), rr = Math.sqrt(Math.max(0, 1 - ny0 * ny0)), a = i * 2.39996 + seed * 7;
+            const sn = [Math.sin(a) * rr, ny0, Math.cos(a) * rr], out = 0.97 + 0.2 * h(i * 3 + 1), p = [cx + sn[0] * rx * out, cy + sn[1] * ry * out, cz + sn[2] * rz * out];
+            let nrm = sn;
+            if (o.crown) { const [qx, qy, qz, kk] = o.crown, d = unit([p[0] - qx, (p[1] - qy) * 1.2, p[2] - qz]); nrm = [sn[0] * (1 - kk) + d[0] * kk, sn[1] * (1 - kk) + d[1] * kk, sn[2] * (1 - kk) + d[2] * kk]; }
+            nrm = unit(nrm);
+            // Its length lies along the skin, turned at random about the outward normal, then tipped out (and hung down).
+            const t1 = unit(cross(Math.abs(sn[1]) > 0.95 ? [1, 0, 0] : [0, 1, 0], sn)), t2 = cross(sn, t1), spin = h(i * 3 + 2) * 6.2832, c = Math.cos(spin), s = Math.sin(spin), tilt = 0.12 + 0.45 * h(i * 3 + 3);
+            const u = unit([t1[0] * c + t2[0] * s + sn[0] * tilt, t1[1] * c + t2[1] * s + sn[1] * tilt - droop, t1[2] * c + t2[2] * s + sn[2] * tilt]), w = unit(cross(u, sn));
+            const L = size * (0.75 + 0.5 * h(i * 3 + 4)), W = L * thin * 0.5, tone = 0.76 + 0.26 * h(i * 3 + 5) + 0.06 * ny0, ao = 0.62 + 0.38 * (ny0 * 0.5 + 0.5);
+            const b0 = [p[0] - u[0] * L * 0.4, p[1] - u[1] * L * 0.4, p[2] - u[2] * L * 0.4], t0 = [p[0] + u[0] * L * 0.6, p[1] + u[1] * L * 0.6, p[2] + u[2] * L * 0.6];
+            const s1 = [p[0] + w[0] * W, p[1] + w[1] * W, p[2] + w[2] * W], s2 = [p[0] - w[0] * W, p[1] - w[1] * W, p[2] - w[2] * W];
+            this.col = [Math.min(255, keep[0] * tone), Math.min(255, keep[1] * tone), Math.min(255, keep[2] * tone)];
+            this.v(...b0, ...nrm, ao); this.v(...s1, ...nrm, ao); this.v(...t0, ...nrm, ao);
+            this.v(...b0, ...nrm, ao); this.v(...t0, ...nrm, ao); this.v(...s2, ...nrm, ao);
+        }
+        this.col = keep; this.e = e;
         return this;
     }
 
@@ -265,38 +303,74 @@ const WayModels = (() => {
     const cache = new Map();
     const model = (key, make) => { let m = cache.get(key); if (!m) { m = new WaySoup(); make(m); cache.set(key, m); } return m; };
 
-    // Trees. Slot 1 is the leaf (tinted by season), 2 the trunk, 3 blossom or fruit.
-    function tree(kind, variant) {
-        return model(`tree:${kind}:${variant}`, s => {
+    // A fir's boughs, seen close: n fronds hung round the hem of a tier (a cone of radius R whose foot is at y), each a
+    // long leaf of needles in two triangles that leans out past the hem and droops, in tones a little apart.
+    function fronds(s, x, y, z, R, n, turn, sway) {
+        const keep = s.col;
+        s.fx(sway, 0, 30);
+        for (let i = 0; i < n; i++) {
+            const a = turn + (i + 0.5 * (i % 2)) / n * TAU, sa = Math.sin(a), ca = Math.cos(a), h = rnd(turn + i, 3), tone = 0.8 + 0.26 * h;
+            const root = [x + sa * R * 0.45, y + 0.75, z + ca * R * 0.45], tip = [x + sa * R * (1.14 + 0.1 * h), y - 0.3 - 0.25 * h, z + ca * R * (1.14 + 0.1 * h)];
+            const mid = [(root[0] + tip[0]) / 2, (root[1] + tip[1]) / 2 + 0.12, (root[2] + tip[2]) / 2], wd = 0.32 + 0.12 * h, wx = ca * wd, wz = -sa * wd;
+            s.col = [keep[0] * tone, keep[1] * tone, keep[2] * tone];
+            const nrm = [sa * 0.55, 0.83, ca * 0.55];
+            s.tri(root, [mid[0] + wx, mid[1], mid[2] + wz], tip, nrm, [0.7, 0.95, 1]).tri(root, tip, [mid[0] - wx, mid[1], mid[2] - wz], nrm, [0.7, 1, 0.95]);
+        }
+        s.col = keep; s.fx(sway);
+    }
+    // Trees. Slot 1 is the leaf (tinted by season), 2 the trunk, 3 blossom or fruit. Each clump of leaf is lit as part
+    // of the whole crown (its normals bent toward the crown's, darker deep inside it), which costs nothing. `rich` (High,
+    // near the traveller: 1, or 0.6 in the thick of the woods) puts that share of leaves on the clumps and of drooping
+    // fronds on a fir's tiers, so the crown's edge is leaves.
+    function tree(kind, variant, rich = 0) {
+        return model(`tree:${kind}:${variant}:${rich}`, s => {
             const r = k => rnd(variant + 1, k + kind.length * 3), lean = (r(1) - 0.5) * 0.5;
             const trunk = (h, r0, r1, col = C.trunk) => s.paint(col, 2).fx(0).prism(5, 0, -0.4, 0, r0, h, r1, { dx: lean, dz: (r(2) - 0.5) * 0.4, foot: 0.6 });
-            const leaf = (x, y, z, rx, ry, rz, sway = 60, seedK = 0, o = {}) => s.paint(C.white, 1).fx(sway).blob(x + lean, y, z, rx, ry, rz, { seed: variant + seedK * 0.37 + 0.1, ...o });
+            let crown = null;
+            const leaf = (x, y, z, rx, ry, rz, sway = 60, seedK = 0, o = {}) => {
+                s.paint(C.white, 1).fx(sway).blob(x + lean, y, z, rx, ry, rz, { seed: variant + seedK * 0.37 + 0.1, crown, ...(rich ? { segs: 9, bands: 4 } : {}), ...o });
+                if (rich) s.fx(Math.min(255, sway + 30)).leaves(x + lean, y, z, rx * 1.06, ry * 1.06, rz * 1.06, Math.round(L.clamp((rx + rz) * ry * 5, 14, 42) * rich), Math.min(1.1, 0.5 + rx * 0.17), { seed: variant + seedK, crown });
+            };
             if (kind === 'oak' || kind === 'apple') {
                 const big = kind === 'oak' ? 1 : 0.62;
+                crown = [lean, 5.0 * big, 0, 0.55, 3.4 * big];
                 trunk(3.4 * big, 0.5 * big, 0.3 * big);
                 leaf(0, 5.6 * big, 0, 3.0 * big, 2.3 * big, 3.0 * big, 50, 1);
                 for (let i = 0; i < 3; i++) { const a = i * 2.1 + r(3) * 6; leaf(Math.sin(a) * 1.9 * big, (4.3 + 1.1 * r(4 + i)) * big, Math.cos(a) * 1.9 * big, 1.9 * big, 1.5 * big, 1.9 * big, 70, 2 + i); }
                 if (kind === 'apple') for (let i = 0; i < 9; i++) { const a = i * 2.4, y = 2.6 + 1.9 * r(10 + i), rr = 1.9 + 0.5 * r(20 + i); s.paint(C.white, 3).fx(60).blob(Math.sin(a) * rr + lean, y, Math.cos(a) * rr, 0.24, 0.24, 0.24, { segs: 4, bands: 2, lump: 0 }); }
             } else if (kind === 'poplar') {
+                crown = [lean, 5.6, 0, 0.5, 2.6];
                 trunk(2.6, 0.32, 0.2);
                 leaf(0, 6.6, 0, 1.35, 4.9, 1.35, 90, 1, { bands: 4 });
                 leaf(0.3, 3.9, 0.2, 1.1, 2.0, 1.1, 60, 2);
             } else if (kind === 'fir' || kind === 'pine') {
                 const pine = kind === 'pine';
                 trunk(pine ? 6 : 2.2, 0.36, 0.2, C.bark);
-                if (pine) { leaf(0.4, 7.2, 0, 2.6, 0.9, 2.4, 40, 1); leaf(-0.9, 6.2, 0.6, 1.7, 0.7, 1.7, 40, 2); leaf(1.2, 5.6, -0.7, 1.4, 0.6, 1.5, 40, 3); }
-                else for (let k = 0; k < 4; k++) s.paint(C.white, 1).fx(22 + k * 16).prism(7, lean * (0.3 + k * 0.2), 2.5 + k * 1.9, 0, 2.3 - 0.46 * k, 5.6 + k * 2.05, 0, { foot: 0.5, turn: k * 0.7 + r(5), dx: lean * 0.25 });
+                if (pine) { crown = [lean, 6.6, 0, 0.5, 2.6]; leaf(0.4, 7.2, 0, 2.6, 0.9, 2.4, 40, 1); leaf(-0.9, 6.2, 0.6, 1.7, 0.7, 1.7, 40, 2); leaf(1.2, 5.6, -0.7, 1.4, 0.6, 1.5, 40, 3); }
+                else for (let k = 0; k < 4; k++) {
+                    const x = lean * (0.3 + k * 0.2), y0 = 2.5 + k * 1.9, R = 2.3 - 0.46 * k;
+                    s.paint(C.white, 1).fx(22 + k * 16).prism(7, x, y0, 0, R, 5.6 + k * 2.05, 0, { foot: 0.5, turn: k * 0.7 + r(5), dx: lean * 0.25 });
+                    if (rich) fronds(s, x, y0, 0, R, Math.round((7 - k) * rich), r(30 + k) * 6, 22 + k * 16);
+                }
             } else if (kind === 'birch') {
+                crown = [lean, 5.3, 0, 0.5, 2.4];
                 trunk(5.4, 0.2, 0.12, C.birch);
                 leaf(0, 6.0, 0, 1.7, 1.9, 1.7, 110, 1); leaf(0.9, 4.6, 0.3, 1.2, 1.2, 1.2, 110, 2); leaf(-0.8, 4.9, -0.5, 1.2, 1.3, 1.2, 110, 3);
             } else if (kind === 'willow') {
+                crown = [lean, 4.6, 0, 0.5, 3.6];
                 trunk(3.0, 0.62, 0.42);
                 leaf(0, 4.9, 0, 3.5, 1.9, 3.5, 40, 1);
-                s.paint([190, 196, 188], 1).fx(150).prism(8, lean, 1.3, 0, 3.6, 4.7, 3.1, { foot: 0.55, turn: r(6) });
+                if (!rich) s.paint([190, 196, 188], 1).fx(150).prism(8, lean, 1.3, 0, 3.6, 4.7, 3.1, { foot: 0.55, turn: r(6) });
+                // Close to, the curtain is withies: long strands hung all round from the crown's rim, moving the most.
+                else for (let i = 0; i < 14; i++) {
+                    const a = i / 14 * TAU + r(6), d = 3.1 + 0.4 * r(30 + i), x = Math.sin(a) * d + lean, z = Math.cos(a) * d, drop = 1.0 + 1.0 * r(50 + i), px = Math.cos(a) * 0.4, pz = -Math.sin(a) * 0.4, tone = 0.84 + 0.2 * r(70 + i);
+                    s.paint([190 * tone, 196 * tone, 188 * tone], 1).fx(150, 0, 40).quad([x - px, 4.8, z - pz], [x + px, 4.8, z + pz], [x * 1.04 + px * 0.3, drop, z * 1.04 + pz * 0.3], [x * 1.04 - px * 0.3, drop, z * 1.04 - pz * 0.3], [Math.sin(a) * 0.9, 0.4, Math.cos(a) * 0.9], [1, 1, 0.7, 0.7]);
+                }
             } else if (kind === 'snag') {
                 trunk(4.6, 0.36, 0.14, [124, 112, 104]);
                 for (let i = 0; i < 3; i++) { const a = i * 2.3 + r(7) * 3; s.paint([124, 112, 104], 2).prism(4, lean * 0.6, 2.2 + i * 0.7, 0, 0.13, 3.7 + i * 0.6, 0.04, { dx: Math.sin(a) * 1.5, dz: Math.cos(a) * 1.5 }); }
             } else if (kind === 'glade') {
+                crown = [lean, 5.7, 0, 0.55, 3.3];
                 trunk(4.2, 0.46, 0.26, [92, 70, 110]);
                 leaf(0, 6.2, 0, 3.2, 1.7, 3.2, 60, 1); leaf(1.6, 5.0, 0.6, 1.7, 1.2, 1.7, 80, 2); leaf(-1.5, 5.2, -0.8, 1.8, 1.2, 1.8, 80, 3);
                 for (let i = 0; i < 6; i++) { const a = i * 1.9; s.paint(C.white, 3).fx(120, 255).blob(Math.sin(a) * 2.3 + lean, 3.4 + 0.9 * r(8 + i), Math.cos(a) * 2.3, 0.13, 0.17, 0.13, { segs: 4, bands: 2, lump: 0 }); }
@@ -368,7 +442,7 @@ const WayModels = (() => {
     // lite (far squares) keeps the shape and the lit windows and drops the rest.
     // Returns where its chimney smokes, its windows glow and its lantern hangs, in its own metres.
     function house(s, o) {
-        const lite = !!o.lite, w = o.w, dp = o.dp, hw = w / 2, hd = dp / 2, r = k => rnd(o.v + 0.1, k), stone = !!o.stone, barn = !!o.barn, fine = !!o.fine && !lite;
+        const lite = !!o.lite, w = o.w, dp = o.dp, hw = w / 2, hd = dp / 2, r = k => rnd(o.v + 0.1, k), stone = !!o.stone, barn = !!o.barn, fine = !!o.fine && !lite, rich = (fine || !!o.rich) && !lite;          // rich: High, near the traveller (timbers, frames and roof boards with depth)
         // (Built as part of something bigger, it stands where that says: o.at.)
         const base = o.at || null, AT = m => s.at(base ? (m ? mul(base, m) : base) : m);
         const FL = 2.6 + 0.4 * r(50), floors = o.floors, wallTop = 0.45 + floors * FL, jut = o.jetty ? 0.5 : 0, stoneBase = !!o.stoneBase && !stone && !barn;
@@ -376,29 +450,44 @@ const WayModels = (() => {
         // An old house leans: everything above the ground floor goes through this.
         const lean = floors > 1 && o.crooked && !lite ? mul(move(0, 0.45 + FL, 0), mul(rotZ((r(51) - 0.5) * 0.09), move(0, -0.45 - FL, 0))) : null;
         AT(null).fx(0).course(true).paint(C.stone, 0).box(0, o.deep ? -1.2 : 0, 0, hw + 0.06, o.deep ? 1.7 : 0.5, hd + 0.06, 0.6).course(false);
+        // A timber: its face 7 cm proud of the wall and its two edges, so it stands off the plaster and catches the light.
         const beam = (x0, y0, x1, y1, z, t = 0.11) => {             // on the front (z > 0) or back face
-            const n = [0, 0, Math.sign(z)], dx = x1 - x0, dy = y1 - y0, l = Math.hypot(dx, dy), px = -dy / l * t, py = dx / l * t, e = z + Math.sign(z) * 0.03;
-            s.paint(C.white, 2).quad([x0 - px, y0 - py, e], [x1 - px, y1 - py, e], [x1 + px, y1 + py, e], [x0 + px, y0 + py, e], n);
+            const sz = Math.sign(z), n = [0, 0, sz], dx = x1 - x0, dy = y1 - y0, l = Math.hypot(dx, dy), px = -dy / l * t, py = dx / l * t, e = z + sz * 0.01, f = z + sz * (rich ? 0.07 : 0.03);
+            s.paint(C.white, 2).quad([x0 - px, y0 - py, f], [x1 - px, y1 - py, f], [x1 + px, y1 + py, f], [x0 + px, y0 + py, f], n);
+            if (!rich) return;
+            s.quad([x0 + px, y0 + py, f], [x1 + px, y1 + py, f], [x1 + px, y1 + py, e], [x0 + px, y0 + py, e], [px / t, py / t, 0], [1, 1, 0.6, 0.6]);
+            s.quad([x0 - px, y0 - py, e], [x1 - px, y1 - py, e], [x1 - px, y1 - py, f], [x0 - px, y0 - py, f], [-px / t, -py / t, 0], [0.6, 0.6, 1, 1]);
         };
+        // A window set in a frame that stands out from the wall (and from the timbers), the glass back in its opening
+        // behind four faces in shade: it reads as a window in a thick wall, not a pane painted on it.
         const windowAt = (x, y, z, ww = 0.42, wh = 0.52, lit = true, dress = false) => {     // on a z face
-            const sz = Math.sign(z), e = z + sz * 0.04, n = [0, 0, sz];
-            if (!lite) s.paint(C.white, 2).quad([x - ww - 0.09, y - wh - 0.09, e], [x + ww + 0.09, y - wh - 0.09, e], [x + ww + 0.09, y + wh + 0.09, e], [x - ww - 0.09, y + wh + 0.09, e], n);
-            s.paint(C.glass, 0).fx(0, lit ? 255 : 0).quad([x - ww, y - wh, e + sz * 0.02], [x + ww, y - wh, e + sz * 0.02], [x + ww, y + wh, e + sz * 0.02], [x - ww, y + wh, e + sz * 0.02], n);
+            const sz = Math.sign(z), n = [0, 0, sz], g = z + sz * (rich ? 0.08 : 0.06), f = z + sz * (rich ? 0.14 : 0.04), fw = 0.09, e = f;
+            if (!lite && !rich) s.paint(C.white, 2).quad([x - ww - fw, y - wh - fw, f], [x + ww + fw, y - wh - fw, f], [x + ww + fw, y + wh + fw, f], [x - ww - fw, y + wh + fw, f], n);          // (a plain frame behind the glass)
+            if (rich) {
+                s.paint(C.white, 2);
+                s.quad([x - ww - fw, y - wh - fw, f], [x - ww, y - wh - fw, f], [x - ww, y + wh + fw, f], [x - ww - fw, y + wh + fw, f], n).quad([x + ww, y - wh - fw, f], [x + ww + fw, y - wh - fw, f], [x + ww + fw, y + wh + fw, f], [x + ww, y + wh + fw, f], n);
+                s.quad([x - ww, y + wh, f], [x + ww, y + wh, f], [x + ww, y + wh + fw, f], [x - ww, y + wh + fw, f], n).quad([x - ww, y - wh - fw, f], [x + ww, y - wh - fw, f], [x + ww, y - wh, f], [x - ww, y - wh, f], n);
+                // The reveal: the opening's four sides, from the frame back to the glass, in shade (the head darkest).
+                s.quad([x - ww, y - wh, g], [x - ww, y + wh, g], [x - ww, y + wh, f], [x - ww, y - wh, f], [1, 0, 0], [0.45, 0.45, 0.7, 0.7]).quad([x + ww, y + wh, g], [x + ww, y - wh, g], [x + ww, y - wh, f], [x + ww, y + wh, f], [-1, 0, 0], [0.45, 0.45, 0.7, 0.7]);
+                s.quad([x + ww, y + wh, g], [x - ww, y + wh, g], [x - ww, y + wh, f], [x + ww, y + wh, f], [0, -1, 0], [0.3, 0.3, 0.55, 0.55]).quad([x - ww, y - wh, g], [x + ww, y - wh, g], [x + ww, y - wh, f], [x - ww, y - wh, f], [0, 1, 0], [0.7, 0.7, 0.9, 0.9]);
+            }
+            s.paint(C.glass, 0).fx(0, lit ? 255 : 0).quad([x - ww, y - wh, g], [x + ww, y - wh, g], [x + ww, y + wh, g], [x - ww, y + wh, g], n);
             s.fx(0);
             if (lit) out.glow.push([x, y, z]);
             if (lite) return;
-            s.paint(C.white, 2).quad([x - 0.035, y - wh, e + sz * 0.03], [x + 0.035, y - wh, e + sz * 0.03], [x + 0.035, y + wh, e + sz * 0.03], [x - 0.035, y + wh, e + sz * 0.03], n);
+            // Its mullion (and, close to, a transom).
+            if (rich) s.paint(C.white, 2).box(x, y, g + sz * 0.015, 0.035, wh, 0.015, 1).box(x, y + wh * 0.3, g + sz * 0.015, ww, 0.028, 0.015, 1);
+            else s.paint(C.white, 2).quad([x - 0.035, y - wh, g + sz * 0.01], [x + 0.035, y - wh, g + sz * 0.01], [x + 0.035, y + wh, g + sz * 0.01], [x - 0.035, y + wh, g + sz * 0.01], n);
             if (fine && dress) {
-                // Close to, on the street's side: a frame that stands proud of the wall, a crossbar, and a lintel over it.
-                s.box(x, y + wh * 0.14, e + sz * 0.035, ww, 0.028, 0.03, 1).box(x, y, e + sz * 0.036, 0.03, wh, 0.034, 1);
-                for (const sx of [-1, 1]) s.box(x + sx * (ww + 0.05), y, e + sz * 0.05, 0.05, wh + 0.1, 0.05, 1);
-                s.box(x, y + wh + 0.07, e + sz * 0.06, ww + 0.14, 0.06, 0.06, 1);
+                // Close to, on the street's side: the panes leaded in a lattice, and a lintel over the frame.
+                for (const k of [-0.5, 0.5]) s.paint([70, 64, 60], 0).box(x + k * ww, y - wh * 0.35, g + sz * 0.01, 0.012, wh * 0.65, 0.008, 1);
+                s.paint(C.white, 2).box(x, y + wh + fw + 0.07, z + sz * 0.1, ww + fw + 0.12, 0.07, 0.08, 1);
             }
             // A sill that catches the light.
             const sy = y - wh - 0.1, so = e + sz * 0.14;
             s.paint([226, 220, 206], 0).quad([x - ww - 0.14, sy, e], [x + ww + 0.14, sy, e], [x + ww + 0.14, sy, so], [x - ww - 0.14, sy, so], [0, 1, 0]).quad([x - ww - 0.14, sy - 0.07, so], [x + ww + 0.14, sy - 0.07, so], [x + ww + 0.14, sy, so], [x - ww - 0.14, sy, so], n, [0.7, 0.7, 1, 1]);
             if (!dress) return;
-            if (!stone && r(x * 3 + y) < 0.6) for (const side of [-1, 1]) s.paint(C.white, 3).quad([x + side * (ww + 0.12) - 0.16, y - wh, e], [x + side * (ww + 0.12) + 0.16, y - wh, e], [x + side * (ww + 0.12) + 0.16, y + wh, e], [x + side * (ww + 0.12) - 0.16, y + wh, e], n);
+            if (!stone && r(x * 3 + y) < 0.6) for (const side of [-1, 1]) { if (rich) s.paint(C.white, 3).box(x + side * (ww + fw + 0.17), y, e + sz * 0.02, 0.17, wh, 0.02, 1); else s.paint(C.white, 3).quad([x + side * (ww + 0.12) - 0.16, y - wh, e + sz * 0.01], [x + side * (ww + 0.12) + 0.16, y - wh, e + sz * 0.01], [x + side * (ww + 0.12) + 0.16, y + wh, e + sz * 0.01], [x + side * (ww + 0.12) - 0.16, y + wh, e + sz * 0.01], n); }          // shutters, folded back
             if (r(x * 5 + y * 2) < 0.38) {
                 // A window box, in flower.
                 const by = sy - 0.02, bo = e + sz * 0.3;
@@ -413,6 +502,8 @@ const WayModels = (() => {
             if (f === 1) AT(lean);
             s.course(rough).paint(rough ? [196, 190, 180] : C.white, rough ? 0 : 1).box(0, y0 + FL / 2, j / 2, x1, FL / 2, hd + j / 2, f ? 1 : 0.55).course(false);
             if (fine && !rough && !barn) for (const px of [-x1, x1]) for (const pz of [z1, -hd]) s.paint(C.white, 2).tube([[px, y0, pz, 0.14, 1], [px, y0 + FL, pz, 0.14, 1]], 6);          // corner posts, in the round
+            // Stone corners in dressed blocks, long and short by turns, standing a little proud.
+            if (fine && rough && !barn) for (const px of [-x1, x1]) for (const pz of [z1, -hd]) for (let k = 0; k < Math.floor(FL / 0.32); k++) { const long = k % 2 === 0, sx = Math.sign(px), sz = Math.sign(pz); s.course(false).paint([214, 208, 198], 0).box(px - sx * (long ? 0.2 : 0.1), y0 + 0.16 + k * 0.32, pz - sz * (long ? 0.1 : 0.2), long ? 0.24 : 0.14, 0.14, long ? 0.14 : 0.24, 0.85); }
             if (f === 1 && jut && !lite) s.paint(C.white, 2).box(0, y0 - 0.07, hd + jut / 2, x1, 0.08, jut / 2 + 0.03, 0.6);       // the beam the upper floor rides out on
             if (!rough && !barn && !lite) {
                 for (const z of [z1, -hd]) {
@@ -445,21 +536,35 @@ const WayModels = (() => {
         }
         // The door, under a lintel, up a step; a barn's is a pair.
         AT(null);
-        const dx = barn || w < 6.5 ? 0 : (r(52) < 0.5 ? -1 : 1) * w * 0.22, dw = barn ? 1.3 : 0.52, dh = barn ? 2.4 : 1.95, e = hd + 0.05;
-        if (!lite) {
-            s.fx(0).paint(C.white, 2).quad([dx - dw - 0.1, 0.4, e], [dx + dw + 0.1, 0.4, e], [dx + dw + 0.1, 0.5 + dh + 0.1, e], [dx - dw - 0.1, 0.5 + dh + 0.1, e], [0, 0, 1]);
-            s.paint(C.white, 3).quad([dx - dw, 0.45, e + 0.02], [dx + dw, 0.45, e + 0.02], [dx + dw, 0.5 + dh, e + 0.02], [dx - dw, 0.5 + dh, e + 0.02], [0, 0, 1], [0.6, 0.6, 1, 1]);
-            s.paint(C.white, 2).box(dx, 0.62 + dh, hd + 0.1, dw + 0.22, 0.09, 0.1, 1);
-            s.paint(C.gold, 0).box(dx + dw - 0.12, 1.4, e + 0.05, 0.03, 0.03, 0.03, 1);
+        const dx = barn || w < 6.5 ? 0 : (r(52) < 0.5 ? -1 : 1) * w * 0.22, dw = barn ? 1.3 : 0.52, dh = barn ? 2.4 : 1.95, e = hd + (rich ? 0.08 : 0.07), f = hd + (rich ? 0.15 : 0.05), top = 0.5 + dh;
+        if (!lite && !rich) {
+            s.fx(0).paint(C.white, 2).quad([dx - dw - 0.1, 0.4, f], [dx + dw + 0.1, 0.4, f], [dx + dw + 0.1, top + 0.1, f], [dx - dw - 0.1, top + 0.1, f], [0, 0, 1]);
+            s.paint(C.white, 3).quad([dx - dw, 0.45, e], [dx + dw, 0.45, e], [dx + dw, top, e], [dx - dw, top, e], [0, 0, 1], [0.6, 0.6, 1, 1]);
+            s.paint(C.white, 2).box(dx, top + 0.12, hd + 0.1, dw + 0.22, 0.09, 0.1, 1);
+            s.paint(C.gold, 0).box(dx + dw - 0.12, 1.4, e + 0.03, 0.03, 0.03, 0.03, 1);
+        }
+        if (rich) {
+            // A frame standing out from the wall, the door back in its opening behind faces in shade, a lintel over it.
+            s.fx(0).paint(C.white, 2).quad([dx - dw - 0.1, 0.4, f], [dx - dw, 0.4, f], [dx - dw, top + 0.1, f], [dx - dw - 0.1, top + 0.1, f], [0, 0, 1]).quad([dx + dw, 0.4, f], [dx + dw + 0.1, 0.4, f], [dx + dw + 0.1, top + 0.1, f], [dx + dw, top + 0.1, f], [0, 0, 1]).quad([dx - dw, top, f], [dx + dw, top, f], [dx + dw, top + 0.1, f], [dx - dw, top + 0.1, f], [0, 0, 1]);
+            s.quad([dx - dw, 0.4, e], [dx - dw, top, e], [dx - dw, top, f], [dx - dw, 0.4, f], [1, 0, 0], [0.45, 0.45, 0.7, 0.7]).quad([dx + dw, top, e], [dx + dw, 0.4, e], [dx + dw, 0.4, f], [dx + dw, top, f], [-1, 0, 0], [0.45, 0.45, 0.7, 0.7]).quad([dx + dw, top, e], [dx - dw, top, e], [dx - dw, top, f], [dx + dw, top, f], [0, -1, 0], [0.3, 0.3, 0.55, 0.55]);
+            s.paint(C.white, 3).quad([dx - dw, 0.45, e], [dx + dw, 0.45, e], [dx + dw, top, e], [dx - dw, top, e], [0, 0, 1], [0.6, 0.6, 1, 1]);
+            s.paint(C.white, 2).box(dx, top + 0.12, hd + 0.17, dw + 0.22, 0.09, 0.06, 1);
+            s.paint(C.gold, 0).box(dx + dw - 0.12, 1.4, e + 0.03, 0.03, 0.03, 0.03, 1);
             if (fine) {
                 // Planks, strap hinges, and a ring to knock with.
                 const n = barn ? 6 : 3;
-                for (let i = 1; i < n; i++) s.paint([60, 44, 36], 0).box(dx - dw + i * 2 * dw / n, 0.5 + dh / 2, e + 0.024, 0.012, dh / 2 - 0.04, 0.004, 1);
-                for (const y of [0.85, 0.3 + dh]) s.paint(C.iron, 0).box(dx - dw * 0.3, y, e + 0.035, dw * 0.66, 0.035, 0.012, 1);
-                s.tube([[dx + dw - 0.2, 1.39, e + 0.05, 0.012, 1], [dx + dw - 0.14, 1.3, e + 0.07, 0.012, 1], [dx + dw - 0.2, 1.21, e + 0.07, 0.012, 1], [dx + dw - 0.26, 1.3, e + 0.07, 0.012, 1], [dx + dw - 0.2, 1.39, e + 0.05, 0.012, 1]], 4, { ref: [0, 0, 1] });
+                for (let i = 1; i < n; i++) s.paint([60, 44, 36], 0).box(dx - dw + i * 2 * dw / n, 0.5 + dh / 2, e + 0.004, 0.012, dh / 2 - 0.04, 0.004, 1);
+                for (const y of [0.85, 0.3 + dh]) s.paint(C.iron, 0).box(dx - dw * 0.3, y, e + 0.011, dw * 0.66, 0.035, 0.012, 1);
+                s.tube([[dx + dw - 0.2, 1.39, e + 0.03, 0.012, 1], [dx + dw - 0.14, 1.3, e + 0.05, 0.012, 1], [dx + dw - 0.2, 1.21, e + 0.05, 0.012, 1], [dx + dw - 0.26, 1.3, e + 0.05, 0.012, 1], [dx + dw - 0.2, 1.39, e + 0.03, 0.012, 1]], 4, { ref: [0, 0, 1] });
+                if (!barn && r(61) < 0.55) {
+                    // A little roof over the door on two brackets, tiled as the house is.
+                    for (const sx of [-1, 1]) s.paint(C.white, 2).box(dx + sx * (dw + 0.18), top + 0.32, hd + 0.3, 0.05, 0.05, 0.28, 1).box(dx + sx * (dw + 0.18), top + 0.12, hd + 0.2, 0.05, 0.16, 0.05, 1);
+                    s.course(true).paint([230, 230, 230], 5).quad([dx - dw - 0.35, top + 0.42, hd + 0.62], [dx + dw + 0.35, top + 0.42, hd + 0.62], [dx + dw + 0.35, top + 0.78, hd + 0.02], [dx - dw - 0.35, top + 0.78, hd + 0.02]).course(false);
+                    s.paint(C.white, 2).box(dx, top + 0.4, hd + 0.62, dw + 0.37, 0.04, 0.03, 1);
+                }
             }
-            s.course(true).paint(C.stone, 0).box(dx, 0.2, hd + 0.4, dw + 0.25, 0.22, 0.35, 0.7).course(false);
         }
+        if (!lite) s.course(true).paint(C.stone, 0).box(dx, 0.2, hd + 0.4, dw + 0.25, 0.22, 0.35, 0.7).course(false);          // a step
         AT(lean);
         // The roof: a steep gable in lapping courses, flared at the eaves, its ridge along the street or (a narrow town house) end-on.
         const endOn = o.endOn ?? (floors > 1 && w < dp + 1.2), span = (endOn ? hw : hd + jut / 2) + 0.55, len = (endOn ? hd + jut / 2 : hw + jut / 2) + 0.5, rise = span * (barn ? 0.85 : 0.95 + 0.4 * r(53)), zc = endOn ? 0 : jut / 2;
@@ -478,12 +583,33 @@ const WayModels = (() => {
             }
         }
         s.course(false);
+        if (rich) {
+            // The roof has thickness: the lower edge of every course of tiles, a board along each eave and up each gable's
+            // verge, and (close to) the ends of the rafters under the eaves.
+            const across = endOn ? [1, 0, 0] : [0, 0, 1], along = endOn ? [0, 0, 1] : [1, 0, 0];
+            for (const sgn of [-1, 1]) {
+                s.course(true).paint([200, 200, 200], 5);
+                for (let c = 0; c < COURSES; c++) {
+                    const t0 = Math.max(0, c / COURSES - 0.05), l0 = len - sag * t0, a0 = sgn * span * (1 - t0), y = curve(t0) + 0.07;
+                    s.quad(pt(a0, y - 0.06, -l0), pt(a0, y - 0.06, l0), pt(a0, y, l0), pt(a0, y, -l0), [across[0] * sgn * 0.8, -0.6, across[2] * sgn * 0.8], [0.6, 0.6, 1, 1]);
+                }
+                s.course(false).paint(C.white, 2);
+                const ae = sgn * (span + 0.015), ye = curve(0) + 0.01;
+                s.quad(pt(ae, ye - 0.2, -len - 0.04), pt(ae, ye - 0.2, len + 0.04), pt(ae, ye, len + 0.04), pt(ae, ye, -len - 0.04), [across[0] * sgn, 0, across[2] * sgn], [0.7, 0.7, 1, 1]);
+                for (const end of [-1, 1]) for (let c = 0; c < COURSES; c++) {
+                    const t0 = c / COURSES, t1 = (c + 1) / COURSES, b0 = end * (len - sag * t0 + 0.03), b1 = end * (len - sag * t1 + 0.03), A = sgn * span * (1 - t0), B = sgn * span * (1 - t1), Y0 = curve(t0) + 0.09, Y1 = curve(t1) + 0.09;
+                    s.quad(pt(A, Y0 - 0.24, b0), pt(B, Y1 - 0.24, b1), pt(B, Y1, b1), pt(A, Y0, b0), [along[0] * end, 0, along[2] * end], [0.7, 0.7, 1, 1]);
+                }
+                if (fine) for (let k = -len + 0.4; k < len - 0.2; k += 0.62) { const c0 = pt(sgn * (span - 0.25), y0 - 0.04, k); s.box(c0[0], c0[1], c0[2], endOn ? 0.25 : 0.04, 0.05, endOn ? 0.04 : 0.25, 0.6); }
+            }
+        }
         const front = hd + jut;
         if (endOn && !stone && !lite) { beam(-span + 0.65, wallTop + 0.05, span - 0.65, wallTop + 0.05, front); beam(0, wallTop, 0, wallTop + rise - 0.7, front); windowAt(0, wallTop + rise * 0.36, front, 0.3, 0.36, r(40) < 0.6); }
         if (!lite) {
             // A ridge of darker tiles; and on a wide roof, a dormer looking at the street.
-            const ridge = pt(0, y1 + 0.03, 0);
-            s.paint([196, 196, 196], 5).box(ridge[0], ridge[1], ridge[2], endOn ? 0.15 : len - sag, 0.1, endOn ? len - sag : 0.15, 1);
+            const ridge = pt(0, y1 + 0.03, 0), r0 = pt(0, y1 + 0.02, -(len - sag) - 0.05), r1 = pt(0, y1 + 0.02, len - sag + 0.05);
+            if (rich) s.paint([196, 196, 196], 5).tube([[...r0, 0.13, 0.8], [...r1, 0.13, 0.8]], 6, { cap: 3 });          // ridge tiles, in the round
+            else s.paint([196, 196, 196], 5).box(ridge[0], ridge[1], ridge[2], endOn ? 0.15 : len - sag, 0.1, endOn ? len - sag : 0.15, 1);
             if (!endOn && !barn && w > 6.8 && r(54) < 0.65) {
                 const t = 0.4, mx = (r(57) - 0.5) * w * 0.4, mz = zc + span * (1 - t) - 0.15, my = curve(t);
                 s.paint(C.white, 1).box(mx, my + 0.35, mz, 0.52, 0.55, 0.62, 1);
@@ -497,7 +623,8 @@ const WayModels = (() => {
         if (!barn) {
             const cx = endOn ? (r(41) < 0.5 ? -1 : 1) * span * 0.45 : (r(41) - 0.5) * w * 0.6, cz = endOn ? (r(42) - 0.5) * dp * 0.5 : -span * 0.35 + zc, top = y1 + 0.55, foot = y1 - rise * 0.62;
             s.course(true).paint(C.stone, 0).box(cx, (foot + top) / 2, cz, 0.36, (top - foot) / 2, 0.36, 0.8, [[70, 62, 60], 0]).course(false);
-            if (!lite) s.paint([170, 96, 70], 0).box(cx, top + 0.16, cz, 0.16, 0.16, 0.16, 1, [[50, 44, 44], 0]);
+            if (rich) s.course(true).paint(C.stone, 0).box(cx, top - 0.06, cz, 0.43, 0.07, 0.43, 0.9).course(false);          // a capping
+            if (!lite) s.paint([170, 96, 70], 0).box(cx, top + 0.16, cz, 0.16, 0.16, 0.16, 1, [[50, 44, 44], 0]);          // a pot
             out.smoke = [cx, top + 1.0, cz];
         }
         AT(null);
@@ -910,7 +1037,7 @@ const WayModels = (() => {
                 const woods = item.b === 'deepwood' || item.b === 'forest' || item.b === 'grove';
                 // (Where the trees stand thick, the fine ones are only those right by the road; the deep forest's fine work is its boughs.)
                 const close = !far && detail > 0 && item.b !== 'deepwood' && item.b !== 'grove' && Math.abs(w.lateral(item.x, item.z)) < (woods ? band * 0.5 : band);
-                const m = far ? farTree(cone || item.kind === 'poplar') : (close ? WayDetail.tree : tree)(bare ? 'snag' : item.kind, Math.floor(v * 3));
+                const m = far ? farTree(cone || item.kind === 'poplar') : close ? WayDetail.tree(bare ? 'snag' : item.kind, Math.floor(v * 3)) : tree(bare ? 'snag' : item.kind, Math.floor(v * 3), detail > 1 && !far ? (woods ? 0.6 : 1) : 0);          // (in the thick of the woods, fewer leaves to a crown: there are more crowns)
                 props.stamp(m, place(lx, item.y - 0.1, lz, item.yaw, far ? sc * 1.3 : sc, far ? sc * 1.2 : sc * (0.9 + 0.3 * rnd(v, 5))), TINT, Math.max(season.snow, w.cold(item.z)) * 0.6, phase);
                 if (!far) { darken(item.x, item.z, 3.4 * sc, 0.34); if (item.kind === 'glade' || item.kind === 'shroom') lights.push([item.x, item.y + 3.5 * sc, item.z, 5, 0.3, 0.9, 0.8, 1]); }
                 continue;
@@ -929,7 +1056,7 @@ const WayModels = (() => {
                 temp.clear();
                 // Far off, and in the back rows of a grand city, a house is its shape, its roof and its lit windows; by the road it is trimmed.
                 const lite = far || (item.row >= 2 && !(detail > 1 && item.row < 4)) || (item.row === 1 && detail === 0);
-                const got = house(temp, lite ? { ...item, lite: true } : detail > 1 && Math.abs(item.d) < band + 4 ? { ...item, fine: true } : item), m = place(lx, item.y - 0.25, lz, item.yaw);
+                const got = house(temp, lite ? { ...item, lite: true } : detail > 1 && Math.abs(item.d) < band + 4 ? { ...item, fine: true } : detail > 1 ? { ...item, rich: true } : item), m = place(lx, item.y - 0.25, lz, item.yaw);
                 TINT[1] = PLASTER[Math.floor(v * 4.99)]; TINT[2] = lerp3(C.timber, [120, 80, 56], rnd(v, 2)); TINT[3] = BRIGHT[Math.floor(rnd(v, 3) * 5.99)]; TINT[5] = lerp3(ROOFS[item.roof], [255, 255, 255], 0.1 * rnd(v, 4));
                 props.stamp(temp, m, TINT, snow, phase, 1);
                 
@@ -1065,5 +1192,5 @@ const WayModels = (() => {
         return out;
     }
 
-    return { C, BRIGHT, PLASTER, GRASS, mul, rotX, rotY, rotZ, move, rnd, lerp3, fixed, house, tower, wall, flag, square, squareSteps, gridIndices, leafTint, model };
+    return { C, BRIGHT, PLASTER, GRASS, mul, rotX, rotY, rotZ, move, rnd, lerp3, fixed, house, tower, wall, flag, square, squareSteps, gridIndices, leafTint, model, fronds, tree };
 })();

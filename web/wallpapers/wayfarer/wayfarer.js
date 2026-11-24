@@ -547,35 +547,18 @@ class WayfarerAnimationManager {
     // Everyone's own small life.
     stepActors(dt, me) {
         const L = WayLogic, w = this.world, t = this.seconds, cam = this.cam;
-        // A sidestep: whoever is on foot gives way to the camera, the traveller and each other, and comes back after. It
-        // is walked: out to the side of the road (never back along it, which read as a slide backwards as the traveller
-        // passed), at a walking pace, turned the way they step, with their legs going. Whoever is sitting stays put
-        // (the near-lens fade is for them), and nobody steps more than a few paces off their place, into a wall.
+        // A sidestep: whoever is on foot gives way to the camera, the traveller and each other, and comes back after,
+        // walked out to the side of the road (WayLogic.giveWay).
         const folk = [];
         for (const group of this.actors.values()) for (const a of group) if (a.kind === 'folk' && Math.abs(a.x - me.x) + Math.abs(a.z - me.z) < 90) folk.push(a);
+        const pushers = [];
         for (const a of folk) {
-            if (a.role === 'sit' || a.role === 'fish') { a.ox = a.oz = a.side = a.slide = 0; continue; }
-            const h = w.heading(a.z), hx = Math.sin(h), hz = Math.cos(h), nx = hz, nz = -hx, side = a.side || 0;
-            const ax = a.x + nx * side, az = a.z + nz * side, mine = side || (a.v < 0.5 ? -1 : 1);
-            let want = 0, pushed = false;
-            const push = (x, z, reach) => {
-                const dx = ax - x, dz = az - z, along = dx * hx + dz * hz, lat = dx * nx + dz * nz;
-                if (along * along + lat * lat >= reach * reach) return;
-                want += Math.sign(lat || mine) * Math.sqrt(reach * reach - along * along) - lat; pushed = true;
-            };
+            pushers.length = 0;
+            const ax = a.x + (a.ox || 0), az = a.z + (a.oz || 0);
             // Further from the lens in front of it than behind: nobody's head fills a corner of the picture.
-            if (cam.y - me.y < 4.5) push(cam.x, cam.z, (ax - cam.x) * Math.sin(cam.heading) + (az - cam.z) * Math.cos(cam.heading) > 0 ? 6.2 : 3);
-            if (a.role === 'stroll' || a.role === 'child') { push(me.x, me.z, 1.3); for (const b of folk) if (b !== a) push(b.x + (b.ox || 0), b.z + (b.oz || 0), 0.95); }
-            const to = pushed ? L.clamp(side + want, -3.2, 3.2) : 0, most = (pushed ? 1.4 : 0.6) * dt;       // at a cut they are already out of the way
-            a.side = this.justCut ? to : side + L.clamp(to - side, -most, most);
-            a.slide = dt > 0 ? (a.side - side) / dt : 0;
-            a.ox = nx * a.side; a.oz = nz * a.side;
-            // Turned the way they are going (along their beat and out to the side together), and stepping.
-            const along = a.role === 'stroll' ? 0.95 : 0, fx = Math.sin(a.yaw) * along + nx * a.slide, fz = Math.cos(a.yaw) * along + nz * a.slide, fast = Math.hypot(fx, fz);
-            const veer = fast > 0.05 ? L.wrapPi(Math.atan2(fx, fz) - a.yaw) * Math.min(1, Math.abs(a.slide) / 0.5) : 0;
-            a.veer = (a.veer || 0) + (veer - (a.veer || 0)) * Math.min(1, dt * 6);
-            if (a.role !== 'stroll' && a.role !== 'child') a.stride = (a.stride || 0) + Math.abs(a.slide) * dt / 1.4;
-            a.stepping = Math.min(1, Math.abs(a.slide) / 0.6);
+            if (cam.y - me.y < 4.5) pushers.push([cam.x, cam.z, (ax - cam.x) * Math.sin(cam.heading) + (az - cam.z) * Math.cos(cam.heading) > 0 ? 6.2 : 3]);
+            if (a.role === 'stroll' || a.role === 'child') { pushers.push([me.x, me.z, 1.3]); for (const b of folk) if (b !== a) pushers.push([b.x + (b.ox || 0), b.z + (b.oz || 0), 0.95]); }
+            L.giveWay(a, dt, w.heading(a.z), pushers, this.justCut);          // (at a cut they are already out of the way)
         }
         for (const group of this.actors.values()) {
             for (const a of group) {
@@ -684,7 +667,7 @@ class WayfarerAnimationManager {
         for (const group of this.actors.values()) for (const a of group) if (a.kind === 'deer' || a.kind === 'rabbit') { const away = Math.hypot(a.x - me.x, a.z - me.z); if (away < nearest) { nearest = away; scare = a; } }
         // A low camera wants the ground before it kept clear; and the rogue has a hand for the first cat when she stops.
         const cam = this.cam, low = cam.y - me.y < 3.2 && c.camera !== 'first';
-        const ctx = { t: this.seconds, night: this.light.night, passing, others: this.party, scare, random: Math.random,
+        const ctx = { t: this.seconds, night: this.light.night, passing: this.keepRight > 0, others: this.party, scare, random: Math.random,
             avoid: low ? { x: cam.x + Math.sin(cam.heading) * 1.1, z: cam.z + Math.cos(cam.heading) * 1.1, room: 1.4 } : null,
             pet: look.stealth && (j.mode === 'gaze' || j.mode === 'camp') ? this.party.find(p => p.kind.group === 'cats' && p.role !== 'ride') || null : null };
         for (const p of this.party) L.companionStep(p, dt, w, j, ctx);
