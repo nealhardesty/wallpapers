@@ -378,6 +378,8 @@ const WayLogic = (() => {
                     put('bunting', zc - 12, 0, { span: 13 });
                     put('bunting', zc + 16, 0, { span: 13 });
                     folk(zc - 3, l.side * 3.2, 'stand');
+                    put('spawn', zc + 9, -l.side * 3.7, { kind: 'mouse', n: 2 });
+                    put('spawn', zc - 8, l.side * 3.2, { kind: 'sparrow', n: 5 });
                 } else {
                     const pd = l.plaza.d;
                     put('well', zc, pd + l.side * 2.5);
@@ -399,6 +401,13 @@ const WayLogic = (() => {
                     put('spawn', zc + 4.6, pd + l.side * 2.2, { kind: 'child', n: 2 });
                     put('spawn', zc - 16, l.side * 3.8, { kind: 'hen', n: 4 });
                     put('spawn', zc + 20, -l.side * 5, { kind: 'cat', n: 1 });
+                    // Mice along the house fronts and under the stalls, and sparrows in the street after crumbs.
+                    put('spawn', zc - 9.5, -l.side * 3.6, { kind: 'mouse', n: 3 });
+                    put('spawn', zc + 0.5, pd + l.side * 7.4, { kind: 'mouse', n: 2 });
+                    put('spawn', zc - 30, l.side * 3.7, { kind: 'mouse', n: 2 });
+                    put('spawn', zc + 32, -l.side * 3.7, { kind: 'mouse', n: 2 });
+                    put('spawn', zc + 8, -l.side * 2.6, { kind: 'sparrow', n: 7 });
+                    put('spawn', zc - 38, l.side * 3, { kind: 'sparrow', n: 5 });
                 }
                 put('sign', zc - span - 14, 2.9);
             } else if (l.grand) {
@@ -505,6 +514,10 @@ const WayLogic = (() => {
                 put('drywall', zc - 52, 4.2, { v: rnd(37) }, -Math.PI / 2);
                 put('spawn', zc - 52, 4.2, { kind: 'cat', n: 1, perch: 0.78 });
                 put('spawn', zc + 84, -4.6, { kind: 'cat', n: 1 });
+                // Under the market stalls and along the house fronts, mice and rats; crumbs for the sparrows.
+                for (let k = 0; k < 6; k++) put('spawn', zc - 110 + 220 * rnd(70 + k), (k % 2 ? 1 : -1) * (4.1 + 0.3 * rnd(80 + k)), { kind: k % 3 ? 'mouse' : 'rat', n: 2 + (k % 2) });
+                put('spawn', zc + 12, sd * 6.5, { kind: 'sparrow', n: 8 });
+                put('spawn', zc - 70, -sd * 3, { kind: 'sparrow', n: 6 });
                 put('sign', zc - A - 104, 3.1);
             } else if (l.place === 'city') {
                 // Walls on an oval the road runs through, gate to gate.
@@ -565,6 +578,8 @@ const WayLogic = (() => {
                 put('spawn', zc - 40, 3.95, { kind: 'cat', n: 1, perch: 0.78 });
                 put('spawn', zc + 50, -5, { kind: 'cat', n: 1 });
                 put('spawn', zc, l.side * 9, { kind: 'pigeon', n: 6 });
+                for (let k = 0; k < 5; k++) put('spawn', zc - 80 + 160 * rnd(70 + k), (k % 2 ? 1 : -1) * (3.9 + 0.25 * rnd(80 + k)), { kind: k === 2 ? 'rat' : 'mouse', n: 2 + (k % 2) });
+                put('spawn', zc + 14, -l.side * 2.8, { kind: 'sparrow', n: 7 });
                 put('sign', zc - A - 22, 3.1);
             } else if (l.place === 'stones') {
                 for (let k = 0; k < 9; k++) { const a = k / 9 * TAU; put('stone', zc + Math.cos(a) * 8.5, l.side * 21 + Math.sin(a) * 8.5, { v: rnd(k), h: 2.6 + 1.6 * rnd(k, 1) }, a); }
@@ -1057,18 +1072,43 @@ const WayLogic = (() => {
         swallows: { tall: 0.3, swarm: 'swallow', rare: 0.6, n: [4, 6], keep: 0, where: 'air', hours: 'day', see: 90 },
         bats: { tall: 0.3, swarm: 'bat', rare: 0.6, n: [5, 8], keep: 0, where: 'air', hours: 'night', see: 60 },
         glowworms: { tall: 0.14, swarm: 'glow', n: [8, 12], keep: 3, hours: 'night', see: 60 },
+        // The small folk of the hedge and the bank: easy to miss, and gone if you look at them too hard.
+        rabbits: { tall: 0.3, rig: 'rabbit', far: 'rabbit', n: [3, 5], keep: 7, range: 5, pace: 1.2, shy: 12, run: 6, act: 'graze', see: 70 },
+        fieldmice: { tall: 0.1, rig: 'fieldmouse', n: [2, 4], keep: 6, range: 2.5, pace: 1.4, shy: 5, run: 2.6, act: 'scurry', see: 24 },
+        chipmunks: { tall: 0.14, rig: 'chipmunk', n: [1, 3], keep: 6, range: 3, pace: 1.8, shy: 7, run: 3.5, act: 'scurry', see: 32 },
+        toad: { tall: 0.12, rig: 'toad', n: [1, 2], keep: 6, range: 2, pace: 0.3, act: 'graze', see: 28 },
+        // A frog on the bank, that goes in with a plop when somebody comes along, and is back up when they have gone.
+        frogs: { tall: 0.12, rig: 'frog', n: [2, 4], where: 'shore', keep: 7, act: 'plop', see: 32 },
+        grouse: { tall: 0.4, rig: 'grouse', far: 'grouse', bird: true, n: [2, 4], keep: 7, range: 5, pace: 0.5, shy: 12, wing: true, act: 'graze', see: 80 },
+        pika: { tall: 0.15, rig: 'pika', n: [1, 3], keep: 6, range: 2, pace: 1.2, shy: 8, run: 3, act: 'sentry', see: 32 },
+        // The grove's mice, whose tails glow after dark.
+        glowmice: { tall: 0.1, rig: 'glowmouse', n: [2, 4], keep: 6, range: 3, pace: 1.4, shy: 5, run: 2.6, act: 'scurry', glow: [0.35, 0.8, 1], glowR: 0.22, see: 30 },
+        dragonflies: { tall: 0.1, swarm: 'dragonfly', n: [3, 6], where: 'shore', keep: 5, hours: 'day', see: 45 },
     };
     // Who is at home where (twice in a list: twice as likely).
     const WILDLIFE = {
-        meadow: ['hare', 'hare', 'foxcubs', 'hedgehog', 'kestrel', 'butterflies', 'butterflies', 'swallows', 'pheasant', 'stag', 'glowworms', 'bats'],
-        farm: ['pheasant', 'pheasant', 'hare', 'hedgehog', 'swallows', 'swallows', 'butterflies', 'kestrel', 'bats', 'foxcubs'],
-        forest: ['bear', 'stag', 'stag', 'squirrel', 'squirrel', 'boar', 'foxcubs', 'badger', 'woodpecker', 'owl', 'hedgehog', 'bats', 'glowworms'],
-        deepwood: ['bear', 'stag', 'squirrel', 'squirrel', 'squirrel', 'boar', 'badger', 'owl', 'woodpecker', 'woodpecker', 'glowworms', 'bats'],
-        lake: ['heron', 'heron', 'swan', 'swan', 'otter', 'fish', 'fish', 'stag', 'butterflies', 'bats', 'squirrel', 'bearfishing'],
-        coast: ['seal', 'seal', 'heron', 'otter', 'fish', 'fish', 'swallows', 'hare', 'crab', 'crab'],
-        moor: ['wildpony', 'wildpony', 'stag', 'hare', 'kestrel', 'eagle', 'marmot', 'glowworms'],
-        pass: ['ibex', 'ibex', 'marmot', 'marmot', 'eagle', 'eagle', 'bear'],
-        grove: ['moonhare', 'moonhare', 'mushling', 'mushling', 'squirrel', 'owl', 'glowworms', 'glowworms', 'butterflies'],
+        meadow: ['hare', 'hare', 'foxcubs', 'hedgehog', 'kestrel', 'butterflies', 'butterflies', 'swallows', 'pheasant', 'stag', 'glowworms', 'bats', 'rabbits', 'fieldmice'],
+        farm: ['pheasant', 'pheasant', 'hare', 'hedgehog', 'swallows', 'swallows', 'butterflies', 'kestrel', 'bats', 'foxcubs', 'rabbits', 'fieldmice'],
+        forest: ['bear', 'stag', 'stag', 'squirrel', 'squirrel', 'squirrel', 'boar', 'foxcubs', 'badger', 'woodpecker', 'owl', 'hedgehog', 'bats', 'glowworms', 'chipmunks'],
+        deepwood: ['bear', 'stag', 'squirrel', 'squirrel', 'squirrel', 'boar', 'badger', 'owl', 'woodpecker', 'woodpecker', 'glowworms', 'bats', 'toad'],
+        lake: ['heron', 'heron', 'swan', 'swan', 'otter', 'fish', 'fish', 'stag', 'butterflies', 'bats', 'squirrel', 'bearfishing', 'frogs', 'dragonflies'],
+        coast: ['seal', 'seal', 'heron', 'otter', 'fish', 'fish', 'swallows', 'hare', 'crab', 'crab', 'rabbits'],
+        moor: ['wildpony', 'wildpony', 'stag', 'hare', 'kestrel', 'eagle', 'marmot', 'glowworms', 'grouse', 'grouse'],
+        pass: ['ibex', 'ibex', 'marmot', 'marmot', 'eagle', 'eagle', 'bear', 'pika'],
+        grove: ['moonhare', 'moonhare', 'mushling', 'mushling', 'squirrel', 'owl', 'glowworms', 'glowworms', 'butterflies', 'glowmice'],
+    };
+    // The small ones, who fill the places left over when there is more wildlife than 'plenty': each tier above it
+    // (WILD_LEVELS) is another eight chances a stretch, drawn from these.
+    const WILD_SMALL = {
+        meadow: ['fieldmice', 'fieldmice', 'rabbits', 'rabbits', 'hedgehog', 'hare', 'butterflies', 'pheasant'],
+        farm: ['fieldmice', 'fieldmice', 'rabbits', 'rabbits', 'hedgehog', 'pheasant', 'butterflies'],
+        forest: ['squirrel', 'squirrel', 'squirrel', 'chipmunks', 'chipmunks', 'fieldmice', 'toad', 'hedgehog', 'rabbits', 'woodpecker'],
+        deepwood: ['squirrel', 'squirrel', 'squirrel', 'chipmunks', 'toad', 'toad', 'fieldmice', 'badger', 'hedgehog'],
+        lake: ['frogs', 'frogs', 'frogs', 'dragonflies', 'dragonflies', 'fieldmice', 'squirrel', 'heron'],
+        coast: ['crab', 'crab', 'rabbits', 'rabbits', 'fieldmice', 'seal'],
+        moor: ['grouse', 'grouse', 'rabbits', 'fieldmice', 'hare', 'toad', 'marmot'],
+        pass: ['pika', 'pika', 'pika', 'marmot', 'marmot', 'chipmunks'],
+        grove: ['glowmice', 'glowmice', 'glowmice', 'mushling', 'squirrel', 'rabbits', 'butterflies', 'moonhare'],
     };
     // The big ones of each country, seen from a long way off: every stretch of road has a place for one party of them,
     // somewhere with a clear view from the road.
@@ -1079,11 +1119,14 @@ const WayLogic = (() => {
     // What stands on a verge that nothing walks through: a crossing waits for a stretch without them.
     const VERGE = new Set(['fence', 'drywall', 'lamp', 'milestone', 'shrine', 'logs', 'camp', 'cart', 'bench', 'sign', 'cairn', 'wall', 'house', 'stall', 'board', 'well', 'clutter']);
     // How much of it there is: the share of the places that could hold somebody that do.
-    const WILD_LEVELS = { none: 0, few: 0.15, some: 0.6, plenty: 0.96 };
+    // Past 'plenty' it is more places, not a bigger share: abundant opens a second eight a stretch, teeming a third
+    // (each place's roll is its tier and a share: 0 to 1 for the first eight, 1 to 2 for the next, 2 to 3 after).
+    const WILD_LEVELS = { none: 0, few: 0.15, some: 0.6, plenty: 0.96, abundant: 1.96, teeming: 2.96 };
+    const WILD_TIERS = 3;
     // (The line of a bough over the road, height and reach, as WayModels builds it: a squirrel's way out along one.)
     const BOUGH_LINE = [[0, 0], [2.6, 0.25], [5.2, 1.3], [6.8, 3.2], [7.5, 5.4], [7.4, 7.2]];
     // wildlife(cz): who could be at home along this CHUNK metres of the road (within fifty metres of it, where they
-    // are seen), the same every time it is asked: up to six parties, each { kind, n, x, z, y, d, roll, v, biome } and,
+    // are seen), the same every time it is asked: up to eight parties for each tier of WILD_LEVELS, each { kind, n, x, z, y, d, roll, v, biome } and,
     // for those in trees, the tree or the bough. `roll` is what the setting is held against (WILD_LEVELS): turning it
     // up adds to those already there, never moves them.
     function wildlifeOf(w) {
@@ -1122,9 +1165,9 @@ const WayLogic = (() => {
             // (In a town the air still has somebody in it: swallows about the roofs by day, bats by night.)
             const mid = w.at(z0 + CHUNK / 2);
             if (mid.near.radius && Math.abs(mid.dz) < mid.near.radius) for (const [kind, salt] of [['swallows', 60], ['bats', 61]]) { const z = z0 + CHUNK * w.hash(cz, 9, salt), [x] = w.place(z, 3 * (w.hash(cz, 10, salt) - 0.5)); out.push({ kind, n: 6, x, z, y: w.surface(x, z), d: w.lateral(x, z), roll: w.hash(cz, 11, salt), v: w.hash(cz, 12, salt), biome: mid.near.biome, town: true }); }
-            for (let slot = 0; slot < 8; slot++) {
-                const h = k => w.hash(cz, slot, 70 + k), roll = slot < 2 ? h(0) ** 1.5 : h(0), side = slot < 2 ? (slot ? -1 : 1) * (h(2) < 0.5 ? -1 : 1) : h(2) < 0.5 ? -1 : 1;
-                const sz = z0 + CHUNK * h(1), r = w.at(sz), b = h(3) < w.share(r.x, sz) ? r.b : r.a, show = slot < 2, list = (show ? WILD_SHOW : WILDLIFE)[b.biome];
+            for (let slot = 0; slot < 8 * WILD_TIERS; slot++) {
+                const tier = Math.floor(slot / 8), h = k => w.hash(cz, slot, 70 + k), roll = tier + (slot < 2 ? h(0) ** 1.5 : h(0)), side = slot < 2 ? (slot ? -1 : 1) * (h(2) < 0.5 ? -1 : 1) : h(2) < 0.5 ? -1 : 1;
+                const sz = z0 + CHUNK * h(1), r = w.at(sz), b = h(3) < w.share(r.x, sz) ? r.b : r.a, show = slot < 2, list = (show ? WILD_SHOW : tier ? WILD_SMALL : WILDLIFE)[b.biome];
                 const kind = list[Math.floor(h(4) * list.length)], K = WILD[kind], n = K.n[0] + Math.floor(h(5) * (K.n[1] - K.n[0] + 1));
                 if (!show && K.rare && h(8) > K.rare) continue;
                 if (K.where === 'tree') {
@@ -1217,8 +1260,10 @@ const WayLogic = (() => {
         if (act === 'climb') {
             // Up the trunk (or out along the bough), a look about, and down again to forage at the foot of it.
             const p0 = wildPath(g, a.u);
+            // (Somebody coming while it is down at the foot: up the trunk, quick, and a scold from a safe height.)
+            if (a.state !== 'up' && a.u < 0.35 && near < 9) { a.state = 'up'; a.top = 0.7 + 0.3 * random(); a.bolt = 2.6; }
             if (a.state === 'idle') { a.moving = ease(a.moving, 0, 0.2); a.rest = ease(a.rest, 1, 0.3); if (a.timer < 0) { a.state = a.u < 0.5 ? 'up' : 'down'; a.top = 0.55 + 0.45 * random(); } }
-            else { a.rest = ease(a.rest, 0, 0.15); a.u = clamp(a.u + (a.state === 'up' ? 1 : -1) * K.pace * dt / p0.len, 0, 1); a.gait += K.pace * dt; a.moving = 1; if (a.state === 'up' ? a.u >= a.top : a.u <= 0) { a.state = 'idle'; a.timer = (a.u > 0 ? 2 : 4) + 5 * random(); } }
+            else { a.rest = ease(a.rest, 0, 0.15); const pace = K.pace * (a.bolt || 1); a.u = clamp(a.u + (a.state === 'up' ? 1 : -1) * pace * dt / p0.len, 0, 1); a.gait += pace * dt; a.moving = 1; if (a.state === 'up' ? a.u >= a.top : a.u <= 0) { a.state = 'idle'; a.timer = (a.u > 0 ? 2 + 4 * (a.bolt ? 1 : 0) : 4) + 5 * random(); a.bolt = 0; } }
             const p = wildPath(g, a.u), up = a.state === 'down' ? -1 : 1, onTrunk = a.u > 0.02;
             a.x = p.x; a.z = p.z; a.alt = p.alt; a.y = g.y;
             a.pitch = ease(a.pitch, onTrunk ? p.pitch * up : 0, 0.12);
@@ -1240,6 +1285,29 @@ const WayLogic = (() => {
             if (a.leap > 0) { a.leap -= dt; const u = 1 - Math.max(0, a.leap) / 0.9; a.x = a.jx + Math.sin(a.yaw) * u * 1.3; a.z = a.jz + Math.cos(a.yaw) * u * 1.3; a.alt = Math.sin(Math.PI * u) * 0.65 - 0.12; a.pitch = Math.cos(Math.PI * u) * 1.1; a.hidden = a.leap <= 0; if (a.hidden) a.timer = 4 + 9 * random(); }
             else if (a.timer < 0) { a.leap = 0.9; a.yaw = random() * TAU; a.jx = a.hx + (random() - 0.5) * 4; a.jz = a.hz + (random() - 0.5) * 4; a.hidden = false; }
             else a.hidden = true;
+            return a;
+        }
+        if (act === 'plop') {
+            // A frog on the bank facing the water, throat going; somebody near, and it is in with a hop and gone a while.
+            if (a.wet === undefined) {
+                let best = Infinity;
+                for (let k = 0; k < 8; k++) { const turn = k * TAU / 8, dry = w.ground(a.hx + Math.sin(turn), a.hz + Math.cos(turn)) - w.water(a.hx + Math.sin(turn), a.hz + Math.cos(turn)); if (dry < best) { best = dry; a.wet = turn; } }
+                // (The others of the party sit along the bank, not on top of the first.)
+                const along = a.wet + Math.PI / 2, off = (a.i % 2 ? 1 : -1) * Math.ceil(a.i / 2) * 0.7;
+                a.hx += Math.sin(along) * off; a.hz += Math.cos(along) * off; a.x = a.hx; a.z = a.hz; a.yaw = a.wet + 0.4 * (a.v - 0.5);
+            }
+            if (a.leap > 0) {
+                a.leap -= dt;
+                const u = 1 - Math.max(0, a.leap) / 0.55;
+                a.x = a.hx + Math.sin(a.wet) * u * 1.0; a.z = a.hz + Math.cos(a.wet) * u * 1.0; a.alt = Math.sin(Math.PI * u) * 0.28 - 0.1 * u; a.gait += 1.6 * dt; a.moving = 1; a.rest = 0;
+                if (a.leap <= 0) { a.hidden = true; a.timer = 6 + 9 * random(); }
+            } else if (a.hidden) {
+                if (a.timer < 0 && near > 14) { a.hidden = false; a.x = a.hx; a.z = a.hz; a.alt = 0; a.yaw = a.wet + 0.4 * (random() - 0.5); }
+            } else {
+                a.moving = ease(a.moving, 0, 0.15); a.rest = 1; a.alt = 0;
+                if (near < 8) { a.leap = 0.55 + 0.25 * a.v; a.yaw = a.wet; }
+            }
+            a.y = Math.max(w.ground(a.x, a.z), w.water(a.x, a.z) - 0.02);
             return a;
         }
         if (act === 'scuttle') {
@@ -1332,12 +1400,14 @@ const WayLogic = (() => {
             a.down = ease(a.down, 0, 0.3); a.rest = ease(a.rest, 0, 0.2);
             if (a.toPost && Math.hypot(a.tx - a.x, a.tz - a.z) < 0.5) { a.state = 'scratch'; a.toPost = false; a.timer = 7 + 3 * random(); }
             else
-            if (go(a.tx, a.tz, K.pace) < 0.3 || a.timer < -30) { a.state = 'idle'; a.timer = act === 'play' ? 0.3 + 1.2 * random() : act === 'box' ? 2 + 4 * random() : 3 + 9 * random(); }
+            if (go(a.tx, a.tz, K.pace) < 0.3 || a.timer < -30) { a.state = 'idle'; a.timer = act === 'play' || act === 'scurry' ? 0.3 + 1.6 * random() : act === 'box' ? 2 + 4 * random() : 3 + 9 * random(); }
         } else {
             a.moving = ease(a.moving, 0, 0.25);
             const calm = a.alert < 0.5;
-            a.down = ease(a.down, act === 'graze' && calm ? 1 : 0, 0.6);
-            a.rest = ease(a.rest, act === 'bask' ? 1 - 0.4 * a.alert : act === 'sentry' || (act === 'amble' && a.v > 0.5 && a.timer > 2) ? 1 : 0, 0.5);
+            // (A mouse in a stop: nose down at a seed, or up on its haunches for a look round, by turns.)
+            const upright = act === 'scurry' && Math.sin(ctx.t * 0.8 + a.v * 20) > 0.2;
+            a.down = ease(a.down, (act === 'graze' || act === 'scurry') && calm && !upright ? 1 : 0, act === 'scurry' ? 0.2 : 0.6);
+            a.rest = ease(a.rest, act === 'bask' ? 1 - 0.4 * a.alert : act === 'sentry' || upright || (act === 'amble' && a.v > 0.5 && a.timer > 2) ? 1 : 0, act === 'scurry' ? 0.2 : 0.5);
             if (act === 'box' && ctx.party.length > 1) {
                 // Two hares up on their hind legs at one another.
                 const o = ctx.party[a.i ? 0 : 1], close = Math.hypot(o.x - a.x, o.z - a.z) < 1.4;
@@ -1907,7 +1977,7 @@ const WayLogic = (() => {
         RAD, TAU, SLOT, CHUNK, RUN, BIOMES, LAND, SEASONS, ROAD, GRAND, WEATHER, WALK, SHOTS, beyondWall,
         clamp, mix, mix3, smooth, hash, noise1, noise2,
         world, camp, nextCamp, bodies, light, weatherStart, weatherStep,
-        WILD, WILDLIFE, WILD_SHOW, WILD_LEVELS, wildStart, wildStep, wildSeen, waterSeen,
+        WILD, WILDLIFE, WILD_SHOW, WILD_SMALL, WILD_LEVELS, wildStart, wildStep, wildSeen, waterSeen,
         COMPANIONS, COMPANION, GROUPS, PARTY_MAX, party, partyStart, partyChange, companionStart, companionStep, FORMS, SHIFT, shiftStart, shiftStep, stealthStart, stealthStep, spook, fenceAt, vault,
         journeyStart, journeyStep, standing, sight, camera, ORBIT, orbitStart, orbitGrab, orbitDrag, orbitStep, orbitCamera, sightline, inOpen, wrapPi,
         GAIT, gaitMix, gaitFoot, legSolve, giveWay,

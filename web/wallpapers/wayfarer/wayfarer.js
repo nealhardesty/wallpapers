@@ -24,7 +24,7 @@ const WAY_CAMERA_NAMES = { follow: 'Behind the traveller', orbit: 'Orbit: drag t
 const WAY_ORBITS = ['fixed', 'turning'];
 const WAY_PICKS = ['surprise', 'choose'];
 // How much wildlife (WayLogic.WILD_LEVELS), and how the herds and flocks there always were scale with it.
-const WAY_WILD = { none: 0, few: 0.6, some: 1, plenty: 1.5 };
+const WAY_WILD = { none: 0, few: 0.6, some: 1, plenty: 1.5, abundant: 2, teeming: 2.6 };
 const WAY_CRAFT = ['never', 'sometimes', 'often'];
 // Which countries the road passes through: all of them, a kind of country, or the ones ticked.
 const WAY_COUNTRY = { all: null, woods: ['forest', 'deepwood', 'grove'], open: ['meadow', 'farm', 'moor'], shore: ['lake', 'coast', 'meadow'], high: ['pass', 'moor', 'forest'], choose: null };
@@ -402,11 +402,12 @@ class WayfarerAnimationManager {
                 else if (s.kind === 'child') for (let i = 0; i < s.n * Math.min(1, life); i++) made.push({ kind: 'folk', role: 'child', look: WayActors.townsfolk(r(10 + i), 'child'), x: s.x, z: s.z, x0: s.x, z0: s.z, yaw: 0, stride: i / 3, v: r(10 + i), turn: i / s.n * 6.28, wave: 0 });
                 else {
                     // The herds, flocks and strays: as many as the wildlife setting says, and none at 'none'.
-                    const n = herds ? Math.max(1, Math.round((s.n || 1) * (0.4 + 0.6 * this.density) * herds)) : 0;
+                    const n = herds ? Math.min(s.kind === 'mouse' || s.kind === 'rat' ? 4 : Infinity, Math.max(1, Math.round((s.n || 1) * (0.4 + 0.6 * this.density) * herds))) : 0;          // (no more than four mice to a stretch of wall)
                     made.herd = true;
                     for (let i = 0; i < n; i++) {
-                        const a = r(20 + i) * 6.28, d = i ? 1.5 + 4 * r(30 + i) : 0;
-                        made.push({ kind: s.kind, x: s.x + Math.sin(a) * d, z: s.z + Math.cos(a) * d, x0: s.x, z0: s.z, y: s.y, yaw: r(40 + i) * 6.28, v: r(50 + i), gait: r(60 + i), moving: 0, graze: 1, timer: 2 + 9 * r(70 + i), state: 'idle', fold: 1, alt: 0, perch: s.perch || 0 });
+                        // (Mice keep to the foot of the wall, strung along it; sparrows are a tight little flock.)
+                        const along = s.kind === 'mouse' || s.kind === 'rat', a = along ? this.world.heading(s.z) : r(20 + i) * 6.28, d = along ? (i - (n - 1) / 2) * 1.3 + (r(30 + i) - 0.5) * 1.1 : i ? (s.kind === 'sparrow' ? 0.3 + 1.2 * r(30 + i) : 1.5 + 4 * r(30 + i)) : 0;
+                        made.push({ kind: s.kind, x: s.x + Math.sin(a) * d, z: s.z + Math.cos(a) * d, x0: s.x, z0: s.z, y: s.y, yaw: r(40 + i) * 6.28, v: r(50 + i), gait: r(60 + i), moving: 0, graze: 1, timer: 2 + 9 * r(70 + i), state: 'idle', fold: 1, alt: 0, perch: s.perch || 0, dir: r(80 + i) < 0.5 ? -1 : 1 });
                     }
                 }
                 this.actors.set(id, made);
@@ -597,14 +598,37 @@ class WayfarerAnimationManager {
                 const shy = a.kind === 'deer' || a.kind === 'rabbit' || a.kind === 'crow' || a.kind === 'pigeon' || a.kind === 'hen';
                 if (a.kind === 'wisp' || a.kind === 'gull') continue;
                 if (a.kind === 'duck') { a.turn = (a.turn || a.v * 6) + dt * 0.25; a.x = a.x0 + Math.sin(a.turn + a.v * 9) * 3 * (0.5 + a.v); a.z = a.z0 + Math.cos(a.turn + a.v * 9) * 3 * (0.5 + a.v); a.yaw = a.turn + a.v * 9 + Math.PI / 2; continue; }
-                if (a.kind === 'crow' || a.kind === 'pigeon') {
+                if (a.kind === 'mouse' || a.kind === 'rat') {
+                    // Along the foot of the wall in dashes: a stop, a nibble, up on its haunches for a look; and when
+                    // somebody comes close, a scurry away along the wall and into a crack until they have gone by.
+                    const hd = w.heading(a.z0), fx = Math.sin(hd), fz = Math.cos(hd);
+                    a.s ??= (a.x - a.x0) * fx + (a.z - a.z0) * fz;
+                    if (a.state === 'hid') { if (a.timer < 0 && near > 8) { a.state = 'idle'; a.timer = 1 + 2 * Math.random(); } continue; }
+                    if (a.state !== 'flee' && near < (a.kind === 'rat' ? 3.5 : 4.5)) { a.state = 'flee'; a.timer = 0.7 + 0.6 * a.v; a.dir = (-dx * fx - dz * fz) < 0 ? -1 : 1; }
+                    let speed = 0;
+                    if (a.state === 'flee') { speed = 2.6; if (a.timer < 0) { a.state = 'hid'; a.timer = 4 + 6 * Math.random(); } }
+                    else if (a.state === 'walk') { speed = a.kind === 'rat' ? 1.1 : 1.5; if (a.timer < 0 || Math.abs(a.s - a.goal) < 0.05) { a.state = 'idle'; a.timer = 0.4 + 2 * Math.random(); } }
+                    else if (a.timer < 0) { a.goal = L.clamp(a.s + (Math.random() < 0.5 ? -1 : 1) * (0.4 + 1.6 * Math.random()), -4, 4); a.dir = a.goal > a.s ? 1 : -1; a.state = 'walk'; a.timer = 3; }
+                    if (speed) { const step = speed * dt; a.s = L.clamp(a.s + a.dir * (a.state === 'walk' ? Math.min(step, Math.abs(a.goal - a.s)) : step), -4.5, 4.5); a.gait += step; }
+                    a.x = a.x0 + fx * a.s; a.z = a.z0 + fz * a.s; a.yaw = hd + (a.dir < 0 ? Math.PI : 0);
+                    a.vel = ease(a.vel, speed); a.moving += ((speed ? 1 : 0) - a.moving) * Math.min(1, dt * 10);
+                    const upright = !speed && Math.sin(t * 0.9 + a.v * 20) > 0.3;
+                    a.rest = L.clamp((a.rest || 0) + (upright ? 1 : -1) * dt * 5, 0, 1); a.graze = L.clamp((a.graze || 0) + (!speed && !upright ? 1 : -1) * dt * 5, 0, 1);
+                    continue;
+                }
+                if (a.kind === 'crow' || a.kind === 'pigeon' || a.kind === 'sparrow') {
                     // On the ground until the traveller comes close; then up, round, and down again further off.
-                    if (a.state === 'idle' && near < 9) { a.state = 'fly'; a.timer = 9 + 6 * a.v; a.turn = Math.atan2(-dx, -dz); }
+                    const sparrow = a.kind === 'sparrow';
+                    if (a.state === 'idle' && near < (sparrow ? 5 : 9)) { a.state = 'fly'; a.timer = (sparrow ? 5 : 9) + 6 * a.v; a.turn = Math.atan2(-dx, -dz); a.hop = 0; }
                     if (a.state === 'fly') {
-                        a.turn += dt * 0.5 * (a.v < 0.5 ? 1 : -1);
-                        a.alt = Math.min(a.alt + dt * 3.2, 7 + 6 * a.v) * (a.timer < 2.5 ? Math.max(0, a.timer / 2.5) : 1);
+                        a.turn += dt * (sparrow ? 1.1 : 0.5) * (a.v < 0.5 ? 1 : -1);
+                        a.alt = Math.min(a.alt + dt * 3.2, (sparrow ? 2.5 + 3 * a.v : 7 + 6 * a.v)) * (a.timer < 2.5 ? Math.max(0, a.timer / 2.5) : 1);
                         a.x += Math.sin(a.turn) * 6 * dt; a.z += Math.cos(a.turn) * 6 * dt; a.yaw = a.turn;
-                        if (a.timer < 0) { a.state = 'idle'; a.alt = 0; }
+                        if (a.timer < 0) { a.state = 'idle'; a.alt = 0; a.x0 = a.x; a.z0 = a.z; }
+                    } else if (sparrow) {
+                        // A sparrow hops: a little jump this way or that, a peck, another.
+                        if (a.hop > 0) { a.hop -= dt; const step = Math.min(dt, a.hop + dt) * 1.6; a.x += Math.sin(a.yaw) * step; a.z += Math.cos(a.yaw) * step; a.alt = 0.06 * Math.sin(Math.PI * Math.max(0, a.hop) / 0.16); }
+                        else { a.alt = 0; if (a.timer < 0) { a.hop = 0.16; a.timer = 0.3 + 1.4 * Math.random(); a.yaw = Math.hypot(a.x - a.x0, a.z - a.z0) > 2 ? Math.atan2(a.x0 - a.x, a.z0 - a.z) : Math.random() * 6.28; } }
                     }
                     a.fold = a.state === 'fly' ? 0 : 1;
                     continue;
@@ -889,7 +913,9 @@ class WayfarerAnimationManager {
         // The wild ones. Near the eye they are the finer animals; further off the plainer ones stand in; the small are
         // not drawn from far away at all. The nearest so many, by the tier.
         {
-            const fineR = this.detail > 1 ? 13 : this.detail ? 8 : 0, most = this.detail > 1 ? 44 : this.detail ? 26 : 14, reach = this.detail > 1 ? 1 : this.detail ? 0.75 : 0.55, night = this.light.night, shown = [];
+            // (Past 'plenty' there are more of the small ones about, so more of them may be drawn.)
+            const more = L.WILD_LEVELS[this.config.wildlife] > 2 ? 2 : L.WILD_LEVELS[this.config.wildlife] > 1 ? 1.5 : 1;
+            const fineR = this.detail > 1 ? 13 : this.detail ? 8 : 0, most = Math.round((this.detail > 1 ? 44 : this.detail ? 26 : 14) * more), reach = this.detail > 1 ? 1 : this.detail ? 0.75 : 0.55, night = this.light.night, shown = [];
             for (const party of this.wildParties) for (const a of party) { if (!a.hidden && inView(a.x, a.z, (a.K.see || 170) * reach)) shown.push([Math.hypot(a.x - view.x, a.z - view.z), a]); }
             shown.sort((p, q) => p[0] - q[0]);
             let n = 0;
@@ -903,6 +929,15 @@ class WayfarerAnimationManager {
                     for (let i = 0; i < a.count; i++) {
                         const u = t + a.v * 40 + i * 7.3;
                         if (K.swarm === 'glow') { const blink = Math.max(0, Math.sin(u * 0.9 + i)) ** 2 * out2; this.glows.add(p[0] + Math.sin(i * 2.4 + u * 0.11) * 3.4, p[1] + 0.25 + 0.3 * Math.sin(u * 0.4 + i), p[2] + Math.cos(i * 1.7 + u * 0.09) * 3.4, 0.07, 0.7 * blink, blink, 0.35 * blink, 1); continue; }
+                        if (K.swarm === 'dragonfly') {
+                            // Darting low over the water's edge: a hang, a dash somewhere else, a hang.
+                            const leg = Math.floor(u * 0.6), f = L.smooth(0, 0.25, u * 0.6 - leg), at = k => [Math.sin(k * 3.7 + i) * 2.6, 0.35 + 0.35 * (0.5 + 0.5 * Math.sin(k * 2.3 + i * 1.7)), Math.cos(k * 2.9 + i * 0.7) * 2.6];
+                            const A0 = at(leg), A1 = at(leg + 1), bx = p[0] + A0[0] + (A1[0] - A0[0]) * f, by = p[1] + A0[1] + (A1[1] - A0[1]) * f + 0.02 * Math.sin(u * 9), bz = p[2] + A0[2] + (A1[2] - A0[2]) * f;
+                            st.reset(bx, by, bz, Math.atan2(A1[0] - A0[0], A1[2] - A0[2]), 2.2 * out2);
+                            out.stamp(WayCompanions.flyerBody('dragonfly'), st.top, null, 0, 0, 1);
+                            for (const side of [-1, 1]) { st.push().size(side, 1, 1).rz(0.35 * Math.sin(u * 60 + side)); out.stamp(WayCompanions.flyer('dragonfly'), st.top, null, 0, 0, 1); st.pop(); }
+                            continue;
+                        }
                         if (K.swarm === 'butterfly') {
                             const bx = p[0] + Math.sin(u * 0.5 + i * 2.1) * 2.4, by = p[1] + 0.6 + 0.4 * Math.sin(u * 0.9 + i), bz = p[2] + Math.cos(u * 0.37 + i * 1.3) * 2.4;
                             for (const side of [-1, 1]) { st.reset(bx, by, bz, u * 1.3 + i, 2.6 * out2).size(side, 1, 1).rz(0.9 * Math.sin(u * 22)); out.stamp(WayCompanions.butterfly(), st.top, null, 0, 0, 1); }
@@ -923,7 +958,7 @@ class WayfarerAnimationManager {
                 if (away < fineR || !K.far) WayCompanions.pose(K.rig, out, st, p[0], p[1], p[2], { lite: true, size: (K.size || 1) * grow, yaw: a.yaw, gait: a.gait, speed: a.vel, moving: a.moving, rest: a.rest, down: a.down, alarm: a.alarm, alt: a.alt, wing: a.wing, bank: a.bank, pitch: a.pitch, t: t + a.v * 9 }, fx);
                 else if (K.bird) A.bird(out, st, K.far, p[0], p[1] + a.alt + 0.12, p[2], { yaw: a.yaw, fold: a.wing ? 0 : 1, flap: a.wing ? (K.act === 'soar' ? 0.12 : 0.7) * Math.sin(t * (K.act === 'soar' ? 1.5 : 11) + a.v * 9) : 0, roll: -(a.bank || 0) * 0.6, size: grow });
                 else A.beast(out, st, K.far, p[0], p[1], p[2], { yaw: a.yaw, ...this.farGait(K.rig, a.gait), speed: a.vel, moving: a.moving, graze: a.down, t: t + a.v * 9, size: (K.farSize || 1) * grow }, K.farCoat || null);
-                if (K.glow && lit > 0.05) this.glows.add(p[0], p[1] + 0.25, p[2], 0.8, K.glow[0] * lit, K.glow[1] * lit, K.glow[2] * lit, 1);
+                if (K.glow && lit > 0.05) this.glows.add(p[0], p[1] + (K.glowR ? 0.08 : 0.25), p[2], K.glowR || 0.8, K.glow[0] * lit, K.glow[1] * lit, K.glow[2] * lit, 1);
             }
             this.wildDrawn = Math.min(n, most);
         }
@@ -1008,6 +1043,16 @@ class WayfarerAnimationManager {
                     const turn = t * 0.35 * (a.v < 0.5 ? 1 : -1) + a.v * 20, rad = 14 + 16 * a.v, p = rel(a.x0 + Math.sin(turn) * rad, a.y + 11 + 12 * a.v + 2 * Math.sin(t * 0.3 + a.v * 7), a.z0 + Math.cos(turn) * rad);
                     if (this.detail > 0 && Math.hypot(p[0], p[2]) < 45) WayCompanions.bird(out, st, 'gull', p[0], p[1], p[2], { yaw: turn + (a.v < 0.5 ? 1 : -1) * Math.PI / 2, wing: 1, gait: t * 0.5 + a.v, bank: (a.v < 0.5 ? 1 : -1) * 0.5, t });
                     else A.bird(out, st, 'gull', p[0], p[1], p[2], { yaw: turn + (a.v < 0.5 ? 1 : -1) * Math.PI / 2, flap: 0.12 * Math.sin(t * 1.4 + a.v * 9), roll: (a.v < 0.5 ? -1 : 1) * 0.3 });
+                } else if (a.kind === 'mouse' || a.kind === 'rat') {
+                    // Too small to see from far off; drawn plainly near at hand on every tier.
+                    if (a.state === 'hid' || Math.hypot(a.x - view.x, a.z - view.z) > (this.detail ? 20 : 13)) continue;
+                    const p = rel(a.x, feet(a.x, a.z), a.z);
+                    WayCompanions.pose(a.kind, out, st, p[0], p[1], p[2], { lite: !closeBy(a.x, a.z, 5), yaw: a.yaw, gait: a.gait, speed: a.vel, moving: a.moving, rest: a.rest, down: a.graze, t: t + a.v * 9 });
+                } else if (a.kind === 'sparrow') {
+                    if (Math.hypot(a.x - view.x, a.z - view.z) > (this.detail ? 30 : 18)) continue;
+                    const flying = a.state === 'fly', p = rel(a.x, feet(a.x, a.z) + (a.alt || 0), a.z);
+                    if (closeBy(a.x, a.z, 14)) WayCompanions.bird(out, st, 'sparrow', p[0], p[1], p[2], { yaw: a.yaw, wing: flying ? 1 : 0, gait: flying ? t * 3 + a.v : 0, moving: 0, down: !flying && !(a.hop > 0) ? 0.6 * Math.max(0, Math.sin(t * 3.3 + a.v * 30)) : 0, t: t + a.v * 9 });
+                    else A.bird(out, st, 'sparrow', p[0], p[1] + 0.05, p[2], { yaw: a.yaw, fold: flying ? 0 : 1, flap: flying ? 0.8 * Math.sin(t * 18 + a.v * 9) : 0 });
                 } else if (a.kind === 'duck' || a.kind === 'hen' || a.kind === 'crow' || a.kind === 'pigeon') {
                     const y = a.kind === 'duck' ? a.y - 0.02 : feet(a.x, a.z) + 0.1 + (a.alt || 0), p = rel(a.x, y, a.z), flying = a.state === 'fly';
                     const fine = { crow: 'raven', hen: 'hen', duck: 'duck' }[a.kind];

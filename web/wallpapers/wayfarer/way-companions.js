@@ -107,7 +107,19 @@ const WayCompanions = (() => {
         wildpony: { ...KINDS.pony, load: false, coat: [112, 84, 64], mane: [44, 36, 34], mark: p => p === 'paw' ? [40, 34, 32] : null, size: 0.92 },
         ibex: { ...KINDS.goat, bell: false, coat: [206, 196, 180], horns: 0.44, mark: p => p === 'paw' || p === 'shin' ? [70, 60, 56] : null, size: 1.12 },
         marmot: { ...KINDS.cub, size: 0.5, coat: [176, 144, 98], mark: p => p === 'muzzle' ? [226, 206, 170] : null, gait: 'bound', stride: 0.3 },
+        // The small ones: mice of the house and the field, a city rat, the grove's mice with their lit tails; a chipmunk
+        // in its stripes; a pika like a marmot's small cousin with no tail; a warty toad. (A little bigger than life, so
+        // they are something more than a speck at the edge of the picture.)
+        mouse: Q({ len: 0.14, tall: 0.065, girth: 0.034, hip: 1.25, neck: [0.012, 0.6], head: 0.036, muzzle: [0.032, 0.017], ears: ['round', 2.2], tail: ['whip', 0.16, -0.12], coat: [146, 128, 112], under: [226, 216, 202], eye: [16, 12, 14], nose: PINK, stride: 0.17, gait: 'scuttle', rest: 'sit' }),
+        chipmunk: { ...KINDS.squirrel, size: 0.85, tail: ['plume', 0.17, 1.6], coat: [182, 124, 72], under: [244, 232, 212], mark: (p, x, y, z) => p === 'body' && y > 0.006 && (Math.abs(x) < 0.008 || Math.abs(Math.abs(x) - 0.024) < 0.007) ? [52, 38, 30] : p === 'body' && y > 0.006 && Math.abs(Math.abs(x) - 0.016) < 0.004 ? [240, 228, 206] : p === 'head' && Math.abs(Math.abs(x) - 0.018) < 0.005 ? [52, 38, 30] : null },
+        pika: { ...KINDS.cub, size: 0.3, coat: [150, 134, 114], under: [206, 194, 176], ears: ['round', 1.5], tail: ['none', 0, 0], mark: null, gait: 'bound', stride: 0.22 },
+        toad: { ...KINDS.frog, size: 1.15, coat: [140, 112, 76], under: [212, 196, 156], mark: (p, x, y, z) => p === 'body' && y > 0 && patch(x, y, z, 60, 7) > 0.62 ? [104, 80, 54] : null, eye: [212, 150, 56], haunch: 1.3 },
         seal: { ...KINDS.otter, rest: 'graze', gait: 'waddle', size: 2.1, coat: [120, 124, 134], under: [176, 178, 184], mark: (p, x, y, z) => patch(x, y, z, 18, 6) > 0.66 ? [90, 92, 102] : null, leg: 0.7 },
+    });
+    Object.assign(KINDS, {
+        fieldmouse: { ...KINDS.mouse, size: 0.95, coat: [190, 134, 82], under: [246, 236, 214] },
+        rat: { ...KINDS.mouse, size: 1.7, coat: [104, 98, 96], under: [160, 154, 148], tail: ['whip', 0.2, -0.2], ears: ['round', 1.3], nose: [200, 150, 150] },
+        glowmouse: { ...KINDS.mouse, size: 1.05, coat: [206, 212, 230], under: [244, 246, 252], eye: [40, 60, 90], mark: (p, x, y, z) => p === 'tail' && y > 0.08 ? [170, 230, 255] : null },
     });
     function quadParts(id, lite = false) {
         const F = lite ? (path => path) : finer;
@@ -379,6 +391,9 @@ const WayCompanions = (() => {
         kestrel: { ...BIRDS.hawk, size: 0.72, body: [176, 110, 70], wing: [140, 90, 62] },
         eagle: { ...BIRDS.hawk, size: 1.75, body: [84, 62, 48], wing: [66, 50, 42], belly: [110, 84, 62] },
         woodpecker: { ...BIRDS.raven, size: 0.62, body: [34, 32, 36], wing: [230, 230, 226], belly: [240, 238, 232], upright: 1.0 },
+        // A house sparrow, brown and buff with a grey cap; a red grouse of the heather.
+        sparrow: { ...BIRDS.raven, size: 0.46, r: 0.1, beak: [0.04, 0.02, [70, 58, 48], false], body: [150, 108, 72], wing: [118, 84, 58], belly: [216, 204, 184], crown: [130, 128, 132], feet: [170, 130, 110], fingers: false, upright: 0.45, flap: 2.4, stride: 0.12 },
+        grouse: { ...BIRDS.hen, size: 1.15, comb: true, body: [116, 66, 44], wing: [96, 58, 40], belly: [130, 78, 52], feet: [226, 220, 210], tailUp: 0.2 },
     });
     function birdParts(id) {
         const b = BIRDS[id], k = 'bird:' + id + ':', r = b.r, len = b.len;
@@ -699,11 +714,13 @@ const WayCompanions = (() => {
 
     // Small things on the wing, a few triangles each (they come in dozens): a bat, a swallow; and a fish out of the water.
     const flyer = kind => part('flyer:' + kind, s => {
+        // (A dragonfly's are two clear pairs, long and narrow, with a glint.)
+        if (kind === 'dragonfly') { for (const [z, l] of [[0.012, 0.075], [-0.006, 0.068]]) for (const up of [1, -1]) s.paint(shiny([196, 226, 236], 0.9), 0).fx(0, 50).tri([0, 0, z + 0.006], [l, 0.004, z + 0.003], [l * 0.85, 0.002, z - 0.008], [0, up, 0]).tri([0, 0, z + 0.006], [l * 0.85, 0.002, z - 0.008], [0, 0, z - 0.006], [0, up, 0]); s.fx(0); return; }
         const c = kind === 'bat' ? [44, 38, 48] : [40, 52, 86], span = kind === 'bat' ? 0.19 : 0.16;
         s.paint(c, 0).fx(0).tri([0, 0, 0.05], [0, 0, -0.06], [span, 0.01, kind === 'bat' ? -0.02 : -0.07], [0, 1, 0]).tri([0, 0, 0.05], [span, 0.01, kind === 'bat' ? -0.02 : -0.07], [span * 0.55, 0, 0.03], [0, 1, 0]);
         s.tri([0, 0, -0.06], [0, 0, 0.05], [span, 0.01, kind === 'bat' ? -0.02 : -0.07], [0, -1, 0]).tri([span, 0.01, kind === 'bat' ? -0.02 : -0.07], [0, 0, 0.05], [span * 0.55, 0, 0.03], [0, -1, 0]);
     });
-    const flyerBody = kind => part('flyer:body:' + kind, s => { s.paint(kind === 'bat' ? [56, 46, 52] : [236, 232, 224], 0).fx(0).blob(0, 0, 0, 0.022, 0.02, 0.06, { segs: 5, bands: 3, lump: 0 }); if (kind === 'swallow') s.paint([40, 52, 86], 0).tri([0, 0.004, -0.05], [0.03, 0, -0.14], [0, 0, -0.08], [0, 1, 0]).tri([0, 0.004, -0.05], [0, 0, -0.08], [-0.03, 0, -0.14], [0, 1, 0]); });
+    const flyerBody = kind => part('flyer:body:' + kind, s => { if (kind === 'dragonfly') { s.paint(shiny([40, 140, 150], 0.6), 0).fx(0).tube([[0, 0, 0.03, 0.008, 1], [0, 0, 0.012, 0.009, 1], [0, 0, -0.02, 0.005, 1], [0, 0, -0.085, 0.003, 1]], 4).paint([30, 60, 70], 0).blob(0, 0.002, 0.034, 0.011, 0.009, 0.009, { segs: 5, bands: 3, lump: 0 }); return; } s.paint(kind === 'bat' ? [56, 46, 52] : [236, 232, 224], 0).fx(0).blob(0, 0, 0, 0.022, 0.02, 0.06, { segs: 5, bands: 3, lump: 0 }); if (kind === 'swallow') s.paint([40, 52, 86], 0).tri([0, 0.004, -0.05], [0.03, 0, -0.14], [0, 0, -0.08], [0, 1, 0]).tri([0, 0.004, -0.05], [0, 0, -0.08], [-0.03, 0, -0.14], [0, 1, 0]); });
     // A seal hauled out: a long grey body tapering to its hind flippers, a small head held up, fore flippers on the rock.
     const seal = () => part('seal', s => {
         const coat = shiny([112, 118, 130], 0.35);

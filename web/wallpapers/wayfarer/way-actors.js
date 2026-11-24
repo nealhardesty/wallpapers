@@ -323,7 +323,7 @@ const WayActors = (() => {
         duck: { size: 0.36, body: [150, 110, 76], wing: [120, 90, 66], span: 0.6, head: [40, 110, 76] }, hen: { size: 0.3, body: [200, 120, 70], wing: [176, 100, 60], span: 0.4, head: [200, 120, 70], comb: true },
         dragon: { size: 9, body: [150, 50, 44], wing: [196, 110, 60], span: 2.6, dragon: true },
         swan: { size: 0.8, body: [250, 250, 250], wing: [240, 240, 244], span: 1.5 }, heron: { size: 0.7, body: [150, 160, 176], wing: [110, 120, 140], span: 1.6 }, eagle: { size: 0.95, body: [84, 62, 48], wing: [66, 50, 42], span: 2.0 },
-        kestrel: { size: 0.36, body: [176, 110, 70], wing: [140, 90, 62], span: 1.3 }, owl: { size: 0.4, body: [150, 118, 84], wing: [124, 96, 70], span: 1.2 }, pheasant: { size: 0.42, body: [176, 100, 50], wing: [140, 84, 50], span: 0.6 }, woodpecker: { size: 0.22, body: [34, 32, 36], wing: [230, 230, 226], span: 0.7 },
+        kestrel: { size: 0.36, body: [176, 110, 70], wing: [140, 90, 62], span: 1.3 }, owl: { size: 0.4, body: [150, 118, 84], wing: [124, 96, 70], span: 1.2 }, pheasant: { size: 0.42, body: [176, 100, 50], wing: [140, 84, 50], span: 0.6 }, grouse: { size: 0.38, body: [116, 66, 44], wing: [96, 58, 40], span: 0.6 }, sparrow: { size: 0.16, body: [150, 108, 72], wing: [118, 84, 58], span: 0.8, head: [130, 128, 132] }, woodpecker: { size: 0.22, body: [34, 32, 36], wing: [230, 230, 226], span: 0.7 },
     };
     function birdParts(kind) {
         const b = BIRDS[kind], k = 'bird:' + kind;
