@@ -400,7 +400,7 @@ test('settings: the panel offers what the code knows, and the keys are declared'
     assert.deepEqual(options('orbitMode'), constant('WAY_ORBITS'));
     assert.deepEqual(options('wildlife'), Object.keys(L.WILD_LEVELS));
     assert.deepEqual(Object.keys(constant('WAY_WILD')), Object.keys(L.WILD_LEVELS));
-    assert.equal(context.WP.defaultsOf('wayfarer').wildlife, 'some');
+    assert.equal(context.WP.defaultsOf('wayfarer').wildlife, 'abundant');
     assert.deepEqual(options('biomePick'), Object.keys(constant('WAY_COUNTRY')));
     assert.deepEqual(options('biomeChoice').sort(), plain(L.BIOMES).sort());
     for (const [pick, list] of Object.entries(constant('WAY_COUNTRY'))) for (const b of list || []) assert.ok(L.BIOMES.includes(b), `${pick}: ${b}`);
@@ -1044,7 +1044,7 @@ test('wildlife: each country has its own, in the same places every time, off the
         if (k.young) assert.ok(L.WILD[k.young[0]] && L.WILD[k.young[0]].act === 'follow');
     }
     assert.ok(['bear', 'stag', 'squirrel'].every(id => L.WILD[id]) && Object.keys(L.WILD).length >= 27);
-    for (const lists of [L.WILDLIFE, L.WILD_SHOW]) for (const [biome, list] of Object.entries(lists)) for (const id of list) assert.ok(L.WILD[id] && L.BIOMES.includes(biome), `${biome}: ${id}`);
+    for (const lists of [L.WILDLIFE, L.WILD_SHOW, L.WILD_SMALL]) for (const [biome, list] of Object.entries(lists)) for (const id of list) assert.ok(L.WILD[id] && L.BIOMES.includes(biome), `${biome}: ${id}`);
     const seenAll = new Set();
     for (const biome of L.BIOMES) {
         const w = L.world(7, { biomes: [biome] }), again = L.world(7, { biomes: [biome] }), seen = new Set();
@@ -1059,8 +1059,8 @@ test('wildlife: each country has its own, in the same places every time, off the
                     const k = L.WILD[g.kind], r = w.at(g.z), d = Math.abs(w.lateral(g.x, g.z)), where = k.where || 'land';
                     parties++; some += g.roll < L.WILD_LEVELS.some; few += g.roll < L.WILD_LEVELS.few;
                     seen.add(g.kind); seenAll.add(g.kind);
-                    assert.ok(L.WILDLIFE[biome].includes(g.kind) || L.WILD_SHOW[biome].includes(g.kind) || g.town, `${g.kind} in ${biome}`);
-                    assert.ok(g.n >= k.n[0] && g.n <= k.n[1] && g.roll >= 0 && g.roll < 1);
+                    assert.ok(L.WILDLIFE[biome].includes(g.kind) || L.WILD_SHOW[biome].includes(g.kind) || (g.roll >= 1 && L.WILD_SMALL[biome].includes(g.kind)) || g.town, `${g.kind} in ${biome}`);
+                    assert.ok(g.n >= k.n[0] && g.n <= k.n[1] && g.roll >= 0 && g.roll < 3);
                     if (where !== 'air') {
                         assert.ok(d < 90, `${g.kind} ${d.toFixed(0)} m away`);
                         assert.ok(d >= Math.max(6, k.keep) - 1e-6, `${g.kind} ${d.toFixed(1)} m from the road's middle`);
@@ -1078,7 +1078,11 @@ test('wildlife: each country has its own, in the same places every time, off the
         // Turned up, the setting adds to who is there: nobody moves.
         const cz = 1720, at = level => plain(w.wildlife(cz).filter(g => g.roll < L.WILD_LEVELS[level]));
         for (const g of at('few')) assert.ok(at('some').some(o => o.x === g.x && o.kind === g.kind) && at('plenty').some(o => o.x === g.x && o.kind === g.kind));
+        for (const g of at('plenty')) assert.ok(at('abundant').some(o => o.x === g.x && o.kind === g.kind) && at('teeming').some(o => o.x === g.x && o.kind === g.kind));
         assert.equal(at('none').length, 0);
+        // Past plenty, more of the small ones: a second eight chances a stretch at abundant, a third at teeming.
+        const count = level => { let n = 0; for (let c = 1700; c < 1790; c++) n += w.wildlife(c).filter(g => g.roll < L.WILD_LEVELS[level]).length; return n; };
+        assert.ok(count('abundant') > count('plenty') * 1.5 && count('teeming') > count('abundant') * 1.2, `${biome}: plenty ${count('plenty')}, abundant ${count('abundant')}, teeming ${count('teeming')}`);
     }
     for (const id of Object.keys(L.WILD)) assert.ok(seenAll.has(id) || L.WILD[id].n[1] === 0, `${id} is at home nowhere`);
     // A squirrel in the deep forest has a bough over the road to run along.
@@ -1129,6 +1133,48 @@ test('wildlife: each country has its own, in the same places every time, off the
         if (biome === 'meadow' || biome === 'moor') assert.ok(crossed > 0, `${biome}: nobody crossed the road`);
     }
     assert.ok(fled > 0, 'nobody shy was ever startled');
+});
+
+test('the small ones: frogs go in with a plop and come back, a squirrel bolts up its tree, and every town has mice along its walls and sparrows in its street', () => {
+    // A frog on the bank: in the water when the traveller comes near, back on the bank once they have gone.
+    const lake = L.world(7, { biomes: ['lake'] });
+    let frogs = null;
+    for (let cz = 1700; cz < 1900 && !frogs; cz++) frogs = lake.wildlife(cz).find(g => g.kind === 'frogs') || null;
+    assert.ok(frogs, 'no frogs by the lake');
+    const party = L.wildStart(frogs, lake), f = party[0], away = { x: frogs.x + 60, z: frogs.z }, near = { x: frogs.x + 3, z: frogs.z }, random = () => 0.5;
+    const run = (me, secs) => { for (let i = 0; i < secs * 30; i++) for (const a of party) L.wildStep(a, 1 / 30, lake, { t: i / 30, night: 0, me, random, party }); };
+    run(away, 2);
+    assert.ok(!f.hidden && Math.abs(f.y - Math.max(lake.ground(f.x, f.z), lake.water(f.x, f.z) - 0.02)) < 0.05, 'on the bank');
+    if (party.length > 1) assert.ok(Math.hypot(party[1].x - f.x, party[1].z - f.z) > 0.5, 'two frogs on one spot');
+    run(near, 2);
+    assert.ok(f.hidden, 'still on the bank with somebody beside it');
+    run(away, 20);
+    assert.ok(!f.hidden && Math.hypot(f.x - f.hx, f.z - f.hz) < 1e-6, 'never came back');
+    // A squirrel at the foot of its tree goes up it when somebody comes close.
+    const wood = L.world(7, { biomes: ['forest'] });
+    let sq = null;
+    for (let cz = 1700; cz < 1900 && !sq; cz++) sq = wood.wildlife(cz).find(g => g.kind === 'squirrel' && g.tree) || null;
+    assert.ok(sq, 'no squirrel on a tree');
+    const s = L.wildStart(sq, wood)[0];
+    s.u = 0; s.state = 'idle'; s.timer = 99;
+    for (let i = 0; i < 30; i++) L.wildStep(s, 1 / 30, wood, { t: i / 30, night: 0, me: { x: sq.x + 4, z: sq.z }, random, party: [s] });
+    assert.ok(s.u > 0.25 && s.alt > 0.5, `up ${s.alt.toFixed(2)} m after a second`);
+    // Every village, hamlet and city has mice at the foot of a wall (never in a house or the road) and sparrows.
+    const seen = {};
+    for (let i = 100; i < 400; i++) {
+        const l = world.leg(i), items = world.layout(i), kind = l.grand ? 'grand' : l.place;
+        if (!['village', 'hamlet', 'city', 'grand'].includes(kind)) continue;
+        const mice = items.filter(it => it.k === 'spawn' && (it.kind === 'mouse' || it.kind === 'rat')), houses = items.filter(it => it.k === 'house');
+        assert.ok(mice.length >= (kind === 'hamlet' ? 1 : 3) && items.some(it => it.k === 'spawn' && it.kind === 'sparrow'), `${kind} ${i}: ${mice.length} mice`);
+        seen[kind] = (seen[kind] || 0) + 1;
+        for (const m of mice) {
+            const d = world.lateral(m.x, m.z);
+            assert.ok(Math.abs(d) > 2.9, `${kind} ${i}: a ${m.kind} ${d.toFixed(1)} m from the road's middle`);
+            // (Strung out along the wall up to 4.5 m either way, a mouse never runs into a house.)
+            for (const h of houses) for (const along of [-4.5, 0, 4.5]) assert.ok(!(Math.abs(m.z + along - h.z) < h.w / 2 - 0.3 && Math.abs(d - world.lateral(h.x, h.z)) < h.dp / 2 - 0.2), `${kind} ${i}: a ${m.kind} inside a house`);
+        }
+    }
+    assert.ok(seen.village && seen.city, JSON.stringify(seen));
 });
 
 test('wild animals cross the road only where the verge is open, and wild ponies never do', () => {

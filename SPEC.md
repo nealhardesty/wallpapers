@@ -167,7 +167,7 @@ Added for Christmas, drawn in code (designs in §10.27–§10.30):
 | `sumo` | sumo-logic.js, sumo-art.js, sumo.js | ~1.3k lines | No network; a league of invented wrestlers kept in `host.storage`, written in Japanese with an English gloss (§10.35); bouts and tournaments pure and seeded (`SumoLogic`), unit-tested; interactive (a tap throws a cushion); evening by `host.now()`; keys N, B |
 | `pocket-hockey` | hockey-logic.js, hockey-art.js, pocket-hockey.js | ~2.4k lines | No network; an invented league of eight clubs and the game in progress kept in `host.storage` (§10.35); the league, the 60 Hz game (physics, steering, signature moves) and the seasons pure and seeded (`HockeyLogic`), unit-tested; top-down pixel art at its own resolution, scaled up pixelated, with its own 5×7 font; interactive (a tap throws something on the ice, or starts a wave); keys N, G, B, X, W |
 | `baseball` | baseball-logic.js, baseball-league.js, baseball-talk.js, baseball-art.js, baseball.js | ~2.4k lines | No network; a league of eight invented clubs kept in `host.storage` (§10.37); every pitch, ball in play and box score pure and seeded (`BaseballLogic`, `BaseballLeague`), unit-tested; 16-bit pixel art at its own resolution with its own lettering, scaled up pixelated; interactive (a tap starts a wave); day, dusk and night by `host.now()`; keys N, S |
-| `wayfarer` | way-logic.js, way-models.js, way-detail.js, way-actors.js, way-people.js, way-companions.js, way-gl.js, wayfarer.js | ~6.6k lines | The second on WebGL (§10.38): an endless road through nine kinds of country (which of them is a setting) with villages, walled cities, grand cities under a castle and landmarks along it, all a pure function of a seed (`WayLogic`), unit-tested; every shape modelled in code as triangles (`WayModels`, `WayActors`); built a 64 m square at a time as the walk reaches it, finer near the traveller; four cameras, one of them an orbit a drag turns; nine travellers (one changes shape, one goes unseen) and 46 companions, six at once, the named cats among them; day, night, weather and seasons; a flat 2D fallback without WebGL; its own watch on the GPU; interactive (drag to look around, or to turn the orbit); keys V, T, X, N, G |
+| `wayfarer` | way-logic.js, way-models.js, way-detail.js, way-actors.js, way-people.js, way-companions.js, way-gl.js, wayfarer.js | ~6.6k lines | The second on WebGL (§10.38): an endless road through nine kinds of country (which of them is a setting) with villages, walled cities, grand cities under a castle and landmarks along it, all a pure function of a seed (`WayLogic`), unit-tested; every shape modelled in code as triangles (`WayModels`, `WayActors`); built a 64 m square at a time as the walk reaches it, finer near the traveller; four cameras, one of them an orbit a drag turns; nine travellers (one changes shape, one goes unseen) and 46 companions, six at once, the named cats among them; wildlife from bears to field mice and frogs, and mice, rats and sparrows in the towns, from none to teeming; day, night, weather and seasons; a flat 2D fallback without WebGL; its own watch on the GPU; interactive (drag to look around, or to turn the orbit); keys V, T, X, N, G |
 | `ski-run` | ski-logic.js, ski-models.js, ski-gl.js, ski-run.js | ~4.6k lines | The third on WebGL (§10.39), with instancing: an endless ski run stitched from twelve kinds of section, one `height(x, z)` for the riders and the mesh (`SkiLogic`), riders moved by the hill (gravity, drag, the scrub of their edges) and held as the forces on them ask (lean from edge force, legs solved to skis that stay on the snow, skid, toe-side and heel-side), tricks, wipeouts, a stop for a drink at a grand lodge, cameras and a ski school all pure and unit-tested; trees, figures and props modelled in code (`SkiModels`); a flat 2D fallback without WebGL; its own watch on the GPU; interactive (carve by keys or a drag, tap to jump; the riders take it back after 4 s); keys A, D, arrows, J, V, T, X, G |
 
 About 1.7 MB of JavaScript in total. **Not imported:** links, weather, clocks,
@@ -5332,7 +5332,7 @@ creature, marking or design is taken from one.
     ones borrow a cat or a rabbit in their own coat); the nearest 44, 26
     or 14 by the tier; swarms are a few triangles each or only lights.
     The orbit's cutaway takes leaves only, so it never takes an animal.
-  - *The setting.* `wildlife`: `none`, `few`, `some` (the default) or
+  - *The setting.* `wildlife`: `none`, `few`, `some` (the default until the ninth pass, which added `abundant`, now the default, and `teeming`) or
     `plenty`; it takes effect at once and leaves the walk alone. It
     governs the herds and flocks too (×0, 0.6, 1, 1.5), which `life` used
     to: `life` is now folk and traffic only.
@@ -5543,6 +5543,59 @@ creature, marking or design is taken from one.
     with a small z-buffer (`tools/wayfarer-raster.mjs`): no browser, the same
     sheet every time. `make wayfarer-budget`: the table above.
   - *Not verified* as the rest of this section: on a real GPU, at speed.
+- **A ninth pass (2026-11-24): "more small animals (squirrels in the forest, perhaps mice in the village/cities, and any others that make sense)", then "there needs to be more of them (and set the configurable number much higher)".**
+  - *More of them.* `wildlife` gains `abundant` (the new default) and
+    `teeming` above `plenty`. Past `plenty` it is more places, not a bigger
+    share: `world.wildlife(cz)` now rolls three tiers of eight places a
+    stretch (24, from 8), and a place's `roll` is its tier plus a share
+    (0 to 1, 1 to 2, 2 to 3), so `WILD_LEVELS` (none 0, few 0.15, some 0.6,
+    plenty 0.96, abundant 1.96, teeming 2.96) lets out the first eight as
+    before, the second at abundant and the third at teeming. The first
+    tier's hashing is unchanged, so every level up to `plenty` has the same
+    animals in the same places as before, and turning it up still only adds.
+    The upper tiers draw from `WILD_SMALL`, each country's small ones. The
+    herds go ×2 and ×2.6 (`WAY_WILD`); the nearest drawn rise ×1.5 at
+    abundant and ×2 at teeming (66/39/21 and 88/52/28 by tier).
+  - *Who is new* (`WILD`): rabbits in a warren's worth (meadow, farm,
+    coast, moor, forest); field mice that `scurry` (a dash, a stop, nose down
+    at a seed, up on their haunches for a look, by turns); chipmunks in
+    their stripes (forest, pass); a toad (deep forest, moor); frogs on the
+    bank that `plop` (facing the water; somebody within 8 m and it hops in
+    and is gone, and back on the bank 6 to 15 s after they are 14 m off);
+    dragonflies over the shallows by day (a hang, a dart, a hang); red
+    grouse on the moor (get up on the wing like the pheasant); pikas in the
+    pass (sentries, like the marmot); and the grove's glow-mice, whose tails
+    light after dark. Squirrels were already up the trunks; now one at the
+    foot of its tree bolts up it (2.6× its pace) when somebody comes within
+    9 m, and stays up a while before coming down.
+  - *In town.* Mice (`mouse`; `rat` too in cities and grand cities) along
+    the foot of the house fronts and under the cart and stalls: each a
+    stretch of wall of its own (±4.5 m from home along the street, never
+    into a house; a test checks every village, hamlet and city), in dashes
+    along it, stopping to nibble or sit up; when the traveller comes within
+    4.5 m (3.5 for a rat) it scurries away along the wall and into a crack
+    until they have gone 8 m by. Four at most to a wall, at any setting.
+    Sparrows in small flocks in every street: they hop and peck, and go up
+    and round, low, when somebody comes within 5 m. Mice are drawn within
+    20 m (13 on Low) on every tier, the finer rig within 5 m; sparrows
+    within 30 m (18), the fine bird close by and the plain one further.
+  - *Models.* `mouse` on the quad rig (a little bigger than life: 14 cm
+    and big round ears, so it is more than a speck), `fieldmouse`, `rat`,
+    `glowmouse`, `chipmunk` (from the squirrel), `pika` (from the marmot),
+    `toad` (from the frog); `sparrow` and `grouse` birds, near and far; a
+    dragonfly flyer (two clear pairs of wings with a glint).
+  - *Cost* (`make wayfarer-budget`, now at the abundant default; before
+    → after, follow / orbit): High forest road 664k / 446k → 679k / 465k,
+    village 489k / 566k → 517k / 582k, grand square 572k / 703k → 573k /
+    720k; Medium +4k to +10k anywhere (village 197k / 211k → 211k / 219k);
+    Low +1k to +6k (village 89k / 85k → 94k / 87k). The places over target
+    on Medium and Low were over before.
+  - *Tests.* Unit: the small ones (frogs go in and come back, a squirrel
+    bolts up, mice in every town and never in a house), and the levels
+    (abundant and teeming keep everyone plenty had and add half again and
+    more). Smoke: abundant by default, teeming more than plenty, off the road.
+  - *Not verified* on a real phone: whether a mouse at the foot of a wall
+    reads at a phone's size.
 - **Settings added:** `orbitMode`, `orbitAzimuth`, `orbitElevation`,
   `orbitDistance`, `companions`, `companionPick`, `companionChoice`,
   `warpaint`, `craft`, `biomePick`, `biomeChoice`, `wildlife`. `companion` (the one

@@ -2442,8 +2442,12 @@ const STAGE_CHECKS = {
             if (settled.leaving.length) record(`still here: ${settled.leaving.join()}`);
             return true;
         }],
-        ['wildlife: some by default, more at plenty, nobody at none (the herds too), each country its own, all of them off the road; the setting changes who is about and nothing else', async () => {
+        ['wildlife: abundant by default, fewer at some, more at plenty and teeming, nobody at none (the herds too), each country its own, all of them off the road; the setting changes who is about and nothing else', async () => {
             if (!await stageWith('wayfarer', { configVersion: 2, time: 'day', weather: 'clear', rests: false, biomePick: 'choose', biomeChoice: ['forest', 'meadow'] }, '&seed=7')) return record('not ready');
+            await sleep(1200);
+            const fresh = await evaluate('WP.stage.manager.debugState().wild');
+            if (fresh.level !== 'abundant') record(`the default is ${fresh.level}`);
+            await evaluate(`(m => m.applySettings({ ...m.config, wildlife: 'some' }))(WP.stage.manager)`);
             const state = () => evaluate("(m => { const w = m.world, s = m.debugState(), ground = m.wildParties.flat().filter(a => !a.K.swarm && (a.K.where || 'land') === 'land' && a.alt < 0.3); return { seed: w.seed, z: m.journey.z, distance: m.journey.distance, party: m.party.map(p => p.id).join(), wild: s.wild, herds: s.herds, nearest: ground.length ? Math.min(...ground.map(a => Math.abs(w.lateral(a.x, a.z)))) : null, moving: m.moving.n, triangles: s.drawn.triangles }; })(WP.stage.manager)");
             const set = level => evaluate(`(m => m.applySettings({ ...m.config, wildlife: '${level}' }))(WP.stage.manager)`);
             await sleep(1500);
@@ -2455,6 +2459,13 @@ const STAGE_CHECKS = {
             const plenty = await state();
             if (!(plenty.wild.parties > some.wild.parties * 1.3) || !(plenty.wild.animals > some.wild.animals)) record(`plenty: ${plenty.wild.parties} parties and ${plenty.wild.animals} animals, against ${some.wild.parties} and ${some.wild.animals} at some`);
             if (plenty.nearest !== null && plenty.nearest < 5) record(`plenty: an animal ${plenty.nearest.toFixed(1)} m from the middle of the road`);
+            await set('teeming');
+            await sleep(1200);
+            const teeming = await state();
+            if (!(teeming.wild.parties > plenty.wild.parties * 1.5) || !(fresh.parties > plenty.wild.parties)) record(`teeming: ${teeming.wild.parties} parties, abundant ${fresh.parties}, plenty ${plenty.wild.parties}`);
+            if (teeming.nearest !== null && teeming.nearest < 5) record(`teeming: an animal ${teeming.nearest.toFixed(1)} m from the middle of the road`);
+            await set('plenty');
+            await sleep(600);
             await shoot('wayfarer-wildlife');
             await set('few');
             await sleep(600);
@@ -2472,7 +2483,7 @@ const STAGE_CHECKS = {
             const back = await state();
             if (back.wild.parties !== some.wild.parties && Math.abs(back.z - some.z) < 1) record(`back at some: ${back.wild.parties} parties, ${some.wild.parties} before`);
             // Each country has its own, and enough kinds of them.
-            const lands = await evaluate("(() => { const L = WayLogic, out = {}; for (const biome of L.BIOMES) { const w = L.world(7, { biomes: [biome] }), kinds = new Set(); let strangers = 0; for (let cz = 1700; cz < 1760; cz++) for (const g of w.wildlife(cz)) { kinds.add(g.kind); if (!L.WILDLIFE[biome].includes(g.kind) && !L.WILD_SHOW[biome].includes(g.kind) && !g.town) strangers++; } out[biome] = [kinds.size, strangers]; } return out; })()");
+            const lands = await evaluate("(() => { const L = WayLogic, out = {}; for (const biome of L.BIOMES) { const w = L.world(7, { biomes: [biome] }), kinds = new Set(); let strangers = 0; for (let cz = 1700; cz < 1760; cz++) for (const g of w.wildlife(cz)) { kinds.add(g.kind); if (!L.WILDLIFE[biome].includes(g.kind) && !L.WILD_SHOW[biome].includes(g.kind) && !L.WILD_SMALL[biome].includes(g.kind) && !g.town) strangers++; } out[biome] = [kinds.size, strangers]; } return out; })()");
             for (const [biome, [kinds, strangers]] of Object.entries(lands)) if (kinds < 4 || strangers) record(`${biome}: ${kinds} kinds, ${strangers} that do not belong`);
             return true;
         }],
