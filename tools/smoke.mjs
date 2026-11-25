@@ -1138,6 +1138,68 @@ const STAGE_CHECKS = {
         if (s.stats.thaws !== 1 || s.phaseT > 5) record(`after the thaw: ${JSON.stringify(s)}`);
         return true;
     }]],
+    // Snow Globe: snow coming down on frame one, the brushwork arriving over
+    // the underpainting; a drag shakes it (snow up off the ground, the globe
+    // rocks); it all settles, and then the stage is asked for few frames; a
+    // tap on the base winds the music box (it turns, notes play); a tap on
+    // the cat is a stroke; B, the cat swipes it; Christmas Eve plays a carol
+    // round the tree, and the cat wears a hat.
+    'snow-globe': [['snow on frame one, painted as it goes, a drag shakes it, it settles and rests, the music box, the cat, Christmas Eve', async () => {
+        const st = () => evaluate('JSON.parse(JSON.stringify(WP.stage.manager.debugState()))');
+        const at = () => evaluate('WP.stage.manager.centres()');
+        if (!await stageWith('snow-globe', { configVersion: 1, cat: 'harry', mischief: 0, autoShake: 'off', candle: false, snowOutside: 0, scene: 'cottage' }, '&seed=7&date=2026-12-10T20:00')) return record('no boot');
+        let s = await st();
+        if (!(s.loose > 100) || s.scene !== 'cottage' || s.cat !== 'harry' || s.festive) record(`frame one: ${JSON.stringify(s)}`);
+        if (!await waitFor(async () => (await st()).painted >= 1, 20000)) record(`the brushwork never finished: ${(await st()).painted}`);
+        s = await st();
+        if (!(s.stats.strokes > 20000)) record(`only ${s.stats.strokes} strokes`);
+        await shoot('snow-globe-painted');
+        // Let it settle quickly, then shake it with a drag across the glass.
+        await evaluate('WP.stage.manager.sim.settleSeconds = 3');
+        if (!await waitFor(async () => (await st()).loose === 0, 15000)) return record(`it never settled: ${JSON.stringify(await st())}`);
+        const settled = await st(), c = await at();
+        await drag([[c.globe.x - c.globe.r * 0.6, c.globe.y], [c.globe.x + c.globe.r * 0.5, c.globe.y - 10], [c.globe.x - c.globe.r * 0.5, c.globe.y + 10], [c.globe.x + c.globe.r * 0.6, c.globe.y]], 30);
+        s = await st();
+        if (!(s.loose > 150) || !(s.ground < settled.ground * 0.8) || s.stats.shakes <= settled.stats.shakes) record(`a drag didn't shake it: ${JSON.stringify({ loose: s.loose, ground: [settled.ground, s.ground], shakes: s.stats.shakes })}`);
+        if (s.wobble === 0 && s.stir < 0.05) record('the globe didn’t move and the water didn’t stir');
+        await sleep(400);
+        await shoot('snow-globe-shaken');
+        // It settles, the water stills, and the stage rests: with no cat, no candle and no snow outside, almost no frames.
+        if (!await waitFor(async () => (s = await st()).loose === 0 && s.calm, 20000)) return record(`it never came to rest: ${JSON.stringify(s)}`);
+        if (!(s.ground > 0.5) || !(s.roofs > 0)) record(`settled, but the snow isn't lying: ground ${s.ground}, ${s.roofs} roofs`);
+        const calmFrames = await framesIn(2000);
+        if (calmFrames > 34) record(`${calmFrames} frames in 2 s at rest with a cat (want 14 a second at most)`);
+        // A tap on the base winds the music box: it turns and plays.
+        const theta = s.music.theta;
+        await mouse('mousePressed', c.base.x, c.base.y); await mouse('mouseReleased', c.base.x, c.base.y);
+        if (!await waitFor(async () => (s = await st()).music.played >= 3, 5000)) record(`the music box didn't play: ${JSON.stringify(s.music)}`);
+        if (!(s.music.wind > 0.8) || !(s.music.omega > 0.1) || !(s.music.theta > theta)) record(`wound, but it isn't turning: ${JSON.stringify(s.music)}`);
+        if (!(s.notes > 0)) record('no notes rising from it');
+        await shoot('snow-globe-music');
+        // A tap on the cat: it purrs.
+        await mouse('mousePressed', c.cat.x, c.cat.y); await mouse('mouseReleased', c.cat.x, c.cat.y);
+        await sleep(300);
+        if ((await st()).catState !== 'purr') record(`a stroke, and the cat is ${(await st()).catState}`);
+        // B: the cat swipes it, and the snow goes up.
+        await evaluate('WP.stage.manager.sim.settleSeconds = 3');
+        if (!await waitFor(async () => (await st()).loose === 0, 15000)) record('it never settled before the swipe');
+        await press('b');
+        if (!await waitFor(async () => (s = await st()).stats.catShakes >= 1 && s.loose > 50, 4000)) record(`B: no swipe: ${JSON.stringify({ cat: s.catState, shakes: s.stats.catShakes, loose: s.loose })}`);
+        // No cat, no candle, no snow outside: at rest, the stage sleeps.
+        if (!await stageWith('snow-globe', { configVersion: 1, cat: 'none', autoShake: 'off', candle: false, snowOutside: 0 }, '&seed=7&date=2026-12-10T20:00')) return record('no boot without a cat');
+        await evaluate('WP.stage.manager.sim.settleSeconds = 2');
+        if (!await waitFor(async () => (s = await st()).loose === 0 && s.calm && s.painted >= 1, 25000)) return record(`no cat: never at rest: ${JSON.stringify(s)}`);
+        await sleep(500);
+        const asleep = await framesIn(3000);
+        if (asleep > 4) record(`${asleep} frames in 3 s with nothing moving (want almost none)`);
+        // Christmas Eve: the tree, a carol already playing, and the cat in a hat.
+        if (!await stageWith('snow-globe', { configVersion: 1, cat: 'butters' }, '&seed=7&date=2026-12-24T20:00')) return record('no boot on Christmas Eve');
+        s = await st();
+        if (!s.festive || s.scene !== 'tree' || !(s.music.wind > 0.5)) record(`Christmas Eve: ${JSON.stringify({ festive: s.festive, scene: s.scene, music: s.music })}`);
+        await sleep(1500);
+        await shoot('snow-globe-eve');
+        return true;
+    }]],
     // A Very Small Christmas: a small canvas scaled up pixelated, at its
     // retro frame rate; T sends the train round and it parks again; M moves
     // house (the track packs away, everyone hops, the track lays itself

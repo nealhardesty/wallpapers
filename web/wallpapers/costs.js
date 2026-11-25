@@ -39,6 +39,7 @@ WP.costs = {
     'sky-island': 3,
     'small-christmas': 1,
     'snow': 1,
+    'snow-globe': 2,
     'stained-glass': 1,
     'starfield': 1,
     'synthwave': 1,
