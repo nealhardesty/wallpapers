@@ -78,6 +78,8 @@ const PaintedBake = (() => {
                 c.globalAlpha = clamp(p.level * p.gain * l.warm / WARM_MAX); c.drawImage(p.patch, p.bx, p.by);
             }
             c.globalAlpha = 1;
+            // Light of the caller's own (the Reading Room's shafts of sun), added before the sky's.
+            if (fx.light) { fx.light(this, c, t, l); c.globalAlpha = 1; t.globalAlpha = 1; t.setTransform(1, 0, 0, 1, 0, 0); }
             // The sky is its own light.
             t.globalCompositeOperation = 'copy'; t.fillStyle = '#000'; t.fillRect(0, 0, hw, hh);
             t.globalCompositeOperation = 'source-over'; t.setTransform(h, 0, 0, h, 0, 0); sky(t, l); t.setTransform(1, 0, 0, 1, 0, 0);
@@ -111,6 +113,8 @@ const PaintedBake = (() => {
             g.globalCompositeOperation = 'lighter';
             for (const p of this.groups) if (p.glow && p.level > 0.004) { g.globalAlpha = clamp(p.level * (0.45 + 0.3 * l.warm)); g.drawImage(p.glow, p.gx, p.gy, p.glow.width * 2, p.glow.height * 2); }
             g.globalAlpha = 1; g.globalCompositeOperation = 'source-over';
+            // Whatever the caller lays over the lit picture (the shafts in the air).
+            if (fx.after) { fx.after(this, g, l); g.globalAlpha = 1; g.globalCompositeOperation = 'source-over'; }
             if (fx.sets) this.stepBulbs(g, fx.sets, fx.palette);
             // The ice last: it shows the lamps and the bulbs too.
             if (this.ice && fx.reflections !== 0) this.stepIce(g, l, fx.reflections ?? 1);
@@ -181,7 +185,7 @@ const PaintedBake = (() => {
     }
 
     // ---- The bake ---------------------------------------------------------------
-    // opts: { seed, brush (× stroke widths), passes (how many of the six), ridge, weave }
+    // opts: { seed, brush (× stroke widths), passes (how many of the six), ridge, weave, air (depths over which the air thickens) }
     function* bake(P, opts = {}) {
         const T = new Painting(P, opts), t0 = performance.now();
         const { cam, pw: W, ph: H, hw, hh, ps } = P;
@@ -257,7 +261,7 @@ const PaintedBake = (() => {
             if (top) { a += 0.1; b += 0.06; }                              // snow glows a little wherever it lies
             if (!lies) a += 0.07 * glow;                                    // and the glow gets round the edge of things
             o.A = Math.min(1, a); o.B = Math.min(1, b);
-            o.t = Math.max(hz, 1 - Math.exp(-(z - 1) / ZH));
+            o.t = Math.max(hz, 1 - Math.exp(-(z - 1) / (opts.air || ZH)));
             if (withLights) for (let j = 0; j < lights.length; j++) {
                 const L = lights[j], dx = L.x - xm, dy = L.y - ym, dz = L.zm - zm, d2 = dx * dx + dy * dy + dz * dz + L.r2;
                 if (d2 > L.reach2) continue;

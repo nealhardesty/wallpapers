@@ -958,7 +958,8 @@ class WayfarerAnimationManager {
                 if (away < fineR || !K.far) WayCompanions.pose(K.rig, out, st, p[0], p[1], p[2], { lite: true, size: (K.size || 1) * grow, yaw: a.yaw, gait: a.gait, speed: a.vel, moving: a.moving, rest: a.rest, down: a.down, alarm: a.alarm, alt: a.alt, wing: a.wing, bank: a.bank, pitch: a.pitch, t: t + a.v * 9 }, fx);
                 else if (K.bird) A.bird(out, st, K.far, p[0], p[1] + a.alt + 0.12, p[2], { yaw: a.yaw, fold: a.wing ? 0 : 1, flap: a.wing ? (K.act === 'soar' ? 0.12 : 0.7) * Math.sin(t * (K.act === 'soar' ? 1.5 : 11) + a.v * 9) : 0, roll: -(a.bank || 0) * 0.6, size: grow });
                 else A.beast(out, st, K.far, p[0], p[1], p[2], { yaw: a.yaw, ...this.farGait(K.rig, a.gait), speed: a.vel, moving: a.moving, graze: a.down, t: t + a.v * 9, size: (K.farSize || 1) * grow }, K.farCoat || null);
-                if (K.glow && lit > 0.05) this.glows.add(p[0], p[1] + (K.glowR ? 0.08 : 0.25), p[2], K.glowR || 0.8, K.glow[0] * lit, K.glow[1] * lit, K.glow[2] * lit, 1);
+                // (The grove's moon-creatures: a faint halo about their own size, not a lamp.)
+                if (K.glow && lit > 0.05) { const k = 0.3 * lit; this.glows.add(p[0], p[1] + K.tall * 0.5 * grow, p[2], K.glowR * grow, K.glow[0] * k, K.glow[1] * k, K.glow[2] * k, 1); }
             }
             this.wildDrawn = Math.min(n, most);
         }

@@ -1138,6 +1138,68 @@ const STAGE_CHECKS = {
         if (s.stats.thaws !== 1 || s.phaseT > 5) record(`after the thaw: ${JSON.stringify(s)}`);
         return true;
     }]],
+    // Snow Globe: snow coming down on frame one, the brushwork arriving over
+    // the underpainting; a drag shakes it (snow up off the ground, the globe
+    // rocks); it all settles, and then the stage is asked for few frames; a
+    // tap on the base winds the music box (it turns, notes play); a tap on
+    // the cat is a stroke; B, the cat swipes it; Christmas Eve plays a carol
+    // round the tree, and the cat wears a hat.
+    'snow-globe': [['snow on frame one, painted as it goes, a drag shakes it, it settles and rests, the music box, the cat, Christmas Eve', async () => {
+        const st = () => evaluate('JSON.parse(JSON.stringify(WP.stage.manager.debugState()))');
+        const at = () => evaluate('WP.stage.manager.centres()');
+        if (!await stageWith('snow-globe', { configVersion: 1, cat: 'harry', mischief: 0, autoShake: 'off', candle: false, snowOutside: 0, scene: 'cottage' }, '&seed=7&date=2026-12-10T20:00')) return record('no boot');
+        let s = await st();
+        if (!(s.loose > 100) || s.scene !== 'cottage' || s.cat !== 'harry' || s.festive) record(`frame one: ${JSON.stringify(s)}`);
+        if (!await waitFor(async () => (await st()).painted >= 1, 20000)) record(`the brushwork never finished: ${(await st()).painted}`);
+        s = await st();
+        if (!(s.stats.strokes > 20000)) record(`only ${s.stats.strokes} strokes`);
+        await shoot('snow-globe-painted');
+        // Let it settle quickly, then shake it with a drag across the glass.
+        await evaluate('WP.stage.manager.sim.settleSeconds = 3');
+        if (!await waitFor(async () => (await st()).loose === 0, 15000)) return record(`it never settled: ${JSON.stringify(await st())}`);
+        const settled = await st(), c = await at();
+        await drag([[c.globe.x - c.globe.r * 0.6, c.globe.y], [c.globe.x + c.globe.r * 0.5, c.globe.y - 10], [c.globe.x - c.globe.r * 0.5, c.globe.y + 10], [c.globe.x + c.globe.r * 0.6, c.globe.y]], 30);
+        s = await st();
+        if (!(s.loose > 150) || !(s.ground < settled.ground * 0.8) || s.stats.shakes <= settled.stats.shakes) record(`a drag didn't shake it: ${JSON.stringify({ loose: s.loose, ground: [settled.ground, s.ground], shakes: s.stats.shakes })}`);
+        if (s.wobble === 0 && s.stir < 0.05) record('the globe didn’t move and the water didn’t stir');
+        await sleep(400);
+        await shoot('snow-globe-shaken');
+        // It settles, the water stills, and the stage rests: with no cat, no candle and no snow outside, almost no frames.
+        if (!await waitFor(async () => (s = await st()).loose === 0 && s.calm, 20000)) return record(`it never came to rest: ${JSON.stringify(s)}`);
+        if (!(s.ground > 0.5) || !(s.roofs > 0)) record(`settled, but the snow isn't lying: ground ${s.ground}, ${s.roofs} roofs`);
+        const calmFrames = await framesIn(2000);
+        if (calmFrames > 34) record(`${calmFrames} frames in 2 s at rest with a cat (want 14 a second at most)`);
+        // A tap on the base winds the music box: it turns and plays.
+        const theta = s.music.theta;
+        await mouse('mousePressed', c.base.x, c.base.y); await mouse('mouseReleased', c.base.x, c.base.y);
+        if (!await waitFor(async () => (s = await st()).music.played >= 3, 5000)) record(`the music box didn't play: ${JSON.stringify(s.music)}`);
+        if (!(s.music.wind > 0.8) || !(s.music.omega > 0.1) || !(s.music.theta > theta)) record(`wound, but it isn't turning: ${JSON.stringify(s.music)}`);
+        if (!(s.notes > 0)) record('no notes rising from it');
+        await shoot('snow-globe-music');
+        // A tap on the cat: it purrs.
+        await mouse('mousePressed', c.cat.x, c.cat.y); await mouse('mouseReleased', c.cat.x, c.cat.y);
+        await sleep(300);
+        if ((await st()).catState !== 'purr') record(`a stroke, and the cat is ${(await st()).catState}`);
+        // B: the cat swipes it, and the snow goes up.
+        await evaluate('WP.stage.manager.sim.settleSeconds = 3');
+        if (!await waitFor(async () => (await st()).loose === 0, 15000)) record('it never settled before the swipe');
+        await press('b');
+        if (!await waitFor(async () => (s = await st()).stats.catShakes >= 1 && s.loose > 50, 4000)) record(`B: no swipe: ${JSON.stringify({ cat: s.catState, shakes: s.stats.catShakes, loose: s.loose })}`);
+        // No cat, no candle, no snow outside: at rest, the stage sleeps.
+        if (!await stageWith('snow-globe', { configVersion: 1, cat: 'none', autoShake: 'off', candle: false, snowOutside: 0 }, '&seed=7&date=2026-12-10T20:00')) return record('no boot without a cat');
+        await evaluate('WP.stage.manager.sim.settleSeconds = 2');
+        if (!await waitFor(async () => (s = await st()).loose === 0 && s.calm && s.painted >= 1, 25000)) return record(`no cat: never at rest: ${JSON.stringify(s)}`);
+        await sleep(500);
+        const asleep = await framesIn(3000);
+        if (asleep > 4) record(`${asleep} frames in 3 s with nothing moving (want almost none)`);
+        // Christmas Eve: the tree, a carol already playing, and the cat in a hat.
+        if (!await stageWith('snow-globe', { configVersion: 1, cat: 'butters' }, '&seed=7&date=2026-12-24T20:00')) return record('no boot on Christmas Eve');
+        s = await st();
+        if (!s.festive || s.scene !== 'tree' || !(s.music.wind > 0.5)) record(`Christmas Eve: ${JSON.stringify({ festive: s.festive, scene: s.scene, music: s.music })}`);
+        await sleep(1500);
+        await shoot('snow-globe-eve');
+        return true;
+    }]],
     // A Very Small Christmas: a small canvas scaled up pixelated, at its
     // retro frame rate; T sends the train round and it parks again; M moves
     // house (the track packs away, everyone hops, the track lays itself
@@ -2807,6 +2869,184 @@ const STAGE_CHECKS = {
             if (!await waitFor(() => evaluate('WP.stage.manager.recoveries === 1'), 4000)) return record('a blank painting was not noticed');
             if (await evaluate(probe) !== 255 || !await evaluate('WP.stage.manager.bakes === 2')) record('noticed, but not painted again');
             console.log(`    painted-village: upright at ${phone.pw}×${phone.ph} above a ${phone.inset} px bar; the bare valley is ${bare.strokes} strokes and ${bare.trees} trees`);
+            return true;
+        }],
+    ],
+    torchlight: [
+        ['at dusk, a picture on frame one and torches already on the mountain; every torch lights the snow it passes; the painting finishes once and is never painted again for the light', async () => {
+            if (!await stageWith('torchlight', { configVersion: 1, sky: 'dusk' }, '&seed=7&date=2026-12-20T17:00')) return record('not ready');
+            const first = await evaluate(`(m => { const T = m.scene, d = T.lit.getContext('2d', { willReadFrequently: true }).getImageData(T.pw >> 1, T.ph - 20, 4, 4).data, p = m.cast.proc;
+                return { frames: WP.host.frames.count, lit: d[0] + d[1] + d[2], alpha: d[3], flakes: m.flakes.length, puffs: m.puffs.length, phase: p && p.phase, skiing: p ? p.sk.filter(k => k.state === 'ski').length : 0, cats: m.cast.cats.length, dog: !!m.cast.dog, groups: T.groups.length, on: T.groups.filter(g => g.level > 0.5).length, kind: m.cam.kind }; })(WP.stage.manager)`);
+            if (first.frames > 12 || !(first.lit > 60) || first.alpha !== 255) record(`no picture on the first frames: ${JSON.stringify(first)}`);
+            if (first.phase !== 'down' || first.skiing < 8 || first.flakes < 100 || first.puffs < 10 || first.cats < 3 || !first.dog) record(`not alive on frame one: ${JSON.stringify(first)}`);
+            if (first.kind !== 'wide' || first.groups < 20 || first.on < first.groups * 0.8) record(`a dark valley at dusk: ${first.on} of ${first.groups} groups lit`);
+            if (!await waitFor(() => evaluate('WP.stage.manager.scene.done'), 30000)) return record('the painting never finished');
+            const painted = await evaluate(`(m => ({ strokes: m.scene.strokes, pass: m.scene.pass, bakes: m.bakes, patches: m.scene.groups.filter(g => g.patch).length, masks: m.scene.masks.filter(Boolean).length, sky: m.scene.openSky.length, half: !!m.scene.paintHalf, len: Math.round(m.scene.track.length) }))(WP.stage.manager)`);
+            if (painted.strokes < 150000 || painted.pass < 5 || painted.bakes !== 1 || painted.patches < 15 || painted.masks < 4 || painted.sky < 40 || !painted.half) record(`the painting: ${JSON.stringify(painted)}`);
+            // The snow about the leader's torch, on screen, with the torches' light and without it (the moving-lights effect).
+            const around = `(m => { const p = m.cast.proc, k = p.sk.filter(q => q.state === 'ski').sort((a, b) => b.s - a.s)[0], at = TorchLogic.at(m.scene.track, k.s, m.cam), r = Math.max(6, 6 * at.sc);
+                const c = document.createElement('canvas'); c.width = 24; c.height = 12; const g = c.getContext('2d', { willReadFrequently: true }); g.drawImage(m.canvas, (at.x - r * 2) * m.dpr, (at.y - r) * m.dpr, r * 4 * m.dpr, r * 2 * m.dpr, 0, 0, 24, 12);
+                const d = g.getImageData(0, 0, 24, 12).data; let R = 0, B = 0; for (let i = 0; i < d.length; i += 4) { R += d[i]; B += d[i + 2]; } return { r: Math.round(R / 288), b: Math.round(B / 288) }; })(WP.stage.manager)`;
+            await evaluate(`(m => { m.cast.proc.hold = { t: 30 }; m.fx.glints = m.fxTarget.glints = 1; })(WP.stage.manager)`);
+            await sleep(500);
+            const lit = await evaluate(around);
+            await evaluate(`(m => { m.fx.glints = m.fxTarget.glints = 0; })(WP.stage.manager)`);
+            await sleep(500);
+            const dark = await evaluate(around);
+            await evaluate(`(m => { m.fx.glints = m.fxTarget.glints = 1; m.cast.proc.hold = null; })(WP.stage.manager)`);
+            if (!(lit.r > dark.r * 1.12) || !(lit.r - dark.r > (lit.b - dark.b) * 1.2)) record(`a torch's pool: lit ${JSON.stringify(lit)}, without ${JSON.stringify(dark)}`);
+            if (await evaluate('WP.stage.manager.bakes') !== 1) record('painted again for the light');
+            console.log(`    torchlight: ${painted.strokes} strokes, a run of ${painted.len} m, ${painted.patches} patches of light; the snow by a torch ${lit.r}/${lit.b} lit, ${dark.r}/${dark.b} without`);
+            await shoot('torchlight-dusk');
+            return true;
+        }],
+        ['a whole descent: lit at the hut, down in order, the torches planted in a heart, a cat to the warm, everyone in at the inn; a tap on the hut sends the next; taps on a cat and the dog; nothing saved', async () => {
+            if (!await stageWith('torchlight', { configVersion: 1, sky: 'night', descents: 'tap', tumbles: 1, finale: 'heart', torches: 16 }, '&seed=7&date=2026-12-20T20:00')) return record('not ready');
+            await sleep(400);
+            if (await evaluate('!!WP.stage.manager.cast.proc')) record('a descent with descents set to only when asked');
+            // A tap on the hut sends them.
+            const hut = await evaluate(`(m => { const h = m.scene.hits.find(h => h.kind === 'hut'); return h && { x: (h.x0 + h.x1) / 2, y: (h.y0 + h.y1) / 2 }; })(WP.stage.manager)`);
+            if (!hut) return record('no hut');
+            await mouse('mousePressed', hut.x, hut.y); await mouse('mouseReleased', hut.x, hut.y);
+            await sleep(300);
+            const sent = await evaluate(`(m => m.cast.proc && { n: m.cast.proc.n, phase: m.cast.proc.phase })(WP.stage.manager)`);
+            if (!sent || sent.phase !== 'gather') return record(`a tap on the hut sent nobody: ${JSON.stringify(sent)}`);
+            // Fast forward, a tenth of a second at a time, watching.
+            const run = await evaluate(`(m => { const c = m.cast, p = c.proc, seen = { phases: [], falls: 0, guideCat: false, maxPlanted: 0, warmCat: false };
+                for (let i = 0; i < 12000 && !p.done; i++) {
+                    c.update(0.1);
+                    if (seen.phases[seen.phases.length - 1] !== p.phase) seen.phases.push(p.phase);
+                    seen.falls = Math.max(seen.falls, p.sk.filter(k => k.fall > 0).length);
+                    seen.maxPlanted = Math.max(seen.maxPlanted, c.planted.length);
+                    if (c.cats.some(k => k.kind === 'roam' && k.at === 'finish')) seen.warmCat = true;
+                }
+                return { ...seen, done: p.done, planted: c.planted.length, inPlace: p.sk.every(k => k.planted && Math.abs(k.planted.x - c.spots[k.i].x) < 1e-9), n: p.n };
+            })(WP.stage.manager)`);
+            if (!run.done || run.phases.join() !== 'gather,down,planted,leave' || run.maxPlanted !== run.n || !run.inPlace) record(`the descent: ${JSON.stringify(run)}`);
+            if (run.falls < 1) record('with tumbles at 1, nobody sat down in the snow');
+            // A cat by the planted torches (they are warm), a heart for a tap on one, the dog on his feet for a tap.
+            const pet = await evaluate(`(m => { const c = m.cast.cats.find(k => k.kind === 'roam'), d = m.cast.dog; return { cat: c && { x: m.cam.sx(c.x, c.z), y: m.cam.sy(c.z) - 0.4 * m.cam.sc(c.z) * c.k }, dog: d && { x: m.cam.sx(d.x, d.z), y: m.cam.sy(d.z) - 0.5 * m.cam.sc(d.z) * 1.5 } }; })(WP.stage.manager)`);
+            if (pet.cat) { await mouse('mousePressed', pet.cat.x, pet.cat.y); await mouse('mouseReleased', pet.cat.x, pet.cat.y); }
+            if (pet.dog) { await mouse('mousePressed', pet.dog.x, pet.dog.y); await mouse('mouseReleased', pet.dog.x, pet.dog.y); }
+            await sleep(200);
+            const after = await evaluate(`(m => ({ hearts: m.cast.hearts.length, wag: m.cast.dog.wag, saved: localStorage.getItem('wp:torchlight') }))(WP.stage.manager)`);
+            if (!(after.hearts > 0) || !(after.wag > 0)) record(`a tap on a cat or the dog: ${JSON.stringify(after)}`);
+            if (!/"descents":"tap"/.test(after.saved || '') || /innName|torches":28/.test(after.saved)) record(`storage changed: ${after.saved}`);
+            return true;
+        }],
+        ['New Year’s Eve: the grand descent spells the year on the mountain at midnight and the fireworks go up; by day there are skiers, and no torches', async () => {
+            if (!await stageWith('torchlight', { configVersion: 1, sky: 'live' }, '&seed=7&date=2026-12-31T23:59:56')) return record('not ready');
+            await sleep(600);
+            const spell = await evaluate(`(m => { const p = m.cast.proc; return p && { grand: p.grand, spelling: p.spelling, n: p.n, figure: m.cast.figure ? m.cast.figure.length : 0, onFigure: p.sk.filter(k => k.fig > 0.95).length, year: m.cal.year }; })(WP.stage.manager)`);
+            if (!spell || !spell.grand || !spell.spelling || spell.n < 40 || spell.figure !== spell.n || spell.onFigure < spell.n * 0.6 || spell.year !== 2027) record(`the year on the mountain: ${JSON.stringify(spell)}`);
+            if (!await waitFor(() => evaluate('WP.stage.manager.cast.sparks.length > 30'), 15000)) record('no fireworks at midnight');
+            await shoot('torchlight-new-year');
+            if (!await stageWith('torchlight', { configVersion: 1, sky: 'day' }, '&seed=7&date=2026-12-20T12:00')) return record('not ready by day');
+            await sleep(800);
+            const day = await evaluate(`(m => ({ proc: !!m.cast.proc, skiers: m.cast.day.length, on: m.scene.groups.filter(g => g.level > 0.5).length, dark: m.light.dark }))(WP.stage.manager)`);
+            if (day.proc || day.skiers < 2 || day.on > 0 || day.dark > 0.05) record(`by day: ${JSON.stringify(day)}`);
+            return true;
+        }],
+        ['a phone held upright: the mountain, the inn and the finish above the gesture bar; everything left out still paints a valley', async () => {
+            await cdp.send('Emulation.setDeviceMetricsOverride', { width: 412, height: 915, deviceScaleFactor: 2, mobile: true });
+            try {
+                if (!await stageWith('torchlight', { configVersion: 1, sky: 'dusk' }, '&seed=7&date=2026-12-20T17:00&host=android')) return record('not ready on a phone');
+                const phone = await evaluate(`(m => ({ kind: m.cam.kind, inset: m.bottom, finish: m.cam.sy(m.L.finish.z), H: m.H, inn: !!m.L.inn, skiing: m.cast.proc ? m.cast.proc.sk.filter(k => k.state === 'ski').length : 0 }))(WP.stage.manager)`);
+                if (phone.kind !== 'upright' || !(phone.inset > 0) || phone.finish > phone.H - phone.inset || !phone.inn || phone.skiing < 5) record(`upright: ${JSON.stringify(phone)}`);
+                await shoot('torchlight-phone');
+            } finally { await cdp.send('Emulation.clearDeviceMetricsOverride'); }
+            const off = { configVersion: 1, sky: 'night', inn: false, chapel: false, chalets: 0, lamps: false, tree: 'never', candles: 'never', snowcat: false, lift: false, dog: false, cats: 0, windowCat: false, backpackCat: false, daySkiers: false, descents: 'tap', snowfall: 0, smoke: false, clouds: 0 };
+            if (!await stageWith('torchlight', off, '&seed=7&date=2026-12-20T20:00')) return record('no boot with everything left out');
+            if (!await waitFor(() => evaluate('WP.stage.manager.scene.done'), 30000)) return record('the bare valley never finished painting');
+            const bare = await evaluate(`(m => ({ strokes: m.scene.strokes, cats: m.cast.cats.length, dog: !!m.cast.dog, proc: !!m.cast.proc, flakes: m.flakes.length, alpha: m.scene.lit.getContext('2d', { willReadFrequently: true }).getImageData(10, m.scene.ph - 10, 1, 1).data[3] }))(WP.stage.manager)`);
+            if (bare.strokes < 50000 || bare.cats || bare.dog || bare.proc || bare.flakes || bare.alpha !== 255) record(`the bare valley: ${JSON.stringify(bare)}`);
+            return true;
+        }],
+    ],
+    'reading-room': [
+        ['a winter morning on frame one: the hall painted as it comes, the sun\'s panes on the floor (and gone when sunbeams are off), a cat asleep in them, readers at the tables; a tap lights a table\'s lamps and nothing is painted again', async () => {
+            if (!await stageWith('reading-room', { configVersion: 1 }, '&seed=7&date=2026-12-10T10:30')) return record('not ready');
+            const first = await evaluate(`(m => { const T = m.scene, d = T.lit.getContext('2d', { willReadFrequently: true }).getImageData(T.pw >> 1, T.ph - 20, 4, 4).data;
+                return { frames: WP.host.frames.count, lit: d[0] + d[1] + d[2], alpha: d[3], cats: m.cast.cats.length, students: m.cast.students.length, librarian: !!m.cast.librarian, owl: !!m.cast.owl, beams: m.beams.length, spots: m.spots.length, kind: m.cam.kind, tables: m.L.tables.length }; })(WP.stage.manager)`);
+            if (first.frames > 12 || !(first.lit > 60) || first.alpha !== 255) record(`no picture on the first frames: ${JSON.stringify(first)}`);
+            if (first.cats !== 6 || first.students < 8 || !first.librarian || !first.owl || first.tables !== 16 || first.kind !== 'wide') record(`not alive on frame one: ${JSON.stringify(first)}`);
+            if (first.beams < 10 || first.spots < 4) record(`no sun in at the windows on a winter morning: ${JSON.stringify(first)}`);
+            if (!await waitFor(() => evaluate('WP.stage.manager.scene.done && !WP.stage.manager.next'), 40000)) return record('the painting never finished');
+            const painted = await evaluate(`(m => ({ strokes: m.scene.strokes, pass: m.scene.pass, bakes: m.bakes, patches: m.scene.groups.filter(g => g.patch).length, glows: m.scene.groups.filter(g => g.glow).length, masks: m.scene.masks.filter(Boolean).length, windows: m.scene.windows.length, shelves: m.scene.shelves.length, motes: m.motes.length, shafts: m.shafts.length }))(WP.stage.manager)`);
+            if (painted.strokes < 150000 || painted.pass < 5 || painted.bakes !== 1 || painted.patches < 18 || painted.glows < 16 || painted.masks < 6 || painted.windows < 40 || painted.shelves < 30 || painted.motes < 20 || painted.shafts < 4) record(`the painting: ${JSON.stringify(painted)}`);
+            // The floor in a patch of sun, with the sunbeams on and off: the sun is a light of its own; nothing is painted again.
+            const spot = await evaluate(`(m => { const s = m.spots.slice().sort((a, b) => a.z - b.z).find(s => s.z > 8 && s.z < 30) || m.spots[0]; return { x: s.x, z: s.z }; })(WP.stage.manager)`);
+            const floor = `(m => { const T = m.scene, cam = m.cam, s = ${JSON.stringify(spot)}, [x, y] = cam.p(s.x, 0, s.z);
+                const d = T.lit.getContext('2d', { willReadFrequently: true }).getImageData(Math.round(x * T.ps) - 6, Math.round(y * T.ps) - 3, 12, 6).data; let v = 0; for (let i = 0; i < d.length; i += 4) v += d[i] + d[i + 1] + d[i + 2];
+                return { v: Math.round(v / 72), x: Math.round(x), y: Math.round(y), sun: ReadingLogic.sunAt(m.beams, s.x, s.z), bakes: m.bakes, steps: m.steps }; })(WP.stage.manager)`;
+            const sunny = await evaluate(floor);
+            await evaluate(`(m => m.applySettings({ ...m.config, sunbeams: false }))(WP.stage.manager)`);
+            await sleep(900);
+            const shade = await evaluate(floor);
+            if (sunny.sun !== 0 || !(sunny.v > shade.v * 1.25) || shade.bakes !== 1 || shade.steps <= sunny.steps) record(`the sun on the floor: on ${JSON.stringify(sunny)}, off ${JSON.stringify(shade)}`);
+            await evaluate(`(m => m.applySettings({ ...m.config, sunbeams: true }))(WP.stage.manager)`);
+            await sleep(900);
+            const cats = await evaluate(`(m => m.cast.cats.map(c => ({ role: c.role, inSun: c.inSun, y: +(c.y || 0).toFixed(2), x: +c.x.toFixed(1), z: +c.z.toFixed(1) })))(WP.stage.manager)`);
+            if (!cats.some(c => c.role === 'sunbeam' && c.inSun)) record(`no cat asleep in the sun: ${JSON.stringify(cats)}`);
+            // A table tapped on its top: its three lamps come on (it is morning, so they were out), and only the light is stepped.
+            const table = await evaluate(`(m => { const T = m.scene, h = T.hits.filter(h => h.kind === 'table').sort((a, b) => (b.x1 - b.x0) - (a.x1 - a.x0)).find(h => h.x0 > 20 && h.x1 < m.W - 20 && h.y1 < m.H - 20) || T.hits.find(h => h.kind === 'table'); return { x: (h.x0 + h.x1) / 2, y: h.y0 + (h.y1 - h.y0) * 0.55, id: h.table, before: h.group.level }; })(WP.stage.manager)`);
+            await mouse('mousePressed', table.x, table.y); await mouse('mouseReleased', table.x, table.y);
+            await sleep(1600);
+            const lamps = await evaluate(`(m => { const g = m.scene.groups.find(g => g.kind === 'table' && g.table === ${table.id}); return { level: g.level, forced: g.forced, bakes: m.bakes }; })(WP.stage.manager)`);
+            if (table.before !== 0 || !(lamps.level > 0.95) || !lamps.forced || lamps.bakes !== 1) record(`a tapped table: ${JSON.stringify({ table, lamps })}`);
+            console.log(`    reading-room: ${painted.strokes} strokes, ${painted.patches} patches of light, ${painted.windows} panes, ${painted.shafts} shafts and ${painted.motes} motes; the floor in the sun ${sunny.v}, without it ${shade.v}; ${cats.filter(c => c.inSun).length} cats in the sun`);
+            await shoot('reading-room-morning');
+            return true;
+        }],
+        ['at dusk the librarian goes down the hall and the lamps come on a table at a time; the rail cat\'s book falls and comes back to her; the clock strikes; the night is lamplit', async () => {
+            if (!await stageWith('reading-room', { configVersion: 1, students: 0, planes: 0 }, '&seed=7&date=2026-12-10T16:40')) return record('not ready');
+            await waitFor(() => evaluate('WP.stage.manager.scene.done && !WP.stage.manager.next'), 40000);
+            // Send her round from the start: put every table out, and watch.
+            await evaluate(`(m => { for (const g of m.scene.groups) if (g.kind === 'table') { g.lit = null; g.level = 0; g.forced = null; } const l = m.cast.librarian; l.x = 7.5; l.z = 9.2; l.state = 'desk'; l.t = 999; })(WP.stage.manager)`);
+            const counts = [];
+            for (let i = 0; i < 18; i++) { await sleep(1500); counts.push(await evaluate(`WP.stage.manager.scene.groups.filter(g => g.kind === 'table' && g.lit).length`)); }
+            const where = await evaluate(`(m => ({ state: m.cast.librarian.state, z: +m.cast.librarian.z.toFixed(1) }))(WP.stage.manager)`);
+            const rising = counts.every((n, i) => !i || n >= counts[i - 1]);
+            if (!rising || counts[0] > 4 || counts[counts.length - 1] < 8 || new Set(counts).size < 4) record(`the lamps at dusk, lit in turn: ${counts.join(' ')} (${JSON.stringify(where)})`);
+            await shoot('reading-room-dusk');
+            // The book: pushed off the rail, it lands on the floor, and floats back up to her.
+            const book = await evaluate(`(m => { const c = m.cast.cats.find(c => c.role === 'shelf'); if (!c) return null; c.book.state = 'rail'; c.book.t = 0.2; return c.book.state; })(WP.stage.manager)`);
+            if (!book) return record('no cat on the gallery rail');
+            const seen = new Set();
+            for (let i = 0; i < 80 && !seen.has('rise'); i++) { await sleep(150); const s = await evaluate(`(m => { const b = m.cast.cats.find(c => c.role === 'shelf').book; if (b.state === 'floor') b.t = Math.min(b.t, 0.3); return b.state; })(WP.stage.manager)`); seen.add(s); }
+            const back = await evaluate(`(m => { const c = m.cast.cats.find(c => c.role === 'shelf'); return { state: c.book.state, d: +Math.hypot(c.book.x - c.x, c.book.y - c.y).toFixed(2) }; })(WP.stage.manager)`);
+            if (!['fall', 'floor', 'rise'].every(s => seen.has(s))) record(`the book: ${[...seen].join(', ')}`);
+            // The clock, tapped.
+            // (Its top: in December the tree stands in front of the bottom of it, and takes a tap there.)
+            const clock = await evaluate(`(m => m.scene.spots.clock)(WP.stage.manager)`);
+            await mouse('mousePressed', clock.x, clock.y - clock.r * 0.75); await mouse('mouseReleased', clock.x, clock.y - clock.r * 0.75);
+            await sleep(200);
+            if (!(await evaluate('WP.stage.manager.cast.chime') > 0)) record('the clock did not strike when tapped');
+            // Night: the tables lit, the hall dark between them.
+            await evaluate(`(m => m.applySettings({ ...m.config, time: 'night' }))(WP.stage.manager)`);
+            await sleep(3500);
+            const night = await evaluate(`(m => ({ lit: m.scene.groups.filter(g => g.kind === 'table' && g.level > 0.5).length, of: m.scene.groups.filter(g => g.kind === 'table').length, chandeliers: m.scene.groups.filter(g => g.kind === 'chandelier' && g.level > 0.5).length, dark: +m.light.dark.toFixed(2), bakes: m.bakes }))(WP.stage.manager)`);
+            if (night.lit < night.of || night.chandeliers < 3 || night.dark < 0.9 || night.bakes !== 1) record(`the night: ${JSON.stringify(night)}`);
+            await shoot('reading-room-night');
+            console.log(`    reading-room: lamps lit in turn ${counts.join(' ')}; the book went ${[...seen].join(' → ')}; at night ${night.lit} of ${night.of} tables and ${night.chandeliers} chandeliers`);
+            return true;
+        }],
+        ['a phone held upright stands its own way above the gesture bar; with nothing in the hall it is still a painted hall; a lost painting is painted again', async () => {
+            if (!await bootStage('w=reading-room&host=android&seed=7&date=2026-12-10T15:00', { width: 412, height: 915, deviceScaleFactor: 2 })) return record('not ready on a phone');
+            const phone = await evaluate(`(m => ({ inset: WP.host.insets.bottom, Hu: m.cam.Hu, H: m.H, kind: m.cam.kind, bottom: +m.cam.foot(m.cam.D(1)).toFixed(1) }))(WP.stage.manager)`);
+            if (phone.inset !== 48 || phone.Hu !== phone.H - 48 || phone.kind !== 'upright' || Math.abs(phone.bottom - phone.Hu) > 1) record(`the phone: ${JSON.stringify(phone)}`);
+            await waitFor(() => evaluate('WP.stage.manager.scene.done'), 30000);
+            await shoot('reading-room-phone');
+            await cdp.send('Emulation.clearDeviceMetricsOverride');
+            const off = { configVersion: 1, cats: 0, students: 0, librarian: false, owl: false, planes: 0, magic: false, chandeliers: false, fireplace: false, desk: false, decorations: 'never', sunbeams: false, moonbeams: false, weather: 'clear', clouds: 0, touch: false };
+            if (!await stageWith('reading-room', off, '&seed=7&date=2026-12-10T15:00')) return record('no boot with everything left out');
+            await waitFor(() => evaluate('WP.stage.manager.scene.done'), 30000);
+            const bare = await evaluate(`(m => ({ cast: m.cast.cats.length + m.cast.students.length + (m.cast.librarian ? 1 : 0) + (m.cast.owl ? 1 : 0), beams: m.beams.length, motes: m.motes.length, groups: m.scene.groups.map(g => g.kind).join(), strokes: m.scene.strokes }))(WP.stage.manager)`);
+            if (bare.cast || bare.motes || bare.strokes < 100000 || /fire|desk|chandelier|tree/.test(bare.groups)) record(`the bare hall: ${JSON.stringify(bare)}`);
+            const probe = `(m => { const c = document.createElement('canvas'); c.width = c.height = 1; const g = c.getContext('2d', { willReadFrequently: true }); g.drawImage(m.scene.paint, m.scene.pw >> 1, m.scene.ph - 2, 1, 1, 0, 0, 1, 1); return g.getImageData(0, 0, 1, 1).data[3]; })(WP.stage.manager)`;
+            await evaluate(`(m => { m.scene.paint.getContext('2d').clearRect(0, 0, m.scene.pw, m.scene.ph); m.lostCheck = 10; })(WP.stage.manager)`);
+            if (!await waitFor(() => evaluate('WP.stage.manager.recoveries === 1'), 4000)) return record('a blank painting was not noticed');
+            if (await evaluate(probe) !== 255 || !await evaluate('WP.stage.manager.bakes === 2')) record('noticed, but not painted again');
             return true;
         }],
     ],

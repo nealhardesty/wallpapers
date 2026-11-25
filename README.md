@@ -239,8 +239,12 @@ then point the wallpaper at `localhost:8096`. For a phone,
 1. Once: `make android-keystore`, back the key up, and `gh secret set` the
    four `WALLPAPERS_KEY*` secrets it prints. Losing it means people must
    uninstall to update. Without them CI ships a debug APK instead.
-2. Bump `version` in `web/manifest.json`, commit, and push a matching tag:
-   `git tag v0.6.0 && git push --tags`.
+2. In Claude Code, type `/releaseme` (optionally `patch`, `minor` or `X.Y.Z`;
+   the skill is in `.agents/skills/releaseme`). By hand: on a `version-X.Y.Z`
+   branch, bump the version in its four places (SPEC §5 "Version":
+   `web/manifest.json`, `WP.VERSION` in `web/core/wp.js`, Jellyfin's
+   `VERSION`, and SPEC's example), open a "Version X.Y.Z" PR, merge it once
+   green, and tag the merge commit: `git tag vX.Y.Z && git push origin vX.Y.Z`.
 3. CI checks everything and publishes a GitHub Release with the APK, the
    extension zip, the universal Mac zip and the Windows zip, each with a
    `.sha256`. If the Mac build or the Windows self-test fails, the release
@@ -298,6 +302,8 @@ still draws offline). 📅 **Seasonal** isn't one itself: it picks one by date.
 | 🎄 [A Very Small Christmas](https://nealhardesty.github.io/wallpapers/?w=small-christmas) | 👆 | A tiny pixel tree with a toy train |
 | ☃️ [Christmas Village](https://nealhardesty.github.io/wallpapers/?w=christmas-village) | 👆 | A New England town in the snow: skaters, a grand tree, cats |
 | 🖼️ [Painted Village](https://nealhardesty.github.io/wallpapers/?w=painted-village) | 👆 | The whole village from the hill, as a painting: lamplight on snow, a toy train, a sledding hill, bears in the woods |
+| 🔥 [Torchlight Descent](https://nealhardesty.github.io/wallpapers/?w=torchlight) | 👆 | An alpine valley at nightfall, painted: skiers with torches snake down the mountain, a cat rides in a rucksack, and on New Year's Eve they spell the year |
+| 🔮 [Snow Globe](https://nealhardesty.github.io/wallpapers/?w=snow-globe) | 👆 | A painted snow globe on the windowsill: shake it, wind its music box, and the cat has a go too |
 | 🏝️ [Sky Island](https://nealhardesty.github.io/wallpapers/?w=sky-island) | 👆 | A pixel village on a floating island, new each load |
 | ⚔️ [Pixel Quest](https://nealhardesty.github.io/wallpapers/?w=quest) | 👆 | A self-playing 8-bit adventure; take over the hero |
 | 🌇 [Synthwave](https://nealhardesty.github.io/wallpapers/?w=synthwave) | | The endless neon drive |
@@ -325,6 +331,7 @@ still draws offline). 📅 **Seasonal** isn't one itself: it picks one by date.
 | ⚾ [The Never-Ending Baseball Season](https://nealhardesty.github.io/wallpapers/?w=baseball) | 👆 | A whole pixel-art league, a pitch at a time |
 | 🥾 [Wayfarer](https://nealhardesty.github.io/wallpapers/?w=wayfarer) | 👆 | An endless walk through a cosy fantasy world (WebGL) |
 | ⛷️ [Fresh Tracks](https://nealhardesty.github.io/wallpapers/?w=ski-run) | 👆 | An endless ski run; ride it yourself (WebGL) |
+| 📚 [The Reading Room](https://nealhardesty.github.io/wallpapers/?w=reading-room) | 👆 | A grand university library, painted: the real sun's shafts across the floor, lamps lit at dusk, and cats |
 | 🖼️ [Bing Image of the Day](https://nealhardesty.github.io/wallpapers/?w=bing) | 📡 | Bing's photo of the day, with its credit |
 
 Each one's full story is in SPEC.md §2 and §10.

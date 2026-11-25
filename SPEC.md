@@ -162,6 +162,8 @@ Added for Christmas, drawn in code (designs in §10.27–§10.30):
 | `small-christmas` | small-christmas-logic.js, small-christmas-art.js, small-christmas.js | ~800 lines | Interactive (tap the tree, the train, the floor); pixel art at its own resolution, scaled up pixelated; palettes, blink patterns, the train's oval and the hops (`SmallXmasLogic`), unit-tested; follows `host.now()` (the sleigh on Christmas Eve, presents on Christmas Day); keys T, M, L, S |
 | `christmas-village` | village-logic.js, village-art.js, village-buildings.js, village-scene.js, village-actors.js, christmas-village.js (and Harvest's harvest-sky.js) | ~3.9k lines | Interactive (tap a cat, a skater, a house, a tree, the cabin, the sky); a New England town painted in code at daylight colour and washed with the hour; the light, the calendar, the windows' hours, the layout and the skaters' steering (`VillageLogic`), unit-tested; follows `host.now()` (the real sun and moon, the church clock, Christmas Eve) (§10.40) |
 | `painted-village` | painted-logic.js, painted-plates.js, painted-art.js, painted-buildings.js, painted-bake.js, painted-cast.js, painted-village.js (and Harvest's harvest-sky.js, Christmas Village's village-logic.js) | ~4.2k lines | Interactive (tap a house, a lamp, a skater, the grand tree, the snowman, a cat, a squirrel, the deer, the bears, the cardinal, the night sky); §10.40's whole town from the hill above the pond, in metres, as about 325,000 brush strokes laid once and lit by canvas arithmetic: the sky's light, two key lights, and a patch of light for every lamp and every floor of windows; the camera, the hour's light, the layout for three shapes of screen, the sledding hill and its sleds, and the plates' arithmetic (`PaintedLogic`), unit-tested; follows `host.now()` (the real sun and moon, the meetinghouse clock, the lamplighter at dusk, Christmas Eve) (§10.41) |
+| `torchlight` | torch-logic.js, torch-art.js, torch-cast.js, torchlight.js (and Painted Village's painted-logic.js, painted-plates.js, painted-art.js, painted-bake.js; Harvest's harvest-sky.js; Christmas Village's village-logic.js) | ~2.1k lines | Interactive (tap the hut or the mountain to send the torches down, a window to light it, a cat, the St Bernard, the night sky for a rocket); an alpine valley at nightfall painted by §10.41's method: far peaks that take the alpenglow, a mountain with its piste cut in switchbacks through the firs, a hut at the top, a chairlift, the inn at the foot with its parlour window and balconies, chalets, a chapel with an onion dome and a clock that keeps the real time; a procession of skiers with flaming torches snaking down, every torch lighting the snow it passes, planted at the bottom in a heart (or a ring, a star, a guard of honour); the camera, the layout for three shapes of screen, the track, the procession and its tumbles, the figures, the year and the calendar (`TorchLogic`), unit-tested; follows `host.now()` (the real sun and moon, the season for the tree and the candles, and New Year's Eve, when the grand descent spells the new year on the mountain at midnight and the fireworks go up) (§10.42) |
+| `snow-globe` | globe-logic.js, globe-art.js, snow-globe.js | ~1.9k lines | Interactive (drag to shake it, tap the base to wind the music box, tap the glass to knock, tap the cat to stroke it); a snow globe on a windowsill, mantel or desk at night, painted as Painted Village is (an underpainting, then brushwork that runs until the colour changes), with a candle and one of the owner's nine cats beside it; the water, the snow in it and its settling (none ever lost), the turntable and its music box, four public-domain carols, the cat's moods and the layout (`SnowGlobeLogic`), unit-tested; follows `host.now()` (the scene through Advent, the tree and a carol on Christmas Eve and Day, the cat in a Santa hat) (§10.43) |
 | `sky-island` | sky-island-logic.js, sky-island-art.js, sky-island-land.js, sky-island-actors.js, sky-island.js (and Harvest's harvest-sky.js) | ~3.5k lines | Interactive (tap a cat, a person, the lake, a house at night, the sky); 16-bit pixel art at its own resolution (a pixel is 2 CSS px on a laptop or 1080p), scaled up pixelated; a terraced island seen from above and in front, its underside, the sea of cloud and the ground far below all baked; the calendar (seasons, holidays, Easter, the owner's dates), the names and the island's three-tier layout from a seed (`SkyIslandLogic`), unit-tested over 240 layouts; follows `host.now()` (the hour, the season, every holiday); keys N, P, V, O, B, W, S, H |
 | `ice-patrol` | ice-logic.js, ice-gl.js, ice-cockpit.js, ice-patrol.js | ~3k lines | The first on WebGL (§10.34): an endless snowfield from two baked noise fields, the same height formula in JavaScript and in the shaders (`IceLogic`), unit-tested; a 2D cockpit (struts, a winged console, switches that keep house) whose centre screen is a live scan of the real terrain; a 2D ridgeline fallback without WebGL; its own watch on the GPU; interactive (fly it by hand: keys and a drag; the autopilot takes it back after 5 s); keys W A S D, arrows, Q, E, X, T, V, R |
 | `sumo` | sumo-logic.js, sumo-art.js, sumo.js | ~1.3k lines | No network; a league of invented wrestlers kept in `host.storage`, written in Japanese with an English gloss (§10.35); bouts and tournaments pure and seeded (`SumoLogic`), unit-tested; interactive (a tap throws a cushion); evening by `host.now()`; keys N, B |
@@ -169,6 +171,7 @@ Added for Christmas, drawn in code (designs in §10.27–§10.30):
 | `baseball` | baseball-logic.js, baseball-league.js, baseball-talk.js, baseball-art.js, baseball.js | ~2.4k lines | No network; a league of eight invented clubs kept in `host.storage` (§10.37); every pitch, ball in play and box score pure and seeded (`BaseballLogic`, `BaseballLeague`), unit-tested; 16-bit pixel art at its own resolution with its own lettering, scaled up pixelated; interactive (a tap starts a wave); day, dusk and night by `host.now()`; keys N, S |
 | `wayfarer` | way-logic.js, way-models.js, way-detail.js, way-actors.js, way-people.js, way-companions.js, way-gl.js, wayfarer.js | ~6.6k lines | The second on WebGL (§10.38): an endless road through nine kinds of country (which of them is a setting) with villages, walled cities, grand cities under a castle and landmarks along it, all a pure function of a seed (`WayLogic`), unit-tested; every shape modelled in code as triangles (`WayModels`, `WayActors`); built a 64 m square at a time as the walk reaches it, finer near the traveller; four cameras, one of them an orbit a drag turns; nine travellers (one changes shape, one goes unseen) and 46 companions, six at once, the named cats among them; wildlife from bears to field mice and frogs, and mice, rats and sparrows in the towns, from none to teeming; day, night, weather and seasons; a flat 2D fallback without WebGL; its own watch on the GPU; interactive (drag to look around, or to turn the orbit); keys V, T, X, N, G |
 | `ski-run` | ski-logic.js, ski-models.js, ski-gl.js, ski-run.js | ~4.6k lines | The third on WebGL (§10.39), with instancing: an endless ski run stitched from twelve kinds of section, one `height(x, z)` for the riders and the mesh (`SkiLogic`), riders moved by the hill (gravity, drag, the scrub of their edges) and held as the forces on them ask (lean from edge force, legs solved to skis that stay on the snow, skid, toe-side and heel-side), tricks, wipeouts, a stop for a drink at a grand lodge, cameras and a ski school all pure and unit-tested; trees, figures and props modelled in code (`SkiModels`); a flat 2D fallback without WebGL; its own watch on the GPU; interactive (carve by keys or a drag, tap to jump; the riders take it back after 4 s); keys A, D, arrows, J, V, T, X, G |
+| `reading-room` | reading-logic.js, reading-art.js, reading-cast.js, reading-room.js (and Painted Village's painted-logic.js, painted-plates.js, painted-bake.js; Harvest's harvest-sky.js) | ~2.2k lines | A grand university reading room painted by Painted Village's method (§10.44): a fixed camera down a vaulted hall of two galleries, books to the vault, tables under green lamps; the real sun as a vector through 76 panes (clerestory, skylights, the great window and the paned wall behind us), each shaft's patch on the floor and the bookcases worked out in metres and laid into the light before the sky's, the shafts in the air over the lit picture, dust in them; the camera, the sun, the windows, the beams, the light indoors, the layout and the cats' choices (`ReadingLogic`), unit-tested; follows `host.now()` (the sun, the lamps lit at dusk, the clock striking, Christmas); interactive (tap a table, a cat, the owl, the librarian, the clock, a shelf, the catalogue, a window, the fire, a chandelier, the tree); keys A, P, O, L, B, M, R |
 
 About 1.7 MB of JavaScript in total. **Not imported:** links, weather, clocks,
 search/omniprompt, custom links, status bar, Docker/nginx, the homepage's
@@ -893,6 +896,9 @@ and the commits.
 | harvest | `mist`, `beams` (medium) | Land is one baked layer per resize; trees, leaves, apples, geese and clouds are baked sprites; the world is washed once per frame with the hour's light; leaves, apples, smoke, sparks and flocks × density; squirrels × (0.5 + 0.5 density) |
 | christmas-village | `reflections`, `aurora` (medium) | The land is one baked painting per layout, washed into a second canvas only when the hour's colour has moved a step; lit windows and lamps are one layer repainted when a window goes on or off; every string bulb is on one of two layers faded against each other (the twinkle costs two blits); the cast is a few filled shapes apiece in colours toned for the hour, the trees among them sprites toned the same way; far snow is one path of squares, near flakes a sprite. 5.4% busy on Low, 7.0% on Medium, 15.1% on High at 4× throttle |
 | painted-village | `reflections`, `moving-lights`, `aurora` (medium) | The picture is brush strokes baked once per layout into plates (in slices of a third of a frame, shown as it goes); the hour is about a dozen canvas blends when its colour has moved, most at half size, and only a patch's rectangle when a window or lamp changes; a frame is one blit, the cast (a dozen dabs each, lit in JavaScript a few times a second, the lit picture put back over whoever is behind something), smoke sprites, a few bulbs and the snow as two paths. The picture's size is capped by tier (0.8, 1.4, 2.5 megapixels) and a change of render scale repaints nothing. 8.6% busy on Low, 17.3% on Medium, 33.3% on High at 4× throttle, the bake included (§10.41) |
+| torchlight | `moving-lights` (medium) | Painted Village's plates and bake (§10.41), on a mountain: the picture baked once per layout, the hour a dozen blends; a frame is one blit and the cast. Every torch's light is done at once: a pool sprite each, screened into one half-size canvas the size of the torches' bounding box, the painting there multiplied by it and added to the frame (three blits however many torches); far skiers are a dab and a flame sprite. The torches × (0.55 + 0.45 density); the fireworks' spark pool 1800 × density + 200, their flash one quarter-size blit. 8.3% busy on Low, 21.7% on Medium, 28.9% on High at 4× throttle, the bake included (§10.42) |
+| snow-globe | `refraction`, `glints` (medium) | The room and the night outside are painted once per layout (an underpainting, then brushwork in slices of 6 ms a frame, shown as it goes), at a size capped by tier (0.8, 1.4, 2.5 megapixels); the scene inside is redrawn into its own canvas only while the snow is in the water or the turntable turns, and squeezed toward the rim by five annular redraws of it (`refraction`); flakes × density (700 at High), pooled, one sprite each, glitter twinkling only with `glints`. At rest it asks for 14 frames a second for the candle and the cat, 4 while the cat sleeps, and none with neither (idleUntil). 6.7% busy on Low, 11.0% on Medium, 18.8% on High at 4× throttle, the bake included (§10.43) |
+| reading-room | `shafts`, `dust` (medium) | Painted Village's method throughout: the hall baked once per layout into its plates (in slices), the hour a dozen blends when the light has moved; the sun's patches and shafts are two half-size greys redrawn only when the sun has moved a fifth of a degree (every half a minute or so, live), soft by scaling down and up, cut by the bands' masks, and laid into the light step and over the lit picture by the step itself; a frame is one blit, the cast (cats, readers, the librarian, the owl, planes, flying books), dust motes as squares, the weather outside clipped to the glass, a few bulbs. Capped at 0.8, 1.4 and 2.5 megapixels; 4, 5 and 6 passes. 16.2% busy on Low, 31.1% on Medium, 41.4% on High at 4× throttle, the bake included (§10.44) |
 | sky-island | — | The canvas is the picture's own pixels (2 CSS px each on a laptop or 1080p, 3 at 1440p, 4 at 4K, 1 on a phone), scaled up pixelated; the terrain (three tiers, their cliffs, the underside, the water) is one bake per season, the roots three sway frames, the sea of cloud two tileable strips and the ground one, rebaked with the light; everything that stands still (houses, trees, lamps, props, trimmings) is baked into one layer per street band, drawn in turn with whoever moves (trees are drawn live, swaying, only on High); the sky is a dithered bake redone as the light changes, the stars four baked twinkle frames; the night is one `source-atop` wash over the island's scratch, with the lit windows and lamps one glow layer redone only when the lit set changes; a passing island is one bake with a few live bits; 20 fps by default (a setting), 12 on Low, paced on a steady timeline through idleUntil; folk × (0.4 + 0.6 density), strays, wildlife, rain, snow, leaves, fireflies × density. Bench 2026-11-11 (v2): Low 21%, Medium 38%, High 46% |
 | ice-patrol | `shadows`, `sparkle` (medium) | WebGL: one grid drawn nine times (96, 64 or 48 cells a side by density), heights and slopes from two noise textures; shadows ten marched steps on High, six on Medium, compiled out when shed (after fading); flakes × density, wrapped in the vertex shader; the cockpit frame painted per light step, the gauges at 15 Hz (8 on Low) on a strip of their own, each instrument only when its reading changes; the terrain scan a 144² map (80² on Low) scrolled by cells, four rows (two) rescanned a tick; lamp halos one sprite a colour; a few dozen height lookups a frame on the main thread. The GPU is watched by the wallpaper itself (late frames give up shadows, then render scale to 0.4), since the governor only times callbacks; software renderers start there. No WebGL: 34 ridgelines a frame in 2D |
 | sumo | — | The hall is one cached canvas (rebuilt on resize, tier and at dusk); a frame draws it, three jointed figures and a few marks. The crowd's rows and the cushions thrown follow density |
@@ -6788,6 +6794,448 @@ a phone, lose its church at a switch, or decorate a little more each day.
 If the owner later wants one village: this one can take §10.40's id and
 its place in December's rotation (§4.2), and §10.40's calendar and
 windows' hours (`village-logic.js`) stay with it.
+
+### 10.42 Torchlight Descent (`torchlight`, owner request, 2026-11-24; **built 2026-11-24**)
+
+The owner, choosing from a list of ideas: "torchlight descent… be
+creative. be whimsical. make it configurable. make it fun. bonus if there
+are cats involved", in the style of §10.41 ("I love that styling"). The
+idea as pitched: an alpine inn on a pass under starlight, alpenglow on the
+peaks at dusk, and on New Year's Eve a snaking line of skiers with torches
+winding down the mountain, each torch a moving light on the snow it passes.
+That is a real alpine custom; the valley, the inn and its name are
+invented, and everything is drawn in code.
+
+#### 10.42.1 The picture (`torch-logic.js`, `torch-art.js`)
+
+- **The camera** (`TorchLogic.camera`): the same shape as §10.41's, so its
+  plates and bake take it unchanged, but lower: the eye 13 m up on a rise
+  across the valley from the mountain, the horizon at 56% (a setting), so
+  the mountain has the top half of the picture and the valley the bottom.
+  A phone held upright stands at 17 m with the horizon six points lower.
+- **The mountain is far**, so it is placed in pixels (`mountainOf`): a
+  summit about three quarters of the way up the sky, a face whose width
+  grows toward its foot, and for each height a depth (`faceZ`, 7.5 at the
+  foot to 24 at the top) that sizes whoever is up there and, separately,
+  how much air is in front of it. Its faces are long facets down its
+  gullies, the left-looking ones toward the top **frost** to the plates, as
+  are the far peaks' (§10.41.2: frost takes the low light whichever way it
+  faces): so at dusk the high snow goes pink with the alpenglow while the
+  forested face below is blue, and under the moon it is the high snow that
+  shines. Rock shows through under the summit in streaks down the fall
+  line; firs stand thick on the lower slopes and thin out, none on the
+  piste or under the lift.
+- **The track** (`piste`, `track`, `at`): from the hut at the top down six
+  switchbacks (seven upright), each turn rounded, then out of the woods at
+  the foot and across the meadow on a smooth curve to the finish, as one
+  line of points in pixels, each with its depth and its metres from the top
+  (on the face a metre is so many pixels by the depth the face is given
+  there). About a kilometre on a 16:9 screen; it only ever goes down the
+  picture, and has no jumps (unit-tested on eight screens). The piste is
+  painted along it, whiter than the face; the run-out is groomed, with
+  corduroy.
+- **The valley** (`layout`, unit-tested): the inn at the foot of the run to
+  the left, large; the finish in front of it to the right; chalets scattered
+  up the valley (10 at most; none on the run, in the inn or in the figure);
+  the chapel on its rise to the right; the snowcat's shed at the mountain's
+  foot; the lift's station beside the run; the woods at the mountain's foot
+  in ranks, open where the run and the lift come out of them; a road
+  across; the Christmas tree beside the inn (in the season: from the end of
+  November to Epiphany, so it is still up on New Year's morning), lamps from
+  the finish to the inn's door, a split-rail fence and young firs across the
+  near meadow, and the firs we look past in the corners.
+- **The inn** (`inn`): a stone ground floor, two floors of dark timber with
+  a balcony across each (carved balusters, snow along the rail), shutters
+  with hearts cut in them and flower boxes under snow, a broad low gable
+  deep in snow with icicles all along its eaves, a stone chimney smoking,
+  the door under a lantern and a wreath, skis stood against the wall, its
+  name (*Inn's Name*) on a board over the door in the signwriter's
+  lettering, and the **parlour's big window**, where the cat sits. Each
+  floor is its own group of lights; the inn keeps late hours, the floors
+  above go to bed first, and on New Year's Eve and at Christmas nobody does.
+- **A chalet**: stone below, timber above, the gable to us, a balcony, two
+  floors of windows that keep their household's hours (`VillageLogic`).
+  **The chapel**: white walls, a steep roof, a tower with an onion dome and
+  a cross, arched windows lit of an evening (late on the holy nights and on
+  New Year's Eve), a lantern by the door, and a clock face whose hands the
+  manager draws at the real time.
+
+#### 10.42.2 The descent (`TorchLogic.procession`, `stepProcession`; `torch-cast.js`)
+
+- **They gather at the hut**, each lighting a torch as the one before sets
+  off, so a cluster of fire grows at the top; then go down in one line,
+  *Spacing* metres apart, the leader at a steady 3.4 m/s × *Pace*. Everyone
+  takes the leader's turns: the line's sideways weave is a function of the
+  place on the track, not of the skier, so it snakes.
+- **Tumbles**: now and then somebody sits down in the snow, skis every
+  which way, torch held high; gets up and catches up at half again the pace;
+  those behind go round. Unit-tested: everyone who falls gets up, and the
+  descent still ends.
+- **At the bottom** each walks to a place in the figure and plants the
+  torch there (`formation`: a heart by default, a ring, a star, a guard of
+  honour down both sides of the run-out, or one of them by chance). A figure
+  on the ground is foreshortened from here, so it is laid out 26 m wide and
+  60 deep to read (44 upright). They stand by their torches a while; then
+  everyone goes in at the inn's door, and the torches burn down over three
+  or four minutes.
+- **Every torch lights the snow it passes** (effect `moving-lights`): a
+  pool sprite for each, round on the face (which stands up to us) and
+  flattened on the meadow, **screened** (not added: §10.41's lesson) into
+  one half-size canvas the size of all the torches' bounding box; the
+  painting there is multiplied by it and the lot added to the frame. Three
+  blits however many torches. The flames are a baked sprite drawn last,
+  over everything, flickering.
+- **When**: *Descents* — one after another after dark, *Minutes Between*
+  apart (the default); on the hour after dark; once at nightfall; only on
+  New Year's Eve; or only when asked (a tap on the hut or the mountain, or
+  `D`). On a first load after dark one is already halfway down
+  ("look alive on the first frame").
+- **New Year's Eve** (`calendar`, `grandDue`): the grand descent (half as
+  many again as *Torches*, 48 at least) sets off at 23:44 and stops halfway
+  down, where each skier glides to a place on the strokes of the new year's
+  four digits (`yearFigure`) and holds there until two and a half minutes
+  past midnight. It will not wait for an ordinary descent to finish: it
+  takes over. Arriving after it set off, it is already on the mountain, and
+  spelling if it is time. `Y` spells the year at any time.
+- **Fireworks**: at midnight on New Year's Eve for a quarter of an hour,
+  with a finale; after every descent too, or now and then, or never (a
+  setting); a tap on the night sky always sends one up. Peonies, willows,
+  rings, crackle and palms; each burst lights the snow with a quarter-size
+  blit of the painting in its colour.
+
+#### 10.42.3 The cats, and the rest of the company
+
+- **The cat in the window**: the inn's own, a tuxedo, on the sill of the
+  parlour's big window, a shape against the lamplight (lit by the sky when
+  the window is dark): sitting, washing, looking round, lying down.
+- **The cat in the rucksack**: she rides down at the head of the line in
+  the guide's pack, ears up, with a little lantern of her own, cool white
+  like the moon among all the orange.
+- **More cats** (0 to 6, 2 by default; *Cat Size*): each has a place (the
+  step, the bench under the parlour window, the foot of the tree, a lamp),
+  sits, curls up, washes, and now and then trots to another with its tail
+  up. When the torches are planted they go and sit by them, because they
+  are warm. A tap gets a heart.
+- **The St Bernard**, barrel at his neck, lies by the inn's door; when the
+  torches are planted he trots out to meet them, wagging, and back. A tap
+  and he is up for a romp.
+- **The snowcat** grooms the run-out by its headlamps, beacon turning,
+  after dark when nobody is coming down, and goes back to its shed when the
+  torches are lit (`G`). **The chairlift**'s chairs go round, somebody
+  riding up now and then, by day and until the evening's descent sets off.
+  **Skiers by day** come down the piste in big turns, a few at a time.
+
+#### 10.42.4 Settings, keys, cost, tests
+
+- **Settings** (all in `settings.js`): the descent (*Descents*, *Minutes
+  Between*, *Torches* 4 to 60, *Spacing*, *Pace*, *Tumbles*, *At the
+  Bottom*, *Jackets*: everyone in their own or the ski school in red,
+  *New Year's Eve*, *Fireworks*); cats and company (the window cat, the
+  rucksack cat, *More Cats*, *Cat Size*, the St Bernard, the snowcat, the
+  lift, skiers by day); the valley (the inn and its name, *Chalets*, the
+  chapel, lamps, the Christmas tree and its lights, window candles, the
+  wreath, lights on the near firs, lit windows); sky and weather (*Time of
+  Day*: **Dusk by default**, the torches' hour, with Live, Night, Day and a
+  whole day quickly; the moon and its phase, stars, clouds, snow, wind,
+  smoke); advanced (*Horizon*, *Brushwork*, *Touch*). Dusk is the default,
+  where §10.41's is Live, because by day there are no torches: Live is one
+  choice away.
+- **Keys**: `D` send them down, `Y` spell the new year, `R` fireworks, `G`
+  the snowcat, `W` a flurry, `P` paint it again, `M` what is happening.
+- **Cost** (`make bench`, a phone at 4× throttle, the bake included):
+  8.3% busy on Low, 21.7% on Medium, 28.9% on High. The bake is §10.41's:
+  about 460,000 strokes at 1600 × 900 in some 4 s of work, shown as it
+  paints; 144,000 on a phone held upright.
+- **Unit** (`tools/torchlight.test.mjs`, 6): the camera's round trips and
+  a phone's taller mountain; the layout on eight screens (the inn and the
+  finish in view and above the inset, no chalet on the run or in the inn,
+  every figure in the picture and clear of the inn with no two torches in
+  one place, the inn just nearer than a band, every switch); the track
+  (from the hut, five turns or more down the face, never back up the
+  picture, no jump, metres that grow, ending at the finish); the procession
+  (all lit, in order and spaced, all planted, all in, the same at 10 and 120
+  fps, every tumble got up from, a hold that holds); the year's figure for
+  four years; the calendar, the schedule's five modes and the fireworks'
+  shells.
+- **Stage** (`tools/smoke.mjs`, 4): a picture by frame 12 with torches
+  already on the mountain at dusk, a finished painting, and the snow by the
+  leading torch more than 12% brighter and warmer with the torches' light
+  than without it, with nothing painted again; a whole descent fast-forwarded
+  (gather, down, planted in the heart, in; somebody sat down), a tap on the
+  hut to send it, taps on a cat and the dog, nothing saved; New Year's Eve
+  at 23:59:56 (the grand descent spelling 2027, fireworks after midnight),
+  and noon (skiers, no torches, no lights); a phone held upright above its
+  gesture bar, and everything switched off still painting a valley.
+- **Not verified**: on a real phone; at a real midnight on New Year's Eve
+  (it is tested at `?date=`).
+
+### 10.43 Snow Globe (`snow-globe`, owner request, 2026-11-24; **built 2026-11-24**)
+
+The owner, picking it from a list of ideas: "the snow globe … be creative.
+be whimsical. make it configurable. make it fun. bonus if there are cats
+involved. go above and beyond." Painted, not vector (the owner's
+"realistic" is a painted, lit look): it borrows §10.41's method.
+
+**The picture.** Night. A snow globe on its base on a windowsill (or the
+mantelpiece, or a desk by the bookshelves), the window behind it with
+frost in the corners of its panes, a garland along the top, heavy curtains,
+the snow coming down outside over the hills and a village's lights. A
+candle on one side of the globe; one of the owner's cats on the other.
+Inside the water, on a turntable: a cottage in the firs, the village
+church, skaters on a pond, the cats' cottage (cat ears on its roof, a cat
+in the window, a cat snowman, a cat on a sled), or a Christmas tree with a
+toy train going round it. *By the date* (the default) is the village
+through Advent, the tree from Christmas Eve to Boxing Day, and the rest of
+the year a different one each day.
+
+**The method** (`globe-art.js`). Every part is an underpainting first:
+shapes filled in their colour and lit (the candle warm from its side, the
+window's moonlight cool from above, a shadow side away from both). Then
+brushwork over it, broad to fine on a jittered grid, each stroke taking the
+colour under its middle and running along the form (or a given direction:
+level on the sill, along the fur on the cat) until that colour changes by
+more than a tolerance or the shape ends (`SnowGlobeLogic.run`, unit-tested),
+with a ridge of lighter paint down one side of the broad ones and the
+canvas's weave over the room. It is a generator: the manager runs it six
+milliseconds a frame (forty when making a thumbnail), so the first frame is
+the underpainting and the strokes arrive over it, the globe's contents and
+the cat first, the room and the night last. About 110,000 strokes at
+1280×800. No pixel is read after the bake.
+
+**The glass and the water.** What is seen through the water behind the
+scene is the room behind the globe, upside down and magnified (a ball of
+water is a strong lens), dark and soft, baked once. The scene is drawn into
+its own canvas; on the screen it is clipped to the glass and then redrawn
+five times in rings toward the rim, each a little smaller, so the scene
+squeezes toward the edge as a water ball bends it (the `refraction`
+effect, shed below Medium). Over it, baked: the rim's darkening, the window
+caught in the curve, the candle's warm highlight and the warm glow the
+water focuses low on the far side, a pin of light. The candle's flicker
+lives on the glass and on the sill, where a bright spot of focused light
+lies beside the base.
+
+**The snow** (`makeSim`, `shake`, `step`). Flakes in globe units (radius
+1), each suspended or settled, on the ground or on one of the scene's
+things; settled and suspended always add up to the flakes there are (a
+test checks the books after every kind of step). A shake stirs the water:
+a slosh that dies in half a second and a few eddies (a Gaussian core each,
+lasting several seconds); the flakes take the water's speed with drag and
+sink at their own pace (big ones faster, glitter fluttering), and settle
+where they meet the floor or a roof. Their sinking is scaled so that half
+is down in a fraction of the *Settles in* time and the last within about
+twice it at 10, 30 or 120 fps (late ones sink faster and faster). A shake
+lifts as much of what lies as it is hard, the roofs first. Off the glass a
+little and slowed by it, so the snow doesn't ride round the inside in a
+ring. Lying snow shows as a whiter ground and as fresh snow on each thing
+(a blanket on a roof's slope, a thicker edge along a gable, a mound on a
+hat), as deep as has settled there. Settled glitter glints on the ground
+and turns with the turntable.
+
+**The turntable and the music box** (`musicBox`, `wind`, `musicStep`,
+`notesDue`). A tap on the base winds it: the scene turns (*While it plays*,
+*Slowly, always* or *Never*) and a carol plays for *One winding plays for*
+seconds, slowing as the spring runs down, the turntable with it. Four
+melodies in the public domain (Silent Night, Jingle Bells, Deck the Halls,
+We Wish You a Merry Christmas), a different one each winding by default.
+Each note sends a gold ♪ up from the base; with *Sound* on, each is also
+plucked as a music box in WebAudio (four partials, a quick decay, an
+octave up), after the first tap or click, as Wiki Pond's notes are. The
+tune keeps time at any frame rate (a test counts its notes at 10 and 120
+fps). The skaters skate and the train goes round only while it plays. The
+wind-up key turns on the base's side.
+
+**The cat** (`makeCat`, `catStep`). One of the nine named cats (Moofy,
+Butters, Waffles, Ras The Destroyer, Ibbie, Maus, Turkey, Harry, Kitty
+Toes) in its own coat, or a different one each day (the default), or none.
+It sits beside the globe, about as tall as the globe and its base: a body
+painted from overlapping shapes (haunch, torso, chest, the far fore leg),
+the near fore leg on its own (it taps), a head with its ears, muzzle and
+nose painted and its eyes and whiskers drawn live (wide while the snow
+flies, slit or round, shut in a slow blink or asleep), and a tail of dabs
+along a curve round its feet that swishes faster while it watches. Its
+moods: sit (looking about), watch (eyes on moving snow, which catches its
+eye whatever it was doing), groom, a slow blink, sleep (z's), tap (a paw to
+the glass: a nudge that stirs the snow and rocks the globe), bat (a proper
+swipe that shakes it), and purr (a tap on the cat is a stroke). *Mischief*
+is how often it taps. When the snow has all settled and stayed still for
+*After* minutes, the cat shakes it itself (*Who shakes it when it's still*:
+the cat, the globe by itself on a timer, or nobody). On Christmas Eve and
+Day it wears a Santa hat. B makes it swipe now.
+
+**The hands.** A drag shakes it: every move stirs the water as hard as it
+was quick and far, the globe follows the hand a little and rocks on its
+base, and springs back. A tap on the base winds it; on the glass, a knock
+(a little stir); on the cat, a stroke. The *Shake it* setting ignores
+touch (a mouse still works), for Android's home screens.
+
+**Keys.** S shake, W wind, B the cat swipes it, N the next scene (saved).
+
+**Cost.** A frame while things move: the snow layer (if snowing outside),
+the candle's flame and glow, the globe (one blit of its scene and five ring
+redraws, the glass, the base), the cat (four sprites and some dabs). The
+scene's canvas is redrawn only while the snow is in the water or the
+turntable turns. At rest the stage is asked for fourteen frames a second
+(the candle, the snow outside, the cat), four while the cat is asleep and
+nothing else moves, and none at all with no cat, no candle and no snow
+outside. Bench (4× throttle, a phone): Low 6.7%, Medium 11.0%, High 18.8%.
+
+**Tests.** Unit (`tools/snow-globe.test.mjs`, 9): the layout at five screens,
+both sides and three sizes; the books balance through shakes and steps,
+inside the glass and above the floor; settling at 10, 30 and 120 fps;
+snow on the roofs of every scene, which a shake sheds first; more or fewer
+flakes; the music box's three turnings, its slowing and its tunes in order
+at any frame rate; the cat's moods, its swipe when it's its job and not
+otherwise, a stroke; the scene and the cat by the date; a stroke's run.
+Smoke: snow on frame one; the brushwork finishes; a drag shakes it (snow off
+the ground, the globe rocks); it settles, the snow lies on the ground and
+the roofs, and the stage paces itself at rest; a tap on the base plays and
+turns it; a tap on the cat, a purr; B, a swipe; with no cat, candle or snow
+outside, almost no frames; Christmas Eve, the tree and a carol playing.
+
+**Not verified:** on a real phone; the sound (headless Chrome is muted);
+whether the cat's tap reads as touching the glass at every size (it is
+aimed, not measured).
+
+### 10.44 The Reading Room (`reading-room`, owner request, 2026-11-24; **built 2026-11-24**)
+
+The owner, picking three of ten ideas: "the reading room. make it grand,
+massive university library style. be creative. be whimsical. make it
+configurable. make it fun. bonus if there are cats involved. go above and
+beyond." It was one of five meant to use Painted Village's technique ("I
+love that styling"), and it does: the same plates, the same bake, the same
+light arithmetic, with two small hooks added to the bake for light of its
+own. The hall is invented (nowhere real, no institution's name); every
+shape is drawn in code.
+
+**The hall** (`ReadingLogic.ROOM`, metres): 24 m between the bookcases'
+faces, nine bays of 9 m, the north wall at 84 m. Bookcases on the floor and
+on the first gallery (5.8 m up, standing out 1.5 m, an iron rail with a
+gilt handrail), a low case on the second (11.4 m); twin-light windows in
+every bay above it, a cornice at 17.3 m, and a coffered half-elliptical
+vault 7.6 m high with a gilt rib over every pier and a round skylight in
+the crown of every bay. At the far end, the door, the great clock (the real
+time; it strikes the hour) and the great window with its tracery and rose.
+Tables in two rows down the hall, one to a bay but the last, three banker's
+lamps each (green glass by default), three chairs a side; a runner down the
+middle aisle; the fireplace in the left wall of the second bay with two
+wingbacks, a rug and the founder over the mantel (a cat in a gown and
+mortarboard); marble busts (one or two with a student's scarf or cat's
+ears) and globes on pedestals at the piers; the card catalogue and the
+librarian's desk ("Silence, please") at our end; five rolling ladders; a
+chandelier in every bay. In December, a tree down the hall past the tables,
+garlands of lights along the first gallery's rails, wreaths on the clock and
+the door, stockings on the mantel.
+
+**Where we stand.** The eye 4 m up at the south end, looking level down the
+middle: one-point perspective, the vault converging overhead and the floor
+below. The camera keeps Painted Village's depth (`z`, 1 at the bottom of the
+picture, `zm` metres to the unit) so Plates and the bake take it unchanged;
+a point in metres is `cam.p(x, y, D)`. A narrower screen sees wider; a phone
+held upright puts its horizon at half height.
+
+**The sun is a vector, and the windows are polygons.** `sunDir(date)` is
+HarvestSky's astronomy (latitude 40°, solar noon 12:15) as a direction in
+the hall's axes (x east, y up, z north, so we look north). Glass: 36
+clerestory lights, 9 skylights, the great north window and, behind us, a
+paned south wall of 30 lights that is never seen but whose light comes in
+over our shoulder. For each pane the sun shines through, `beams(s)` sends
+its corners down along the light to the floor (clipped to the hall, the
+floor under the galleries in their shade) and across to the bookcases
+opposite (or the north wall), so the mullions are bars of shadow in every
+patch. In winter the clerestory's light lands high on the far bookcases and
+the south wall's panes swing across the floor from the left (morning) to the
+right (afternoon); in summer the skylights' and clerestory's land on the
+floor too. Measured: on 10 December the floor patches' mean x is −7.1 m at
+9:30, 0 at 12:15, +7.1 m at 15:00.
+
+**The light.** Painted Village's terms, read for a room: `S` is the
+daylight from everywhere, `A` the great window's light from the far end
+(DIR_A comes from there), `B` the clerestory's from up on the left; the
+air's thickness is 26 depth units, not 12 (a room's haze, not a valley's:
+the bake's new `air` option). `ReadingLogic.roomLight` gives the room's own
+colours by the sun's altitude over Painted Village's sky (which shows in
+the glass), with moonlight. Lamps, chandeliers, the desk lamp, the fire and
+the tree are groups with patches, so each goes on and off by itself. Two
+hooks in `Painting.step`, both optional (Painted Village passes neither, and
+its output is unchanged: 326,843 strokes, as before):
+- `fx.light(T, c, t, l)`, after the lamps' patches and before the sky: the
+  Reading Room adds its sun plate (a half-size grey of every patch,
+  soft-edged by scaling down and up, each patch cut by the band mask of
+  whatever stands nearer than it lies) × the sun's colour.
+- `fx.after(T, g, l)`, over the lit picture before the bulbs: the shafts in
+  the air, each the hull of its pane (or of where its light crosses 2.2 m in
+  front of the eye) and of where it lands, brightest at the glass, screened
+  on.
+The sun plate and the shafts are redrawn only when the sun has moved a fifth
+of a degree; dust motes are points inside the shafts' outlines, glinting.
+At night the moon does the same, cold and faint.
+
+**The cast** (`reading-cast.js`), each lit as the painting is, golden in a
+patch of sun, and put back behind whatever stands nearer:
+- Cats, each with a name (Footnote, Marginalia, Quarto, Ibid, Vellum,
+  Dewey, Colophon, Errata, Folio, Octavo, Codex, Index) and a habit
+  (`ReadingLogic.ROLES`): asleep in the sun, getting up and moving to the
+  nearest sunny place as the patches move (`sunSpots`: inside a patch, in an
+  aisle, never under a table; two cats never share one), by the fire or a
+  lamp after dark; on the first gallery's rail with a book she pushes off
+  (it falls, lands in a puff of dust, lies there, and floats back up to her
+  in sparkles; she does it again); riding a rolling ladder that rolls along
+  its rail by itself; a kitten on a table after a pen, and after a moth at
+  the lamp at night; asleep by a lamp; walking the top rail; by the fire; on
+  the desk; wanderers. They walk the aisles and cross between tables only at
+  the gaps by the piers (`waypoint`). Coats in three values, tabbies'
+  stripes, eyes shut or open (catching the lamplight at night). Every cat is
+  where it would be on the first frame.
+- Readers at the tables: reading, turning pages, writing, dozing (z's, and
+  waking with a start); coming and going by the aisles; fewer of an evening,
+  and a few night owls after ten.
+- The librarian: at her desk by day; at dusk she goes down the hall with a
+  taper and each table's lamps come on as she comes level with it (without
+  her they come on by themselves, the far end first); at night, rounds with
+  a lantern whose pool goes with her.
+- An owl on a chandelier who turns her head, hoots the hour and goes round
+  under the vault at night; paper planes from the top gallery; books that
+  fly home to their shelves by themselves (or, from a tap on a shelf, down
+  to a table); a mouse from the card catalogue, and the nearest cat after
+  it; the fire; the clock's "bong"; weather in the glass (snow, petals,
+  swifts or leaves by the season, or rain).
+
+**Settings** (`settings.js`): time (live, a whole day quickly, morning,
+afternoon, dusk, night), season (live or pinned: the sun's path and what is
+outside), sunbeams, shafts, sun brightness, dust, moonbeams; the weather
+outside and clouds; the lamps (lit at dusk, always, never) and their glass
+(green, amber, ruby, blue, milk), chandeliers, the fireplace and the fire,
+rows of tables, the desk, brushwork; cats (0 to 12) and their size, readers,
+the librarian, the owl, paper planes an hour, books flying home and how
+often, the clock striking; Christmas decorations (December to Twelfth
+Night, always, never) and the tree; taps on a touch screen. **Keys:** A a
+cat stirs, P a paper plane, O the owl, L the librarian, B a book flies home,
+M the time, R paint it again (C is the player's).
+
+**Cost.** About 800,000 strokes at 1600×900 on High (Painted Village has
+325,000: books to the vault ask for fine strokes, so the large surfaces were
+coarsened until only the near books, the tables and the rails take the
+finest passes), 6 to 7 s of bake on the build machine, in slices. Bench:
+16.2% busy on Low, 31.1% on Medium, 41.4% on High (4× throttle, a phone's
+size).
+
+**Tests.** Unit (`tools/reading-room.test.mjs`, 9): the camera against
+Painted Village's depth; the sun south at noon, east then west, 26.6° and
+73.4° at the solstices; the windows; the beams left in the morning, right in
+the afternoon, every patch inside the hall, the south wall's panes separate,
+shafts in front of the eye; the light indoors; the layout and the tree in
+December; a cat crossing the hall never walks through a table; the sunbeam
+cat in the sun through a winter day (more than 85% of the time), left of the
+hall in the morning and right in the afternoon, by the fire at night.
+Smoke: frame one alive; the floor in a patch of sun more than twice as
+bright as with sunbeams off, and nothing painted again; a cat in the sun; a
+tapped table's lamps; at dusk the lamps lit in turn as the librarian goes
+(2, 4, 6, 8, 10 tables), the rail cat's book falls, lands and rises, the
+clock strikes when tapped, the night lamplit; a phone upright; the bare
+hall; a lost painting painted again.
+
+**Not verified** on a real phone or GPU, or in a real browser at speed; the
+thumbnail and the screenshots are headless Chrome's.
 
 ### 10.21 macOS: live desktop and screen saver (`mac/`, owner idea)
 
