@@ -171,7 +171,7 @@ Added for Christmas, drawn in code (designs in §10.27–§10.30):
 | `baseball` | baseball-logic.js, baseball-league.js, baseball-talk.js, baseball-art.js, baseball.js | ~2.4k lines | No network; a league of eight invented clubs kept in `host.storage` (§10.37); every pitch, ball in play and box score pure and seeded (`BaseballLogic`, `BaseballLeague`), unit-tested; 16-bit pixel art at its own resolution with its own lettering, scaled up pixelated; interactive (a tap starts a wave); day, dusk and night by `host.now()`; keys N, S |
 | `wayfarer` | way-logic.js, way-models.js, way-detail.js, way-actors.js, way-people.js, way-companions.js, way-gl.js, wayfarer.js | ~6.6k lines | The second on WebGL (§10.38): an endless road through nine kinds of country (which of them is a setting) with villages, walled cities, grand cities under a castle and landmarks along it, all a pure function of a seed (`WayLogic`), unit-tested; every shape modelled in code as triangles (`WayModels`, `WayActors`); built a 64 m square at a time as the walk reaches it, finer near the traveller; four cameras, one of them an orbit a drag turns; nine travellers (one changes shape, one goes unseen) and 46 companions, six at once, the named cats among them; wildlife from bears to field mice and frogs, and mice, rats and sparrows in the towns, from none to teeming; day, night, weather and seasons; a flat 2D fallback without WebGL; its own watch on the GPU; interactive (drag to look around, or to turn the orbit); keys V, T, X, N, G |
 | `ski-run` | ski-logic.js, ski-models.js, ski-gl.js, ski-run.js | ~4.6k lines | The third on WebGL (§10.39), with instancing: an endless ski run stitched from twelve kinds of section, one `height(x, z)` for the riders and the mesh (`SkiLogic`), riders moved by the hill (gravity, drag, the scrub of their edges) and held as the forces on them ask (lean from edge force, legs solved to skis that stay on the snow, skid, toe-side and heel-side), tricks, wipeouts, a stop for a drink at a grand lodge, cameras and a ski school all pure and unit-tested; trees, figures and props modelled in code (`SkiModels`); a flat 2D fallback without WebGL; its own watch on the GPU; interactive (carve by keys or a drag, tap to jump; the riders take it back after 4 s); keys A, D, arrows, J, V, T, X, G |
-| `reading-room` | reading-logic.js, reading-art.js, reading-cast.js, reading-room.js (and Painted Village's painted-logic.js, painted-plates.js, painted-bake.js; Harvest's harvest-sky.js) | ~2.2k lines | A grand university reading room painted by Painted Village's method (§10.44): a fixed camera down a vaulted hall of two galleries, books to the vault, tables under green lamps; the real sun as a vector through 76 panes (clerestory, skylights, the great window and the paned wall behind us), each shaft's patch on the floor and the bookcases worked out in metres and laid into the light before the sky's, the shafts in the air over the lit picture, dust in them; the camera, the sun, the windows, the beams, the light indoors, the layout and the cats' choices (`ReadingLogic`), unit-tested; follows `host.now()` (the sun, the lamps lit at dusk, the clock striking, Christmas); interactive (tap a table, a cat, the owl, the librarian, the clock, a shelf, the catalogue, a window, the fire, a chandelier, the tree); keys A, P, O, L, B, M, R |
+| `reading-room` | reading-logic.js, reading-art.js, reading-cast.js, reading-room.js (and Painted Village's painted-logic.js, painted-plates.js, painted-bake.js; Harvest's harvest-sky.js) | ~2.8k lines | A grand university reading room painted by Painted Village's method (§10.44): a fixed camera down a vaulted hall of three tiers of bookcases and galleries, books to the vault, tables under green lamps, a spine of low bookcases down the middle; the real sun as a vector through 81 panes (clerestory, skylights, the great window and the paned wall behind us), each shaft's patch on the floor and the bookcases worked out in metres and laid into the light before the sky's, the shafts in the air over the lit picture, dust in them; the camera, the sun, the windows, the beams, the light indoors, the layout, the cats' choices, and how people get about (routes round the furniture, walking with planted feet, keeping right and never through each other: `ReadingLogic`), unit-tested; follows `host.now()` (the sun, the lamps lit at dusk, the clock striking, Christmas); interactive (tap a table, a cat, the owl, the librarian, the clock, a shelf, the catalogue, a window, the fire, a chandelier, the tree, the dictionary, the armillary sphere, the glass case); keys A, P, O, L, B, M, R |
 
 About 1.7 MB of JavaScript in total. **Not imported:** links, weather, clocks,
 search/omniprompt, custom links, status bar, Docker/nginx, the homepage's
@@ -898,7 +898,7 @@ and the commits.
 | painted-village | `reflections`, `moving-lights`, `aurora` (medium) | The picture is brush strokes baked once per layout into plates (in slices of a third of a frame, shown as it goes); the hour is about a dozen canvas blends when its colour has moved, most at half size, and only a patch's rectangle when a window or lamp changes; a frame is one blit, the cast (a dozen dabs each, lit in JavaScript a few times a second, the lit picture put back over whoever is behind something), smoke sprites, a few bulbs and the snow as two paths. The picture's size is capped by tier (0.8, 1.4, 2.5 megapixels) and a change of render scale repaints nothing. 8.6% busy on Low, 17.3% on Medium, 33.3% on High at 4× throttle, the bake included (§10.41) |
 | torchlight | `moving-lights` (medium) | Painted Village's plates and bake (§10.41), on a mountain: the picture baked once per layout, the hour a dozen blends; a frame is one blit and the cast. Every torch's light is done at once: a pool sprite each, screened into one half-size canvas the size of the torches' bounding box, the painting there multiplied by it and added to the frame (three blits however many torches); far skiers are a dab and a flame sprite. The torches × (0.55 + 0.45 density); the fireworks' spark pool 1800 × density + 200, their flash one quarter-size blit. 8.3% busy on Low, 21.7% on Medium, 28.9% on High at 4× throttle, the bake included (§10.42) |
 | snow-globe | `refraction`, `glints` (medium) | The room and the night outside are painted once per layout (an underpainting, then brushwork in slices of 6 ms a frame, shown as it goes), at a size capped by tier (0.8, 1.4, 2.5 megapixels); the scene's textures and ball sprites are painted and brushed once too; the scene inside is redrawn into its own canvas only while the snow is in the water, the turntable turns, smoke rises or the lighthouse turns (each solid a few dozen affine blits and fills, the floor two rotated blits), and squeezed toward the rim by five annular redraws of it (`refraction`); flakes × density (700 at High), pooled, one sprite each (a few shapes, six turns of the star baked), glitter flashing only with `glints`; the room's bulbs a dot and a baked glow each. At rest it asks for a wait (never a deadline) of 1/14 s while anything flickers (the candle, a cat awake, snow outside, twinkling lights, smoke), 250 ms while the cat sleeps, and 1.5 s with nothing (`restWait`, idleUntil). 12.2% busy on Low, 18.5% on Medium, 24.3% on High at 4× throttle, the bake included (§10.43) |
-| reading-room | `shafts`, `dust` (medium) | Painted Village's method throughout: the hall baked once per layout into its plates (in slices), the hour a dozen blends when the light has moved; the sun's patches and shafts are two half-size greys redrawn only when the sun has moved a fifth of a degree (every half a minute or so, live), soft by scaling down and up, cut by the bands' masks, and laid into the light step and over the lit picture by the step itself; a frame is one blit, the cast (cats, readers, the librarian, the owl, planes, flying books), dust motes as squares, the weather outside clipped to the glass, a few bulbs. Capped at 0.8, 1.4 and 2.5 megapixels; 4, 5 and 6 passes. 16.2% busy on Low, 31.1% on Medium, 41.4% on High at 4× throttle, the bake included (§10.44) |
+| reading-room | `shafts`, `dust` (medium) | Painted Village's method throughout: the hall baked once per layout into its plates (in slices), the hour a dozen blends when the light has moved; the sun's patches and shafts are two half-size greys redrawn only when the sun has moved a fifth of a degree (every half a minute or so, live), soft by scaling down and up, cut by the bands' masks, and laid into the light step and over the lit picture by the step itself; a frame is one blit, the cast (cats, readers walking and seated and up on the galleries, the librarian, the owl, planes, flying books; a walker is a dozen strokes, its tones kept until the light on it changes), dust motes as squares, the weather outside clipped to the glass, a few bulbs; the ways about the hall worked out once (14 ms), a route only when someone sets off. Capped at 0.8, 1.4 and 2.5 megapixels; 4, 5 and 6 passes. 20.4% busy on Low, 43.1% on Medium, 54.8% on High at 4× throttle, the bake included (§10.44) |
 | sky-island | — | The canvas is the picture's own pixels (2 CSS px each on a laptop or 1080p, 3 at 1440p, 4 at 4K, 1 on a phone), scaled up pixelated; the terrain (three tiers, their cliffs, the underside, the water) is one bake per season, the roots three sway frames, the sea of cloud two tileable strips and the ground one, rebaked with the light; everything that stands still (houses, trees, lamps, props, trimmings) is baked into one layer per street band, drawn in turn with whoever moves (trees are drawn live, swaying, only on High); the sky is a dithered bake redone as the light changes, the stars four baked twinkle frames; the night is one `source-atop` wash over the island's scratch, with the lit windows and lamps one glow layer redone only when the lit set changes; a passing island is one bake with a few live bits; 20 fps by default (a setting), 12 on Low, paced on a steady timeline through idleUntil; folk × (0.4 + 0.6 density), strays, wildlife, rain, snow, leaves, fireflies × density. Bench 2026-11-11 (v2): Low 21%, Medium 38%, High 46% |
 | ice-patrol | `shadows`, `sparkle` (medium) | WebGL: one grid drawn nine times (96, 64 or 48 cells a side by density), heights and slopes from two noise textures; shadows ten marched steps on High, six on Medium, compiled out when shed (after fading); flakes × density, wrapped in the vertex shader; the cockpit frame painted per light step, the gauges at 15 Hz (8 on Low) on a strip of their own, each instrument only when its reading changes; the terrain scan a 144² map (80² on Low) scrolled by cells, four rows (two) rescanned a tick; lamp halos one sprite a colour; a few dozen height lookups a frame on the main thread. The GPU is watched by the wallpaper itself (late frames give up shadows, then render scale to 0.4), since the governor only times callbacks; software renderers start there. No WebGL: 34 ridgelines a frame in 2D |
 | sumo | — | The hall is one cached canvas (rebuilt on resize, tier and at dusk); a frame draws it, three jointed figures and a few marks. The crowd's rows and the cushions thrown follow density |
@@ -7190,26 +7190,54 @@ own. The hall is invented (nowhere real, no institution's name); every
 shape is drawn in code.
 
 **The hall** (`ReadingLogic.ROOM`, metres): 24 m between the bookcases'
-faces, nine bays of 9 m, the north wall at 84 m. Bookcases on the floor and
-on the first gallery (5.8 m up, standing out 1.5 m, an iron rail with a
-gilt handrail), a low case on the second (11.4 m); twin-light windows in
-every bay above it, a cornice at 17.3 m, and a coffered half-elliptical
-vault 7.6 m high with a gilt rib over every pier and a round skylight in
-the crown of every bay. At the far end, the door, the great clock (the real
-time; it strikes the hour) and the great window with its tracery and rose.
-Tables in two rows down the hall, one to a bay but the last, three banker's
-lamps each (green glass by default), three chairs a side; a runner down the
-middle aisle; the fireplace in the left wall of the second bay with two
-wingbacks, a rug and the founder over the mantel (a cat in a gown and
-mortarboard); marble busts (one or two with a student's scarf or cat's
-ears) and globes on pedestals at the piers; the card catalogue and the
-librarian's desk ("Silence, please") at our end; five rolling ladders; a
-chandelier in every bay. In December, a tree down the hall past the tables,
-garlands of lights along the first gallery's rails, wreaths on the clock and
-the door, stockings on the mantel.
+faces, nine bays of 9 m, the north wall at 84 m. Three tiers of bookcases
+(0 to 5.35 m, 6 to 10.9 m, 11.5 to 16.4 m), each with a gallery in front of
+the next (`ROOM.gal`): the first at 6 m, standing out 1.5 m; the second at
+11.5 m, the grand one, as deep, its fascia thicker with a second gilt band
+and deeper brackets under it; the third at 17 m, standing out a metre, with
+a low case on it. Every gallery has an iron rail with a gilt handrail and
+carved walnut brackets under its front every metre and a half. Twin-light
+windows in every bay above the top gallery (18.5 to 22.8 m), a cornice at
+23.2 m, and a coffered half-elliptical vault 7.6 m high with a gilt rib over
+every pier and a round skylight in the crown of every bay. At the far end,
+the door, the great clock (the real time; it strikes the hour) between the
+first two galleries, a whole wall of books above it, and the great window
+(18.3 to 29.6 m) with its tracery and rose. Tables in two rows down the
+hall, one to a bay but the last, three banker's lamps each (green glass by
+default), three chairs a side; a runner down the middle aisle; the
+fireplace in the left wall of the second bay with two wingbacks, a rug and
+the founder over the mantel (a cat in a gown and mortarboard); marble busts
+(one or two with a student's scarf or cat's ears) and globes on pedestals at
+the piers; the card catalogue and the librarian's desk ("Silence, please")
+at our end; five rolling ladders; a chandelier in every bay. In December, a
+tree in the last bay, garlands of lights along the first gallery's rails,
+wreaths on the clock and the door, stockings on the mantel.
+
+**The spine** (owner, 2026-11-25: "the center needs something. Maybe just
+a row of bookshelves down the center"). A low bookcase (1.3 m) either side
+of the runner in bays 0 to 7 (`ReadingLogic.SPINE`, 1.65 to 2.15 m out), its
+books toward the middle aisle, so from where we stand the two rows are two
+lines of spines converging on the far door, the runner between them; a gap
+at every pier to cross by; the first starts a little way into its bay, so
+the runner keeps the foreground (a phone held upright would otherwise see
+mostly the nearest case's top). On each, an oak top, a brass plate on the
+end toward us, two banker's lamps (lit like the tables', a group each, and
+by the librarian on her round), and between them a stack of books, an
+hourglass, a fern, a little bust in spectacles or a brass telescope; the
+lamp cat sleeps on one. In the middle aisle, at the piers: a lectern with
+the great dictionary (tap it: the day's word, by `host.now()`), the big
+globe, an armillary sphere (tap: where the real sun stands) and a glass
+case of the library's treasures. Cases running across the hall were tried
+first: from a 4 m eye low cases stack up the picture into one tower and the
+runner's lead line is lost; along it, they read as a row. Tables moved out
+0.3 m (5.5 m from the middle) and the desk 0.45 m toward the wall to make
+the aisles: the middle one (between the spine), the inner (3.1 m, between
+the spine and the tables) and the outer (7.9 m, between the tables and the
+busts).
 
 **Where we stand.** The eye 4 m up at the south end, looking level down the
-middle: one-point perspective, the vault converging overhead and the floor
+middle, the horizon at 38.5% of the height (47% on a phone held upright;
+lowered from 43% for the taller hall, so the vault still shows): one-point perspective, the vault converging overhead and the floor
 below. The camera keeps Painted Village's depth (`z`, 1 at the bottom of the
 picture, `zm` metres to the unit) so Plates and the bake take it unchanged;
 a point in metres is `cam.p(x, y, D)`. A narrower screen sees wider; a phone
@@ -7219,7 +7247,7 @@ held upright puts its horizon at half height.
 HarvestSky's astronomy (latitude 40°, solar noon 12:15) as a direction in
 the hall's axes (x east, y up, z north, so we look north). Glass: 36
 clerestory lights, 9 skylights, the great north window and, behind us, a
-paned south wall of 30 lights that is never seen but whose light comes in
+paned south wall of 35 lights (to 25.4 m) that is never seen but whose light comes in
 over our shoulder. For each pane the sun shines through, `beams(s)` sends
 its corners down along the light to the floor (clipped to the hall, the
 floor under the galleries in their shade) and across to the bookcases
@@ -7263,16 +7291,24 @@ patch of sun, and put back behind whatever stands nearer:
   (it falls, lands in a puff of dust, lies there, and floats back up to her
   in sparkles; she does it again); riding a rolling ladder that rolls along
   its rail by itself; a kitten on a table after a pen, and after a moth at
-  the lamp at night; asleep by a lamp; walking the top rail; by the fire; on
-  the desk; wanderers. They walk the aisles and cross between tables only at
-  the gaps by the piers (`waypoint`). Coats in three values, tabbies'
+  the lamp at night; asleep on a case of the spine between its lamps (by a
+  lit lamp after dark); walking the second gallery's rail; by the fire; on
+  the desk; wanderers. They go by the same routes as people (`route`, as
+  `stepToward`), and a cat's home (`hz`) is no longer overwritten by the
+  haze colour when she is relit (it was, so wanderers went home to z = NaN).
+  Coats in three values, tabbies'
   stripes, eyes shut or open (catching the lamplight at night). Every cat is
   where it would be on the first frame.
 - Readers at the tables: reading, turning pages, writing, dozing (z's, and
-  waking with a start); coming and going by the aisles; fewer of an evening,
-  and a few night owls after ten.
-- The librarian: at her desk by day; at dusk she goes down the hall with a
-  taper and each table's lamps come on as she comes level with it (without
+  waking with a start); coming in from the door behind us to their seats and
+  leaving again; fewer of an evening, and a few night owls after ten; a few
+  already on their way in on frame one. Up on the galleries, one reader to
+  a gallery (up to four, by the Readers setting), walking along the shelves,
+  stopping to browse (turned to the books, an arm up for one), and on; the
+  gallery's front hides their feet and its rail is drawn again over them.
+- The librarian: behind her desk by day (it hides her below its top); at
+  dusk she goes down the middle aisle with a taper on its pole and each
+  table's lamps, and the spine's, come on as she comes level with them (without
   her they come on by themselves, the far end first); at night, rounds with
   a lantern whose pool goes with her.
 - An owl on a chandelier who turns her head, hoots the hour and goes round
@@ -7281,6 +7317,48 @@ patch of sun, and put back behind whatever stands nearer:
   to a table); a mouse from the card catalogue, and the nearest cat after
   it; the fire; the clock's "bong"; weather in the glass (snow, petals,
   swifts or leaves by the season, or rain).
+
+**Walking** (owner, 2026-11-25: "the people walk really weird, it's like
+they are ice skating"; "people walk through each other"). The root causes:
+a walker was a profile figure flipped left or right whose legs swung on a
+clock (a fixed rate whatever the speed), symmetrically about a hip that
+moved on steadily, so the feet slid on the floor; it went at a constant
+speed from a standstill, turned 90° at once at each corner, and was drawn
+side on even walking straight toward or away from us; and nothing kept two
+people apart. Now (`ReadingLogic`, pure and tested):
+- `route(from, to, radius)`: the shortest way through a visibility graph of
+  points in the aisles at every pier and the middle of every bay and round
+  the corners of the desk, the catalogue, the fireside chairs and the
+  curiosities, everything that stands on the floor kept as boxes
+  (`obstacles`, `blocked`, `segClear`). Built once (14 ms), a route only
+  when someone sets off, or when they have been put off it so that the
+  straight line on cuts a corner.
+- `walk(a, others, dt)`: the walker faces a way (`h`) and turns toward the
+  next point at 4.2 rad/s at most, slowing right down to turn round; speeds
+  up at 1.3 m/s² and slows to a stop at the end (v ≤ √(2·1.1·d)); keeps
+  right of anyone coming the other way or standing in the way (the same
+  choice from both sides, so they pass); falls in behind anyone going the
+  same way more slowly; slides round anyone shoulder to shoulder; and
+  never takes a step that brings them closer than their two radii (0.26 m
+  each) to anyone, readers seated, walkers, the librarian or a cat on the
+  floor. Held up, after a moment they step aside, or back.
+- `gait(a, moved)`: each step plants a foot half a step ahead of the body,
+  where it stays while the body goes over it, then swings through, lifted,
+  to land half a step ahead again; the step's length (0.74 m at a brisk
+  1.3 m/s, shorter when slower) is advanced by the distance walked, so step
+  × cadence is the speed (about 1.7 steps a second at a walk), and
+  perspective comes free, everything being in metres. A last little step
+  brings the feet together when they stop. `pose` gives the feet, the
+  body's rise over each step (2.4 cm) and how much of a walk it is.
+- Drawn (`ReadingCast.drawWalker`) from the joints in metres through the
+  camera: hip, knee (bent forward by as much as the leg is short of its
+  reach) and foot, a shoe along the way they face; arms swinging against
+  the legs; shoulders broad seen from in front or behind, narrow from the
+  side; the far arm and leg in shadow; the face, or the back of the head,
+  or the hair behind, as they face. Hidden below the top of a spine case
+  that stands between us and them, or the librarian's desk.
+- Cats' legs go by the distance walked too (a four-beat walk, each paw
+  planted while the body goes over it).
 
 **Settings** (`settings.js`): time (live, a whole day quickly, morning,
 afternoon, dusk, night), season (live or pinned: the sun's path and what is
@@ -7294,26 +7372,37 @@ Night, always, never) and the tree; taps on a touch screen. **Keys:** A a
 cat stirs, P a paper plane, O the owl, L the librarian, B a book flies home,
 M the time, R paint it again (C is the player's).
 
-**Cost.** About 800,000 strokes at 1600×900 on High (Painted Village has
+**Cost.** About 750,000 strokes at 1600×900 on High (Painted Village has
 325,000: books to the vault ask for fine strokes, so the large surfaces were
 coarsened until only the near books, the tables and the rails take the
-finest passes), 6 to 7 s of bake on the build machine, in slices. Bench:
-16.2% busy on Low, 31.1% on Medium, 41.4% on High (4× throttle, a phone's
-size).
+finest passes; the spine's books turn to a mottle of their colours soon,
+seen as edgewise as they are), 6 to 7 s of bake on the build machine, in
+slices. Bench: 20.4% busy on Low, 43.1% on Medium, 54.8% on High (4×
+throttle, a phone's size; before the third tier and the spine, 16.2%, 31.1%
+and 41.4%: the cast costs a frame what it did, 0.55 ms on the build
+machine, and the rise is the bake and the light steps with 32 more lamps).
 
-**Tests.** Unit (`tools/reading-room.test.mjs`, 9): the camera against
+**Tests.** Unit (`tools/reading-room.test.mjs`, 11): the camera against
 Painted Village's depth; the sun south at noon, east then west, 26.6° and
 73.4° at the solstices; the windows; the beams left in the morning, right in
 the afternoon, every patch inside the hall, the south wall's panes separate,
 shafts in front of the eye; the light indoors; the layout and the tree in
 December; a cat crossing the hall never walks through a table; the sunbeam
 cat in the sun through a winter day (more than 85% of the time), left of the
-hall in the morning and right in the afternoon, by the fire at night.
+hall in the morning and right in the afternoon, by the fire at night; a
+walker's planted foot never moves, the steps add up to the way walked
+(within 3%), turns are gradual and the feet come together on stopping; a
+crowd for five minutes (people in to seats, up and out, across the hall, up
+to 18 at once among the seated) never closer than their two radii, never in
+the furniture, more than 120 arriving, nobody held up for 90 s, and
+people passing each other going opposite ways.
 Smoke: frame one alive; the floor in a patch of sun more than twice as
 bright as with sunbeams off, and nothing painted again; a cat in the sun; a
 tapped table's lamps; at dusk the lamps lit in turn as the librarian goes
 (2, 4, 6, 8, 10 tables), the rail cat's book falls, lands and rises, the
-clock strikes when tapped, the night lamplit; a phone upright; the bare
+clock strikes when tapped, the night lamplit; the spine (16 cases), three
+galleries with readers on them, and a busy hall watched for 7 s: nobody
+through anybody, no planted foot sliding; a phone upright; the bare
 hall; a lost painting painted again.
 
 **Not verified** on a real phone or GPU, or in a real browser at speed; the

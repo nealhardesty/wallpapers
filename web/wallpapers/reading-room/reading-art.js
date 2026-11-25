@@ -3,8 +3,9 @@
 // Reading Room's camera, for painted-bake.js to brush and light. Far to
 // near: the north wall and its great window and clock, the coffered vault
 // and its skylights, the floor and its runner, then bay by bay the
-// bookcases on two levels, the galleries and their iron rails, the
+// bookcases on three tiers, the galleries and their iron rails, the
 // clerestory, the piers; then the tables and their lamps and chairs, the
+// spine of low bookcases down the middle and its curiosities, the
 // fireplace, the busts and globes, the card catalogue, the desk, the
 // chandeliers, the ladders, and in December the tree and the garlands.
 // Every lamp, chandelier and the fire is a group of lights (a patch each),
@@ -48,20 +49,29 @@ const ReadingArt = (() => {
             // The great window: tracery, and the sky in it.
             const win = RL.windows().find(w => w.kind === 'north');
             set(D, CLS.UP, MAT.STONE, 2.4, Math.PI / 2);
-            P.fill(C.stone, quad(win.pts.map(([x, y, z]) => [x * 1.08, y + (y > 13 ? 0.4 : -0.3), z])));
+            P.fill(C.stone, quad(win.pts.map(([x, y, z]) => [x * 1.08, y + (y > RL.NORTH.y0 + 1.4 ? 0.4 : -0.3), z])));
             glass(win.pts, D);
             set(D, CLS.UP, MAT.STONE, 1.4, Math.PI / 2);
-            for (const x of [-3.4, -1.1, 1.1, 3.4]) P.fill(C.stone, quad([[x - 0.09, 11.6, D], [x - 0.09, 19.5 + (2.2 - Math.abs(x)) * 0.9, D], [x + 0.09, 19.5 + (2.2 - Math.abs(x)) * 0.9, D], [x + 0.09, 11.6, D]]));
-            P.fill(C.stone, quad([[-5.6, 15.4, D], [-5.6, 15.6, D], [5.6, 15.6, D], [5.6, 15.4, D]]));
-            const rose = []; for (let i = 0; i < 20; i++) { const a = i / 20 * TAU; rose.push([Math.cos(a) * 2.2, 20.6 + Math.sin(a) * 2.2, D]); }
+            const ny = RL.NORTH.y0, ry = RL.NORTH.y1 - 3.0;
+            for (const x of [-3.4, -1.1, 1.1, 3.4]) P.fill(C.stone, quad([[x - 0.09, ny, D], [x - 0.09, ry - 1.1 + (2.2 - Math.abs(x)) * 0.9, D], [x + 0.09, ry - 1.1 + (2.2 - Math.abs(x)) * 0.9, D], [x + 0.09, ny, D]]));
+            P.fill(C.stone, quad([[-5.6, ny + 3.8, D], [-5.6, ny + 4.0, D], [5.6, ny + 4.0, D], [5.6, ny + 3.8, D]]));
+            const rose = []; for (let i = 0; i < 20; i++) { const a = i / 20 * TAU; rose.push([Math.cos(a) * 2.2, ry + Math.sin(a) * 2.2, D]); }
             P.line(C.stone, Math.max(1, 0.16 * cam.mpx(D)), g => poly(g, rose.map(q => pr(...q))));
-            for (let i = 0; i < 8; i++) { const a = i / 8 * TAU; P.line(C.stone, Math.max(0.8, 0.1 * cam.mpx(D)), g => { const [x0, y0] = pr(0, 20.6, D), [x1, y1] = pr(Math.cos(a) * 2.2, 20.6 + Math.sin(a) * 2.2, D); g.moveTo(x0, y0); g.lineTo(x1, y1); }); }
+            for (let i = 0; i < 8; i++) { const a = i / 8 * TAU; P.line(C.stone, Math.max(0.8, 0.1 * cam.mpx(D)), g => { const [x0, y0] = pr(0, ry, D), [x1, y1] = pr(Math.cos(a) * 2.2, ry + Math.sin(a) * 2.2, D); g.moveTo(x0, y0); g.lineTo(x1, y1); }); }
             P.hit('window', ...box(win.pts.map(q => pr(...q))), { which: 'north' });
-            // Bookcases either side of the door on both levels, and the galleries across.
-            for (const [x0, x1] of [[-R.hw, -2.6], [2.6, R.hw]]) { endCase(x0, x1, 0.15, 5.35, D); endCase(x0, x1, 6.0, 11.0, D); }
-            set(D - 1.5, CLS.UP, MAT.WOOD, 2, 0);
-            for (const [y0, y1] of [[5.35, 6.0], [11.0, 11.4]]) P.fill(C.walnutLight, quad([[-R.hw, y0, D - 1.5], [-R.hw, y1, D - 1.5], [R.hw, y1, D - 1.5], [R.hw, y0, D - 1.5]]));
-            rail(-R.hw, R.hw, D - 1.5, 6.0, 'across'); rail(-R.hw, R.hw, D - 1.2, 11.4, 'across');
+            // Bookcases either side of the door and the clock, the whole width above them, and either side of the
+            // great window on the top gallery; the three galleries across.
+            const T = R.tiers;
+            for (const [x0, x1] of [[-R.hw, -2.6], [2.6, R.hw]]) { endCase(x0, x1, T[0][0], T[0][1], D); endCase(x0, x1, T[1][0], T[1][1], D); }
+            endCase(-R.hw, R.hw, T[2][0], T[2][1], D);
+            for (const [x0, x1] of [[-R.hw, -6.3], [6.3, R.hw]]) endCase(x0, x1, T[3][0], T[3][1], D);
+            for (const [i, G] of R.gal.entries()) {
+                const Dg = D - (i === 2 ? 1.0 : 1.5);
+                set(Dg, CLS.UP, MAT.WOOD, 2, 0);
+                P.fill(C.walnutLight, quad([[-R.hw, G.y0, Dg], [-R.hw, G.y1, Dg], [R.hw, G.y1, Dg], [R.hw, G.y0, Dg]]));
+                P.line(C.gilt, Math.max(0.5, 0.035 * cam.mpx(Dg)), g => { const a = pr(-R.hw, G.y1 - 0.08, Dg), b = pr(R.hw, G.y1 - 0.08, Dg); g.moveTo(...a); g.lineTo(...b); });
+                rail(-R.hw, R.hw, Dg, G.y1, 'across');
+            }
             // The door: an arch of stone, two leaves of oak, and a fanlight.
             set(D, CLS.UP, MAT.STONE, 2.4, Math.PI / 2);
             const door = [[-2.6, 0, D], [-2.6, 4.2, D], ...Array.from({ length: 9 }, (_, i) => { const a = Math.PI - Math.PI * (i + 1) / 10; return [Math.cos(a) * 2.6, 4.2 + Math.sin(a) * 2.6, D]; }), [2.6, 4.2, D], [2.6, 0, D]];
@@ -155,6 +165,7 @@ const ReadingArt = (() => {
         }
         P.add(R.len - 0.01, () => pier(-1, R.len, R.bays)); P.add(R.len - 0.01, () => pier(1, R.len, R.bays));
         for (const t of L.tables) P.add(t.z - R.tableLen / 2, () => table(t));
+        for (const c of L.spine) P.add(c.z0 - 0.05, () => spineCase(c));
         for (const t of L.things) P.add(t.z, () => thing(t));
         for (const c of L.chandeliers) P.add(c.z - 0.6, () => chandelier(c));
         for (const l of L.ladders) P.add(l.z - 0.3, () => ladder(l));
@@ -203,8 +214,8 @@ const ReadingArt = (() => {
             for (let x = x0; x <= x1 + 0.01; x += (x1 - x0) / Math.max(1, Math.round((x1 - x0) / 2.4))) P.fill(C.walnut, quad([[x - 0.06, y0, D], [x - 0.06, y1, D], [x + 0.06, y1, D], [x + 0.06, y0, D]]));
         }
 
-        // One bay of one wall: bookcases on the floor and on the first gallery, a
-        // low case on the second, and the clerestory above with its twin lights.
+        // One bay of one wall: bookcases on the floor and on the first two galleries,
+        // a low case on the top one, and the clerestory above with its twin lights.
         function wallBay(side, k, z0, z1, zc) {
             const x = side * R.hw, cls = wallCls(side);
             if (!onScreen([[x, 0, z0], [x, R.spring, z0], [x, R.spring, z1], [x, 0, z1]], 10)) return;
@@ -214,12 +225,12 @@ const ReadingArt = (() => {
                 P.fill(mixc(C.stone, C.back, 0.25), quad([[x, 0, z0 + 0.5], [x, 5.35, z0 + 0.5], [x, 5.35, z1 - 0.5], [x, 0, z1 - 0.5]]));
                 for (let y = 0, row = 0; y < 5.3; y += 0.42, row++) for (let z = z0 + 0.5 - (row % 2) * 0.35; z < z1 - 0.5; z += 0.7) { const a = Math.max(z0 + 0.5, z + 0.03), b = Math.min(z1 - 0.5, z + 0.67); if (b > a) P.fill(P.vary(C.stone, 0.09), quad([[x, y + 0.03, a], [x, y + 0.39, a], [x, y + 0.39, b], [x, y + 0.03, b]])); }
             }
-            else books(side, k, z0 + 0.5, z1 - 0.5, 0.15, 5.35, 0);
-            books(side, k, z0 + 0.5, z1 - 0.5, 6.0, 11.0, 1);
-            books(side, k, z0 + 0.5, z1 - 0.5, 11.4, 12.3, 2);
-            // The wall over the second gallery, and the window in it.
+            else books(side, k, z0 + 0.5, z1 - 0.5, R.tiers[0][0], R.tiers[0][1], 0);
+            for (let i = 1; i < R.tiers.length; i++) books(side, k, z0 + 0.5, z1 - 0.5, R.tiers[i][0], R.tiers[i][1], i);
+            // The wall over the top gallery, and the window in it.
+            const top = R.tiers[3][1];
             set(zc, cls, MAT.WALL, 6, Math.PI / 2);
-            P.fill(C.plaster, quad([[x, 12.3, z0 + 0.5], [x, R.spring, z0 + 0.5], [x, R.spring, z1 - 0.5], [x, 12.3, z1 - 0.5]]));
+            P.fill(C.plaster, quad([[x, top, z0 + 0.5], [x, R.spring, z0 + 0.5], [x, R.spring, z1 - 0.5], [x, top, z1 - 0.5]]));
             const outer = RL.windows().filter(w => w.kind === 'side' && w.k === k && w.side === side);
             set(zc, cls, MAT.STONE, 3.6, Math.PI / 2);
             const h = R.winW / 2 + 0.3, sp = R.win1 - R.winW / 2;
@@ -237,11 +248,11 @@ const ReadingArt = (() => {
 
         // Shelves of books on a wall, z0 to z1, y0 to y1: each shelf its own row,
         // the books batched by colour, the far ones a mottle of their colours.
-        function books(side, k, z0, z1, y0, y1, level) {
-            const x = side * R.hw, cls = wallCls(side);
+        function books(side, k, z0, z1, y0, y1, level, xf = null) {
+            const x = xf ?? side * R.hw, cls = wallCls(side);
             if (!onScreen([[x, y0, z0], [x, y1, z0], [x, y1, z1], [x, y0, z1]], 10)) return;
             for (let z = z0; z < z1 - 0.01;) {
-                const D0 = z, step = D0 < 16 ? 1 : D0 < 34 ? 2 : 4.2, za = z, zb = Math.min(z1, z + step), Dm = (za + zb) / 2, dense = R.hw * cam.foc / (Dm * Dm);
+                const D0 = z, step = D0 < 16 ? 1 : D0 < 34 ? 2 : 4.2, za = z, zb = Math.min(z1, z + step), Dm = (za + zb) / 2, dense = Math.abs(x) * cam.foc / (Dm * Dm);
                 z = zb;
                 set(Dm, cls, MAT.WOOD, 5, Math.PI / 2);
                 P.fill(C.back, quad([[x, y0, za], [x, y1, za], [x, y1, zb], [x, y0, zb]]));
@@ -264,24 +275,38 @@ const ReadingArt = (() => {
                     P.fill(C.walnutLight, quad([[x - side * 0.02, yb - 0.035, za], [x - side * 0.02, yb, za], [x - side * 0.02, yb, zb], [x - side * 0.02, yb - 0.035, zb]]));
                 }
             }
+            if (level < 0) return;
             P.shelves.push({ side, k, level, z0, z1, y0, y1 });
             P.hit('shelf', ...box([[x, y0, z0], [x, y1, z0], [x, y1, z1], [x, y0, z1]].map(q => pr(...q))), { side, k, level });
         }
 
-        // The galleries along a bay: the slab's underside and its front, and the rail.
+        // The galleries along a bay: the slab's underside and its front, the brackets under it, and the rail.
+        // The second, halfway up, is the grand one: deeper, on carved brackets, with a second gilt band.
         function galleries(side, z0, z1) {
-            for (const [y0, y1, gx] of [[5.35, 6.0, R.g1x], [11.0, 11.4, R.g2x]]) {
-                const x = side * R.hw, xf = side * gx, Dm = (z0 + z1) / 2;
-                if (!onScreen([[x, y0, z0], [xf, y1, z1], [x, y1, z1], [xf, y0, z0]], 10)) continue;
+            for (const [i, G] of R.gal.entries()) {
+                const { y0, y1, gx } = G, x = side * R.hw, xf = side * gx, Dm = (z0 + z1) / 2, s = cam.mpx(Dm);
+                if (!onScreen([[x, y0 - 0.5, z0], [xf, y1, z1], [x, y1, z1], [xf, y0 - 0.5, z0]], 10)) continue;
                 // The underside, coffered, seen from below; then the fascia, carved, toward the hall.
                 set(Dm, CLS.UP, MAT.WOOD, 4.4, vp(...pr(xf, y0, Dm)));
                 P.fill(C.walnut, quad([[x, y0, z0], [xf, y0, z0], [xf, y0, z1], [x, y0, z1]]));
                 for (let z = z0 + 0.3; z < z1 - 0.6; z += 1.5) P.fill(mixc(C.walnut, C.back, 0.4), quad([[x - side * 0.2, y0, z], [xf + side * 0.2, y0, z], [xf + side * 0.2, y0, z + 1.1], [x - side * 0.2, y0, z + 1.1]]));
                 set(Dm, wallCls(side), MAT.WOOD, 3, vp(...pr(xf, (y0 + y1) / 2, Dm)));
                 P.fill(C.walnutLight, quad([[xf, y0, z0], [xf, y1, z0], [xf, y1, z1], [xf, y0, z1]]));
-                P.line(C.gilt, Math.max(0.5, 0.035 * cam.mpx(Dm)), g => { const a = pr(xf, y1 - 0.08, z0), b = pr(xf, y1 - 0.08, z1); g.moveTo(...a); g.lineTo(...b); });
+                P.line(C.gilt, Math.max(0.5, 0.035 * s), g => { const a = pr(xf, y1 - 0.08, z0), b = pr(xf, y1 - 0.08, z1); g.moveTo(...a); g.lineTo(...b); });
+                if (i === 1) P.line(C.giltDark, Math.max(0.5, 0.03 * s), g => { const a = pr(xf, y0 + 0.12, z0), b = pr(xf, y0 + 0.12, z1); g.moveTo(...a); g.lineTo(...b); });
+                // Brackets under the front, every metre and a half: a scroll of walnut against the books.
+                if (s > 3) {
+                    const deep = i === 1 ? 0.6 : 0.4;
+                    set(Dm, wallCls(side), MAT.WOOD, 2.2, Math.PI / 2);
+                    P.fill(mixc(C.walnut, C.walnutLight, 0.4), g => {
+                        for (let z = z0 + 0.45; z < z1 - 0.2; z += 1.5) {
+                            const a = pr(xf, y0, z - 0.09), b = pr(xf, y0, z + 0.09), c = pr(xf + side * 0.05, y0 - deep, z + 0.06), d = pr(xf + side * 0.05, y0 - deep, z - 0.06);
+                            g.moveTo(...a); g.lineTo(...b); g.quadraticCurveTo(b[0], (b[1] + c[1]) / 2, c[0], c[1]); g.lineTo(...d); g.quadraticCurveTo(a[0], (a[1] + d[1]) / 2, a[0], a[1]); g.closePath();
+                        }
+                    });
+                }
                 rail(side, z0, z1, y1, gx);
-                if (xmas && y0 < 6) swag(side, z0, z1, y1 + R.rail, gx);
+                if (xmas && i === 0) swag(side, z0, z1, y1 + R.rail, gx);
             }
         }
         // An iron rail: balusters, a scroll between, a gilt handrail. `along`: a run across the north wall.
@@ -324,7 +349,7 @@ const ReadingArt = (() => {
             set(z, CLS.UP, MAT.STONE, 4.6, Math.PI / 2);
             P.fill(mixc(C.marble, C.stone, 0.4), quad([[x, 0, z - w], [x, R.spring, z - w], [xi, R.spring, z - w], [xi, 0, z - w]]));
             // A capital at each level, gilt.
-            for (const y of [5.0, 10.7, 16.7]) { set(z, wallCls(side), MAT.STONE, 3, 0); P.fill(C.gilt, quad([[xi - side * 0.06, y, z - w - 0.08], [xi - side * 0.06, y + 0.3, z - w - 0.08], [xi - side * 0.06, y + 0.3, z + w + 0.08], [xi - side * 0.06, y, z + w + 0.08]])); }
+            for (const y of [5.0, 10.5, 16.0, R.spring - 0.6]) { set(z, wallCls(side), MAT.STONE, 3, 0); P.fill(C.gilt, quad([[xi - side * 0.06, y, z - w - 0.08], [xi - side * 0.06, y + 0.3, z - w - 0.08], [xi - side * 0.06, y + 0.3, z + w + 0.08], [xi - side * 0.06, y, z + w + 0.08]])); }
         }
 
         // A reading table: four legs, an apron, a top with a leather inset, three lamps; chairs both sides; books.
@@ -385,6 +410,53 @@ const ReadingArt = (() => {
                 P.fill(C.walnutLight, quad([[bx, y + 0.44, z - 0.22], [bx, y + 0.56, z - 0.22], [bx, y + 0.56, z + 0.22], [bx, y + 0.44, z + 0.22]]));
             }, { shadow: 0.2 });
         }
+        // A case of the spine: a low bookcase along the runner, its books toward the middle aisle, an oak top
+        // with two banker's lamps, and on most something of its own between them.
+        function spineCase(c) {
+            const side = c.side, w = R.spineW, h = R.spineH, xi = c.x - side * w, xo = c.x + side * w, za = c.z0, zb = c.z1;
+            if (!onScreen([[xi, 0, za], [xi, h + 0.6, za], [xi, h, zb]], 20)) return;
+            const group = P.group('case', { kind: 'case', k: c.k, side, spine: c.id });
+            c.group = group;
+            const [fx, fy] = pr(xi, 0, za);
+            P.solid(cam.z(za), fx, fy, () => {
+                books(side, c.k, za + 0.08, zb - 0.08, 0.15, h - 0.06, -1, xi);
+                set(c.z, wallCls(side), MAT.WOOD, 3, Math.PI / 2);
+                P.fill(C.walnut, quad([[xi - side * 0.03, 0, za], [xi - side * 0.03, 0.15, za], [xi - side * 0.03, 0.15, zb], [xi - side * 0.03, 0, zb]]));
+                for (const z of [za + 0.04, c.z, zb - 0.04]) P.fill(C.walnut, quad([[xi - side * 0.03, 0.15, z - 0.04], [xi - side * 0.03, h, z - 0.04], [xi - side * 0.03, h, z + 0.04], [xi - side * 0.03, 0.15, z + 0.04]]));
+                // The end toward us: a panel, and a brass plate for what is on the shelves.
+                set(za, CLS.UP, MAT.WOOD, 2.2, Math.PI / 2);
+                P.fill(C.walnut, quad([[xi, 0, za], [xi, h, za], [xo, h, za], [xo, 0, za]]));
+                P.fill(mixc(C.walnut, C.back, 0.35), quad([[xi + side * 0.06, 0.2, za - 0.01], [xi + side * 0.06, h - 0.12, za - 0.01], [xo - side * 0.06, h - 0.12, za - 0.01], [xo - side * 0.06, 0.2, za - 0.01]]));
+                P.fill(C.brass, quad([[xi + side * 0.12, h - 0.32, za - 0.02], [xi + side * 0.12, h - 0.24, za - 0.02], [xo - side * 0.12, h - 0.24, za - 0.02], [xo - side * 0.12, h - 0.32, za - 0.02]]));
+                // The top, and its moulded edge toward the aisle.
+                set(c.z, CLS.TOP, MAT.WOOD, 3, vp(...pr(c.x, h, c.z)));
+                P.fill(C.oak, quad([[xi - side * 0.05, h, za - 0.05], [xi - side * 0.05, h, zb + 0.05], [xo + side * 0.05, h, zb + 0.05], [xo + side * 0.05, h, za - 0.05]]));
+                set(c.z, wallCls(side), MAT.WOOD, 2.4, Math.PI / 2);
+                P.fill(C.walnutLight, quad([[xi - side * 0.05, h - 0.07, za - 0.05], [xi - side * 0.05, h, za - 0.05], [xi - side * 0.05, h, zb + 0.05], [xi - side * 0.05, h - 0.07, zb + 0.05]]));
+                // Between the lamps: a stack of books, an hourglass, a fern, a little bust in spectacles, a brass
+                // telescope; and on some, nothing (that is where the cat sleeps).
+                const what = ['books', 'hourglass', 'fern', 'bust', null, 'telescope', 'books'][(c.k * 3 + (side > 0 ? 1 : 0)) % 7], x = c.x, oz = c.z, s = cam.mpx(oz);
+                if (what === 'books') for (let i = 0; i < 4; i++) { const col = pick(BOOKS), y = h + i * 0.055, dz = rr(-0.03, 0.03); set(oz, wallCls(side), MAT.FIG, 1.4, null); P.fill(col, quad([[xi - side * 0.01, y, oz - 0.2 + dz], [xi - side * 0.01, y + 0.055, oz - 0.2 + dz], [xi - side * 0.01, y + 0.055, oz + 0.2 + dz], [xi - side * 0.01, y, oz + 0.2 + dz]])); }
+                else if (what === 'hourglass') { set(oz, CLS.UP, MAT.STONE, 1.4, null); P.fill(C.walnut, quad([[x - 0.1, h, oz], [x - 0.1, h + 0.03, oz], [x + 0.1, h + 0.03, oz], [x + 0.1, h, oz]])); P.fill(C.walnut, quad([[x - 0.1, h + 0.3, oz], [x - 0.1, h + 0.33, oz], [x + 0.1, h + 0.33, oz], [x + 0.1, h + 0.3, oz]])); P.fill([0.86, 0.82, 0.7], quad([[x - 0.07, h + 0.03, oz], [x + 0.07, h + 0.3, oz], [x - 0.07, h + 0.3, oz], [x + 0.07, h + 0.03, oz]])); P.fill([0.8, 0.62, 0.34], quad([[x - 0.06, h + 0.03, oz], [x - 0.02, h + 0.1, oz], [x + 0.02, h + 0.1, oz], [x + 0.06, h + 0.03, oz]])); }
+                else if (what === 'fern') { set(oz, CLS.UP, MAT.FIR, 1.4, null); P.fill([0.62, 0.3, 0.18], quad([[x - 0.1, h, oz], [x - 0.13, h + 0.16, oz], [x + 0.13, h + 0.16, oz], [x + 0.1, h, oz]])); P.fill([0.2, 0.42, 0.18], g => { const [cx, cy] = pr(x, h + 0.16, oz), r = 0.3 * s; for (let i = 0; i < 9; i++) { const a = Math.PI * (0.1 + 0.8 * i / 8); g.moveTo(cx, cy); g.quadraticCurveTo(cx + Math.cos(a) * r * 0.6, cy - Math.sin(a) * r * 0.9, cx + Math.cos(a) * r, cy - Math.sin(a) * r * 0.55); g.quadraticCurveTo(cx + Math.cos(a) * r * 0.5, cy - Math.sin(a) * r * 0.6, cx, cy); } }); }
+                else if (what === 'bust') { set(oz, CLS.UP, MAT.STONE, 1.4, null); const [hx, hy] = pr(x, h + 0.34, oz); P.fill(C.marble, g => { const a = pr(x - 0.13, h, oz), b = pr(x + 0.13, h, oz); g.moveTo(...a); g.quadraticCurveTo(hx - 0.15 * s, hy + 0.05 * s, hx - 0.05 * s, hy + 0.09 * s); g.lineTo(hx + 0.05 * s, hy + 0.09 * s); g.quadraticCurveTo(hx + 0.15 * s, hy + 0.05 * s, b[0], b[1]); }); P.fill(mixc(C.marble, C.cream, 0.3), g => g.ellipse(hx, hy, 0.06 * s, 0.08 * s, 0, 0, TAU)); P.line(C.iron, Math.max(0.5, 0.008 * s), g => { g.ellipse(hx - 0.025 * s, hy, 0.02 * s, 0.015 * s, 0, 0, TAU); g.moveTo(hx + 0.045 * s, hy); g.ellipse(hx + 0.025 * s, hy, 0.02 * s, 0.015 * s, 0, 0, TAU); }); }
+                else if (what === 'telescope') { set(oz, CLS.UP, MAT.STONE, 1.4, null); P.line(C.walnut, Math.max(0.5, 0.015 * s), g => { const t = pr(x, h + 0.3, oz); for (const dz of [-0.12, 0, 0.12]) { const b = pr(x + (dz ? 0 : 0.1), h, oz + dz); g.moveTo(...t); g.lineTo(...b); } }); P.line(C.brass, Math.max(0.8, 0.05 * s), g => { const a = pr(x, h + 0.24, oz - 0.25), b = pr(x - side * 0.05, h + 0.42, oz + 0.25); g.moveTo(...a); g.lineTo(...b); }); }
+                // The lamps.
+                for (const lz of c.k ? [c.z - 1.9, c.z + 1.9] : [c.z + 0.6]) {
+                    const ly = h + R.shade, ls = cam.mpx(lz);
+                    set(lz, CLS.UP, MAT.STONE, 1.4, Math.PI / 2);
+                    P.fill(C.brass, quad([[x - 0.1, h, lz], [x - 0.1, h + 0.035, lz], [x + 0.1, h + 0.035, lz], [x + 0.1, h, lz]]));
+                    P.fill(C.brass, quad([[x - 0.016, h, lz], [x - 0.016, ly, lz], [x + 0.016, ly, lz], [x + 0.016, h, lz]]));
+                    const shadePts = dome(x, ly, lz, 0.25, 0.12);
+                    set(lz, CLS.SELF, MAT.GLASS, 1.4, 0);
+                    P.fill(shade, g => poly(g, shadePts));
+                    P.glowPoly(group, `rgb(${shade.map(v => Math.min(255, v * 330 + 40) | 0).join(',')})`, shadePts);
+                    P.light(group, { x, y: ly - 0.1, z: cam.z(lz), c: bulbC, I: 0.9, r2: 0.12, out: 0 });
+                    P.halo(group, ...pr(x, ly - 0.07, lz), Math.max(1, 0.11 * ls));
+                }
+            }, { shadow: 0.3 });
+            P.hit('spine', ...box([[xi, 0, za], [xo, 0, za], [xi, h + 0.6, za], [xo, h + 0.6, za + 2.2]].map(q => pr(...q))), { group, spine: c.id });
+        }
         function thing(t) {
             const { x, z } = t, [fx, fy] = pr(x, 0, z), s = cam.mpx(z);
             if (!onScreen([[x - 1, 0, z], [x + 1, 3, z]], 30)) return;
@@ -413,6 +485,58 @@ const ReadingArt = (() => {
                         P.hit('globe', gx - r * s, gyy - r * s, gx + r * s, gyy + r * s);
                     }
                 }, { shadow: 0.3 });
+            } else if (t.kind === 'lectern') {
+                // The great dictionary, open on its lectern, a ribbon hanging and a glass to read it by.
+                P.solid(cam.z(z - 0.4), fx, fy, () => {
+                    set(z, CLS.UP, MAT.WOOD, 1.8, Math.PI / 2);
+                    P.fill(C.walnut, quad([[x - 0.34, 0, z], [x - 0.34, 0.1, z], [x + 0.34, 0.1, z], [x + 0.34, 0, z]]));
+                    P.fill(C.walnutLight, quad([[x - 0.07, 0.1, z], [x - 0.07, 0.98, z], [x + 0.07, 0.98, z], [x + 0.07, 0.1, z]]));
+                    set(z, CLS.TOP, MAT.WOOD, 1.8, null);
+                    P.fill(C.walnut, quad([[x - 0.42, 0.98, z - 0.3], [x - 0.42, 1.24, z + 0.25], [x + 0.42, 1.24, z + 0.25], [x + 0.42, 0.98, z - 0.3]]));
+                    set(z, CLS.TOP, MAT.FIG, 1.4, null);
+                    for (const sd of [-1, 1]) P.fill(C.paper, quad([[x, 1.02, z - 0.27], [x + sd * 0.4, 1.0, z - 0.26], [x + sd * 0.4, 1.27, z + 0.22], [x, 1.3, z + 0.22]]));
+                    P.fill(mixc(C.paper, C.back, 0.25), quad([[x - 0.01, 1.02, z - 0.27], [x - 0.01, 1.3, z + 0.22], [x + 0.01, 1.3, z + 0.22], [x + 0.01, 1.02, z - 0.27]]));
+                    for (let i = 0; i < 6; i++) for (const sd of [-1, 1]) P.fill(mixc(C.paper, C.back, 0.4), quad([[x + sd * 0.06, 1.06 + i * 0.035, z - 0.22 + i * 0.065], [x + sd * 0.06, 1.065 + i * 0.035, z - 0.215 + i * 0.065], [x + sd * 0.34, 1.065 + i * 0.035, z - 0.215 + i * 0.065], [x + sd * 0.34, 1.06 + i * 0.035, z - 0.22 + i * 0.065]]));
+                    P.fill([0.66, 0.1, 0.12], quad([[x - 0.02, 1.02, z - 0.28], [x - 0.02, 0.72, z - 0.3], [x + 0.03, 0.72, z - 0.3], [x + 0.02, 1.02, z - 0.28]]));
+                    set(z, CLS.UP, MAT.STONE, 1.4, null);
+                    P.line(C.brass, Math.max(0.6, 0.02 * s), g => { const [gx, gy] = pr(x + 0.22, 1.2, z); g.ellipse(gx, gy, 0.07 * s, 0.05 * s, 0, 0, TAU); const a = pr(x + 0.28, 1.17, z), b = pr(x + 0.38, 1.12, z); g.moveTo(...a); g.lineTo(...b); });
+                }, { shadow: 0.3 });
+                P.hit('lectern', ...box([pr(x - 0.45, 0, z), pr(x + 0.45, 1.35, z)]));
+            } else if (t.kind === 'armillary') {
+                // An armillary sphere on a marble column: the heavens in brass rings, and the sun's ring gilt.
+                P.solid(cam.z(z - 0.4), fx, fy, () => {
+                    set(z, CLS.UP, MAT.STONE, 2.2, Math.PI / 2);
+                    P.fill(C.marble, quad([[x - 0.34, 0, z], [x - 0.34, 0.12, z], [x + 0.34, 0.12, z], [x + 0.34, 0, z]]));
+                    P.fill(mixc(C.marble, C.stone, 0.3), quad([[x - 0.15, 0.12, z], [x - 0.15, 1.05, z], [x + 0.15, 1.05, z], [x + 0.15, 0.12, z]]));
+                    P.fill(C.marble, quad([[x - 0.26, 1.05, z], [x - 0.26, 1.13, z], [x + 0.26, 1.13, z], [x + 0.26, 1.05, z]]));
+                    const [cx, cy] = pr(x, 1.68, z), r = 0.5 * s;
+                    set(z, CLS.UP, MAT.STONE, 1.2, null);
+                    P.line(C.brass, Math.max(0.6, 0.035 * s), g => { g.moveTo(cx + r, cy); g.ellipse(cx, cy, r, r, 0, 0, TAU); g.moveTo(cx + r, cy); g.ellipse(cx, cy, r, r * 0.3, 0, 0, TAU); g.moveTo(cx + r * 0.34, cy); g.ellipse(cx, cy, r * 0.34, r, 0, 0, TAU); const a = pr(x, 1.13, z); g.moveTo(...a); g.lineTo(cx, cy + r); });
+                    P.line(C.gilt, Math.max(0.6, 0.045 * s), g => g.ellipse(cx, cy, r * 1.02, r * 0.42, -0.41, 0, TAU));
+                    P.line(C.iron, Math.max(0.5, 0.015 * s), g => { g.moveTo(cx - Math.sin(0.7) * r * 1.2, cy + Math.cos(0.7) * r * 1.2); g.lineTo(cx + Math.sin(0.7) * r * 1.2, cy - Math.cos(0.7) * r * 1.2); });
+                    P.fill(C.gilt, g => g.ellipse(cx, cy, 0.07 * s, 0.07 * s, 0, 0, TAU));
+                }, { shadow: 0.3 });
+                P.hit('armillary', ...box([pr(x - 0.6, 0, z), pr(x + 0.6, 2.25, z)]));
+            } else if (t.kind === 'vitrine') {
+                // A glass case of the library's treasures: an illuminated book open under the glass.
+                P.solid(cam.z(z - 0.5), fx, fy, () => {
+                    const hw = 0.72, hd = 0.45, hb = 0.82, ht = 1.22;
+                    set(z - hd, CLS.UP, MAT.WOOD, 1.8, Math.PI / 2);
+                    P.fill(C.walnut, quad([[x - hw, 0, z - hd], [x - hw, hb, z - hd], [x + hw, hb, z - hd], [x + hw, 0, z - hd]]));
+                    for (const sd of [-1, 1]) P.fill(mixc(C.walnut, C.back, 0.3), quad([[x + sd * 0.36 - 0.28, 0.15, z - hd - 0.01], [x + sd * 0.36 - 0.28, hb - 0.12, z - hd - 0.01], [x + sd * 0.36 + 0.28, hb - 0.12, z - hd - 0.01], [x + sd * 0.36 + 0.28, 0.15, z - hd - 0.01]]));
+                    set(z, CLS.TOP, MAT.WOOD, 1.6, null);
+                    P.fill([0.3, 0.08, 0.1], quad([[x - hw, hb, z - hd], [x - hw, hb, z + hd], [x + hw, hb, z + hd], [x + hw, hb, z - hd]]));
+                    set(z, CLS.TOP, MAT.FIG, 1.2, null);
+                    for (const sd of [-1, 1]) P.fill(C.paper, quad([[x, hb + 0.04, z - 0.24], [x + sd * 0.4, hb + 0.02, z - 0.22], [x + sd * 0.4, hb + 0.02, z + 0.22], [x, hb + 0.04, z + 0.24]]));
+                    P.fill([0.7, 0.12, 0.12], quad([[x - 0.32, hb + 0.03, z - 0.16], [x - 0.32, hb + 0.03, z], [x - 0.18, hb + 0.03, z], [x - 0.18, hb + 0.03, z - 0.16]]));
+                    P.fill(C.gilt, quad([[x - 0.3, hb + 0.032, z - 0.14], [x - 0.3, hb + 0.032, z - 0.02], [x - 0.2, hb + 0.032, z - 0.02], [x - 0.2, hb + 0.032, z - 0.14]]));
+                    P.fill([0.2, 0.3, 0.6], quad([[x + 0.12, hb + 0.03, z + 0.05], [x + 0.12, hb + 0.03, z + 0.18], [x + 0.32, hb + 0.03, z + 0.18], [x + 0.32, hb + 0.03, z + 0.05]]));
+                    // The glass: a brass frame and a glint.
+                    set(z - hd, CLS.UP, MAT.STONE, 1.2, null);
+                    P.line(C.brass, Math.max(0.5, 0.02 * s), g => { const c = [[x - hw, hb, z - hd], [x - hw, ht, z - hd], [x + hw, ht, z - hd], [x + hw, hb, z - hd]].map(q => pr(...q)), b = [[x - hw, ht, z + hd], [x + hw, ht, z + hd]].map(q => pr(...q)); poly(g, c); g.moveTo(...c[1]); g.lineTo(...b[0]); g.lineTo(...b[1]); g.lineTo(...c[2]); });
+                    P.fill([0.86, 0.92, 0.95], quad([[x - hw + 0.1, hb + 0.08, z - hd], [x - hw + 0.18, ht - 0.04, z - hd], [x - hw + 0.24, ht - 0.04, z - hd], [x - hw + 0.16, hb + 0.08, z - hd]]));
+                }, { shadow: 0.3 });
+                P.hit('vitrine', ...box([pr(x - 0.75, 0, z - 0.45), pr(x + 0.75, 1.25, z - 0.45)]));
             } else if (t.kind === 'catalogue') {
                 const w = 1.8, h = 1.35, d = 0.6;
                 P.solid(cam.z(z - d / 2), fx, fy, () => {

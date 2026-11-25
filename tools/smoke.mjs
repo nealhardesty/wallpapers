@@ -3069,6 +3069,25 @@ const STAGE_CHECKS = {
             console.log(`    reading-room: lamps lit in turn ${counts.join(' ')}; the book went ${[...seen].join(' → ')}; at night ${night.lit} of ${night.of} tables and ${night.chandeliers} chandeliers`);
             return true;
         }],
+        ['the spine down the middle and three galleries; readers up on them; a busy hall where people walk in and out on planted feet, round the furniture, and never through each other', async () => {
+            if (!await stageWith('reading-room', { configVersion: 1, students: 30, cats: 4 }, '&seed=7&date=2026-10-10T11:00')) return record('not ready');
+            const hall = await evaluate(`(m => ({ spine: m.L.spine.length, cases: m.scene.groups.filter(g => g.kind === 'case').length, galleries: ReadingLogic.ROOM.gal.length, browsers: m.cast.browsers.map(b => b.y), walking: m.cast.students.filter(s => s.state !== 'seat').length, curios: m.L.things.filter(t => t.centre).map(t => t.kind).join() }))(WP.stage.manager)`);
+            if (hall.spine !== 16 || hall.cases < 12 || hall.galleries !== 3 || hall.browsers.length < 3 || !hall.browsers.every(y => [6, 11.5, 17].includes(y)) || !hall.walking || !/lectern/.test(hall.curios)) record(`the hall: ${JSON.stringify(hall)}`);
+            // Traffic: a few up and out, a few in, the librarian round; watch them for a while.
+            await evaluate(`(m => { const c = m.cast; for (const s of c.students.filter(s => s.state === 'seat').slice(0, 6)) c.leave(s); for (let i = 0; i < 6; i++) c.addStudent(false); c.round(c.librarian, 'round'); })(WP.stage.manager)`);
+            let worst = Infinity, slip = 0, frames = 0, moved = 0;
+            for (let i = 0; i < 60; i++) {
+                await sleep(120);
+                const r = await evaluate(`(m => { const b = m.cast.bodies().filter(a => a.kind !== 'cat'), walk = b.filter(a => a.g && !a.g.rest); let worst = Infinity; for (let i = 0; i < b.length; i++) for (let j = i + 1; j < b.length; j++) worst = Math.min(worst, Math.hypot(b[i].x - b[j].x, b[i].z - b[j].z) - b[i].r - b[j].r);
+                    let slip = 0; for (const a of walk) { const f = a.g.feet[1 - a.g.sw], k = a.g.sw + ':' + a.g.p.toFixed(3); if (a._st && a._st.sw === a.g.sw && a.g.p > a._st.p) slip = Math.max(slip, Math.hypot(f.x - a._st.x, f.z - a._st.z)); a._st = { sw: a.g.sw, p: a.g.p, x: f.x, z: f.z }; }
+                    return { worst, slip, walking: walk.length }; })(WP.stage.manager)`);
+                worst = Math.min(worst, r.worst); slip = Math.max(slip, r.slip); frames++; moved = Math.max(moved, r.walking);
+            }
+            if (worst < -1e-6 || slip > 1e-9 || moved < 4) record(`people in the hall: closest ${worst.toFixed(3)} m apart (less than 0 is through each other), a planted foot slid ${slip.toFixed(4)} m, ${moved} walking at once`);
+            console.log(`    reading-room: ${hall.spine} cases down the middle, ${hall.browsers.length} readers on the galleries; ${moved} walking at once, the closest ${worst.toFixed(2)} m apart, planted feet slid ${slip} m`);
+            await shoot('reading-room-busy');
+            return true;
+        }],
         ['a phone held upright stands its own way above the gesture bar; with nothing in the hall it is still a painted hall; a lost painting is painted again', async () => {
             if (!await bootStage('w=reading-room&host=android&seed=7&date=2026-12-10T15:00', { width: 412, height: 915, deviceScaleFactor: 2 })) return record('not ready on a phone');
             const phone = await evaluate(`(m => ({ inset: WP.host.insets.bottom, Hu: m.cam.Hu, H: m.H, kind: m.cam.kind, bottom: +m.cam.foot(m.cam.D(1)).toFixed(1) }))(WP.stage.manager)`);
