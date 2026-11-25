@@ -239,8 +239,12 @@ then point the wallpaper at `localhost:8096`. For a phone,
 1. Once: `make android-keystore`, back the key up, and `gh secret set` the
    four `WALLPAPERS_KEY*` secrets it prints. Losing it means people must
    uninstall to update. Without them CI ships a debug APK instead.
-2. Bump `version` in `web/manifest.json`, commit, and push a matching tag:
-   `git tag v0.6.0 && git push --tags`.
+2. In Claude Code, type `/releaseme` (optionally `patch`, `minor` or `X.Y.Z`;
+   the skill is in `.agents/skills/releaseme`). By hand: on a `version-X.Y.Z`
+   branch, bump the version in its four places (SPEC §5 "Version":
+   `web/manifest.json`, `WP.VERSION` in `web/core/wp.js`, Jellyfin's
+   `VERSION`, and SPEC's example), open a "Version X.Y.Z" PR, merge it once
+   green, and tag the merge commit: `git tag vX.Y.Z && git push origin vX.Y.Z`.
 3. CI checks everything and publishes a GitHub Release with the APK, the
    extension zip, the universal Mac zip and the Windows zip, each with a
    `.sha256`. If the Mac build or the Windows self-test fails, the release
