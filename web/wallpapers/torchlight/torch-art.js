@@ -172,7 +172,7 @@ const TorchArt = (() => {
                 const q = j * gw + i, hf = clamp((foot - y) / FH), rib = ribs[q], a = spokes[q], steep = Math.abs(g);
                 c.foot = hazeOf(y); c.ang = Math.atan2(y - top + 0.3 * FH, x - S);
                 // The runs: groomed snow, brushed along the way they run.
-                if (pd[q] < 1) { c.col = P.vary(GROOMED, 0.008); c.cls = facing(g, 0.5); c.m = hf > 0.5 && g > -0.5 ? MAT.FROST : MAT.SNOW; c.size = 3.2; c.ang = pang[q]; return; }
+                if (pd[q] < 1) { const cut = hf < 0.5, edge = pd[q] > 0.84; c.col = P.vary(cut && edge ? SNOW_SHADE : GROOMED, 0.008); c.cls = cut && !edge ? lying(g, 0.6) : facing(g, 0.5); c.m = hf > 0.5 && g > -0.5 ? MAT.FROST : MAT.SNOW; c.size = 3.2; c.ang = pang[q]; return; }
                 const open = cut[q] || hutAt(x, y) || inBowl(x, y);
                 // The tree line: lower in the bowl under the summit, higher up the ribs; glades, and the avalanche paths down the gullies.
                 const tl = 0.6 + 0.08 * fbm(x / (0.25 * FH), 0.5, 7, 2) + 0.06 * (rib - 0.5) - 0.16 * Math.exp(-(((x - Y.cx) / (0.3 * M.half)) ** 2));
@@ -294,16 +294,20 @@ const TorchArt = (() => {
             // The dark under the trees, broken where something stands open.
             P.fill(P.vary([0.17, 0.24, 0.29], 0.05), g => poly(g, [...edge, ...edge.slice().reverse().map(([x, y]) => [x, y + 16 * u + r * 0.4])]));
             // Where a run comes out of the trees: a lane cut through the rank, as wide as the run, the way the run goes.
+            // At the woods' own depth and in their air, so it takes the same light as the snow about it; groomed down
+            // the middle, in the trees' shade along ragged edges, opening toward us.
             for (const c of holes) {
-                const ya = y0 - r * 1.2, yb = y0 + 16 * u + r * 0.4, w = c.rx * (0.75 + 0.35 * t), edge = [];
-                for (let k = 0; k <= 4; k++) { const y = lerp(ya, yb, k / 4); edge.push([c.xAt(y), y, w * (1 + 0.08 * k) + P.rr(-0.3, 0.3) * r]); }
-                P.set({ cls: CLS.GROUND, m: MAT.SNOW, size: 4, ang: Math.PI / 2, foot: cam.H });
-                P.fill(P.vary([0.9, 0.92, 0.99], 0.02), g => poly(g, [...edge.map(([x, y, e]) => [x - e, y]), ...edge.reverse().map(([x, y, e]) => [x + e, y])]));
+                const ya = y0 - r * 1.2, yb = y0 + 16 * u + r * 0.4, w = c.rx * (0.5 + 0.6 * t), L = [], R = [];
+                for (let k = 0; k <= 6; k++) { const y = lerp(ya, yb, k / 6), x = c.xAt(y), e = w * (0.9 + 0.12 * k / 6); L.push([x - e - P.rr(0, 0.7) * r, y]); R.push([x + e + P.rr(0, 0.7) * r, y]); }
+                P.set({ cls: CLS.UP, m: MAT.SNOW, size: 3, ang: Math.PI / 2, foot: farFoot(cam, z), haze: 0 });
+                P.fill(P.vary([0.8, 0.83, 0.94], 0.02), g => poly(g, [...L, ...R.slice().reverse()]));
+                P.set({ cls: CLS.TOP });
+                P.fill(P.vary([0.93, 0.94, 1], 0.015), g => poly(g, [...L.map(([x, y], k) => [lerp(x, R[k][0], 0.22), y]), ...R.map(([x, y], k) => [lerp(L[k][0], x, 0.78), y]).reverse()]));
                 set();
             }
             for (let x = -10 * u + P.rr(0, r); x < W + 10 * u; x += r * P.rr(0.5, 1.0)) {
                 const y = y0 + wave(x) + P.rr(-0.3, 0.5) * r, h = r * P.rr(1.8, 2.7), snowy = P.R() < 0.38;
-                if (holes.some(c => Math.abs(x - c.xAt(y)) < c.rx * (0.75 + 0.35 * t) + r * 0.2)) continue;
+                if (holes.some(c => Math.abs(x - c.xAt(y)) < c.rx * (0.5 + 0.6 * t) * 0.95)) continue;
                 P.fill(P.vary(snowy ? [0.44, 0.52, 0.62] : [0.15, 0.24, 0.27], 0.16), g => poly(g, [[x - r * 0.5, y + r], [x, y - h], [x + r * 0.5, y + r]]));
                 if (snowy) P.fill([0.86, 0.89, 0.98], g => poly(g, [[x - r * 0.2, y - h * 0.45], [x, y - h], [x + r * 0.2, y - h * 0.45]]));
             }
