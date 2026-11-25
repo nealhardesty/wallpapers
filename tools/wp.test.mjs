@@ -274,6 +274,18 @@ test('frame pacing: caps hold on a 60 Hz display', () => {
     assert.ok(Math.abs(framesInOneSecond(20) - 20) <= 1, `20 fps cap gave ${framesInOneSecond(20)}`);
 });
 
+test('frame pacing: idleUntil takes a wait in ms, never a deadline', () => {
+    // host.idleUntil(ms) rests for ms from now; a performance.now()-based deadline passed to it rests as long as
+    // the page has been open (Snow Globe froze after a while until the mouse moved, 2026-11-25).
+    for (const entry of WP.catalog.filter(e => !e.pseudo && e.scripts.length)) {
+        for (const script of entry.scripts) {
+            const source = readFileSync(join(WEB, 'wallpapers', script), 'utf8');
+            const bad = source.match(/idleUntil\(\s*(performance\.now\(\)|this\.host\.now\(\)|Date\.now\(\))\s*\+/);
+            assert.ok(!bad, `${script}: ${bad?.[0]}`);
+        }
+    }
+});
+
 test('catalog: unique ids, and every script and defaults file exists', () => {
     const ids = WP.catalog.map(entry => entry.id);
     assert.equal(new Set(ids).size, ids.length);
