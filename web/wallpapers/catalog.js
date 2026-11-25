@@ -185,7 +185,7 @@
               { keys: ['m'], label: 'What is happening on the mountain?', run: t => t.report() },
             ] },
         { id: 'snow-globe', name: 'Snow Globe', icon: '🔮', accent: '#ffcf8a', background: '#120e18',
-          scripts: ['snow-globe/globe-logic.js', 'snow-globe/globe-art.js', 'snow-globe/snow-globe.js'],
+          scripts: ['snow-globe/globe-logic.js', 'snow-globe/globe-art.js', 'snow-globe/globe-models.js', 'snow-globe/snow-globe.js'],
           make: host => new SnowGlobeAnimationManager(host), cost: 'medium', interactive: true,
           effects: [['refraction', 'medium'], ['glints', 'medium']],
           keys: [

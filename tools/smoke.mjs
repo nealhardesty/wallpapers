@@ -1143,11 +1143,13 @@ const STAGE_CHECKS = {
     // rocks); it all settles, and then the stage is asked for few frames; a
     // tap on the base winds the music box (it turns, notes play); a tap on
     // the cat is a stroke; B, the cat swipes it; Christmas Eve plays a carol
-    // round the tree, and the cat wears a hat.
-    'snow-globe': [['snow on frame one, painted as it goes, a drag shakes it, it settles and rests, the music box, the cat, Christmas Eve', async () => {
+    // round the tree, and the cat wears a hat; N through all eleven scenes,
+    // half a turn puts what was in front behind; the room's lights twinkle
+    // at rest; on black, the globe alone.
+    'snow-globe': [['snow on frame one, painted as it goes, a drag shakes it, it settles and rests, the music box, the cat, Christmas Eve, every scene, the lights, on black', async () => {
         const st = () => evaluate('JSON.parse(JSON.stringify(WP.stage.manager.debugState()))');
         const at = () => evaluate('WP.stage.manager.centres()');
-        if (!await stageWith('snow-globe', { configVersion: 1, cat: 'harry', mischief: 0, autoShake: 'off', candle: false, snowOutside: 0, scene: 'cottage' }, '&seed=7&date=2026-12-10T20:00')) return record('no boot');
+        if (!await stageWith('snow-globe', { configVersion: 1, cat: 'harry', mischief: 0, autoShake: 'off', candle: false, snowOutside: 0, scene: 'cottage', deskTree: 'off' }, '&seed=7&date=2026-12-10T20:00')) return record('no boot');
         let s = await st();
         if (!(s.loose > 100) || s.scene !== 'cottage' || s.cat !== 'harry' || s.festive) record(`frame one: ${JSON.stringify(s)}`);
         if (!await waitFor(async () => (await st()).painted >= 1, 20000)) record(`the brushwork never finished: ${(await st()).painted}`);
@@ -1192,7 +1194,7 @@ const STAGE_CHECKS = {
         await press('b');
         if (!await waitFor(async () => (s = await st()).stats.catShakes >= 1 && s.loose > 50, 4000)) record(`B: no swipe: ${JSON.stringify({ cat: s.catState, shakes: s.stats.catShakes, loose: s.loose })}`);
         // No cat, no candle, no snow outside: at rest, the stage sleeps.
-        if (!await stageWith('snow-globe', { configVersion: 1, cat: 'none', autoShake: 'off', candle: false, snowOutside: 0 }, '&seed=7&date=2026-12-10T20:00')) return record('no boot without a cat');
+        if (!await stageWith('snow-globe', { configVersion: 1, cat: 'none', autoShake: 'off', candle: false, snowOutside: 0, deskTree: 'off', scene: 'pond' }, '&seed=7&date=2026-12-10T20:00')) return record('no boot without a cat');
         await evaluate('WP.stage.manager.sim.settleSeconds = 2');
         if (!await waitFor(async () => (s = await st()).loose === 0 && s.calm && s.painted >= 1, 25000)) return record(`no cat: never at rest: ${JSON.stringify(s)}`);
         await sleep(500);
@@ -1204,6 +1206,36 @@ const STAGE_CHECKS = {
         if (!s.festive || s.scene !== 'tree' || !(s.music.wind > 0.5)) record(`Christmas Eve: ${JSON.stringify({ festive: s.festive, scene: s.scene, music: s.music })}`);
         await sleep(1500);
         await shoot('snow-globe-eve');
+        // N: every scene in turn, each built as solids, drawn as it turns.
+        const seen = new Set();
+        for (let i = 0; i < 11; i++) {
+            await press('n'); await sleep(350);
+            s = await st(); seen.add(s.scene);
+            if (!(s.models >= 5)) record(`${s.scene}: only ${s.models} things built`);
+        }
+        if (seen.size !== 11) record(`N went through ${seen.size} scenes: ${[...seen]}`);
+        await evaluate('WP.stage.manager.config.scene = "lighthouse"; WP.stage.manager.pickScene(); WP.stage.manager.resize()');
+        await sleep(1500);
+        await shoot('snow-globe-lighthouse');
+        // The turntable turns them as solids: a house's place and its depth change, and half a turn puts what was in front behind.
+        const turn = await evaluate(`(m => { const at = th => SnowGlobeLogic.placed('cottage', th, 0)[0]; const a = at(0), b = at(Math.PI); return { a: a.depth, b: b.depth, fa: a.face, fb: b.face }; })(WP.stage.manager)`);
+        if (!(Math.sign(turn.a) !== Math.sign(turn.b) && Math.abs(turn.fb - turn.fa - Math.PI) < 1e-6)) record(`half a turn: ${JSON.stringify(turn)}`);
+        // The room's lights: a string round the window and a little tree, twinkling, so the stage keeps a few frames coming.
+        if (!await stageWith('snow-globe', { configVersion: 1, cat: 'harry', mischief: 0, autoShake: 'off', candle: false, snowOutside: 0, scene: 'cabin', room: 'desk', windowLights: 'multi', deskTree: 'on', deskTreeTopper: 'cat' }, '&seed=7&date=2026-11-10T20:00')) return record('no boot with the lights');
+        await evaluate('WP.stage.manager.sim.settleSeconds = 2');
+        if (!await waitFor(async () => (s = await st()).painted >= 1 && s.loose === 0, 25000)) record('lights: never painted and settled');
+        if (!(s.bulbs > 20) || !(s.treeBulbs > 10)) record(`lights: ${s.bulbs} on the window, ${s.treeBulbs} on the tree`);
+        await shoot('snow-globe-lights');
+        const twinkling = await framesIn(2000);
+        if (twinkling < 14) record(`${twinkling} frames in 2 s with the lights twinkling at rest`);
+        // Just the globe, on black: no cat, no candle, no room; its reflection.
+        if (!await stageWith('snow-globe', { configVersion: 1, background: 'black', scene: 'carousel' }, '&seed=7&date=2026-11-10T20:00')) return record('no boot on black');
+        await sleep(1500);
+        s = await st();
+        if (!s.black || s.cat || s.bulbs || s.treeBulbs) record(`black: ${JSON.stringify({ black: s.black, cat: s.cat, bulbs: s.bulbs, tree: s.treeBulbs })}`);
+        const corner = await evaluate(`(() => { const c = document.querySelectorAll('canvas')[2], g = document.createElement('canvas').getContext('2d'); g.drawImage(c, 0, 0, 1, 1, 0, 0, 1, 1); return Array.from(g.getImageData(0, 0, 1, 1).data.slice(0, 3)); })()`);
+        if (corner.some(v => v > 4)) record(`black: the corner is ${corner}`);
+        await shoot('snow-globe-black');
         return true;
     }]],
     // A Very Small Christmas: a small canvas scaled up pixelated, at its

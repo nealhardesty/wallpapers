@@ -32,85 +32,173 @@ const SnowGlobeLogic = (() => {
         return { sx: x, sy: -(y * ct - z * TILT) * 0.98, depth: z * ct + y * TILT };
     }
 
+    // ---- Seeing it turn ------------------------------------------------------------------------
+    // Everything on the turntable is a solid in its own frame (x to its right,
+    // y up, z out of its front), turned `face` about the vertical and stood at
+    // its place on the floor. view(p) is one placed thing as the camera sees
+    // it; at(v, x, y, z) is a point of it on the screen (globe units, y down)
+    // and how near it is; facing(v, n) how squarely a surface with normal n
+    // faces us (seen if above 0); world(v, n) that normal in the globe's frame,
+    // for the light. A face's width on the screen goes as the cosine of its
+    // turn, and things behind pass behind: the scene is a turntable, not a
+    // picture squeezed round the middle.
+    const CT = Math.sqrt(1 - TILT * TILT);
+    function view(p) {
+        const pr = project(p.x, FLOOR, p.z);
+        return { x: pr.sx, y: pr.sy, depth: pr.depth, k: (1 + 0.16 * pr.depth) * (p.s || 1), c: Math.cos(p.face), s: Math.sin(p.face) };
+    }
+    function at(v, x, y, z, out = [0, 0, 0]) {
+        const wx = x * v.c + z * v.s, wz = -x * v.s + z * v.c;
+        out[0] = v.x + wx * v.k; out[1] = v.y - (y * CT - wz * TILT) * 0.98 * v.k; out[2] = v.depth + (wz * CT + y * TILT) * v.k;
+        return out;
+    }
+    const facing = (v, nx, ny, nz) => (-nx * v.s + nz * v.c) * CT + ny * TILT;
+    const world = (v, nx, ny, nz) => [nx * v.c + nz * v.s, ny, -nx * v.s + nz * v.c];
+    // A vector of the thing's frame as a screen offset (globe units), for ellipses.
+    function offset(v, x, y, z, out = [0, 0]) { const wx = x * v.c + z * v.s, wz = -x * v.s + z * v.c; out[0] = wx * v.k; out[1] = -(y * CT - wz * TILT) * 0.98 * v.k; return out; }
+    // The ellipse a solid ellipsoid (radii along its own axes, given as three
+    // vectors) is seen as: a 2×2 matrix B taking the unit circle to it (the
+    // symmetric root of A·Aᵀ, so a sprite drawn through it isn't turned).
+    function ellipseOf(v, ax, ay, az) {
+        const a = offset(v, ...ax, [0, 0]), b = offset(v, ...ay, [0, 0]), c = offset(v, ...az, [0, 0]);
+        const m00 = a[0] * a[0] + b[0] * b[0] + c[0] * c[0], m01 = a[0] * a[1] + b[0] * b[1] + c[0] * c[1], m11 = a[1] * a[1] + b[1] * b[1] + c[1] * c[1];
+        const sq = Math.sqrt(Math.max(0, m00 * m11 - m01 * m01)), t = Math.sqrt(m00 + m11 + 2 * sq) || 1;
+        return [(m00 + sq) / t, m01 / t, m01 / t, (m11 + sq) / t];
+    }
+
     // ---- The scenes ---------------------------------------------------------------------------
-    // What stands on the turntable: kind, its angle round it (a, radians, 0 at
-    // the back), how far out (r, of FLOOR_R), its own turn (yaw), its scale
-    // (s, × its kind's own size). `box` kinds are buildings with a front and a
-    // side; the rest look much the same from anywhere (or have a back).
+    // What stands on the turntable: kind, its angle round it (a, radians, 0
+    // toward us), how far out (r, of FLOOR_R), its own turn (yaw), its scale
+    // (s, × its kind's own size). `box` kinds are houses (w across the gable
+    // end, d along the ridge, h to the eaves, roof to the ridge). Things that
+    // go round on their own (orbit: round the middle; spin: round where they
+    // stand) head along their own x. `ground`: what the floor is painted as.
     const KINDS = {
         cottage: { box: true, w: 0.42, d: 0.34, h: 0.36, roof: 0.2 },
         cathouse: { box: true, w: 0.42, d: 0.34, h: 0.36, roof: 0.22 },
         house: { box: true, w: 0.3, d: 0.26, h: 0.3, roof: 0.15 },
         church: { box: true, w: 0.3, d: 0.4, h: 0.36, roof: 0.16, spire: 0.42 },
+        hut: { box: true, w: 0.26, d: 0.24, h: 0.2, roof: 0.13 },
+        gingerhouse: { box: true, w: 0.4, d: 0.34, h: 0.3, roof: 0.22 },
+        cabin: { box: true, w: 0.42, d: 0.34, h: 0.26, roof: 0.2 },
         fir: { w: 0.2, h: 0.44 },
         bigtree: { w: 0.5, h: 0.92 },
-        snowman: { w: 0.14, h: 0.24, back: true },
-        catsnowman: { w: 0.15, h: 0.24, back: true },
+        snowman: { w: 0.14, h: 0.24 },
+        catsnowman: { w: 0.15, h: 0.24 },
         lamp: { w: 0.05, h: 0.3 },
         fence: { w: 0.26, h: 0.07 },
-        bench: { w: 0.18, h: 0.08, back: true },
-        skaters: { w: 0.14, h: 0.17, back: true },
+        bench: { w: 0.18, h: 0.08 },
+        skaters: { w: 0.14, h: 0.17 },
         presents: { w: 0.2, h: 0.1 },
-        sledcat: { w: 0.14, h: 0.12, back: true },
-        deer: { w: 0.2, h: 0.2, back: true },
+        sledcat: { w: 0.14, h: 0.12 },
+        deer: { w: 0.2, h: 0.2 },
         pond: { w: 0.6, h: 0, flat: true },
-        train: { w: 0.16, h: 0.09, back: true },
+        train: { w: 0.16, h: 0.09 },
+        lighthouse: { w: 0.2, h: 0.6 },
+        rocks: { w: 0.26, h: 0.08 },
+        candycane: { w: 0.07, h: 0.2 },
+        gingerman: { w: 0.11, h: 0.15 },
+        lolly: { w: 0.1, h: 0.22 },
+        bear: { w: 0.34, h: 0.19 },
+        cub: { w: 0.2, h: 0.11 },
+        iceblocks: { w: 0.2, h: 0.1 },
+        carousel: { w: 0.64, h: 0.56 },
+        penguin: { w: 0.08, h: 0.15 },
+        slider: { w: 0.14, h: 0.06 },
+        igloo: { w: 0.38, h: 0.17 },
+        moose: { w: 0.32, h: 0.32 },
+        woodpile: { w: 0.2, h: 0.09 },
     };
     for (const K of Object.values(KINDS)) for (const f of ['w', 'd', 'h', 'roof', 'spire']) if (K[f]) K[f] *= 1.22;     // (the scene a little bigger in its glass)
     const SCENES = {
         cottage: [
             { kind: 'cottage', a: 0, r: 0.22, yaw: 0.35 }, { kind: 'fir', a: -1.1, r: 0.62, s: 1.1 }, { kind: 'fir', a: 1.25, r: 0.66, s: 0.9 },
-            { kind: 'fir', a: 2.6, r: 0.7, s: 0.75 }, { kind: 'snowman', a: 2.05, r: 0.52 }, { kind: 'lamp', a: -2.2, r: 0.55 }, { kind: 'fence', a: -2.9, r: 0.7, yaw: 0.4 },
-            { kind: 'deer', a: 3.4, r: 0.58, s: 0.9 },
+            { kind: 'fir', a: 2.6, r: 0.7, s: 0.75 }, { kind: 'snowman', a: 2.05, r: 0.52, yaw: -0.5 }, { kind: 'lamp', a: -2.2, r: 0.55 }, { kind: 'fence', a: -2.9, r: 0.7, yaw: 0.4 },
+            { kind: 'deer', a: 3.4, r: 0.58, s: 1.15, yaw: 2.2 },
         ],
         village: [
-            { kind: 'church', a: 0.2, r: 0.4, yaw: -0.2 }, { kind: 'house', a: -1.5, r: 0.5, yaw: 0.6 }, { kind: 'house', a: 1.7, r: 0.52, yaw: -0.5, s: 0.9 },
+            { kind: 'church', a: 0.2, r: 0.4, yaw: -0.2 }, { kind: 'house', a: -1.5, r: 0.5, yaw: 0.6 }, { kind: 'house', a: 1.7, r: 0.52, yaw: -0.5, s: 0.9, v: 1 },
             { kind: 'fir', a: -0.6, r: 0.74, s: 0.85 }, { kind: 'fir', a: 0.95, r: 0.76, s: 0.8 }, { kind: 'fir', a: 3.05, r: 0.66, s: 0.9 },
-            { kind: 'lamp', a: 2.5, r: 0.35 }, { kind: 'snowman', a: -2.55, r: 0.45, s: 0.9 }, { kind: 'bench', a: -3.4, r: 0.3, yaw: 0.2 },
+            { kind: 'lamp', a: 2.5, r: 0.35 }, { kind: 'snowman', a: -2.55, r: 0.45, s: 0.9, yaw: 0.6 }, { kind: 'bench', a: -3.4, r: 0.3, yaw: 0.2 },
         ],
         pond: [
-            { kind: 'pond', a: 0, r: 0 }, { kind: 'skaters', a: 0.6, r: 0.24, spin: 1 }, { kind: 'fir', a: -0.3, r: 0.78, s: 1.15 },
+            { kind: 'pond', a: 0, r: 0 }, { kind: 'skaters', a: 0.6, r: 0.24, spin: 1, s: 1.35 }, { kind: 'fir', a: -0.3, r: 0.78, s: 1.15 },
             { kind: 'fir', a: 1.4, r: 0.8, s: 0.9 }, { kind: 'fir', a: 2.3, r: 0.8, s: 0.75 }, { kind: 'fir', a: -1.5, r: 0.8, s: 0.95 },
-            { kind: 'bench', a: 3.1, r: 0.72, yaw: 0 }, { kind: 'lamp', a: 3.7, r: 0.76 }, { kind: 'snowman', a: -2.4, r: 0.74, s: 0.85 },
+            { kind: 'bench', a: 3.1, r: 0.72, yaw: 3.1 }, { kind: 'lamp', a: 3.7, r: 0.76 }, { kind: 'snowman', a: -2.4, r: 0.74, s: 0.85, yaw: -2.4 },
         ],
         catcottage: [
-            { kind: 'cathouse', a: 0, r: 0.22, yaw: -0.3 }, { kind: 'catsnowman', a: 1.9, r: 0.55 }, { kind: 'fir', a: -1.2, r: 0.66, s: 1.05 },
-            { kind: 'fir', a: 1.0, r: 0.72, s: 0.8 }, { kind: 'sledcat', a: 2.8, r: 0.6, spin: 0.6 }, { kind: 'lamp', a: -2.1, r: 0.56 },
+            { kind: 'cathouse', a: 0, r: 0.22, yaw: -0.3 }, { kind: 'catsnowman', a: 1.9, r: 0.55, yaw: 0.8 }, { kind: 'fir', a: -1.2, r: 0.66, s: 1.05 },
+            { kind: 'fir', a: 1.0, r: 0.72, s: 0.8 }, { kind: 'sledcat', a: 2.8, r: 0.6, spin: 0.6, s: 1.3 }, { kind: 'lamp', a: -2.1, r: 0.56 },
             { kind: 'fir', a: 3.5, r: 0.74, s: 0.7 },
         ],
         tree: [
-            { kind: 'bigtree', a: 0, r: 0 }, { kind: 'presents', a: 1.0, r: 0.32 }, { kind: 'presents', a: -1.9, r: 0.34, s: 0.85, yaw: 0.6 },
-            { kind: 'train', a: 0, r: 0.62, orbit: 0.9 }, { kind: 'snowman', a: 2.6, r: 0.66, s: 0.85 }, { kind: 'fir', a: -0.9, r: 0.8, s: 0.6 }, { kind: 'fir', a: 1.9, r: 0.8, s: 0.55 },
+            { kind: 'bigtree', a: 0, r: 0 }, { kind: 'presents', a: 1.0, r: 0.32 }, { kind: 'presents', a: -1.9, r: 0.34, s: 0.85, yaw: 0.6, v: 1 },
+            { kind: 'train', a: 0, r: 0.62, orbit: 0.9 }, { kind: 'snowman', a: 2.6, r: 0.66, s: 0.85, yaw: 2.6 }, { kind: 'fir', a: -0.9, r: 0.8, s: 0.6 }, { kind: 'fir', a: 1.9, r: 0.8, s: 0.55 },
+        ],
+        lighthouse: [
+            { kind: 'lighthouse', a: 0.5, r: 0.16, yaw: 0.3 }, { kind: 'hut', a: -1.3, r: 0.44, yaw: -0.9 }, { kind: 'rocks', a: 2.1, r: 0.58 },
+            { kind: 'rocks', a: -2.6, r: 0.6, s: 0.85, yaw: 1 }, { kind: 'rocks', a: 0.9, r: 0.66, s: 0.7, yaw: 2 }, { kind: 'fir', a: -0.35, r: 0.62, s: 0.8 },
+            { kind: 'fir', a: 3.5, r: 0.52, s: 0.7 }, { kind: 'lamp', a: -1.95, r: 0.62, s: 0.8 },
+        ],
+        gingerbread: [
+            { kind: 'gingerhouse', a: 0, r: 0.2, yaw: -0.25 }, { kind: 'candycane', a: 0.75, r: 0.62 }, { kind: 'candycane', a: -0.6, r: 0.64, yaw: 3.1 },
+            { kind: 'gingerman', a: 2.0, r: 0.56, yaw: 2.2, s: 1.3 }, { kind: 'gingerman', a: -2.2, r: 0.56, yaw: -2.0, v: 1, s: 1.3 }, { kind: 'lolly', a: 3.0, r: 0.66, yaw: 3.0, s: 1.2 },
+            { kind: 'lolly', a: -1.5, r: 0.7, s: 0.85, yaw: -1.5, v: 1 }, { kind: 'fir', a: 1.45, r: 0.74, s: 0.72 },
+        ],
+        polar: [
+            { kind: 'bear', a: 0.35, r: 0.28, yaw: 0.6 }, { kind: 'cub', a: 1.45, r: 0.46, yaw: -0.2 }, { kind: 'cub', a: 2.15, r: 0.5, yaw: 2.7, s: 0.85 },
+            { kind: 'iceblocks', a: -1.3, r: 0.56, yaw: 0.4 }, { kind: 'iceblocks', a: 3.4, r: 0.64, yaw: 1.2, s: 0.8, v: 1 }, { kind: 'rocks', a: -2.5, r: 0.66, s: 0.8, v: 1 },
+        ],
+        carousel: [
+            { kind: 'carousel', a: 0, r: 0, spin: 1 }, { kind: 'lamp', a: 0.8, r: 0.8 }, { kind: 'lamp', a: -2.3, r: 0.8 },
+            { kind: 'fir', a: -0.9, r: 0.82, s: 0.7 }, { kind: 'fir', a: 2.0, r: 0.82, s: 0.75 }, { kind: 'fir', a: 3.2, r: 0.82, s: 0.62 },
+            { kind: 'bench', a: 1.45, r: 0.8, yaw: 1.45 },
+        ],
+        penguins: [
+            { kind: 'igloo', a: -0.5, r: 0.28, yaw: -0.2 }, { kind: 'penguin', a: 0.85, r: 0.4, yaw: 0.5 }, { kind: 'penguin', a: 1.25, r: 0.56, yaw: -0.4, s: 0.78 },
+            { kind: 'penguin', a: 2.4, r: 0.44, yaw: 2.9 }, { kind: 'penguin', a: -2.1, r: 0.56, yaw: -1.0, s: 0.9 }, { kind: 'slider', a: 0, r: 0.72, orbit: 0.8 },
+            { kind: 'iceblocks', a: 3.4, r: 0.64, s: 0.7, yaw: 0.5 },
+        ],
+        cabin: [
+            { kind: 'cabin', a: 0, r: 0.2, yaw: 0.4 }, { kind: 'moose', a: 2.15, r: 0.55, yaw: 0.9, s: 1.15 }, { kind: 'fir', a: -1.1, r: 0.66, s: 1.1 },
+            { kind: 'fir', a: 1.15, r: 0.72, s: 0.9 }, { kind: 'fir', a: 3.05, r: 0.74, s: 0.85 }, { kind: 'woodpile', a: -2.2, r: 0.56, yaw: -2.6 },
+            { kind: 'fence', a: -3.2, r: 0.72, yaw: -1.6 },
         ],
     };
-    const SCENE_ORDER = ['cottage', 'village', 'pond', 'catcottage', 'tree'];
-    const SCENE_NAMES = { cottage: 'A cottage in the firs', village: 'The village church', pond: 'Skaters on the pond', catcottage: 'The cats’ cottage', tree: 'The Christmas tree' };
+    const GROUND = { cottage: 'path', village: 'lane', pond: 'pond', catcottage: 'paws', tree: 'track', lighthouse: 'sea', gingerbread: 'candy', polar: 'floe', carousel: 'ring', penguins: 'ice', cabin: 'path' };
+    const SCENE_ORDER = ['cottage', 'village', 'pond', 'catcottage', 'tree', 'lighthouse', 'gingerbread', 'polar', 'carousel', 'penguins', 'cabin'];
+    const SCENE_NAMES = {
+        cottage: 'A cottage in the firs', village: 'The village church', pond: 'Skaters on the pond', catcottage: 'The cats’ cottage', tree: 'The Christmas tree',
+        lighthouse: 'The lighthouse on the rocks', gingerbread: 'The gingerbread house', polar: 'Polar bears on the ice', carousel: 'The carousel', penguins: 'The penguins’ igloo', cabin: 'The cabin and the moose',
+    };
+    const ADVENT = ['village', 'gingerbread', 'carousel', 'cabin'];
+    const YEAR = ['cottage', 'pond', 'catcottage', 'lighthouse', 'polar', 'penguins', 'cabin', 'gingerbread', 'carousel', 'village'];
 
-    // 'auto': the tree from Christmas Eve to Boxing Day, the village through
-    // Advent, and the rest of the year a different one each day.
+    // 'auto': the tree from Christmas Eve to Boxing Day; through Advent, a
+    // different Christmas one each day (the village, the gingerbread house,
+    // the carousel, the cabin); the rest of the year a different one each day.
     function sceneFor(choice, date) {
         if (SCENES[choice]) return choice;
-        const m = date.getMonth(), d = date.getDate();
+        const m = date.getMonth(), d = date.getDate(), day = Math.floor(Date.UTC(date.getFullYear(), m, d) / 86400000);
         if (m === 11 && d >= 24 && d <= 26) return 'tree';
-        if (m === 11) return 'village';
-        const day = Math.floor((Date.UTC(date.getFullYear(), m, d) / 86400000));
-        return ['cottage', 'pond', 'catcottage'][((day % 3) + 3) % 3];
+        if (m === 11 && d < 24) return ADVENT[(d - 1) % ADVENT.length];
+        return YEAR[((day % YEAR.length) + YEAR.length) % YEAR.length];
     }
     const festive = date => date.getMonth() === 11 && (date.getDate() === 24 || date.getDate() === 25);
 
     // Where each thing on the turntable is now, turned `theta`, in globe units:
     // { x, z, y (its foot), r (how far it reaches round), top, depth, face
-    // (its own facing, 0 = toward us), i }. Skaters and the train go round on
-    // their own as well.
+    // (its own facing, 0 = toward us), i }. Skaters, the sled, the slider and
+    // the train go round on their own as well, heading along their own x.
     function placed(scene, theta, t = 0) {
         const out = [];
         (SCENES[scene] || SCENES.cottage).forEach((o, i) => {
-            const K = KINDS[o.kind], s = o.s || 1;
-            const a = o.a + theta + (o.orbit ? t * o.orbit * 0.35 : 0) + (o.spin ? t * 0.5 * o.spin : 0);
+            const K = KINDS[o.kind], s = o.s || 1, own = (o.orbit ? t * o.orbit * 0.35 : 0) + (o.spin ? t * 0.5 * o.spin : 0);
+            const a = o.a + theta + (o.r ? own : 0);
             const rr = o.r * FLOOR_R, x = Math.sin(a) * rr, z = Math.cos(a) * rr;
-            const face = (o.yaw || 0) + theta + (o.orbit ? t * o.orbit * 0.35 + Math.PI / 2 : 0) + (o.spin ? t * 0.5 * o.spin + Math.PI / 2 : 0);
+            const moves = o.orbit || o.spin, face = (o.yaw || 0) + (moves && o.r ? a : theta + own);
             const p = project(x, FLOOR, z);
-            out.push({ kind: o.kind, i, x, z, y: FLOOR, s, w: K.w * s, top: FLOOR + K.h * s + (K.roof || 0) * s, r: Math.max(K.w, K.d || 0) * s * 0.5, depth: p.depth, face, flat: !!K.flat, box: !!K.box });
+            out.push({ kind: o.kind, i, v: o.v || 0, x, z, y: FLOOR, s, w: K.w * s, top: FLOOR + K.h * s + (K.roof || 0) * s, r: Math.max(K.w, K.d || 0) * s * 0.5, depth: p.depth, face, flat: !!K.flat, box: !!K.box });
         });
         return out;
     }
@@ -127,14 +215,18 @@ const SnowGlobeLogic = (() => {
 
     function makeSim(n, o = {}) {
         const rand = o.rand || Math.random;
-        const sim = { flakes: [], water: { slosh: [0, 0, 0], eddies: [] }, settleSeconds: o.settleSeconds || 60, kind: o.kind || 'mixed', t: 0, ground: 0, onThings: [], calmFor: 0 };
+        const sim = { flakes: [], water: { slosh: [0, 0, 0], eddies: [], turb: 0, ph: [0, 1.7, 3.1, 4.4, 2.2, 5.3] }, settleSeconds: o.settleSeconds || 60, kind: o.kind || 'mixed', t: 0, ground: 0, onThings: [], calmFor: 0 };
         for (let i = 0; i < n; i++) sim.flakes.push(newFlake(sim, rand, i));
         return sim;
     }
     function newFlake(sim, rand, i) {
         const k = sim.kind, glitter = k === 'glitter' || k === 'rainbow' ? rand() < 0.85 : k === 'mixed' ? rand() < 0.22 : false;
         const size = glitter ? 0.5 + rand() * 0.6 : Math.pow(rand(), 1.8) * 1.6 + 0.45;
-        const f = { x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, size, glitter, hue: k === 'rainbow' ? rand() : k === 'glitter' ? (rand() < 0.5 ? 0.12 : 0.6) : 0.14, phase: rand() * TAU, spin: 3 + rand() * 9, state: 1, on: -1, age: 0, sinkK: (glitter ? 0.62 : 0.55 + 0.4 * size) * (0.75 + rand() * 0.5), i };
+        // Its shape: snow a soft round flake, a six-armed star or a clump (the big ones); glitter a hexagon or a square
+        // sequin. Each turns (rot) and tumbles (tum: a sequin flashes when it comes face on to the light).
+        const r = rand(), shape = glitter ? (r < 0.6 ? 3 : 4) : size > 1.25 && r < 0.45 ? 2 : r < 0.42 ? 1 : 0;
+        const f = { x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, size, glitter, shape, rot: rand() * TAU, rotV: (rand() - 0.5) * 3, tum: rand() * TAU, tumV: (2 + rand() * 6) * (rand() < 0.5 ? -1 : 1),
+            hue: k === 'rainbow' ? rand() : k === 'glitter' ? (rand() < 0.5 ? 0.12 : 0.6) : 0.14, phase: rand() * TAU, spin: 3 + rand() * 9, state: 1, on: -1, age: 0, sinkK: (glitter ? 0.62 : 0.55 + 0.4 * size) * (0.75 + rand() * 0.5), i };
         floorSpot(f, rand);
         sim.ground++;
         return f;
@@ -179,25 +271,40 @@ const SnowGlobeLogic = (() => {
             sim.water.eddies.push({ c: [(rand() - 0.5) * 1.1, FLOOR + 0.25 + rand() * 0.7, (rand() - 0.5) * 0.8], n: n.map(v => v / nl), w: (2.2 + rand() * 2.2) * Math.min(1.4, s), life: 3 + rand() * 4 + s, age: 0 });
         }
         if (sim.water.eddies.length > 12) sim.water.eddies.splice(0, sim.water.eddies.length - 12);
+        // And the water stays turbulent a good while after: rolls that drift, curl and slowly die.
+        sim.water.turb = Math.min(1.6, (sim.water.turb || 0) + s * 0.6);
         const lift = clamp(s * 0.75), up = 0.6 + 0.9 * s;
         let lifted = 0;
         for (const f of sim.flakes) {
             if (f.state !== 1) continue;
-            if (rand() > (f.on >= 0 ? Math.min(1, lift * 1.4) : lift)) continue;
+            if (rand() > (f.on >= 0 ? Math.min(1, lift * 1.8) : lift)) continue;
             const from = { x: f.x, z: f.z, on: f.on };
-            loose(sim, f, rand, 0.25);
-            if (from.on < 0) { f.x = from.x; f.z = from.z; }
-            f.vx = ux * s * 0.3 + (rand() - 0.5) * s * 1.1; f.vy = up * (0.3 + rand()); f.vz = (rand() - 0.5) * s * 1.0;
+            // A hard shake mixes it all through the water; a gentle one lifts it from where it lay.
+            const mixed = rand() < clamp((s - 0.4) * 0.8);
+            loose(sim, f, rand, mixed ? 0 : 0.25);
+            if (from.on < 0 && !mixed) { f.x = from.x; f.z = from.z; }
+            const k = mixed ? 0.35 : 1;
+            f.vx = ux * s * 0.3 * k + (rand() - 0.5) * s * 1.1 * k; f.vy = up * (0.3 + rand()) * k; f.vz = (rand() - 0.5) * s * 1.0 * k;
             lifted++;
         }
         sim.calmFor = 0;
         return lifted;
     }
 
-    // The water's speed at a point, into `out`.
+    // The water's speed at a point, into `out`: the slosh, the eddies (a
+    // Gaussian core each) and the turbulence, the curl of a slowly drifting
+    // field of sines (so it neither gathers the snow nor spreads it, only
+    // stirs it round in rolls that come and go).
+    const TK = 2.7;
     function waterAt(sim, x, y, z, out) {
         const w = sim.water;
         let vx = w.slosh[0], vy = w.slosh[1], vz = w.slosh[2];
+        if (w.turb > 0.004) {
+            const p = w.ph, T = w.turb * 0.2, kx = TK * x, ky = TK * y, kz = TK * z;
+            const s1 = Math.sin(ky + p[0]), c1 = Math.cos(ky + p[0]), s2 = Math.sin(kz + p[1]), c2 = Math.cos(kz + p[1]), s3 = Math.sin(kz + p[2]), c3 = Math.cos(kz + p[2]);
+            const s4 = Math.sin(kx + p[3]), c4 = Math.cos(kx + p[3]), s5 = Math.sin(kx + p[4]), c5 = Math.cos(kx + p[4]), s6 = Math.sin(ky + p[5]), c6 = Math.cos(ky + p[5]);
+            vx += T * (s5 * c6 - c3 * s4); vy += T * (s1 * c2 - c5 * s6); vz += T * (s3 * c4 - c1 * s2);
+        }
         for (const e of w.eddies) {
             const px = x - e.c[0], py = y - e.c[1], pz = z - e.c[2], d2 = px * px + py * py + pz * pz;
             const k = e.w * Math.exp(-d2 / (CORE * CORE)) * Math.exp(-e.age / e.life * 1.6);
@@ -209,7 +316,7 @@ const SnowGlobeLogic = (() => {
     // How stirred the water is, 0 to about 3.
     function stir(sim) {
         const w = sim.water;
-        let e = Math.hypot(...w.slosh);
+        let e = Math.hypot(...w.slosh) + (w.turb || 0) * 0.4;
         for (const d of w.eddies) e += Math.abs(d.w) * Math.exp(-d.age / d.life * 1.6) * 0.3;
         return e;
     }
@@ -224,6 +331,10 @@ const SnowGlobeLogic = (() => {
         w.slosh[0] *= decay; w.slosh[1] *= decay; w.slosh[2] *= decay;
         for (const e of w.eddies) e.age += dt;
         w.eddies = w.eddies.filter(e => e.age < e.life * 2);
+        // The turbulence dies over a fifth of the settling time; its rolls drift and turn over as they go.
+        w.turb = (w.turb || 0) * Math.exp(-dt / clamp(sim.settleSeconds * 0.2, 3, 20));
+        if (w.turb < 0.004) w.turb = 0;
+        for (let i = 0; i < 6; i++) w.ph[i] += dt * (0.35 + 0.09 * i) * (i % 2 ? -1 : 1) * (0.6 + w.turb);
         // The time a typical flake takes to come down from the middle is about half the settling time.
         const sink = (1 - FLOOR) * 0.85 / (sim.settleSeconds * 0.5), kd = 1 - Math.exp(-DRAG * dt);
         let loose = 0;
@@ -237,6 +348,9 @@ const SnowGlobeLogic = (() => {
             if (f.glitter) { const fl = Math.sin(sim.t * f.spin * 0.3 + f.phase); _v[0] += fl * 0.03; _v[2] += Math.cos(sim.t * f.spin * 0.21 + f.phase) * 0.03; vt *= 0.8 + 0.4 * Math.abs(fl); }
             f.vx += (_v[0] - f.vx) * kd; f.vy += (_v[1] - vt - f.vy) * kd; f.vz += (_v[2] - f.vz) * kd;
             f.x += f.vx * dt; f.y += f.vy * dt; f.z += f.vz * dt;
+            // It turns and tumbles as it goes, faster while the water carries it.
+            const sp = Math.abs(f.vx) + Math.abs(f.vy) + Math.abs(f.vz);
+            f.rot += dt * f.rotV * (0.3 + sp * 2); f.tum += dt * f.tumV * (0.25 + sp * 2.5);
             // The glass.
             const d = Math.hypot(f.x, f.y, f.z);
             if (d > WALL) {
@@ -417,6 +531,30 @@ const SnowGlobeLogic = (() => {
         if (rand() < dt * 0.08) c.ear = 1;
         return ev;
     }
+    // The ear on side e (-1, 1) of the head, in head units (y up): a triangle.
+    const earAt = (e, s, puff, earH) => [[e * 0.15 * puff, 0.03], [e * 0.12 * puff + s * 0.02, earH], [e * 0.03, 0.12]];
+    // Twice a polygon's signed area: positive counter-clockwise (y up).
+    function area(pts) { let a = 0; for (let i = 0; i < pts.length; i++) { const p = pts[i], q = pts[(i + 1) % pts.length]; a += p[0] * q[1] - q[0] * p[1]; } return a; }
+
+    // The tail's middle line, in cat units (y up from where it sits, s: toward
+    // the globe), from the root to the tip: out from behind the haunch, down
+    // round its back to the floor, then along the floor in front of the paws,
+    // the tip curling up. `sway` and `lift` move only its last third. Returns
+    // [[x, y, radius]…] (n + 1 points) and `front`, the index from which it
+    // lies in front of the body (drawn after it): before that it is behind the
+    // haunch, so it wraps round the cat and never passes through it.
+    function tailLine(s, puff, sway, lift, n = 28) {
+        const A = [[-s * 0.3, 0.15], [-s * 0.43, 0.11], [-s * 0.43, -0.02], [-s * 0.25, -0.036]];
+        const B = [[-s * 0.25, -0.036], [-s * 0.1, -0.046], [s * (0.05 + sway * 0.5), -0.048], [s * (0.14 + sway), -0.014 + lift]];
+        const bez = (P, u, i) => { const v = 1 - u; return v * v * v * P[0][i] + 3 * v * v * u * P[1][i] + 3 * v * u * u * P[2][i] + u * u * u * P[3][i]; };
+        const pts = [];
+        for (let i = 0; i <= n; i++) {
+            const u = i / n, P = u < 0.5 ? A : B, w = u < 0.5 ? u * 2 : (u - 0.5) * 2;
+            pts.push([bez(P, w, 0), bez(P, w, 1), (0.052 - 0.022 * u - 0.012 * u * u * u) * puff]);
+        }
+        return { pts, front: Math.round(n * 0.2) };
+    }
+
     // A stroke: the cat purrs a while.
     function pet(c) { c.state = 'purr'; c.t = 0; c.dur = 3.5; c.paw = 0; return c; }
 
@@ -438,7 +576,7 @@ const SnowGlobeLogic = (() => {
     // ---- Where it all stands on the screen -----------------------------------------------------
     // The surface (sill, mantel or desk) runs across the bottom; the globe sits
     // on its base on it, the cat beside it, the candle on the other side.
-    // o: { insets, size (× the globe), catSide ('left'|'right'), cat (true if there is one), room }.
+    // o: { insets, size (× the globe), catSide ('left'|'right'), cat (true if there is one), treeSize, room }.
     function layout(W, H, o = {}) {
         const ins = o.insets || {}, top = ins.top || 0, bottom = H - (ins.bottom || 0), left = ins.left || 0, right = W - (ins.right || 0);
         const w = right - left, h = bottom - top, portrait = h > w * 1.15, u = Math.max(0.5, Math.min(w, h) / 800);
@@ -469,7 +607,16 @@ const SnowGlobeLogic = (() => {
         if (croom < R * 0.9) { candle.x = side > 0 ? right - w * 0.12 : left + w * 0.12; candle.y = back + (foot - back) * 0.22; candle.h = R * 0.42; candle.side = side; }
         const win = { x: cx - Math.min(w * 0.36, R * 2.6), y: top + h * 0.06, w: Math.min(w * 0.72, R * 5.2), h: back - (top + h * 0.06) - 6 * u };
         if (portrait) { win.x = left + w * 0.1; win.w = w * 0.8; }
-        return { W, H, u, portrait, top, bottom, left, right, back, foot, cx, cy, R, base, cat, candle, win };
+        // By the bookshelves the window is narrower, so the shelves have the wall either side of it.
+        if (o.room === 'desk' && !portrait) { win.w = Math.min(w * 0.42, R * 3.3); win.x = cx - win.w / 2; }
+        // A little Christmas tree on the candle's side, further back and further out (on a phone held upright,
+        // at the back beside the globe). h: its height with its pot, × the size setting; y: where its pot stands.
+        const th = R * (portrait ? 1.05 : 1.45) * (o.treeSize || 1), tside = candle.side;
+        const tree = { h: th, y: back + (foot - back) * (portrait ? 0.14 : 0.3), side: tside, x: 0 };
+        const half = th * 0.36, troom = tside > 0 ? right - (cx + R) : (cx - R) - left;
+        tree.x = cx + tside * (portrait ? R * 0.9 : Math.max(R * 1.25 + half, Math.min(R * 3.05, troom * 0.8)));
+        tree.x = clamp(tree.x, left + half + 4 * u, right - half - 4 * u);
+        return { W, H, u, portrait, top, bottom, left, right, back, foot, cx, cy, R, base, cat, candle, win, tree };
     }
 
     // ---- Brushwork ------------------------------------------------------------------------------
@@ -492,8 +639,8 @@ const SnowGlobeLogic = (() => {
     }
 
     return {
-        TAU, clamp, mix, smooth, rng, FLOOR, FLOOR_R, TILT, WALL, project, KINDS, SCENES, SCENE_ORDER, SCENE_NAMES, sceneFor, festive, placed,
+        TAU, clamp, mix, smooth, rng, FLOOR, FLOOR_R, TILT, CT, WALL, project, view, at, facing, world, offset, ellipseOf, KINDS, SCENES, GROUND, SCENE_ORDER, SCENE_NAMES, ADVENT, YEAR, sceneFor, festive, placed,
         makeSim, scatter, shake, step, count, resize, cover, waterAt, stir, OMEGA, musicBox, wind, musicStep, notesDue, TUNES, TUNE_ORDER, hz,
-        CATS, CAT_ORDER, catFor, makeCat, catStep, pet, CAT_STATES, restWait, layout, run,
+        CATS, CAT_ORDER, catFor, makeCat, catStep, pet, CAT_STATES, earAt, area, tailLine, restWait, layout, run,
     };
 })();

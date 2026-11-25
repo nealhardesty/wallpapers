@@ -1,4 +1,4 @@
-// Snow Globe (SPEC §10.43). A snow globe on a frosty windowsill at night,
+// Snow Globe (SPEC §10.43). A snow globe on a frosty windowsill at night (or alone on black),
 // painted: a candle on one side, a cat on the other, the snow coming down
 // outside. Inside the water a little scene stands on a turntable (a cottage
 // in the firs, the village church, skaters on a pond, the cats' cottage, a
@@ -19,6 +19,12 @@
 // still when the cat's asleep.
 
 const SNOW_GLOBE_CAP = { low: 0.8, medium: 1.4, high: 2.5 };     // megapixels the painting is made at, by tier
+const SNOW_GLOBE_LIGHTS = {                                        // the room's strings of lights, by colour
+    warm: [[255, 190, 100], [255, 214, 150], [255, 176, 86]],
+    multi: [[255, 70, 60], [255, 200, 80], [80, 210, 110], [90, 140, 255], [255, 120, 200]],
+    cool: [[150, 190, 255], [226, 238, 255], [120, 160, 255]],
+    gold: [[255, 206, 110], [255, 230, 168]],
+};
 
 class SnowGlobeAnimationManager {
     constructor(host) {
@@ -114,7 +120,7 @@ class SnowGlobeAnimationManager {
         if (changed(['flakes'])) { this.sim = SnowGlobeLogic.makeSim(this.flakeCount(), { rand: Math.random, settleSeconds: config.settle, kind: config.flakes }); SnowGlobeLogic.scatter(this.sim, 0.6, Math.random); }
         if (changed(['snow'])) SnowGlobeLogic.resize(this.sim, this.flakeCount(), Math.random);
         this.sim.settleSeconds = config.settle;
-        if (changed(['scene', 'cat', 'catSide', 'room', 'base', 'size', 'candle', 'treeLights'])) this.resize();
+        if (changed(['scene', 'cat', 'catSide', 'room', 'base', 'size', 'candle', 'treeLights', 'lights', 'background', 'windowLights', 'deskTree', 'deskTreeSize', 'deskTreeTopper'])) this.resize();
         if (changed(['snowOutside'])) this.outside = [];
         if (!config.sound && this.audio) { this.audio.close?.(); this.audio = null; }
         this.innerDirty = true;
@@ -134,61 +140,78 @@ class SnowGlobeAnimationManager {
         if (!this.canvas) return;
         const W = this.W = innerWidth, H = this.H = innerHeight, dpr = this.dpr = window.devicePixelRatio || 1;
         for (const c of [this.skyCanvas, this.snowCanvas, this.roomCanvas, this.canvas]) { c.width = Math.round(W * dpr); c.height = Math.round(H * dpr); }
-        const c = this.config, A = SnowGlobeArt, side = c.catSide === 'left' ? -1 : 1;
-        const L = this.layout = SnowGlobeLogic.layout(W, H, { insets: this.host.insets || {}, size: c.size, catSide: c.catSide, cat: !!this.catId });
-        this.side = this.catId ? side : 1;
+        const c = this.config, A = SnowGlobeArt, M = SnowGlobeModels, S = SnowGlobeLogic, side = c.catSide === 'left' ? -1 : 1;
+        // On black there is only the globe: no room, no cat, no candle.
+        const black = this.black = c.background === 'black', catId = black ? null : this.catId;
+        const month = this.host.now().getMonth();
+        this.treeOn = !black && (c.deskTree === 'on' || (c.deskTree === 'december' && month === 11));
+        this.candleOn = !black && c.candle;
+        this.windowLightsOn = !black && c.windowLights !== 'off';
+        const L = this.layout = S.layout(W, H, { insets: this.host.insets || {}, size: c.size, catSide: c.catSide, cat: !!catId, treeSize: c.deskTreeSize, room: c.room });
+        this.side = catId ? side : 1;
         // The picture's own scale: the screen's, capped by the tier.
         const cap = SNOW_GLOBE_CAP[this.host.quality?.tier] || SNOW_GLOBE_CAP.high;
         const ps = this.ps = Math.max(0.5, Math.min(dpr, Math.sqrt(cap * 1e6 / (W * H))));
         const seed = 7, R = L.R;
         this.jobs = [];
         const brush = (name, src, opts, done) => { this.jobs.push({ name, it: A.strokes(src, opts), done }); };
-        // The room and the night outside.
-        this.sky = A.outside(L, ps, { side: -this.side, seed });
-        this.room = A.room(L, ps, { room: c.room, candle: c.candle, treeLights: c.treeLights, side: -this.side, cat: !!this.catId, seed });
-        this.flame = this.room.flame;
-        this.panes = this.room.panes || [];
+        // The room and the night outside (or nothing but black).
+        this.sky = black ? null : A.outside(L, ps, { side: -this.side, seed });
+        this.room = black ? A.black(L, ps) : A.room(L, ps, { room: c.room, candle: this.candleOn, treeLights: c.treeLights, windowLights: this.windowLightsOn, deskTree: this.treeOn, topper: c.deskTreeTopper, treeSize: c.deskTreeSize, side: -this.side, cat: !!catId, seed });
+        const keepOf = r => ({ flame: r.flame, panes: r.panes || [], bulbs: r.bulbs || [], treeBulbs: r.treeBulbs || [], treeTop: r.treeTop || null, crisp: r.crisp });
+        this.roomKeep = keepOf(this.room);
+        this.flame = this.roomKeep.flame;
         this.showRoom();
         // The globe: its base, its glass, what is seen through the water, its ground.
         this.baseArt = A.base(L, ps, c.base, this.side);
-        this.glassArt = A.glass(L, ps, -this.side, { candle: c.candle });
-        this.behindArt = A.behind(L, ps, [this.sky, c.room === 'mantel' ? null : this.room]);
-        this.groundArt = A.ground(L, ps, -this.side, this.scene);
+        this.glassArt = A.glass(L, ps, -this.side, { candle: this.candleOn, black });
+        this.behindArt = A.behind(L, ps, black ? [] : [this.sky, c.room === 'mantel' ? null : this.room], { black });
+        const list = S.SCENES[this.scene], house = list.find(o => S.KINDS[o.kind].box), door = {};
+        if (house) {
+            // Where the main house's door is, for the path to it in the snow.
+            const rr = house.r * S.FLOOR_R, hx = Math.sin(house.a) * rr, hz = Math.cos(house.a) * rr, yaw = house.yaw || 0, d = S.KINDS[house.kind].d * (house.s || 1) / 2;
+            const dx = hx + Math.sin(yaw) * d, dz = hz + Math.cos(yaw) * d;
+            Object.assign(door, { doorAt: Math.atan2(dx, dz), doorR: Math.hypot(dx, dz) / S.FLOOR_R, door: Math.atan2(dx + Math.sin(yaw) * 0.6, dz + Math.cos(yaw) * 0.6) });
+        }
+        this.groundArt = A.ground(L, ps, -this.side, S.GROUND[this.scene] || 'path', door);
         this.inner = A.canvas(R * 2 * ps, R * 2 * ps);
-        // What stands inside, each kind in the faces it shows.
-        this.things = {};
-        const list = SnowGlobeLogic.SCENES[this.scene];
-        list.forEach((o, i) => {
-            const K = SnowGlobeLogic.KINDS[o.kind];
-            if (K.flat) return;
-            const faces = K.box ? ['front', 'side'] : K.back ? ['front', 'back'] : ['front'];
-            for (const f of faces) {
-                const key = `${o.kind}:${f}:${o.kind === 'house' ? i % 2 : 0}`;
-                if (this.things[key]) continue;
-                const t = this.things[key] = A.thing(o.kind, L, ps, -this.side, f, { v: i % 2 });
-                brush(key, t.canvas, t.opts, out => { t.canvas = out; });
-            }
-        });
-        // The flakes, glitter, notes.
+        // What stands inside, each kind built once as a solid (globe-models.js), its textures painted and brushed.
+        this.kit = M.kit(R, ps, -this.side, { lights: c.lights, black });
+        const sprites = {};
+        const art = { fir: kind => sprites[kind] || (sprites[kind] = (() => { const t = A.thing(kind, L, ps, -this.side), hold = { c: t.canvas, w: t.w, h: t.h, ax: t.ax, ay: t.ay }; brush(`thing:${kind}`, t.canvas, t.opts, out => { hold.c = out; }); return hold; })()) };
+        this.models = list.map(o => (S.KINDS[o.kind].flat ? null : M.build(o.kind, o.v || 0, this.kit, art)));
+        for (const j of this.kit.jobs) brush(j.name, j.src, j.opts, j.done);
+        this.smoke = [];
+        // The flakes, glitter, notes, lights.
+        const hues = [[255, 236, 160], [214, 230, 255], [255, 170, 200], [170, 255, 210], [190, 200, 255], [255, 210, 130]];
         this.sprites = {
-            flake: A.flake(R * 0.022, ps),
-            glints: [[255, 236, 160], [214, 230, 255], [255, 170, 200], [170, 255, 210], [190, 200, 255], [255, 210, 130]].map(col => A.glint(R * 0.03, ps, col)),
+            flake: A.flake(R * 0.022, ps), soft: A.flake(R * 0.034, ps, 0.12), clump: A.clump(R * 0.03, ps),
+            stars: Array.from({ length: 6 }, (_, k) => A.star(R * 0.028, ps, k * Math.PI / 18)),
+            sequins: [6, 4].map(n => hues.map(col => A.sequin(R * 0.022, ps, col, n))),
+            glints: hues.map(col => A.glint(R * 0.03, ps, col)),
             notes: [A.note(R * 0.16, ps, 0), A.note(R * 0.16, ps, 1)],
             glow: A.glow(R * 0.2 * ps, [255, 200, 120]),
             flameGlow: A.glow(R * 1.2 * ps, [255, 170, 90], 0.1),
             lampGlow: A.glow(R * 0.12 * ps, [255, 210, 140], 0.2),
             outside: A.flake(2.2, ps),
+            puff: A.glow(R * 0.06 * ps, [200, 204, 214], 0.2),
+            beam: A.glow(R * 0.5 * ps, [255, 240, 190], 0.15),
+            bulbs: {},
         };
         // The cat.
-        this.catArt = this.catId ? A.cat(this.catId, L.cat.h, ps, this.side) : null;
+        this.catArt = catId ? A.cat(catId, L.cat.h, ps, this.side) : null;
         if (this.catArt) for (const part of ['body', 'head', 'leg']) { const p = this.catArt[part]; brush(`cat-${part}`, p.canvas, p.opts, out => { p.canvas = out; }); }
-        brush('base', this.baseArt.front, this.baseArt.frontOpts, out => { this.baseArt.front = out; });
+        brush('base', this.baseArt.front, this.baseArt.frontOpts, out => { this.baseArt.front = out; this.reflection = null; });
         brush('ground', this.groundArt.canvas, this.groundArt.opts, out => { this.groundArt.canvas = out; });
+        brush('floor', this.groundArt.top, this.groundArt.topOpts, out => { this.groundArt.top = out; });
         // The room and the night last: they are the biggest, and the underpainting stands in well meanwhile.
         const u = R * ps;
         const backV = L.back / L.H;
-        brush('room', this.room, { widths: [u * 0.22, u * 0.11, u * 0.055, u * 0.03], seed: 3, len: 3, tol: 50, jit: 0.05, keep: true, fine: 0.55, dir: (x, y) => (y > backV + 0.01 ? 0.015 * Math.sin(x * 7) : null), after: g => A.weave(g, this.room.width, this.room.height, 5) }, out => { out.flame = this.flame; out.panes = this.panes; this.room = out; this.showRoom(); });
-        brush('sky', this.sky, { widths: [u * 0.2, u * 0.1, u * 0.05], seed: 9, len: 4, tol: 40, jit: 0.05, keep: false, dir: (x, y) => (y < 0.55 ? -0.1 + 0.25 * Math.sin(x * 9 + y * 6) : null) }, out => { this.sky = out; this.showRoom(); this.behindArt = A.behind(this.layout, this.ps, [this.sky, this.config.room === 'mantel' ? null : this.room]); });
+        if (!black) {
+            brush('room', this.room, { widths: [u * 0.22, u * 0.11, u * 0.055, u * 0.03], seed: 3, len: 3, tol: 50, jit: 0.05, keep: true, fine: 0.55, dir: (x, y) => (y > backV + 0.01 ? 0.015 * Math.sin(x * 7) : null), after: g => { this.roomKeep.crisp?.(g); A.weave(g, this.room.width, this.room.height, 5); } }, out => { this.room = out; this.showRoom(); });
+            brush('sky', this.sky, { widths: [u * 0.2, u * 0.1, u * 0.05], seed: 9, len: 4, tol: 40, jit: 0.05, keep: false, dir: (x, y) => (y < 0.55 ? -0.1 + 0.25 * Math.sin(x * 9 + y * 6) : null) }, out => { this.sky = out; this.showRoom(); this.behindArt = A.behind(this.layout, this.ps, [this.sky, this.config.room === 'mantel' ? null : this.room]); });
+        }
+        this.reflection = null;
         this.jobsTotal = this.jobs.length;
         this.innerDirty = true;
         this.outside = [];
@@ -196,7 +219,7 @@ class SnowGlobeAnimationManager {
     }
     showRoom() {
         const draw = (cv, src) => { const g = cv.getContext('2d'); g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, cv.width, cv.height); if (src) g.drawImage(src, 0, 0, cv.width, cv.height); };
-        draw(this.skyCanvas, this.config.room === 'mantel' ? null : this.sky);
+        draw(this.skyCanvas, this.config.room === 'mantel' || this.black ? null : this.sky);
         draw(this.roomCanvas, this.room);
     }
     // The brushwork, a few milliseconds at a time.
@@ -338,8 +361,32 @@ class SnowGlobeAnimationManager {
         if (Math.abs(w.a) < 1e-4 && Math.abs(w.v) < 1e-3) { w.a = 0; w.v = 0; }
         w.a = Math.max(-0.12, Math.min(0.12, w.a));
         if (!this.drag) { w.x -= w.x * k; w.y -= w.y * k; if (Math.abs(w.x) < 0.05) w.x = 0; if (Math.abs(w.y) < 0.05) w.y = 0; }
-        // Snow falling past the window.
+        // Snow falling past the window; smoke from the chimneys inside.
         this.stepOutside(dt);
+        this.stepSmoke(dt);
+    }
+    // Smoke from the chimneys in the globe (and the train's while it runs): puffs that rise, spread and fade.
+    stepSmoke(dt) {
+        const S = SnowGlobeLogic, R = this.L.R, playing = this.music.tempo > 0.05;
+        for (const p of this.smoke) { p.age += dt; p.y -= dt * R * 0.07; p.x += dt * R * (0.025 + 0.02 * Math.sin(p.age * 1.5 + p.ph)); }
+        this.smoke = this.smoke.filter(p => p.age < p.life);
+        if (!this.placed || !this.config.lights) return;
+        this.placed.forEach((pl, i) => {
+            const m = this.models[i];
+            if (!m?.smoke || (m.smokeMoving && !playing)) return;
+            m.puffT = (m.puffT || 0) - dt;
+            if (m.puffT > 0 || this.smoke.length > 36) return;
+            m.puffT = 0.4 + Math.random() * 0.3;
+            const v = S.view(pl), q = S.at(v, ...m.smoke);
+            this.smoke.push({ x: q[0] * R, y: q[1] * R, age: 0, life: 3 + Math.random(), ph: Math.random() * 6, k: v.k });
+        });
+        if (this.smoke.length) this.innerDirty = true;
+    }
+    // Whether anything flickers, twinkles or drifts at rest (and so wants fourteen frames a second).
+    ambient() {
+        const c = this.config;
+        return this.candleOn || this.outside.length > 0 || this.smoke.length > 0 || this.scene === 'lighthouse' && c.lights
+            || ((this.windowLightsOn || this.treeOn) && c.twinkle !== 'steady');
     }
     // Where the cat looks when it watches: at the globe.
     headTo() { return 0.85; }
@@ -364,7 +411,7 @@ class SnowGlobeAnimationManager {
         this.calm = !busy;
         if (busy) return;
         const cat = !this.catArt ? 'none' : this.catState.state === 'sleep' ? 'asleep' : 'awake';
-        this.restMs = SnowGlobeLogic.restWait({ busy, cat, ambient: this.config.candle || this.outside.length > 0 });
+        this.restMs = SnowGlobeLogic.restWait({ busy, cat, ambient: this.ambient() });
         this.host.idleUntil(this.restMs);
     }
 
@@ -383,7 +430,8 @@ class SnowGlobeAnimationManager {
         g.clearRect(0, 0, this.canvas.width, this.canvas.height);
         g.setTransform(dpr, 0, 0, dpr, 0, 0);
         this.drawCandle(g);
-        if (this.innerDirty) { this.drawInner(); this.innerDirty = false; }
+        this.drawLights(g);
+        if (this.innerDirty || this.scene === 'lighthouse') { this.drawInner(); this.innerDirty = false; }
         this.drawGlobe(g);
         if (this.catArt) this.drawCat(g);
         for (const n of this.notes) { const a = Math.min(1, n.age * 4) * Math.max(0, 1 - n.age / 2.6), s = this.sprites.notes[n.kind], wd = s.width / this.ps; g.globalAlpha = a; g.drawImage(s, n.x - wd / 2, n.y - wd / 2, wd, wd); }
@@ -392,7 +440,7 @@ class SnowGlobeAnimationManager {
     put(g, c, x, y, w = c.width / this.ps, h = c.height / this.ps) { g.drawImage(c, x, y, w, h); }
 
     drawCandle(g) {
-        if (!this.config.candle || !this.flame) return;
+        if (!this.candleOn || !this.flame) return;
         const f = this.flame, t = this.time, flick = 0.85 + 0.1 * Math.sin(t * 11.3) * Math.sin(t * 7.1) + 0.06 * Math.sin(t * 23.7);
         const s = this.sprites.flameGlow, gw = s.width / this.ps * (0.9 + 0.12 * flick);
         g.globalAlpha = 0.32 * flick; g.drawImage(s, f.x - gw / 2, f.y - gw / 2, gw, gw); g.globalAlpha = 1;
@@ -405,21 +453,67 @@ class SnowGlobeAnimationManager {
         g.restore();
     }
 
-    // The scene inside, into its own canvas (only when something in it changed).
+    // The room's lights: the string round the window (or along the mantel),
+    // the little tree's; steady, twinkling, chasing or fading, in the colours chosen.
+    lightCols(name) { return SNOW_GLOBE_LIGHTS[name] || SNOW_GLOBE_LIGHTS.multi; }
+    bulbGlow(col) { const k = col.join(','); return this.sprites.bulbs[k] || (this.sprites.bulbs[k] = SnowGlobeArt.glow(this.L.R * 0.09 * this.ps, col, 0.3)); }
+    // How bright bulb i (u along its string, 0 to 1) is now.
+    bright(i, u, mode) {
+        const t = this.time;
+        if (mode === 'steady') return 1;
+        if (mode === 'chase') return 0.25 + 0.75 * Math.pow(Math.max(0, Math.sin(u * 26 - t * 3.2)), 2);
+        if (mode === 'fade') return 0.35 + 0.65 * (0.5 + 0.5 * Math.sin(t * 0.9 + (i % 3) * 2.09));
+        const q = Math.sin(i * 91.7) * 43758.5453, f = q - Math.floor(q);
+        return 0.55 + 0.45 * Math.sin(t * (1.3 + f * 2.2) + f * 40) * (f > 0.75 ? 1.4 : 0.8);
+    }
+    drawBulbs(g, list, cols, mode, size, n) {
+        const R = this.L.R;
+        for (const b of list) {
+            const col = cols[b.i % cols.length], k = Math.max(0, Math.min(1, this.bright(b.i, b.u ?? b.i / n, mode))) * (b.front != null ? 0.55 + 0.45 * b.front : 1), r = R * size;
+            g.fillStyle = `rgb(${col[0] * (0.45 + 0.55 * k) | 0},${col[1] * (0.45 + 0.55 * k) | 0},${col[2] * (0.45 + 0.55 * k) | 0})`;
+            g.beginPath(); g.ellipse(b.x, b.y, r * 0.55, r * 0.8, 0, 0, Math.PI * 2); g.fill();
+            if (k > 0.08) {
+                const s = this.bulbGlow(col), gr = R * size * 5;
+                g.globalCompositeOperation = 'lighter'; g.globalAlpha = 0.6 * k; g.drawImage(s, b.x - gr, b.y - gr, gr * 2, gr * 2);
+                g.globalAlpha = 0.9 * k; g.fillStyle = '#fffbe8'; g.beginPath(); g.arc(b.x, b.y - r * 0.15, r * 0.3, 0, Math.PI * 2); g.fill();
+                g.globalCompositeOperation = 'source-over'; g.globalAlpha = 1;
+            }
+        }
+    }
+    drawLights(g) {
+        const c = this.config, K = this.roomKeep;
+        if (this.windowLightsOn && K.bulbs.length) this.drawBulbs(g, K.bulbs, this.lightCols(c.windowLights), c.twinkle, 0.022, K.bulbs.length);
+        if (this.treeOn && K.treeBulbs.length) {
+            const T = this.L.tree;
+            this.drawBulbs(g, K.treeBulbs, this.lightCols(c.deskTreeLights), c.twinkle, 0.016 * Math.min(1.3, T.h / (this.L.R * 1.45)), K.treeBulbs.length);
+            if (K.treeTop) { const s = this.sprites.flameGlow, r = K.treeTop.r * (0.9 + 0.1 * Math.sin(this.time * 2)); g.globalCompositeOperation = 'lighter'; g.globalAlpha = 0.35; g.drawImage(s, K.treeTop.x - r, K.treeTop.y - r, r * 2, r * 2); g.globalAlpha = 1; g.globalCompositeOperation = 'source-over'; }
+        }
+    }
+
+    // The scene inside, into its own canvas (only when something in it
+    // changed): what is seen through the water behind, the floor (turned with
+    // the turntable), the snow lying on it, the snow in the water behind the
+    // scene, the scene's solids back to front, smoke and the lighthouse's
+    // beam, and the snow in front.
     drawInner() {
-        const S = SnowGlobeLogic, L = this.L, R = L.R, ps = this.ps, c = this.inner, g = c.getContext('2d'), sim = this.sim, t = this.time;
+        const S = SnowGlobeLogic, M = SnowGlobeModels, L = this.L, R = L.R, ps = this.ps, c = this.inner, g = c.getContext('2d'), sim = this.sim, t = this.time, G = this.groundArt, theta = this.music.theta;
         this.stats.inner++;
         g.setTransform(1, 0, 0, 1, 0, 0);
         g.clearRect(0, 0, c.width, c.height);
         g.drawImage(this.behindArt, 0, 0, c.width, c.height);
-        g.drawImage(this.groundArt.canvas, 0, 0, c.width, c.height);
-        const cover = S.cover(sim, this.placed || []);
-        g.globalAlpha = Math.min(0.85, cover.ground * 1.2);
-        g.drawImage(this.groundArt.fresh, 0, 0, c.width, c.height);
-        g.globalAlpha = 1;
+        g.drawImage(G.canvas, 0, 0, c.width, c.height);
+        const placed = this.placed || [], cover = S.cover(sim, placed);
         g.setTransform(ps, 0, 0, ps, R * ps, R * ps);         // CSS px, the globe's centre at 0
-        // Glitter that has settled on the ground, glinting.
-        const theta = this.music.theta, glints = this.sprites.glints, twinkle = this.wants('glints');
+        // The floor's top, as it turns: its paths and pond and tracks go round with what stands on it.
+        g.save(); g.beginPath(); g.arc(0, 0, R * 0.985, 0, Math.PI * 2); g.clip();
+        g.translate(0, G.fy); g.scale(1, S.TILT * 0.98); g.rotate(-theta);
+        g.drawImage(G.top, -G.fr, -G.fr, G.fr * 2, G.fr * 2);
+        const fresh = Math.min(0.5, cover.ground * 0.7);
+        if (fresh > 0.01) { g.globalAlpha = fresh * (S.GROUND[this.scene] === 'sea' || S.GROUND[this.scene] === 'floe' ? 0.6 : 1); g.drawImage(G.fresh, -G.fr, -G.fr, G.fr * 2, G.fr * 2); g.globalAlpha = 1; }
+        g.restore();
+        g.drawImage(G.shade, -R, -R, R * 2, R * 2);
+        // Glitter that has settled on the floor, glinting.
+        const glints = this.sprites.glints, twinkle = this.wants('glints');
         for (const f of sim.flakes) {
             if (!f.glitter || f.state !== 1 || f.on >= 0) continue;
             const d = theta - (f.th || 0), x = f.x * Math.cos(d) + f.z * Math.sin(d), z = f.z * Math.cos(d) - f.x * Math.sin(d), p = S.project(x, S.FLOOR, z);
@@ -431,102 +525,82 @@ class SnowGlobeAnimationManager {
         g.globalAlpha = 1;
         // Snow behind the scene, the scene, snow in front of it.
         this.drawFlakes(g, -2, -0.15);
-        const order = (this.placed || []).filter(p => !p.flat).sort((a, b) => a.depth - b.depth);
-        for (const p of order) this.drawThing(g, p, cover.on[p.i] || 0);
+        const D = { R, Ld: this.kit.Ld, time: t, spin: this.spinT || 0, lights: this.config.lights, glow: this.sprites.glow, cover: 0 };
+        const order = placed.filter(p => !p.flat).sort((a, b) => a.depth - b.depth);
+        for (const p of order) {
+            const m = this.models[p.i];
+            if (!m) continue;
+            D.cover = cover.on[p.i] || 0;
+            M.draw(g, m, p, D);
+            if (m.cone) this.drawTreeLights(g, p, m.cone);
+        }
+        this.drawSmoke(g);
+        for (const p of order) if (this.models[p.i]?.beam && this.config.lights) this.drawBeam(g, p, this.models[p.i].beam);
         this.drawFlakes(g, -0.15, 2);
         g.setTransform(1, 0, 0, 1, 0, 0);
     }
+    drawSmoke(g) {
+        const s = this.sprites.puff, R = this.L.R;
+        for (const p of this.smoke) {
+            const u = p.age / p.life, r = R * 0.035 * p.k * (0.6 + u * 2.2);
+            g.globalAlpha = Math.min(1, u * 6) * (1 - u) * 0.45; g.drawImage(s, p.x - r, p.y - r, r * 2, r * 2);
+        }
+        g.globalAlpha = 1;
+    }
+    // The lighthouse's beam, going round on its own: brightest at the lamp,
+    // a flash when it points at us, faint as it swings away.
+    drawBeam(g, pl, lamp) {
+        const S = SnowGlobeLogic, R = this.L.R, v = S.view(pl), b = this.time * 0.9, dir = [Math.sin(b), -0.06, Math.cos(b)];
+        const a = S.at(v, ...lamp), e = S.at(v, lamp[0] + dir[0] * 0.8, lamp[1] + dir[1] * 0.8, lamp[2] + dir[2] * 0.8), f = S.facing(v, ...dir);
+        const ax = a[0] * R, ay = a[1] * R, ex = e[0] * R, ey = e[1] * R, dx = ex - ax, dy = ey - ay, l = Math.hypot(dx, dy) || 1, w = R * 0.11 * v.k;
+        g.globalCompositeOperation = 'lighter';
+        if (l > R * 0.05) {
+            const gr = g.createLinearGradient(ax, ay, ex, ey); gr.addColorStop(0, `rgba(255,244,200,${0.4 * (0.4 + 0.6 * (1 - Math.abs(f)))})`); gr.addColorStop(1, 'rgba(255,244,200,0)');
+            g.fillStyle = gr; g.beginPath(); g.moveTo(ax - dy / l * w * 0.1, ay + dx / l * w * 0.1); g.lineTo(ex - dy / l * w, ey + dx / l * w); g.lineTo(ex + dy / l * w, ey - dx / l * w); g.lineTo(ax + dy / l * w * 0.1, ay - dx / l * w * 0.1); g.closePath(); g.fill();
+        }
+        const flash = Math.pow(Math.max(0, f), 6), s = this.sprites.beam, r = R * (0.12 + 0.45 * flash) * v.k;
+        g.globalAlpha = 0.25 + 0.75 * flash; g.drawImage(s, ax - r, ay - r, r * 2, r * 2);
+        g.globalAlpha = 1; g.globalCompositeOperation = 'source-over';
+    }
+    // The snow in the water between two depths: snow flakes soft, starred or
+    // clumped, bigger and softer the nearer the glass (out of focus), smaller
+    // and dimmer far; glitter as sequins that tumble (squashed as they turn
+    // edge on) and flash when they come face on to the light.
     drawFlakes(g, d0, d1) {
-        const S = SnowGlobeLogic, R = this.L.R, t = this.time, flake = this.sprites.flake, glints = this.sprites.glints, twinkle = this.wants('glints'), playing = this.music.tempo > 0.05;
+        const S = SnowGlobeLogic, R = this.L.R, t = this.time, sp = this.sprites, twinkle = this.wants('glints'), playing = this.music.tempo > 0.05;
         for (const f of this.sim.flakes) {
             if (f.state !== 0) continue;
             const p = S.project(f.x, f.y, f.z);
             if (p.depth < d0 || p.depth >= d1) continue;
-            const k = 1 + 0.22 * p.depth;
+            const k = 1 + 0.32 * p.depth, x = p.sx * R, y = p.sy * R;
             if (f.glitter) {
-                const tw = twinkle ? 0.2 + 0.8 * Math.pow(Math.abs(Math.sin(t * f.spin * (playing ? 1.4 : 1) + f.phase)), 6) : 0.6, r = R * 0.028 * f.size * k;
-                g.globalAlpha = tw; g.drawImage(glints[Math.floor(f.hue * 5.99)], p.sx * R - r, p.sy * R - r, r * 2, r * 2);
+                const r = R * 0.019 * f.size * k, c = Math.cos(f.tum), sq = Math.max(0.12, Math.abs(c)), img = sp.sequins[f.shape === 4 ? 1 : 0][Math.floor(f.hue * 5.99)];
+                g.globalAlpha = 0.55 + 0.4 * sq;
+                if (f.i & 1) g.drawImage(img, x - r, y - r * sq, r * 2, r * 2 * sq); else g.drawImage(img, x - r * sq, y - r, r * 2 * sq, r * 2);
+                if (twinkle) {
+                    const flash = Math.pow(Math.max(0, Math.abs(c) - 0.9) * 10, 3) * (playing ? 1.2 : 1);
+                    if (flash > 0.04) { const gr = r * (2.2 + flash * 1.6); g.globalCompositeOperation = 'lighter'; g.globalAlpha = Math.min(1, flash); g.drawImage(sp.glints[Math.floor(f.hue * 5.99)], x - gr, y - gr, gr * 2, gr * 2); g.globalCompositeOperation = 'source-over'; }
+                }
             } else {
-                const r = R * 0.02 * f.size * k;
-                g.globalAlpha = 0.75 + 0.2 * p.depth; g.drawImage(flake, p.sx * R - r, p.sy * R - r, r * 2, r * 2);
+                const near = p.depth > 0.45, far = p.depth < -0.35, r = R * 0.02 * f.size * k * (near ? 1.5 : 1);
+                g.globalAlpha = near ? 0.45 : far ? 0.5 + 0.2 * (p.depth + 1) : 0.85;
+                const img = near ? sp.soft : f.shape === 1 ? sp.stars[Math.floor(((f.rot % 1.0472) + 1.0472) % 1.0472 / 0.17454) % 6] : f.shape === 2 ? sp.clump : sp.flake;
+                const rr = f.shape === 1 && !near ? r * 1.25 : r;
+                g.drawImage(img, x - rr, y - rr, rr * 2, rr * 2);
             }
         }
         g.globalAlpha = 1;
     }
-    // One thing on the turntable: its faces as it turns, the snow on it, its lit windows.
-    drawThing(g, p, cap) {
-        const S = SnowGlobeLogic, R = this.L.R, K = S.KINDS[p.kind], k = (1 + 0.16 * p.depth) * p.s, proj = S.project(p.x, S.FLOOR, p.z), fx = proj.sx * R, fy = proj.sy * R;
-        const v = p.kind === 'house' ? p.i % 2 : 0, get = f => this.things[`${p.kind}:${f}:${v}`];
-        const lights = this.config.lights ? 1 : 0, t = this.time;
-        const glowAt = (sp, x0, y0, sx, sy) => {
-            if (!lights) return;
-            g.globalCompositeOperation = 'lighter';
-            for (const gl of sp.glows) {
-                const r = gl.r * k * (gl.lamp ? 1.4 : 0.6), x = x0 + gl.x * sx, y = y0 + gl.y * sy;
-                g.globalAlpha = (gl.lamp ? 0.7 : 0.45) * (0.9 + 0.1 * Math.sin(t * 3 + gl.x));
-                g.drawImage(this.sprites.glow, x - r, y - r, r * 2, r * 2);
-            }
-            g.globalAlpha = 1; g.globalCompositeOperation = 'source-over';
-        };
-        // Fresh snow on it, as deep as has settled there: a blanket on a roof's slope, a thicker edge
-        // along a gable, a mound on a hat or a treetop.
-        const capAt = (sp, x0, y0, sx) => {
-            if (cap < 0.03 || !sp.caps.length) return;
-            const c0 = sp.caps[0], X = x => x0 + x * sx, Yc = y => y0 + y * k, d = Math.min(1, cap * 1.4);
-            g.globalAlpha = Math.min(1, cap * 1.8); g.fillStyle = '#f4f7fd';
-            g.beginPath();
-            if (c0.kind === 'band') {
-                const top = c0.y, depth = c0.h * (0.25 + 0.75 * d), n = 7;
-                g.moveTo(X(c0.x - c0.w / 2), Yc(top + depth));
-                for (let i = 0; i <= n; i++) { const u = i / n; g.lineTo(X(c0.x - c0.w / 2 + u * c0.w), Yc(top - c0.h * 0.06 * d * (0.6 + 0.4 * Math.sin(i * 2.7 + p.i)))); }
-                g.lineTo(X(c0.x + c0.w / 2), Yc(top + depth));
-                for (let i = n; i >= 0; i--) { const u = i / n; g.lineTo(X(c0.x - c0.w / 2 + u * c0.w), Yc(top + depth * (0.85 + 0.15 * Math.sin(i * 1.9 + p.i)))); }
-            } else if (c0.kind === 'gable') {
-                const t = c0.h * 0.22 * d;
-                g.moveTo(X(c0.x - c0.w), Yc(c0.y + c0.h)); g.lineTo(X(c0.x), Yc(c0.y - t)); g.lineTo(X(c0.x + c0.w), Yc(c0.y + c0.h));
-                g.lineTo(X(c0.x + c0.w * 0.9), Yc(c0.y + c0.h + t * 0.4)); g.lineTo(X(c0.x), Yc(c0.y + t * 0.6)); g.lineTo(X(c0.x - c0.w * 0.9), Yc(c0.y + c0.h + t * 0.4));
-            } else g.ellipse(X(c0.x), Yc(c0.y), Math.abs(c0.w * sx) * (0.6 + 0.4 * d), c0.h * k * (0.5 + d), 0, Math.PI, 0);
-            g.closePath(); g.fill(); g.globalAlpha = 1;
-        };
-        if (K.box) {
-            const cf = Math.cos(p.face), sf = Math.sin(p.face), front = get('front'), side = get('side');
-            const wf = K.w * R * k * Math.abs(cf), wsd = K.d * R * k * Math.abs(sf), total = wf + wsd, left = fx - total / 2;
-            const frontFirst = cf * sf < 0;
-            const fx0 = frontFirst ? left : left + wsd, sx0 = frontFirst ? left + wf : left;
-            // The side, then the front.
-            const draw = (sp, x0, w, which) => {
-                if (w < 0.5) return;
-                const sw = sp.w * k, sh = sp.h * k, inner = (which === 'front' ? K.w : K.d) * R * k, sxK = w / inner;
-                g.save(); g.translate(x0 + w / 2, fy); g.scale(sxK, 1);
-                g.drawImage(sp.canvas, -sw / 2 + (sp.w / 2 - sp.ax) * k, -sp.ay * k, sw, sh);
-                g.restore();
-                glowAt(sp, x0 + w / 2, fy, sxK * k, k);
-                capAt(sp, x0 + w / 2, fy, sxK * k);
-            };
-            draw(side, sx0, wsd, 'side');
-            draw(front, fx0, wf, 'front');
-            return;
-        }
-        const back = K.back && Math.cos(p.face) < 0, sp = get(back ? 'back' : 'front') || get('front');
-        let sx = k;
-        if (p.kind === 'deer' || p.kind === 'sledcat' || p.kind === 'train') sx = k * (0.35 + 0.65 * Math.abs(Math.sin(p.face))) * (Math.sin(p.face) < 0 ? -1 : 1);
-        if (p.kind === 'fence' || p.kind === 'bench') sx = k * (0.12 + 0.88 * Math.abs(Math.cos(p.face)));
-        g.save(); g.translate(fx, fy); g.scale(sx, k);
-        g.drawImage(sp.canvas, -sp.ax, -sp.ay, sp.w, sp.h);
-        g.restore();
-        glowAt(sp, fx, fy, sx, k);
-        capAt(sp, fx, fy, Math.abs(sx));
-        if (p.kind === 'bigtree' && sp.cone) this.drawTreeLights(g, fx, fy, sp.cone, k);
-    }
-    // The big tree's lights and baubles go round with it.
-    drawTreeLights(g, x0, y0, cone, k) {
-        const t = this.time, th = this.music.theta, cols = [[255, 90, 70], [255, 210, 100], [100, 220, 130], [120, 160, 255], [255, 150, 220]], glow = this.sprites.glow;
+    // The big tree's lights go round with it (on its cone, the far side's hidden).
+    drawTreeLights(g, pl, cone) {
+        const S = SnowGlobeLogic, v = S.view(pl), R = this.L.R, t = this.time, cols = [[255, 90, 70], [255, 210, 100], [100, 220, 130], [120, 160, 255], [255, 150, 220]], glow = this.sprites.glow;
         for (let i = 0; i < 46; i++) {
-            const u = 0.1 + (i * 0.618 % 1) * 0.82, a = i * 2.39996 + th, half = cone.w * 0.5 * (1 - u * 0.85) * k, y = y0 - cone.h * (0.06 + u * 0.88) * k, x = x0 + Math.sin(a) * half * 0.92, front = Math.cos(a);
-            if (front < -0.15) continue;
+            const u = 0.1 + (i * 0.618 % 1) * 0.82, a = i * 2.39996, half = cone.w * 0.5 * (1 - u * 0.85) * 0.95, f = S.facing(v, Math.sin(a), 0.2, Math.cos(a));
+            if (f < -0.1) continue;
+            const q = S.at(v, Math.sin(a) * half, cone.h * (0.06 + u * 0.88), Math.cos(a) * half), x = q[0] * R, y = q[1] * R;
             const col = cols[i % 5], tw = this.config.lights ? 0.55 + 0.45 * Math.sin(t * 2.5 + i * 1.7) : 0;
-            g.fillStyle = `rgb(${col[0]},${col[1]},${col[2]})`; g.globalAlpha = 0.6 + 0.4 * front; g.beginPath(); g.arc(x, y + half * 0.08 * front, this.L.R * 0.009 * k, 0, Math.PI * 2); g.fill();
-            if (tw > 0.05) { g.globalCompositeOperation = 'lighter'; g.globalAlpha = tw * 0.5 * (0.5 + 0.5 * front); const r = this.L.R * 0.05 * k; g.drawImage(glow, x - r, y - r, r * 2, r * 2); g.globalCompositeOperation = 'source-over'; }
+            g.fillStyle = `rgb(${col[0]},${col[1]},${col[2]})`; g.globalAlpha = 0.6 + 0.4 * Math.max(0, f); g.beginPath(); g.arc(x, y, R * 0.009 * v.k, 0, Math.PI * 2); g.fill();
+            if (tw > 0.05) { g.globalCompositeOperation = 'lighter'; g.globalAlpha = tw * 0.5 * (0.5 + 0.5 * Math.max(0, f)); const r = R * 0.05 * v.k; g.drawImage(glow, x - r, y - r, r * 2, r * 2); g.globalCompositeOperation = 'source-over'; }
         }
         g.globalAlpha = 1;
     }
@@ -548,9 +622,11 @@ class SnowGlobeAnimationManager {
                 g.restore();
             }
         }
+        // The room's lights, seen through the water: upside down, bigger, out of focus (as the room behind is).
+        this.drawLightsInWater(g);
         g.restore();
         this.put(g, this.glassArt, L.cx - R, L.cy - R, R * 2, R * 2);
-        if (this.config.candle) {
+        if (this.candleOn) {
             // The candle's flicker on the glass.
             const t = this.time, flick = 0.5 + 0.5 * Math.sin(t * 9.1) * Math.sin(t * 5.3), s = this.sprites.glow, r = R * 0.35;
             g.globalCompositeOperation = 'lighter'; g.globalAlpha = 0.1 + 0.08 * flick;
@@ -560,6 +636,38 @@ class SnowGlobeAnimationManager {
         this.put(g, B.front, B.x, B.y);
         SnowGlobeArt.key(g, B.key.x, B.key.y, R * 0.18, this.music.theta * 3, this.side);
         g.restore();
+        if (this.black && this.config.reflection) this.drawReflection(g);
+    }
+    drawLightsInWater(g) {
+        const c = this.config, K = this.roomKeep, L = this.L, R = L.R;
+        if (!(this.windowLightsOn || this.treeOn)) return;
+        const put = (list, cols) => {
+            for (const b of list) {
+                const x = L.cx - 1.25 * (b.x - L.cx), y = L.cy - 1.25 * (b.y - (L.cy - R * 0.25));
+                if (Math.hypot(x - L.cx, y - L.cy) > R * 0.95) continue;
+                const col = cols[b.i % cols.length], k = Math.max(0, this.bright(b.i, b.u ?? 0, c.twinkle)), s = this.bulbGlow(col), r = R * 0.1;
+                g.globalAlpha = 0.28 * k; g.drawImage(s, x - r, y - r, r * 2, r * 2);
+            }
+        };
+        g.globalCompositeOperation = 'lighter';
+        if (this.windowLightsOn) put(K.bulbs, this.lightCols(c.windowLights));
+        if (this.treeOn) put(K.treeBulbs, this.lightCols(c.deskTreeLights));
+        g.globalAlpha = 1; g.globalCompositeOperation = 'source-over';
+    }
+    // On black: the globe and its base mirrored in the black it stands on, faint, fading away below.
+    drawReflection(g) {
+        const L = this.L, R = L.R, B = this.baseArt, w = this.wob, h = Math.min(L.H - L.foot, R * 1.4);
+        if (h < 4) return;
+        g.save();
+        g.beginPath(); g.rect(0, L.foot, L.W, h); g.clip();
+        g.translate(L.base.x + w.x, L.foot); g.rotate(-w.a); g.scale(1, -0.9); g.translate(-L.base.x, -L.foot);
+        g.globalAlpha = 0.22;
+        this.put(g, B.front, B.x, B.y);
+        g.save(); g.beginPath(); g.arc(L.cx, L.cy, R, 0, Math.PI * 2); g.clip(); g.drawImage(this.inner, L.cx - R, L.cy - R, R * 2, R * 2); g.restore();
+        g.globalAlpha = 1;
+        g.restore();
+        const gr = g.createLinearGradient(0, L.foot, 0, L.foot + h); gr.addColorStop(0, 'rgba(0,0,0,0.15)'); gr.addColorStop(0.6, 'rgba(0,0,0,0.85)'); gr.addColorStop(1, 'rgba(0,0,0,1)');
+        g.fillStyle = gr; g.fillRect(0, L.foot, L.W, h);
     }
 
     // The cat: its body (breathing), its tail (dabs along a curve, live), the
@@ -568,14 +676,10 @@ class SnowGlobeAnimationManager {
         const A = this.catArt, c = this.catState, L = this.L, h = L.cat.h, x0 = L.cat.x, y0 = L.cat.y, s = A.s, t = this.time, puff = A.puff;
         const X = x => x0 + x * h, Y = y => y0 - y * h;
         const breathe = 1 + 0.012 * Math.sin(t * (c.state === 'sleep' ? 1.3 : 2.2));
-        // The tail, curled round its feet, the tip swishing.
+        // The tail: out from behind the haunch and round the front of the paws, the tip swishing (SnowGlobeLogic.tailLine).
         const sway = Math.sin(c.tail * 1.7) * (c.state === 'watch' ? 0.07 : 0.03) + (c.state === 'tap' || c.state === 'bat' ? 0.05 * Math.sin(t * 14) : 0), lift = c.state === 'watch' ? 0.05 + 0.03 * Math.sin(c.tail * 2.3) : 0.01;
-        const P = [[-s * 0.3, 0.07], [-s * 0.5, 0.0], [-s * 0.15, -0.035], [s * (0.16 + sway), 0.03 + lift]];
-        const bez = (u, i) => { const v = 1 - u; return v * v * v * P[0][i] + 3 * v * v * u * P[1][i] + 3 * v * u * u * P[2][i] + u * u * u * P[3][i]; };
-        for (let i = 0; i <= 26; i++) {
-            const u = i / 26, x = bez(u, 0), y = bez(u, 1), r = (0.05 - 0.028 * u) * puff, col = A.tail[(i >> 1) % 2 ? 2 : 0];
-            g.fillStyle = `rgb(${col[0]},${col[1]},${col[2]})`; g.beginPath(); g.ellipse(X(x), Y(y), r * h, r * h * 0.8, 0, 0, Math.PI * 2); g.fill();
-        }
+        const tail = SnowGlobeLogic.tailLine(s, puff, sway, lift);
+        this.drawTail(g, tail.pts, 0, X, Y, h);
         // The body.
         const B = A.body, bw = B.canvas.width / this.ps, bh = B.canvas.height / this.ps;
         g.save(); g.translate(X(0), Y(0)); g.scale(1, breathe); g.drawImage(B.canvas, -B.ax, -B.ay, bw, bh); g.restore();
@@ -583,6 +687,8 @@ class SnowGlobeAnimationManager {
         const groom = c.state === 'groom' ? 0.55 + 0.1 * Math.sin(t * 6) : 0, paw = Math.max(c.paw, groom);
         const Lg = A.leg, sh = A.shoulder, lw = Lg.canvas.width / this.ps, lh = Lg.canvas.height / this.ps;
         g.save(); g.translate(X(sh.x), Y(sh.y * breathe)); g.rotate(-s * paw * (c.state === 'bat' ? 1.75 : 1.45)); g.drawImage(Lg.canvas, -Lg.ax, -Lg.ay, lw, lh); g.restore();
+        // The rest of the tail lies in front of the paws.
+        this.drawTail(g, tail.pts, tail.front, X, Y, h);
         // The head.
         const sleep = c.sleep, look = c.head, H = A.head, hw = H.canvas.width / this.ps, hh = H.canvas.height / this.ps;
         const hx = X(A.headAt.x + s * look * 0.018), hy = Y(A.headAt.y * breathe - 0.06 * sleep - 0.04 * groom + 0.006 * Math.sin(t * 2.2));
@@ -620,15 +726,58 @@ class SnowGlobeAnimationManager {
         g.globalAlpha = 1;
     }
 
+    // One smooth tapered stroke from point i0 to the tip: the coat, its stripes, a lit top and a shaded underside.
+    drawTail(g, pts, i0, X, Y, h) {
+        const A = this.catArt, P = A.P, n = pts.length - 1, left = [], right = [];
+        for (let i = i0; i <= n; i++) {
+            const a = pts[Math.max(0, i - 1)], b = pts[Math.min(n, i + 1)], dx = X(b[0]) - X(a[0]), dy = Y(b[1]) - Y(a[1]), l = Math.hypot(dx, dy) || 1, r = pts[i][2] * h;
+            const x = X(pts[i][0]), y = Y(pts[i][1]);
+            left.push([x - dy / l * r, y + dx / l * r]); right.push([x + dy / l * r, y - dx / l * r]);
+        }
+        const tip = pts[n], tx = X(tip[0]), ty = Y(tip[1]), tr = tip[2] * h;
+        // (Its outline goes out along one side and back along the other: one closed piece, one winding.)
+        const path = new Path2D();
+        path.moveTo(left[0][0], left[0][1]);
+        for (const q of left) path.lineTo(q[0], q[1]);
+        for (let i = right.length - 1; i >= 0; i--) path.lineTo(right[i][0], right[i][1]);
+        path.closePath();
+        const cap = new Path2D(); cap.arc(tx, ty, tr, 0, Math.PI * 2);
+        const col = c => `rgb(${c[0] | 0},${c[1] | 0},${c[2] | 0})`;
+        g.fillStyle = col(P.base); g.fill(path); g.fill(cap);
+        g.save(); g.clip(path); g.lineCap = 'round';
+        // Along it: the underside in shadow, the top in the light.
+        const line = (off, w, style) => { g.strokeStyle = style; g.lineWidth = w; g.beginPath(); for (let i = i0; i <= n; i++) { const p = pts[i], x = X(p[0]), y = Y(p[1]) + off * p[2] * h; i === i0 ? g.moveTo(x, y) : g.lineTo(x, y); } g.stroke(); };
+        line(0.8, h * 0.035, 'rgba(10,8,18,0.32)');
+        line(-0.6, h * 0.02, `rgba(${P.light[0]},${P.light[1]},${P.light[2]},0.5)`);
+        // A painted coat: short strokes along it, in the coat's colours and its stripes or patches (the same every frame).
+        const band = P.stripe || (P.mottle && P.mottle[0]) || P.patches, cols = [P.base, P.light, P.base, band || P.base];
+        for (let i = i0 + 1; i < n; i++) {
+            const a = pts[i - 1], b = pts[i + 1], dx = X(b[0]) - X(a[0]), dy = Y(b[1]) - Y(a[1]), l = Math.hypot(dx, dy) || 1, r = pts[i][2] * h, x = X(pts[i][0]), y = Y(pts[i][1]);
+            for (let k = 0; k < 3; k++) {
+                const q = Math.sin(i * 12.9898 + k * 78.233) * 43758.5453, f = q - Math.floor(q), off = (f - 0.5) * 1.6 * r;
+                const stripe = band && (P.stripe ? i % 3 === 0 : f > 0.6);
+                g.strokeStyle = col(stripe ? band : cols[(i + k) % 3]); g.globalAlpha = stripe ? 0.55 : 0.38; g.lineWidth = r * (stripe ? 0.6 : 0.45);
+                g.beginPath(); g.moveTo(x - dy / l * off - dx / l * r * 1.0, y + dx / l * off - dy / l * r * 1.0); g.lineTo(x - dy / l * off + dx / l * r * 1.4, y + dx / l * off + dy / l * r * 1.4); g.stroke();
+            }
+        }
+        g.globalAlpha = 1;
+        g.restore();
+        if (P.white && P.bib) { g.fillStyle = col(P.white); g.beginPath(); g.arc(tx, ty, tr * 1.15, 0, Math.PI * 2); g.fill(); }
+        // Fur at the edge, a fluffy coat's more so.
+        const fl = A.C.fluff || 0;
+        g.strokeStyle = `rgba(${P.base[0]},${P.base[1]},${P.base[2]},0.7)`; g.lineWidth = h * (0.006 + 0.006 * fl); g.lineJoin = 'round'; g.stroke(path);
+    }
+
     // ---- For tests -------------------------------------------------------------------------------
 
     centres() { const L = this.L; return { globe: { x: L.cx, y: L.cy, r: L.R }, base: { x: L.base.x, y: (L.base.top + L.foot) / 2 }, cat: this.catArt ? { x: L.cat.x, y: L.cat.y - L.cat.h * 0.4 } : null }; }
     debugState() {
         const sim = this.sim, cover = SnowGlobeLogic.cover(sim, this.placed || []);
         return {
-            scene: this.scene, cat: this.catId, catState: this.catState.state, festive: this.festive, loose: SnowGlobeLogic.count(sim), flakes: sim.flakes.length,
+            scene: this.scene, cat: this.catArt ? this.catId : null, catState: this.catState.state, festive: this.festive, loose: SnowGlobeLogic.count(sim), flakes: sim.flakes.length,
             ground: +cover.ground.toFixed(3), roofs: cover.on.filter(Boolean).length, calm: !!this.calm, calmFor: +sim.calmFor.toFixed(2), stir: +SnowGlobeLogic.stir(sim).toFixed(3),
             music: { wind: +this.music.wind.toFixed(3), omega: +this.music.omega.toFixed(3), theta: +this.music.theta.toFixed(3), tempo: +this.music.tempo.toFixed(3), played: this.music.played, tune: this.tune || null },
+            black: !!this.black, bulbs: this.windowLightsOn ? this.roomKeep.bulbs.length : 0, treeBulbs: this.treeOn ? this.roomKeep.treeBulbs.length : 0, models: this.models.filter(Boolean).length, smoke: this.smoke.length,
             wobble: +this.wob.a.toFixed(4), painted: +this.painted().toFixed(3), notes: this.notes.length, outside: this.outside.length, ps: this.ps, stats: { ...this.stats },
         };
     }
