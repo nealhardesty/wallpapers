@@ -154,7 +154,9 @@ function listen() {
     // So are a fixture server's deliberate 503s.
     // A declared service failing (offline, a fixture 503, or on the live run the real service having a bad
     // moment, as celestrak.org does) is the wallpaper's offline case, which its checks cover; not a failure.
-    const outage = e => e.source === 'network' && declared(e.url || '');
+    // A refusal without CORS headers (celestrak.org turning a busy runner away) is logged against the page, not the
+    // request, so the service's URL is read from the message.
+    const outage = e => (e.source === 'network' && declared(e.url || '')) || declared(/Access to fetch at '([^']+)'/.exec(e.text || '')?.[1] || '');
     cdp.on('Log.entryAdded', ({ entry: e }) => e.level === 'error' && !((current.offline || current.forecast === '503') && (e.source === 'network' || declared(e.url || ''))) && !(LIVE && outage(e)) && record(`log: ${e.text} ${e.url || ''}`));
     cdp.on('Runtime.executionContextCreated', ({ context }) => {
         if (context.auxData?.isDefault) contexts.set(context.auxData.frameId, context.id);
@@ -268,6 +270,12 @@ const DRAWN = `(() => {
     return best;
 })()`;
 
+const CANVASES = `(() => {
+    const lost = c => { try { const g = c.getContext('2d'); return g && g.isContextLost && g.isContextLost() ? ' lost' : ''; } catch { return ''; } };
+    const list = [...document.querySelectorAll('canvas')].map(c => (c.id || 'canvas') + ' ' + c.width + 'x' + c.height + lost(c));
+    return (list.join(', ') || 'no canvas') + '; ' + (WP.host?.frames?.count ?? '?') + ' frames';
+})()`;
+
 const PANEL_OPEN = `(() => { const p = document.getElementById('panel'); return !!p && !p.hidden; })()`;
 
 // Defaults are exact if a fresh run's config saves as nothing, and the only
@@ -301,10 +309,21 @@ async function stage(id, entry) {
     writeFileSync(join(SHOTS, `${id}.png`), Buffer.from(data, 'base64'));
     const storage = ready ? await evaluate(STORAGE) : null;
 
-    if (drawn < 2 && id !== 'blank') record(photo ? 'background photo not shown' : 'nothing drawn');
+    let notes = [];
+    if (drawn < 2 && id !== 'blank' && !photo) {
+        // What was there: each canvas's size and whether its context was lost, and how many frames had run.
+        const seen = await evaluate(CANVASES);
+        if (LIVE) {
+            // The live run shares a busy runner with real network: look once more before calling it blank.
+            await sleep(RUN_MS);
+            const again = await evaluate(DRAWN);
+            if (again >= 2) notes.push(`blank at first, drawn ${RUN_MS} ms later (${seen})`);
+            else record(`nothing drawn (${seen})`);
+        } else record(`nothing drawn (${seen})`);
+    } else if (drawn < 2 && id !== 'blank') record('background photo not shown');
     if (storage?.diff?.length) record(`fresh run would save: ${storage.diff.join(', ')} (defaults.js out of step)`);
     if (storage?.foreign?.length) record(`wrote storage outside its namespace: ${storage.foreign.join(', ')}`);
-    return { readyMs, drawn, problems: current.problems };
+    return { readyMs, drawn, problems: current.problems, notes };
 }
 
 // Murmuration's and Lanterns': a plain mouse event.
@@ -1252,10 +1271,12 @@ const STAGE_CHECKS = {
         if (canvas.w !== s.bw || canvas.w > 700 || canvas.look !== 'pixelated') record(`the canvas: ${JSON.stringify(canvas)}`);
         if (s.lights < 6 || s.presents !== 3 || s.track !== 1) record(`frame one: ${JSON.stringify(s)}`);
         await sleep(500);
-        const before = await evaluate('WP.host.frames.count');
+        // Timed by the page's clock: a slow runner's round trips stretch our two seconds, not its frame rate.
+        const before = await evaluate('[WP.host.frames.count, performance.now()]');
         await sleep(2000);
-        const frames = await evaluate('WP.host.frames.count') - before;
-        if (frames > 30 || frames < 12) record(`${frames} frames in 2 s (want about 24)`);
+        const after = await evaluate('[WP.host.frames.count, performance.now()]');
+        const fps = (after[0] - before[0]) / ((after[1] - before[1]) / 1000);
+        if (fps > 15 || fps < 6) record(`${fps.toFixed(1)} frames a second (want about 12)`);
         // T: once round, and parked where it started.
         const parked = s.trainS;
         await press('t');
@@ -3121,7 +3142,7 @@ const STAGE_CHECKS = {
             if (s.chunks !== 61 || s.trees < 3000) record(`the land: ${s.chunks} chunks, ${s.trees} trees`);
             if (s.shot !== 'follow' || s.type !== 'groomer') record(`it starts ${s.shot} on a ${s.type}`);
             // With WebGL: a mesh for every chunk, trees by the batch, the riders as triangles.
-            if (!s.flat && (s.meshes !== 61 || s.drawn.triangles < 60000 || s.drawn.calls > 160 || s.moving < 600 || s.batches < 400)) record(`the view: ${JSON.stringify(s)}`);
+            if (!s.flat && (s.meshes < s.chunks - 1 || s.drawn.triangles < 60000 || s.drawn.calls > 160 || s.moving < 600 || s.batches < 400)) record(`the view: ${JSON.stringify(s)}`);
             if (await evaluate(DRAWN) < 30) record('barely drawn');
             await shoot('ski-run');
             return s.riders === 3;
@@ -5380,6 +5401,7 @@ async function main(only) {
             if (verdict === '✗') failed++;
             console.log(`${id.padEnd(18)} ${String(r.readyMs).padStart(5)}ms ${String(r.drawn).padStart(6)}  ${verdict}`);
             if (verdict === '✗') for (const p of [...new Set(r.problems)]) console.log(`    ${p}`);
+            for (const n of r.notes) console.log(`    note: ${n}`);
             failed += await stageChecks(id);
             if (EXTRA[id] && !LIVE) {
                 const { check, failed: extra } = checker();

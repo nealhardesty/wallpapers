@@ -492,9 +492,21 @@ const SnowGlobeArt = (() => {
         g.fillStyle = css(S.plaque); g.beginPath(); g.ellipse(x, py, pw / 2, ph / 2, 0, 0, TAU); g.fill();
         g.lineWidth = Math.max(0.8, R * 0.012); g.strokeStyle = css(shade(S.ring, 0.7)); g.stroke();
         g.fillStyle = css(shade(S.plaque, 0.55)); g.font = `italic ${Math.max(6, ph * 0.62)}px Georgia, serif`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('Noël', x, py + ph * 0.04);
+        // How far the body's side stands out from its middle at height y, along the curve it was drawn with,
+        // so the key's stem goes into the wood instead of starting in the air beside it.
+        const sideAt = y => {
+            const P = [[cw / 2, yt], [cw / 2, yt + bh * 0.35], [bw / 2 * 0.86, yt + bh * 0.45], [bw / 2, yb - bh * 0.12]];
+            let best = cw / 2, err = Infinity;
+            for (let i = 0; i <= 64; i++) {
+                const t = i / 64, u = 1 - t, w = [u * u * u, 3 * u * u * t, 3 * u * t * t, t * t * t];
+                const px = w[0] * P[0][0] + w[1] * P[1][0] + w[2] * P[2][0] + w[3] * P[3][0], py = w[0] * P[0][1] + w[1] * P[1][1] + w[2] * P[2][1] + w[3] * P[3][1];
+                if (Math.abs(py - y) < err) { err = Math.abs(py - y); best = px; }
+            }
+            return best;
+        };
         // Into brushwork, softly (the base is near: fine strokes).
         const opts = { widths: [R * 0.09 * ps, R * 0.045 * ps, R * 0.022 * ps], seed: 21, len: 3, tol: 50, jit: 0.05, dir: (u, v) => (v > 0.12 ? 0.02 : null) };
-        return { back: bc, front: fc, frontOpts: opts, x: ox, y: oy, w: W / ps, h: H / ps, key: { x: x + (side > 0 ? -1 : 1) * (bw / 2 * 0.95), y: yt + bh * 0.55 } };
+        return { back: bc, front: fc, frontOpts: opts, x: ox, y: oy, w: W / ps, h: H / ps, key: { x: x + (side > 0 ? -1 : 1) * (sideAt(yt + bh * 0.55) - R * 0.006), y: yt + bh * 0.55 } };
     }
     // The wind-up key in the base's side, turned `a` about its own axis
     // (which points out of the base, level, toward the viewer's side): its
@@ -521,7 +533,11 @@ const SnowGlobeArt = (() => {
         wing(far);
         const sg = g.createLinearGradient(0, y - s * 0.07, 0, y + s * 0.07); sg.addColorStop(0, css([250, 220, 140])); sg.addColorStop(0.5, css([200, 158, 70])); sg.addColorStop(1, css([110, 78, 30]));
         g.fillStyle = sg; g.fillRect(Math.min(x, bx), y - s * 0.06, Math.abs(bx - x), s * 0.12);
-        g.fillStyle = css([170, 130, 56]); g.beginPath(); g.ellipse(x + dir * s * 0.05, y, s * 0.04, s * 0.11, 0, 0, TAU); g.fill();
+        // Its escutcheon: a brass plate on the base's curving side, seen nearly edge on, the keyhole the stem goes into.
+        g.fillStyle = css([92, 64, 26]); g.beginPath(); g.ellipse(x - dir * s * 0.015, y + s * 0.012, s * 0.055, s * 0.17, 0, 0, TAU); g.fill();
+        g.fillStyle = css([196, 152, 66]); g.beginPath(); g.ellipse(x, y, s * 0.05, s * 0.16, 0, 0, TAU); g.fill();
+        g.fillStyle = css([250, 222, 150], 0.7); g.beginPath(); g.ellipse(x + dir * s * 0.012, y - s * 0.06, s * 0.018, s * 0.06, 0, 0, TAU); g.fill();
+        g.fillStyle = css([170, 130, 56]); g.beginPath(); g.ellipse(x + dir * s * 0.05, y, s * 0.035, s * 0.09, 0, 0, TAU); g.fill();
         g.fillStyle = brass(0.55); g.beginPath(); g.ellipse(bx, y, s * 0.09, Math.max(thick * 0.6, s * 0.1 * Math.abs(c)), 0, 0, TAU); g.fill();
         wing(near);
     }

@@ -2,7 +2,7 @@
 name: releaseme
 description: Cut a Wallpapers release from what is already merged on master, the way this repo does it. Bump the version in its four places on a version-X.Y.Z branch, open the "Version X.Y.Z" PR, wait for its CI and fix anything that broke until it is green, then merge, tag vX.Y.Z on the merge commit, and watch the tag's CI run publish the GitHub Release (APK, extension, Mac and Windows zips), fixing new breakage the same way. Start it when the user types /releaseme or asks for a release as part of a larger request ("merge it, then /releaseme", "…and cut a release"), optionally with patch|minor|major|X.Y.Z and a one-line summary. Never start a release on your own initiative.
 context: fork
-allowed-tools: Bash(git *) Bash(gh *) Bash(make *) Read Edit Write Grep Glob
+allowed-tools: Bash(git *) Bash(gh *) Bash(make *) Bash(shasum *) Read Edit Write Grep Glob
 ---
 
 <!-- One skill for every agent: it lives in `.agents/skills/` (the shared Agent Skills location;
@@ -219,9 +219,17 @@ Then check what was published: `gh release view vX.Y.Z --json url,assets,body`. 
 has six files: `wallpapers-X.Y.Z.apk`, `wallpapers-extension-X.Y.Z.zip`,
 `wallpapers-mac-X.Y.Z.zip` and `wallpapers-windows-X.Y.Z.zip`, the last two each with a
 `.sha256`. Leave the generated notes as they are; earlier releases were never edited.
-- **The Mac or Windows zip is missing:** by design (the `release` job's comment) the release
-  still goes out when `mac` or `win` fails, with a warning. It isn't a failed release. Classify
-  the failure as in §4 and report it; if it's ours, fix it through a PR and ship the next patch
+- **The Mac zip is missing: always build it here and attach it, without asking** (the owner's
+  standing order). On a Mac, in a fresh detached worktree at the tag
+  (`git worktree add --detach <scratch dir> vX.Y.Z`): `make mac-test`, `make mac-saver-test`,
+  then `make mac-release` (all in the background). It must say `arm64 x86_64`, and the zip's
+  `shasum -a 256` must match its `.sha256`. Then `gh release upload vX.Y.Z
+  dist/wallpapers-mac-X.Y.Z.zip dist/wallpapers-mac-X.Y.Z.zip.sha256`, check that the release
+  lists six files, and remove the worktree. If the tests fail it's real breakage: don't upload,
+  classify it as in §4 and report it. Not on a Mac: report that it must be attached by hand.
+- **The Windows zip is missing:** by design (the `release` job's comment) the release still
+  goes out when `mac` or `win` fails, with a warning. It isn't a failed release. Classify the
+  failure as in §4 and report it; if it's ours, fix it through a PR and ship the next patch
   version, which will carry the missing zip.
 - **`wallpapers-X.Y.Z-debug.apk` instead of the signed APK:** the `WALLPAPERS_KEYSTORE_*`
   secrets are missing. Report it; never try to sign some other way, and never touch the
