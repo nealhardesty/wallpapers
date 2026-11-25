@@ -356,14 +356,16 @@ class SnowGlobeAnimationManager {
         }
     }
     // How often frames are needed: all of them while anything moves; fourteen a
-    // second for the candle and the cat; a few while the cat sleeps and nothing else stirs.
+    // second for the candle and the cat; a few while the cat sleeps and nothing
+    // else stirs (SnowGlobeLogic.restWait: a wait in ms, as idleUntil takes it).
     pace() {
         const m = this.music, w = this.wob, busy = this.loose > 0 || m.omega > 0.001 || m.wind > 0 || w.a || w.v || w.x || w.y || this.drag || this.notes.length || this.jobs.length
             || (this.catArt && (this.catState.state === 'tap' || this.catState.state === 'bat' || this.catState.paw > 0.01));
         this.calm = !busy;
         if (busy) return;
-        const quiet = (!this.catArt || this.catState.state === 'sleep') && !this.config.candle && !this.outside.length;
-        this.host.idleUntil(performance.now() + (quiet ? 1500 : this.catArt && this.catState.state === 'sleep' && !this.outside.length ? 250 : 1000 / 14));
+        const cat = !this.catArt ? 'none' : this.catState.state === 'sleep' ? 'asleep' : 'awake';
+        this.restMs = SnowGlobeLogic.restWait({ busy, cat, ambient: this.config.candle || this.outside.length > 0 });
+        this.host.idleUntil(this.restMs);
     }
 
     // ---- Drawing -----------------------------------------------------------------------------------

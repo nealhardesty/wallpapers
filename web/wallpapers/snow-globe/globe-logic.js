@@ -420,6 +420,21 @@ const SnowGlobeLogic = (() => {
     // A stroke: the cat purrs a while.
     function pet(c) { c.state = 'purr'; c.t = 0; c.dur = 3.5; c.paw = 0; return c; }
 
+    // ---- Pacing at rest ----------------------------------------------------------------------
+    // How long the stage may wait before the next frame, in ms from now (a
+    // wait, never a deadline: host.idleUntil takes a duration). 0 while
+    // anything moves; fourteen frames a second for something that flickers
+    // or breathes (the candle, a cat awake, snow outside, lights, smoke); four
+    // while the cat sleeps and nothing else stirs; and with nothing at all,
+    // a frame now and then for the timers (who shakes it, the music box).
+    // o: { busy, cat: 'none'|'awake'|'asleep', ambient (anything else that flickers) }.
+    function restWait(o) {
+        if (o.busy) return 0;
+        if (o.ambient || o.cat === 'awake') return 1000 / 14;
+        if (o.cat === 'asleep') return 250;
+        return 1500;
+    }
+
     // ---- Where it all stands on the screen -----------------------------------------------------
     // The surface (sill, mantel or desk) runs across the bottom; the globe sits
     // on its base on it, the cat beside it, the candle on the other side.
@@ -479,6 +494,6 @@ const SnowGlobeLogic = (() => {
     return {
         TAU, clamp, mix, smooth, rng, FLOOR, FLOOR_R, TILT, WALL, project, KINDS, SCENES, SCENE_ORDER, SCENE_NAMES, sceneFor, festive, placed,
         makeSim, scatter, shake, step, count, resize, cover, waterAt, stir, OMEGA, musicBox, wind, musicStep, notesDue, TUNES, TUNE_ORDER, hz,
-        CATS, CAT_ORDER, catFor, makeCat, catStep, pet, CAT_STATES, layout, run,
+        CATS, CAT_ORDER, catFor, makeCat, catStep, pet, CAT_STATES, restWait, layout, run,
     };
 })();

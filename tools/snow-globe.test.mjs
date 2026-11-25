@@ -191,6 +191,29 @@ test('the cat: watches moving snow, taps the glass, shakes it itself when it has
     assert.notEqual(c.state, 'purr');
 });
 
+test('at rest: frames keep coming for as long as anything should move, at the pace it needs, however long it rests', () => {
+    // A fake clock: each frame asks restWait how long until the next; thirty simulated minutes of a calm globe.
+    for (const [catOn, ambient] of [[true, true], [true, false], [false, true], [false, false]]) {
+        const c = G.makeCat(), rand = seeded(9);
+        let t = 0, frames = 0, longest = 0, asleep = 0;
+        while (t < 30 * 60 * 1000) {
+            const cat = !catOn ? 'none' : c.state === 'sleep' ? 'asleep' : 'awake';
+            const wait = G.restWait({ busy: false, cat, ambient });
+            assert.ok(Number.isFinite(wait) && wait > 0 && wait <= 1500, `a wait, not a deadline: ${wait} at ${(t / 1000).toFixed(0)} s`);
+            const dt = Math.min(0.1, wait / 1000);
+            if (catOn) G.catStep(c, dt, { rand, swirl: 0, calmFor: t / 1000, mischief: 0, byCat: false });
+            if (cat === 'asleep') asleep++;
+            longest = Math.max(longest, wait);
+            t += wait; frames++;
+        }
+        const tag = `cat ${catOn}, ambient ${ambient}`;
+        if (ambient) assert.ok(longest < 80 && frames > 30 * 60 * 13, `${tag}: 14 a second all along (${frames} frames, longest wait ${longest.toFixed(0)} ms)`);
+        else if (catOn) assert.ok(longest <= 250 && asleep > 0, `${tag}: at least 4 a second while it sleeps (longest wait ${longest} ms)`);
+        else assert.equal(longest, 1500, `${tag}: almost none with nothing to move`);
+    }
+    assert.equal(G.restWait({ busy: true, cat: 'awake', ambient: true }), 0, 'busy: every frame');
+});
+
 test('by the date: the scene and the cat', () => {
     const d = s => new Date(s);
     assert.equal(G.sceneFor('auto', d('2026-12-24T20:00')), 'tree');

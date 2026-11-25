@@ -1169,6 +1169,12 @@ const STAGE_CHECKS = {
         if (!(s.ground > 0.5) || !(s.roofs > 0)) record(`settled, but the snow isn't lying: ground ${s.ground}, ${s.roofs} roofs`);
         const calmFrames = await framesIn(2000);
         if (calmFrames > 34) record(`${calmFrames} frames in 2 s at rest with a cat (want 14 a second at most)`);
+        if (calmFrames < 7) record(`${calmFrames} frames in 2 s at rest with a cat awake or asleep (want 4 to 14 a second)`);
+        // As if the page had been open twenty minutes: a rest is still a short wait, not as long as the page has been open.
+        await evaluate('(n => { performance.now = () => n() + 20 * 60 * 1000; })(performance.now.bind(performance))');
+        await sleep(400);
+        const later = await framesIn(2000);
+        if (later < 7) record(`${later} frames in 2 s at rest twenty minutes on (it froze until the mouse moved)`);
         // A tap on the base winds the music box: it turns and plays.
         const theta = s.music.theta;
         await mouse('mousePressed', c.base.x, c.base.y); await mouse('mouseReleased', c.base.x, c.base.y);
