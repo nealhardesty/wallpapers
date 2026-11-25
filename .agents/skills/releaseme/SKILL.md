@@ -1,22 +1,22 @@
 ---
 name: releaseme
-description: Cut a Wallpapers release from what is already merged on master, the way this repo does it. Bump the version in its four places on a version-X.Y.Z branch, open the "Version X.Y.Z" PR, wait for its CI and fix anything that broke until it is green, then merge, tag vX.Y.Z on the merge commit, and watch the tag's CI run publish the GitHub Release (APK, extension, Mac and Windows zips), fixing new breakage the same way. Only the user starts it, by typing /releaseme, optionally with patch|minor|major|X.Y.Z and a one-line summary.
-disable-model-invocation: true
+description: Cut a Wallpapers release from what is already merged on master, the way this repo does it. Bump the version in its four places on a version-X.Y.Z branch, open the "Version X.Y.Z" PR, wait for its CI and fix anything that broke until it is green, then merge, tag vX.Y.Z on the merge commit, and watch the tag's CI run publish the GitHub Release (APK, extension, Mac and Windows zips), fixing new breakage the same way. Start it when the user types /releaseme or asks for a release as part of a larger request ("merge it, then /releaseme", "…and cut a release"), optionally with patch|minor|major|X.Y.Z and a one-line summary. Never start a release on your own initiative.
 context: fork
 allowed-tools: Bash(git *) Bash(gh *) Bash(make *) Read Edit Write Grep Glob
 ---
 
 <!-- One skill for every agent: it lives in `.agents/skills/` (the shared Agent Skills location;
 Codex and others read it), and `.claude/skills/releaseme` is a symlink to it. `context: fork`,
-`allowed-tools` and `disable-model-invocation` are Claude Code's keys (run it as a background
-subagent, pre-allow git/gh/make, and only start it when the user asks); other agents ignore them. -->
+`allowed-tools` are Claude Code's keys (run it as a background subagent, pre-allow git/gh/make);
+other agents ignore them. An agent may start it, but only because the user asked for a release. -->
 
 # /releaseme: bump → Version PR → green CI → merge → tag → watch the Release
 
 The user's arguments, if any: `$ARGUMENTS`. A bump level (`patch`, `minor`, `major` or `X.Y.Z`;
 default: see §0) and/or a one-line summary for the PR body.
 
-The user typed `/releaseme`, which authorizes every step below. Run them without stopping to
+The user asked for a release (typed `/releaseme`, or asked for one in a larger request that an
+agent is carrying out), which authorizes every step below. Run them without stopping to
 ask. **Follow the repo's rules: never `--admin`, never merge a red or pending PR, never push
 to `master` directly, never move or delete a tag, never commit a secret.** Stop and report when
 a rule below says to, or when a step fails in a way this file doesn't cover.
@@ -41,8 +41,12 @@ agent's background or async shell, or `cmd &` then `wait`. Never poll in a tight
 
 - `git fetch origin --tags`, then `git status --short`. **A release ships only what is merged.**
   Uncommitted changes, or local commits not on `origin/master`, are someone's unfinished work:
-  don't sweep them into a version PR. Say so and stop (they go through their own PR first).
-- Be on master at `origin/master`: `git checkout master && git pull --ff-only`.
+  don't sweep them into a version PR. If they belong to work that isn't part of this release
+  (the owner's edits on another branch), leave them untouched and do the whole release in a fresh
+  worktree instead: `git worktree add -b version-X.Y.Z <scratch dir> origin/master`, and remove
+  it at the end. If they look like work meant for this release, say so and stop (it goes
+  through its own PR first).
+- Be on master at `origin/master`: `git checkout master && git pull --ff-only` (in the fresh worktree, you already are).
 - Latest tag: `git describe --tags --abbrev=0`. If `git log --oneline <tag>..origin/master` is
   empty, there is nothing to release. Say so and stop.
 - `gh auth status` must pass.
