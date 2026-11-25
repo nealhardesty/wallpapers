@@ -169,6 +169,21 @@
               { keys: ['p'], label: 'Paint it again', run: village => village.repaint() },
               { keys: ['m'], label: 'What time is it in the village?', run: village => village.report() },
           ] },
+        // Painted Village's method on a mountain: its plates and bake, with the real sun and moon (harvest-sky.js) and the windows' hours (village-logic.js).
+        { id: 'torchlight', name: 'Torchlight Descent', icon: '🔥', accent: '#ff9a4a', background: '#1b2346',
+          scripts: ['harvest/harvest-sky.js', 'christmas-village/village-logic.js', 'painted-village/painted-logic.js', 'painted-village/painted-plates.js', 'painted-village/painted-art.js', 'painted-village/painted-bake.js',
+              'torchlight/torch-logic.js', 'torchlight/torch-art.js', 'torchlight/torch-cast.js', 'torchlight/torchlight.js'],
+          make: host => new TorchlightAnimationManager(host), cost: 'medium', interactive: true,
+          effects: [['moving-lights', 'medium']],
+          keys: [
+              { keys: ['d'], label: 'Light the torches: send them down', run: t => t.descend() },
+              { keys: ['y'], label: 'Spell the new year on the mountain', run: t => t.spellYear() },
+              { keys: ['r'], label: 'Rockets: fireworks over the valley', run: t => t.rockets() },
+              { keys: ['g'], label: 'The snowcat: out to groom, or home', run: t => t.groom() },
+              { keys: ['w'], label: 'A flurry', run: t => t.flurry() },
+              { keys: ['p'], label: 'Paint it again', run: t => t.repaint() },
+              { keys: ['m'], label: 'What is happening on the mountain?', run: t => t.report() },
+          ] },
         // harvest-sky.js (the sun and the moon) loads first: Sky Island shares Harvest Valley's astronomy.
         { id: 'sky-island', name: 'Sky Island', icon: '🏝️', accent: '#7cc4ff', background: '#5a8fd0',
           scripts: ['harvest/harvest-sky.js', 'sky-island/sky-island-logic.js', 'sky-island/sky-island-art.js', 'sky-island/sky-island-land.js', 'sky-island/sky-island-actors.js', 'sky-island/sky-island.js'],
