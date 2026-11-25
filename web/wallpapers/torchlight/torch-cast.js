@@ -72,14 +72,14 @@ class TorchCast {
         // New Year's Eve, near midnight: the grand descent, already on the mountain (spelling the year, if it is time).
         if (m.config.newYear !== false && cal.newYear && cal.toMidnight != null && cal.toMidnight <= TorchLogic.GRAND_AT && cal.toMidnight > -150) {
             const p = this.start({ grand: true, year: cal.year });
-            if (p) { this.wakeDown(p, 0.38); if (cal.toMidnight < TorchLogic.GRAND_AT - 300) { p.hold = { t: Math.max(20, cal.toMidnight + 150) }; p.spelling = true; for (const k of p.sk) k.fig = k.state === 'ski' ? 1 : 0; } }
+            if (p) { this.wakeDown(p, p.figureAt / this.T.track.length); if (cal.toMidnight < TorchLogic.GRAND_AT - 300) { p.hold = { t: Math.max(20, cal.toMidnight + 150) }; p.speed = 0; for (const k of p.sk) k.v = 0; this.spellNow(p); for (const k of p.sk) k.fig = k.figAt ? 1 : 0; } }
         } else if (dark > 0.55 && m.descentsAllowed()) {
             const p = this.start({ quiet: true });
             if (p) {
-                // Well under way: some still at the top, the head of it halfway down.
-                const at = this.rr(0.25, 0.6) * this.T.track.length + p.gap * p.n * 0.3;
+                // Well under way: some still at the top, the head of it well down the mountain.
+                const face = this.T.track.pts[Math.max(1, this.T.track.faceEnd)].m, at = face * this.rr(0.72, 0.97);
                 p.lead = at; p.phase = 'down';
-                for (const k of p.sk) { k.lit = 1; const s = TorchLogic.slot(p, k.i); if (s > 0) { k.state = 'ski'; k.s = Math.min(s, this.T.track.length - 1); } }
+                for (const k of p.sk) { k.lit = 1; const s = TorchLogic.slot(p, k.i); if (s > 0) { k.state = 'ski'; k.s = Math.min(s, this.T.track.length - 1); k.v = p.v; } }
             }
         }
         if (dark < 0.5) for (let i = 0; i < 4; i++) this.daySkier(true);
@@ -93,27 +93,47 @@ class TorchCast {
         const m = this.m, cfg = m.config, grand = !!o.grand;
         const n = Math.max(1, Math.round((grand ? Math.max(48, cfg.torches * 1.5) : cfg.torches) * (0.55 + 0.45 * m.density())));
         const shape = cfg.finale === 'surprise' ? this.pick(TorchLogic.SHAPES) : cfg.finale;
-        const p = this.proc = TorchLogic.procession(n, { random: this.random, pace: cfg.pace, gap: cfg.spacing, tumbles: cfg.tumbles, shape, grand, gather: 30 });
+        // The grand descent stops to spell the year when its leader is below the figure; close enough
+        // together that the last of them has left the hut by then.
+        const track = this.T.track, Y = this.L.year, below = track.pts.find(q => !q.ground && q.y >= Y.cy + Y.h / 2 - 4 * this.cam.u) || track.pts[Math.max(0, track.faceEnd - 1)];
+        const gap = grand ? Math.max(3, Math.min(cfg.spacing, (below.m - 25) / Math.max(1, n - 1))) : cfg.spacing;
+        const p = this.proc = TorchLogic.procession(n, { random: this.random, pace: cfg.pace, gap, tumbles: cfg.tumbles, shape, grand, gather: 30 });
         p.linger = grand ? 240 : 70;
-        this.spots = TorchLogic.formation(shape, n, this.L, this.cam);
+        this.spots = TorchLogic.planFinish(track, TorchLogic.formation(shape, n, this.L, this.cam));
         this.figure = grand ? this.yearFigure(n, o.year || TorchLogic.calendar(m.host.now()).year) : null;
-        if (grand) p.figureAt = this.T.track.length * 0.5;
+        if (grand) p.figureAt = below.m;
         this.planted = this.planted.filter(t => t.life > 0);
         return p;
     }
-    yearFigure(n, year) {
-        const M = this.L.mountain, cam = this.cam, cy = TorchLogic.lerp(M.top, M.footY, 0.56), cx = M.cx + M.half * 0.05;
-        return TorchLogic.yearFigure(year, n, cx, cy, (M.footY - M.top) * (this.cam.kind === 'upright' ? 0.12 : 0.24));
+    yearFigure(n, year) { const Y = this.L.year; return TorchLogic.yearFigure(year, n, Y.cx, Y.cy, Y.h); }
+    // Each skier on the mountain to a place in the year, none above where they will have stopped.
+    spellNow(p) {
+        p.spelling = true;
+        if (!this.figure) this.figure = this.yearFigure(p.n, TorchLogic.calendar(this.m.host.now()).year);
+        const track = this.T.track, on = [];
+        for (const k of p.sk) {
+            k.figAt = null;
+            if (k.state !== 'ski') continue;
+            const stop = TorchLogic.near(track, k.s + k.v * k.v / 6 + 0.5);
+            if (!stop.ground) on.push({ i: k.i, x: stop.x, y: stop.y });
+        }
+        const places = TorchLogic.assignFigure(this.figure, on);
+        for (const k of p.sk) k.figAt = places.get(k.i) || null;
+    }
+    // The year done: back onto the track below where each of them is, gliding down to it.
+    unspell(p) {
+        p.spelling = false;
+        for (const k of p.sk) if (k.figAt && k.state === 'ski') { k.s = TorchLogic.rejoin(this.T.track, k.s, k.figAt.y); k.v = 0; }
     }
     // Spell the new year on the mountain now (a key): the line stops where it is and makes the figure.
     spell() {
         let p = this.proc;
-        if (!p || p.done) { p = this.start({ grand: true }); this.wakeDown(p, 0.32); }
-        if (!this.figure) this.figure = this.yearFigure(p.n, TorchLogic.calendar(this.m.host.now()).year);
-        p.hold = { t: 50 }; p.spelling = true;
+        if (!p || p.done) { p = this.start({ grand: true }); this.wakeDown(p, p.figureAt / this.T.track.length); }
+        p.hold = { t: 50 }; p.spelt = true;
+        if (!p.spelling) this.spellNow(p);
         return `🎆 ${TorchLogic.calendar(this.m.host.now()).year}`;
     }
-    wakeDown(p, share) { p.lead = share * this.T.track.length + p.gap * p.n; p.phase = 'down'; for (const k of p.sk) { k.lit = 1; const s = TorchLogic.slot(p, k.i); if (s > 0) { k.state = 'ski'; k.s = Math.min(s, this.T.track.length - 1); } } }
+    wakeDown(p, share) { p.lead = share * this.T.track.length; p.phase = 'down'; for (const k of p.sk) { k.lit = 1; const s = TorchLogic.slot(p, k.i); if (s > 0) { k.state = 'ski'; k.s = Math.min(s, this.T.track.length - 1); k.v = p.v; } } }
 
     update(dt) {
         const m = this.m, cfg = m.config, cal = m.cal, T = this.T.track;
@@ -128,7 +148,7 @@ class TorchCast {
         const p = this.proc;
         if (p && !p.done) {
             // On New Year's Eve the line stops halfway down and spells the year until just after midnight.
-            if (p.grand && p.figureAt && !p.spelling && p.lead - (p.n - 1) * p.gap > 30 && p.lead > p.figureAt) { p.hold = { t: cal.toMidnight != null ? Math.max(20, cal.toMidnight + 150) : 60 }; p.spelling = true; }
+            if (p.grand && p.figureAt && !p.spelling && !p.spelt && p.lead - (p.n - 1) * p.gap > 20 && p.lead > p.figureAt) { p.hold = { t: cal.toMidnight != null ? Math.max(20, cal.toMidnight + 150) : 60 }; p.spelt = true; this.spellNow(p); }
             const ev = TorchLogic.stepProcession(p, dt, T, this.spots, this.L.door, this.random);
             for (const [what, i] of ev) {
                 if (what === 'plant') { const k = p.sk[i]; this.planted.push({ x: k.x, z: k.z, life: 1, burn: this.rr(150, 260), phase: this.rr(0, 6) }); }
@@ -136,8 +156,8 @@ class TorchCast {
                 if (what === 'planted' && this.dog) { this.dog.state = 'go'; this.dog.to = { x: this.L.finish.x - 3, z: this.L.finish.z - this.cam.dz(4) }; }
                 if (what === 'done') this.since = 0;
             }
-            for (const k of p.sk) k.fig = TorchLogic.clamp((k.fig || 0) + (p.hold && p.spelling && k.state === 'ski' && this.figure ? 1 : -1) * dt / 7);
-            if (!p.hold && p.spelling) p.spelling = false;
+            for (const k of p.sk) k.fig = TorchLogic.clamp((k.fig || 0) + (p.hold && p.spelling && k.state === 'ski' && k.figAt ? 1 : -1) * dt / 7);
+            if (!p.hold && p.spelling) this.unspell(p);
         }
         for (const t of this.planted) { t.burn -= dt; if (t.burn < 0) t.life -= dt / 20; }
         this.planted = this.planted.filter(t => t.life > 0);
@@ -152,17 +172,18 @@ class TorchCast {
         this.hearts = this.hearts.filter(h => h.t < 2.4);
     }
 
-    // Skiers by day: down the piste in big turns, a few at a time.
+    // Skiers by day: down any of the resort's runs in big turns, a few at a time (TorchLogic.lane: on the piste, never uphill).
     daySkier(mid) {
-        const T = this.T.track, cfg = this.m.config;
-        if (cfg.daySkiers === false) return;
-        this.day.push({ s: mid ? this.rr(0, T.length * 0.95) : 0, v: this.rr(5, 9), coat: Math.floor(this.random() * 1e6), wob: this.rr(0, 6), w: this.rr(3, 6), kid: this.random() < 0.2 });
+        const runs = this.L.runs, cfg = this.m.config;
+        if (cfg.daySkiers === false || !runs || !runs.length) return;
+        const r = this.random() < 0.4 ? 0 : 1 + Math.floor(this.random() * (runs.length - 1)), R = runs[r];
+        this.day.push({ r, s: mid ? this.rr(0, R.length * 0.85) : 0, v: this.rr(5, 9), coat: Math.floor(this.random() * 1e6), phase: this.rr(0, 6.2832), amp: this.rr(3, 7), wave: this.rr(40, 60), kid: this.random() < 0.2 });
     }
     updateDay(dt) {
-        const T = this.T.track, dark = this.m.light.dark;
+        const runs = this.L.runs, dark = this.m.light.dark;
         if (dark < 0.45 && this.day.length < 6 * this.m.density() + 1 && this.m.chance(70, dt)) this.daySkier(false);
         for (const d of this.day) d.s += d.v * dt;
-        this.day = this.day.filter(d => d.s < T.length);
+        this.day = this.day.filter(d => runs[d.r] && d.s < runs[d.r].length);
     }
 
     // The snowcat: parked by its shed; after dark, when nobody is coming down, it grooms the run-out by its lamps.
@@ -339,17 +360,20 @@ class TorchCast {
                     const h = T.spots.hut; if (!h) continue;
                     s = cam.sc(this.L.mountain.faceZ(h.y)); x = h.x + 12 * s + ((k.i % 7) - 3) * 1.6 * s; y = h.y + 2 * s + (Math.floor(k.i / 7) % 3) * 0.8 * s; z = this.L.mountain.faceZ(h.y); ground = false;
                 } else if (k.state === 'ski') {
-                    TorchLogic.at(track, k.s, cam, at);
-                    // Everyone takes the leader's turns: the offset is a function of the place, so the line snakes.
-                    const wave = Math.sin(k.s / 21 * 6.2832) * (at.ground ? 2.6 : 3.4) + (k.fall > 0 ? 3 * k.side : 0), nx = -Math.sin(at.dir), ny = Math.cos(at.dir);
-                    x = at.x + nx * wave * at.sc; y = at.y + ny * wave * at.sc * (at.ground ? 0.3 : 1); z = at.z; s = at.sc; ground = at.ground; dir = at.dir; xm = at.xm;
-                    if (k.fig > 0 && this.figure) { const f = this.figure[k.i % this.figure.length], e = k.fig * k.fig * (3 - 2 * k.fig); x += (f.x - x) * e; y += (f.y - y) * e; z = this.L.mountain.faceZ(y); s = cam.sc(z); }
+                    // Everyone in the leader's tracks: the line is the track, so it snakes by the switchbacks; aside only
+                    // to sit down or go round someone who has (k.off, metres across, which never climbs).
+                    TorchLogic.place(k, track, cam, at);
+                    x = at.x; y = at.y; z = at.z; s = at.sc; ground = at.ground; xm = at.xm;
+                    dir = this.heading(track, k.s);
+                    if (k.fig > 0 && k.figAt) { const f = k.figAt, e = k.fig * k.fig * (3 - 2 * k.fig); x += (f.x - x) * e; y += (f.y - y) * e; z = this.L.mountain.faceZ(y); s = cam.sc(z); }
                 } else {
-                    z = k.z; xm = k.x; s = cam.sc(z); x = cam.sx(k.x, z); y = cam.sy(z); ground = true;
+                    TorchLogic.place(k, track, cam, at);
+                    z = at.z; xm = at.xm; s = at.sc; x = at.x; y = at.y; ground = true;
+                    if (k.state === 'glide' && k.glide) { const a = TorchLogic.glideAt(k.glide, k.t + 0.2, cam.zm); dir = Math.atan2(cam.sy(a[1]) - y, cam.sx(a[0], a[1]) - x); }
                 }
                 const flick = 0.85 + 0.15 * Math.sin(t * 13 + k.wob * 9) * Math.sin(t * 7.3 + k.wob);
-                const reach = (ground ? 7 : 9) * s * (0.9 + 0.1 * flick);
-                if (k.lit > 0.05 && dark > 0.12) pool(x, y, Math.max(reach, 5 * cam.u), ground ? 0.34 : 0.8, k.lit * flick * (ground ? 0.95 : 0.8) * Math.min(1, dark * 1.4));
+                const reach = (ground ? 7 : 10.5) * s * (0.9 + 0.1 * flick);
+                if (k.lit > 0.05 && dark > 0.12) pool(x, y, Math.max(reach, 5 * cam.u), ground ? 0.34 : 0.8, k.lit * flick * (ground ? 0.95 : 1) * Math.min(1, dark * 1.4));
                 // The rucksack cat's lantern: a little cool light of its own among all the orange.
                 if (k.guide && this.m.config.backpackCat !== false && dark > 0.2 && k.state !== 'gone') pool(x - 0.5 * s, y, Math.max(3.5 * s, 3 * cam.u), ground ? 0.34 : 0.8, 0.5 * dark, 'cat', [0.6, 0.78, 1]);
                 figs.push({ kind: 'skier', k, x, y, z, s, dir, ground, xm, flick });
@@ -371,11 +395,13 @@ class TorchCast {
         this.drawPools(ctx, pools);
         // The lift's chairs, going round.
         this.drawLift(ctx);
-        // By day: skiers carving.
+        // By day: skiers carving, each down a run of their own; fading out as they reach the lift's station or the finish.
+        const ahead = this.ahead ||= {};
         for (const d of this.day) {
-            TorchLogic.at(track, d.s, cam, at);
-            const wave = Math.sin(d.s / (at.ground ? 14 : 18) * 6.2832 + d.wob) * d.w, nx = -Math.sin(at.dir), ny = Math.cos(at.dir);
-            figs.push({ kind: 'dayskier', d, x: at.x + nx * wave * at.sc, y: at.y + ny * wave * at.sc * (at.ground ? 0.3 : 1), z: at.z, s: at.sc, dir: at.dir + Math.cos(d.s / (at.ground ? 14 : 18) * 6.2832 + d.wob) * 0.8, ground: at.ground });
+            const R = this.L.runs[d.r];
+            TorchLogic.lane(R, d.s, d.phase, d.amp, d.wave, cam, at);
+            TorchLogic.lane(R, d.s + 0.8, d.phase, d.amp, d.wave, cam, ahead);
+            figs.push({ kind: 'dayskier', d, x: at.x, y: at.y, z: at.z, s: at.sc, dir: Math.atan2(ahead.y - at.y, ahead.x - at.x), ground: at.ground, a: TorchLogic.clamp((R.length - d.s) / 12) * TorchLogic.clamp(d.s / 4 + 0.2) });
         }
         for (const cat of this.cats) if (cat.kind === 'roam') figs.push({ kind: 'cat', c: cat, x: cam.sx(cat.x, cat.z), y: cam.sy(cat.z), z: cat.z, s: cam.sc(cat.z) });
         if (this.dog) figs.push({ kind: 'dog', d: this.dog, x: cam.sx(this.dog.x, this.dog.z), y: cam.sy(this.dog.z), z: this.dog.z, s: cam.sc(this.dog.z) });
@@ -397,6 +423,8 @@ class TorchCast {
         this.drawHearts(ctx);
     }
     drawOver(ctx) { this.drawFireworks(ctx); }
+    // Which way the track runs at s, over a metre or two: smooth through the turns.
+    heading(track, s) { const a = TorchLogic.near(track, s - 0.8), b = TorchLogic.near(track, s + 0.8); return Math.atan2(b.y - a.y, b.x - a.x); }
 
     drawFlame(ctx, f) {
         const dark = this.m.light.dark, spr = this.flameSprite(), s = f.s;
@@ -437,7 +465,7 @@ class TorchCast {
             ctx.restore();
             return;
         }
-        const skiing = k.state === 'ski' || k.state === 'wait';
+        const skiing = k.state === 'ski' || k.state === 'wait' || k.state === 'glide';
         if (skiing) { ctx.strokeStyle = this.tone(TorchCast.SKIS[k.coat % TorchCast.SKIS.length], L); ctx.lineWidth = Math.max(1, 0.1 * s); const a = f.dir, cs = Math.cos(a) * 0.95 * s, sn = Math.sin(a) * 0.3 * s; for (const dy of [0, 0.12 * s]) { ctx.beginPath(); ctx.moveTo(-cs, -sn + dy); ctx.lineTo(cs, sn + dy); ctx.stroke(); } }
         const bob = skiing ? 0 : Math.abs(Math.sin(this.m.time * 6 + k.wob)) * 0.05 * s, knee = skiing ? 0.3 : 0.05;
         ctx.strokeStyle = this.tone(dark, L); ctx.lineWidth = Math.max(1, 0.2 * s);
@@ -477,13 +505,19 @@ class TorchCast {
     }
     drawDaySkier(ctx, f) {
         const d = f.d, s = f.s * (d.kid ? 0.72 : 1), coat = TorchCast.COATS_DAY[d.coat % TorchCast.COATS_DAY.length], L = this.lightOf(0), air = f.ground ? 0 : 0.25, u = this.cam.u;
-        if (s * 1.8 < 5 * u) { ctx.fillStyle = this.tone(coat, L, air); ctx.fillRect(f.x - 0.3 * s, f.y - 1.5 * s, Math.max(1, 0.6 * s), Math.max(1.2, 1.4 * s)); return; }
-        ctx.save(); ctx.translate(f.x, f.y); ctx.rotate(Math.sin(f.dir) * 0.25);
-        ctx.strokeStyle = this.tone([0.15, 0.14, 0.16], L); ctx.lineWidth = Math.max(1, 0.1 * s); ctx.beginPath(); ctx.moveTo(-0.9 * s, 0); ctx.lineTo(0.9 * s, 0); ctx.stroke();
-        ctx.lineWidth = Math.max(1, 0.2 * s); ctx.beginPath(); ctx.moveTo(-0.1 * s, -0.05 * s); ctx.lineTo(0.15 * s, -0.5 * s); ctx.lineTo(0, -0.85 * s); ctx.stroke();
-        ctx.fillStyle = this.tone(coat, L); ctx.fillRect(-0.28 * s, -1.5 * s, 0.56 * s, 0.7 * s);
-        ctx.fillStyle = this.tone([0.94, 0.8, 0.7], L); ctx.beginPath(); ctx.arc(0, -1.68 * s, 0.18 * s, 0, 6.2832); ctx.fill();
+        if (f.a < 0.02) return;
+        ctx.globalAlpha = f.a;
+        if (s * 1.8 < 5 * u) { ctx.fillStyle = this.tone(coat, L, air); ctx.fillRect(f.x - 0.3 * s, f.y - 1.5 * s, Math.max(1, 0.6 * s), Math.max(1.2, 1.4 * s)); ctx.globalAlpha = 1; return; }
+        // The skis along the way they are going, foreshortened; leaning into the turn.
+        const cs = Math.cos(f.dir) * 0.9 * s, sn = Math.sin(f.dir) * 0.3 * s, lean = Math.cos(f.dir) * 0.22 * s;
+        ctx.save(); ctx.translate(f.x, f.y); ctx.lineCap = 'round';
+        ctx.strokeStyle = this.tone([0.15, 0.14, 0.16], L, air); ctx.lineWidth = Math.max(1, 0.1 * s);
+        for (const dy of [0, 0.12 * s]) { ctx.beginPath(); ctx.moveTo(-cs, -sn + dy); ctx.lineTo(cs, sn + dy); ctx.stroke(); }
+        ctx.lineWidth = Math.max(1, 0.2 * s); ctx.beginPath(); ctx.moveTo(-0.1 * s, -0.05 * s); ctx.lineTo(0.15 * s + lean * 0.4, -0.5 * s); ctx.lineTo(lean * 0.6, -0.85 * s); ctx.stroke();
+        ctx.fillStyle = this.tone(coat, L, air); ctx.beginPath(); ctx.moveTo(-0.28 * s + lean * 0.6, -0.8 * s); ctx.lineTo(0.28 * s + lean * 0.6, -0.8 * s); ctx.lineTo(0.26 * s + lean, -1.5 * s); ctx.lineTo(-0.26 * s + lean, -1.5 * s); ctx.closePath(); ctx.fill();
+        ctx.fillStyle = this.tone([0.94, 0.8, 0.7], L, air); ctx.beginPath(); ctx.arc(lean, -1.68 * s, 0.18 * s, 0, 6.2832); ctx.fill();
         ctx.restore();
+        ctx.globalAlpha = 1;
     }
     drawSnowcat(ctx, f) {
         const s = f.s, L = this.lightOf(0), dir = f.dir;
