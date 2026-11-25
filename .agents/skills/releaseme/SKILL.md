@@ -59,8 +59,10 @@ agent's background or async shell, or `cmd &` then `wait`. Never poll in a tight
   origin` again. These merges ship in this release (they count when picking the version
   below), and their titles land in the generated notes.
 - Latest tag: `git describe --tags --abbrev=0`. If `git log --oneline <tag>..origin/master` is
-  still empty after the ready PRs, there is nothing to release. Say so, list the open PRs that
-  weren't ready and why, and stop.
+  still empty after the ready PRs, **that's a normal, successful outcome, not a failure**:
+  master is already released. Don't bump anything. Still make sure that release is whole (§5's
+  asset check, attaching a missing Mac zip the same way), then report "up to date at vX.Y.Z",
+  the open PRs that weren't ready and why, and finish.
 - `gh auth status` must pass.
 - Hooks: if `git config core.hooksPath` isn't `.githooks`, run `make hooks` (it audits every
   commit, commit message and push for anything private; the repo is public).
