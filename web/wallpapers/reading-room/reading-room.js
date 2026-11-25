@@ -1,10 +1,11 @@
 // The Reading Room: a vast university library at the hour it really is,
 // painted (SPEC §10.44). We stand at the south end of the hall and look
-// down it: two tiers of galleries, iron rails, books to the vault, rolling
-// ladders, long tables under green lamps, busts and globes, a fire, the
-// great clock over the far door, and a coffered vault with a skylight in
-// every bay. The real sun comes in through the real windows (ReadingLogic)
-// and its shafts swing across the floor through the day, dust turning in
+// down it: three tiers of galleries, iron rails, books to the vault, rolling
+// ladders, long tables under green lamps, low bookcases down the middle,
+// busts and globes, a fire, the great clock over the far door, and a
+// coffered vault with a skylight in every bay. The real sun comes in
+// through the real windows (ReadingLogic) and its shafts swing across the
+// floor through the day, dust turning in
 // them; the lamps come on table by table at dusk; at night it is
 // lamplight, moonlight and the fire. And cats, of course: one asleep in
 // the sun who follows it as it moves, one on a gallery rail with a book
@@ -168,7 +169,7 @@ class ReadingRoomAnimationManager {
     // Which table's lamps come on first at dusk: from the door at the far end toward us, as if someone walked down
     // lighting them; each with a moment of its own.
     order() {
-        const tables = this.scene.groups.filter(g => g.kind === 'table').sort((a, b) => b.k - a.k || a.side - b.side);
+        const tables = this.scene.groups.filter(g => g.kind === 'table' || g.kind === 'case').sort((a, b) => b.k - a.k || (a.side || 0) - (b.side || 0));
         tables.forEach((g, i) => { g.turn = 0.14 + 0.32 * i / Math.max(1, tables.length - 1); });
     }
 
@@ -318,7 +319,7 @@ class ReadingRoomAnimationManager {
         const d = this.light.dark, cfg = this.config;
         switch (g.kind) {
             // At dusk: as the librarian lights them, if she is about; else each by itself as it gets darker.
-            case 'table': return cfg.lamps === 'never' ? 0 : cfg.lamps === 'always' ? 1 : g.lit != null ? (g.lit ? 1 : 0) : cfg.librarian && this.cast?.librarian ? 0 : d > g.turn ? 1 : 0;
+            case 'table': case 'case': return cfg.lamps === 'never' ? 0 : cfg.lamps === 'always' ? 1 : g.lit != null ? (g.lit ? 1 : 0) : cfg.librarian && this.cast?.librarian ? 0 : d > g.turn ? 1 : 0;
             case 'desk': return cfg.lamps === 'never' ? 0 : d > 0.05 || cfg.lamps === 'always' || this.cast?.atDesk() ? 1 : 0;
             case 'chandelier': return d > 0.45 && this.hour > 12 || d > 0.45 && this.hour < 7 ? 1 : 0;
             case 'fire': return cfg.fire && (d > 0.04 || this.season !== 'summer') ? 1 : 0;
@@ -527,12 +528,28 @@ class ReadingRoomAnimationManager {
             if (h.kind === 'catalogue') { if (this.cast) this.cast.mouse(); return; }
             if (h.kind === 'window') { if (this.cast) this.cast.bird(x, y); return; }
             if (h.kind === 'globe') { this.host.toast?.(this.globeWord()); return; }
+            if (h.kind === 'lectern') { this.host.toast?.(this.wordOfTheDay()); return; }
+            if (h.kind === 'armillary') { this.host.toast?.(this.sunWord()); return; }
+            if (h.kind === 'vitrine') { this.host.toast?.(['🔒 The Founder’s own catalogue: every cat in the library, with notes', '🔒 A book of hours, open at a page of cats in the margins', '🔒 Please do not tap the glass. (The cats do.)'][Math.floor(Math.random() * 3)]); return; }
             const groups = h.groups || (h.group ? [h.group] : []);
             if (!groups.length) continue;
             const lit = groups.some(g => g.level > 0.5);
             for (const g of groups) g.forced = !lit;
             return;
         }
+    }
+    // The great dictionary on its lectern, open at the day's word.
+    wordOfTheDay() {
+        const words = ReadingRoomAnimationManager.WORDS, d = this.host.now(), n = Math.floor((Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())) / 864e5);
+        const [w, m] = words[((n % words.length) + words.length) % words.length];
+        return `📖 ${w}: ${m}`;
+    }
+    // The armillary sphere: where the real sun stands.
+    sunWord() {
+        const s = this.sunV, alt = this.sun.alt;
+        if (alt < -6) return '🌙 The sun is below the world; the sphere keeps its place for the morning';
+        const az = (Math.atan2(s.x, s.z) * 180 / Math.PI + 360) % 360, dirs = ['north', 'north-east', 'east', 'south-east', 'south', 'south-west', 'west', 'north-west'];
+        return `☀️ The sun stands ${Math.round(alt)}° up in the ${dirs[Math.round(az / 45) % 8]}`;
     }
     globeWord() { return ['🌍 Somewhere, it is teatime', '🌏 Here be dragons', '🌎 The cats have marked their favourite places', '🌍 It turns, slowly'][Math.floor(Math.random() * 4)]; }
 
@@ -548,3 +565,12 @@ class ReadingRoomAnimationManager {
         return `🕰️ ${d.getHours()}:${pad(d.getMinutes())} in the Reading Room · ${when} · ${this.cast ? this.cast.census() : ''}`;
     }
 }
+// The great dictionary's words of the day: real words, about books and reading.
+ReadingRoomAnimationManager.WORDS = [
+    ['Bibliosmia', 'the smell of old books'], ['Tsundoku', 'buying books and letting them pile up unread'], ['Marginalia', 'notes in the margins (and a cat of that name)'],
+    ['Colophon', 'the printer’s note at the end of a book'], ['Incunabula', 'books printed before 1501'], ['Palimpsest', 'a page written over, the old words still showing'],
+    ['Foxing', 'the brown spots that come on old paper'], ['Quire', 'a gathering of sheets folded together'], ['Vellum', 'fine parchment, of calfskin'],
+    ['Lucubration', 'study by lamplight, late into the night'], ['Bibliophile', 'one who loves books'], ['Rubric', 'a heading written in red'],
+    ['Folio', 'a sheet folded once: a big book'], ['Octavo', 'a sheet folded three times: a pocket book'], ['Errata', 'a list of mistakes, found too late'],
+    ['Florilegium', 'a gathering of the best passages'], ['Scriptorium', 'the room where books were copied by hand'], ['Book-louse', 'a tiny insect that eats paste and paper'],
+];

@@ -7,7 +7,13 @@
 //     warmth; walking the top rail; by the fire; on the librarian's desk
 //     with the bell; and wanderers
 //   - students at the tables: reading, turning pages, writing, dozing (and
-//     the z's), coming and going by the aisles; fewer at night
+//     the z's), coming and going by the aisles; fewer at night. Whoever
+//     walks walks as people do (ReadingLogic.walk and .gait): feet planted
+//     where they land, a step's length times its pace the speed, the body
+//     riding up over each step and the arms swinging against the legs,
+//     turning by the way they face, speeding up and slowing down, keeping
+//     right of whoever comes the other way and never walking through anyone
+//   - readers up on the galleries, browsing the shelves
 //   - the librarian: at her desk by day, down the hall at dusk lighting each
 //     table's lamps as she passes, round the hall at night with a lantern
 //   - an owl on a chandelier, who turns her head, hoots the hour, and now
@@ -23,7 +29,7 @@ class ReadingCast {
     constructor(m) {
         this.m = m;
         this.T = m.scene; this.L = m.L; this.cam = m.cam;
-        this.cats = []; this.students = []; this.planes = []; this.books = []; this.notes = []; this.puffs = []; this.sparkles = [];
+        this.cats = []; this.students = []; this.browsers = []; this.planes = []; this.books = []; this.notes = []; this.puffs = []; this.sparkles = [];
         this.librarian = null; this.owl = null; this.mouseA = null; this.birdA = null;
         this.chime = 0; this.strikesLeft = 0; this.jingle = 0; this.lastHour = null;
         this.random = WP.seededRandom(m.host.params?.seed ? 4321 : Math.floor(Math.random() * 1e9));
@@ -39,6 +45,8 @@ class ReadingCast {
         this.build();
         this.settle();
         for (let i = 0; i < 30; i++) this.populate(2, true);
+        // And a few already on their way in, so that someone is walking on frame one.
+        for (let i = 0; i < 3 && this.wanted() > 0 && this.students.length < this.wanted() + 2; i++) { this.addStudent(false); for (let j = 0; j < 40 + i * 45; j++) this.updateStudents(0.1); }
         this.lastHour = Math.floor(m.hour);
     }
 
@@ -89,23 +97,48 @@ class ReadingCast {
     // How busy the hall is at this hour: full by day, quieter of an evening, a few owls at night.
     busy() { const h = this.m.hour; return h >= 8.5 && h < 18 ? 1 : h >= 18 && h < 22 ? 0.6 : h >= 7 && h < 8.5 ? 0.4 : h >= 22 || h < 1 ? 0.25 : 0.1; }
 
+    wanted() { return Math.round((this.cfg.students ?? 18) * this.m.density() * this.busy()); }
     populate(dt, seed) {
-        const cfg = this.cfg, want = Math.round((cfg.students ?? 18) * this.m.density() * this.busy());
+        const cfg = this.cfg, want = this.wanted();
         const seated = this.students.filter(s => !s.leaving).length;
         if (seated < want && (seed || this.random() < dt * 0.12)) this.addStudent(seed);
         if (seated > want && this.random() < dt * 0.08) { const s = this.students.find(s => s.state === 'seat'); if (s) this.leave(s); }
         // The librarian keeps her hours, and is down the hall at dusk.
-        if (cfg.librarian && !this.librarian) this.librarian = { kind: 'librarian', x: (this.L.desk?.x ?? 8) - 0.9, z: this.L.desk?.z ?? 9, state: 'desk', t: this.rr(20, 60), dir: -1, phase: 0, path: [], L: [1, 1, 1, 0], lt: 0, coat: [0.24, 0.2, 0.32], hat: [0.6, 0.6, 0.62], scarf: null };
+        if (cfg.librarian && !this.librarian) { const [x, z] = this.deskSpot(); this.librarian = { kind: 'librarian', x, z, h: Math.PI, v: 0, vmax: 1.0, r: ReadingLogic.ROOM.personR, k: 1, state: 'desk', t: this.rr(20, 60), dir: -1, phase: 0, path: [], goals: [], L: [1, 1, 1, 0], lt: 0, coat: [0.24, 0.2, 0.32], hat: [0.6, 0.6, 0.62], scarf: null }; }
+        // Up on the galleries, a reader or two along the shelves: one to a gallery, so they keep out of each other's way.
+        const R = ReadingLogic.ROOM, up = Math.min(4, Math.round((cfg.students ?? 18) / 6 * Math.min(1, this.busy() + 0.2)));
+        while (this.browsers.length < up) {
+            const i = this.browsers.length, [side, gi] = [[1, 0], [-1, 1], [1, 2], [-1, 0]][i], G = R.gal[gi], z = this.rr(ReadingLogic.pierZ(1) + 2, ReadingLogic.pierZ(6));
+            this.browsers.push({ kind: 'browser', i, side, gal: gi, x: side * (G.gx + R.hw) / 2, y: G.y1, z, h: side > 0 ? 0 : Math.PI, v: 0, vmax: this.rr(0.55, 0.8), r: R.personR, k: this.rr(0.94, 1.04), free: true, path: [], state: 'browse', t: this.rr(1, 8), reach: 0, coat: this.pick(ReadingCast.COATS_P), hair: this.pick(ReadingCast.HAIR), scarf: this.random() < 0.3 ? this.pick(ReadingCast.SCARVES) : null, L: [1, 1, 1, 0], lt: 0, books: this.random() < 0.5 });
+        }
+        if (this.browsers.length > up && this.random() < dt * 0.05) this.browsers.pop();
     }
+    // Where the librarian stands at her desk: behind it, facing the hall.
+    deskSpot() { const d = this.L.desk; return d ? [d.x + 0.85, d.z] : [7.9, 9.2]; }
+    // Everyone on the floor, for whoever walks to keep clear of: the readers (seated or walking), the librarian, the cats on the floor.
+    bodies() {
+        const out = this._bodies || (this._bodies = []);
+        out.length = 0;
+        for (const s of this.students) out.push(s);
+        if (this.librarian) out.push(this.librarian);
+        for (const c of this.cats) if (!c.perch && (c.y || 0) < 0.1) { c.r = 0.2 * c.k; out.push(c); }
+        return out;
+    }
+    aisleOf(seat) { const R = ReadingLogic.ROOM; return Math.sign(seat.x) * (Math.abs(seat.x) < R.tableX ? R.aisleIn : R.aisleOut); }
     addStudent(seed) {
         const seat = this.seatsFree.find(s => !this.students.some(o => o.seat === s));
         if (!seat) return;
         const coat = this.pick(ReadingCast.COATS_P), hair = this.pick(ReadingCast.HAIR);
-        const s = { kind: 'student', seat, coat, hair, scarf: this.random() < 0.3 ? this.pick(ReadingCast.SCARVES) : null, x: seat.x, z: seat.z, dir: seat.face, state: seed ? 'seat' : 'come', act: this.pick(['read', 'read', 'write', 'read', 'doze']), t: this.rr(4, 20), phase: this.rr(0, 6), page: 0, L: [1, 1, 1, 0], lt: 0, k: this.rr(0.92, 1.05) };
-        if (!seed) { const aisle = Math.abs(seat.x) > ReadingLogic.ROOM.tableX ? Math.sign(seat.x) * 8.2 : 0; s.x = aisle; s.z = 1.2; s.path = [[aisle, seat.z], [seat.x, seat.z]]; }
+        const s = { kind: 'student', seat, coat, hair, scarf: this.random() < 0.3 ? this.pick(ReadingCast.SCARVES) : null, x: seat.x, z: seat.z, dir: seat.face, state: seed ? 'seat' : 'come', act: this.pick(['read', 'read', 'write', 'read', 'doze']), t: this.rr(4, 20), phase: this.rr(0, 6), page: 0, L: [1, 1, 1, 0], lt: 0, k: this.rr(0.92, 1.05), r: ReadingLogic.ROOM.personR, vmax: this.rr(1.0, 1.35), v: 0, h: Math.PI / 2, path: [], goals: [], books: this.random() < 0.6 };
+        if (!seed) {
+            // In from the door behind us, along the aisle for their table, if nobody is just there.
+            const x = this.aisleOf(seat) + this.rr(-0.2, 0.2), z = 0.4;
+            if (this.bodies().some(o => Math.hypot(o.x - x, o.z - z) < 1.3)) return;
+            Object.assign(s, { x, z, v: s.vmax * 0.8, goals: [[seat.x, seat.z]] });
+        }
         this.students.push(s);
     }
-    leave(s) { s.leaving = true; s.state = 'go'; const aisle = Math.abs(s.seat.x) > ReadingLogic.ROOM.tableX ? Math.sign(s.seat.x) * 8.2 : 0; s.path = [[aisle, s.seat.z], [aisle, 0.6]]; }
+    leave(s) { s.leaving = true; s.state = 'go'; s.v = 0; s.h = s.dir > 0 ? 0 : Math.PI; s.g = null; s.path = []; s.goals = [[this.aisleOf(s.seat), 0.3]]; }
 
     // ---- Calls, from keys and taps ---------------------------------------------------
     callCat() { const c = this.cats.find(c => !c.perch && c.state !== 'walk') || this.cats[0]; if (!c) return '🐈 No cats today (see Cats, in the panel)'; this.poke(c); return `🐈 ${c.name}`; }
@@ -144,7 +177,7 @@ class ReadingCast {
     // Paper planes from the top gallery: launched over the rail, they glide down in long swoops.
     launch() {
         const R = ReadingLogic.ROOM, side = this.random() < 0.5 ? -1 : 1, z = ReadingLogic.bayZ(Math.floor(this.rr(1, 6)));
-        this.planes.push({ x: side * (R.g2x - 0.1), y: R.g2 + R.rail + 0.3, z, vx: -side * this.rr(1.3, 2.2), vz: this.rr(-0.8, 0.6), vy: 0, ph: this.rr(0, 6), age: 0, landed: 0, dir: -side });
+        this.planes.push({ x: side * (R.g3x - 0.1), y: R.g3 + R.rail + 0.3, z, vx: -side * this.rr(1.3, 2.2), vz: this.rr(-0.8, 0.6), vy: 0, ph: this.rr(0, 6), age: 0, landed: 0, dir: -side });
     }
     // A book off a table, up and home to a shelf (or, from a tap on a shelf, the other way).
     flyHome(from, to) {
@@ -162,12 +195,14 @@ class ReadingCast {
         this.flyHome(a, t ? { x: t.x + this.rr(-0.3, 0.3), y: R.tableH + 0.05, z: t.z + this.rr(-2, 2) } : null);
     }
     fly() { const o = this.owl; if (o && !o.fly) o.fly = { t: 0, dur: 14, dir: this.random() < 0.5 ? 1 : -1 }; }
+    // Her rounds: at dusk down the middle aisle between the cases of the spine and back, lighting the lamps
+    // either side as she comes level with them; at night round by the outer aisles with her lantern.
     round(l, kind) {
         const R = ReadingLogic.ROOM, out = [];
-        if (kind === 'light') { out.push([0, Math.max(l.z, 6)]); for (let k = 0; k < R.bays - 1; k++) if (ReadingLogic.bayZ(k) > l.z) out.push([0, ReadingLogic.bayZ(k)]); out.push([0, ReadingLogic.bayZ(R.bays - 1)]); }
-        else for (const [x, z] of [[8.2, 6], [8.2, 70], [0, 76], [-8.2, 70], [-8.2, 6]]) out.push([x, z]);
-        out.push([(this.L.desk?.x ?? 8) - 0.9, this.L.desk?.z ?? 9]);
-        l.path = out; l.state = kind;
+        if (kind === 'light') out.push([0, Math.max(6, Math.min(l.z, 12))], [0, ReadingLogic.pierZ(R.bays - 1) + 0.6], [0, 6]);
+        else out.push([R.aisleOut, 6], [R.aisleOut, 70], [-R.aisleOut, 70], [-R.aisleOut, 6]);
+        out.push(this.deskSpot());
+        l.goals = out; l.path = []; l.state = kind;
     }
 
     // ---- Each frame -------------------------------------------------------------------
@@ -187,6 +222,7 @@ class ReadingCast {
         if (cfg.magic && this.random() < (cfg.magicRate ?? 6) * dt / 3600) this.flyHome();
         this.updateCats(dt);
         this.updateStudents(dt);
+        this.updateBrowsers(dt);
         this.updateLibrarian(dt);
         this.updateOwl(dt);
         this.updateThings(dt);
@@ -279,8 +315,13 @@ class ReadingCast {
             const s = this.students[i];
             s.t -= dt; s.phase += dt * 5;
             if (s.state === 'come' || s.state === 'go') {
-                const [tx, tz] = s.path[0], left = RL.stepToward(s, tx, tz, 1.1, dt);
-                if (left < 0.1) { s.path.shift(); if (!s.path.length) { if (s.state === 'go') { this.students.splice(i, 1); continue; } s.state = 'seat'; s.x = s.seat.x; s.z = s.seat.z; s.dir = s.seat.face; } }
+                if (!s.path.length && s.goals.length) s.path = RL.route(s.x, s.z, ...s.goals.shift(), s.r);
+                const left = RL.walk(s, this.bodies(), dt);
+                RL.gait(s, s.moved, dt);
+                if (left === 0 && !s.path.length && !s.goals.length) {
+                    if (s.state === 'go') { this.students.splice(i, 1); continue; }
+                    s.state = 'seat'; s.x = s.seat.x; s.z = s.seat.z; s.dir = s.seat.face; s.v = 0; s.vx = s.vz = 0; s.g = null;
+                }
                 continue;
             }
             if (s.t <= 0) {
@@ -296,24 +337,48 @@ class ReadingCast {
     }
     at(a, y) { const [x, py] = this.cam.p(a.x, y, Math.max(1, a.z)); return { x, y: py }; }
 
+    // The readers on the galleries: along to a shelf, a while browsing it (a book taken down, looked at, put back), and on.
+    updateBrowsers(dt) {
+        const RL = ReadingLogic;
+        for (const b of this.browsers) {
+            b.t -= dt;
+            if (b.state === 'browse') {
+                b.v = 0; b.vx = b.vz = 0; b.moved = 0;
+                const face = b.side > 0 ? 0 : Math.PI, d = Math.atan2(Math.sin(face - b.h), Math.cos(face - b.h));
+                b.h += Math.sign(d) * Math.min(Math.abs(d), 3 * dt);
+                b.reach = Math.max(0, Math.min(1, b.reach + (b.t > 1.2 && b.t % 7 < 3 ? dt * 2 : -dt * 2)));
+                if (b.t <= 0) { b.state = 'walk'; b.reach = 0; const lo = RL.pierZ(1) + 1, hi = RL.pierZ(7) - 1, to = RL.clamp(b.z + this.rr(3, 14) * (this.random() < (b.z - lo) / (hi - lo) ? -1 : 1), lo, hi); b.path = [[b.x, to]]; }
+            } else {
+                const left = RL.walk(b, [], dt);
+                if (left === 0) { b.state = 'browse'; b.t = this.rr(6, 18); }
+            }
+            RL.gait(b, b.moved, dt);
+        }
+    }
+
     updateLibrarian(dt) {
         const l = this.librarian, m = this.m;
         if (!l) return;
         l.t -= dt; l.phase += dt * 6;
         // At dusk she goes down the hall lighting the lamps, a table at a time.
         const d = m.light.dark;
-        if (l.state === 'desk' && this.cfg.lamps === 'dusk' && d > 0.12 && d < 0.6 && this.T.groups.some(g => g.kind === 'table' && !g.lit && g.forced == null)) this.round(l, 'light');
+        const lamped = g => g.kind === 'table' || g.kind === 'case';
+        if (l.state === 'desk' && this.cfg.lamps === 'dusk' && d > 0.12 && d < 0.6 && this.T.groups.some(g => lamped(g) && !g.lit && g.forced == null)) this.round(l, 'light');
         if (l.state === 'desk' && l.t <= 0) { l.t = this.rr(60, 200); if (d > 0.6 && this.random() < 0.6) this.round(l, 'round'); }
         if (l.state === 'light' || l.state === 'round') {
-            const [tx, tz] = l.path[0], left = ReadingLogic.stepToward(l, tx, tz, l.state === 'light' ? 1.6 : 1.05, dt);
-            // Each table's lamps as she comes level with it, both sides of the aisle.
-            if (l.state === 'light') for (const g of this.T.groups) if (g.kind === 'table' && g.lit == null && Math.abs(ReadingLogic.bayZ(g.k) - l.z) < 3.6 && l.z > 5) { g.lit = true; }
-            if (left < 0.12) { l.path.shift(); if (!l.path.length) { l.state = 'desk'; l.dir = -1; l.t = this.rr(60, 200); } }
-        }
+            const RL = ReadingLogic;
+            l.vmax = l.state === 'light' ? 1.6 : 1.0;
+            if (!l.path.length && l.goals.length) l.path = RL.route(l.x, l.z, ...l.goals.shift(), l.r);
+            const left = RL.walk(l, this.bodies(), dt);
+            RL.gait(l, l.moved, dt);
+            // Each table's lamps, and the spine's, as she comes level with them, both sides of the aisle.
+            if (l.state === 'light') for (const g of this.T.groups) if (lamped(g) && g.lit == null && Math.abs(RL.bayZ(g.k) - l.z) < 3.6 && l.z > 5) { g.lit = true; }
+            if (left === 0 && !l.path.length && !l.goals.length) { l.state = 'desk'; l.dir = -1; l.t = this.rr(60, 200); }
+        } else { l.v = 0; l.vx = l.vz = 0; ReadingLogic.gait(l, 0, dt); }
         l.lantern = d > 0.55 && l.state !== 'desk';
         // By day the lamps that were lit are put out again by the hour; with nobody to light them, they come on by themselves.
-        if (d < 0.08) for (const g of this.T.groups) if (g.kind === 'table') g.lit = null;
-        if (d > 0.62) for (const g of this.T.groups) if (g.kind === 'table' && g.lit == null) g.lit = true;
+        if (d < 0.08) for (const g of this.T.groups) if (lamped(g)) g.lit = null;
+        if (d > 0.62) for (const g of this.T.groups) if (lamped(g) && g.lit == null) g.lit = true;
     }
 
     updateOwl(dt) {
@@ -364,11 +429,11 @@ class ReadingCast {
         // In a patch of sun: golden.
         if (m.beams && !m.beamNight && (a.y || 0) < 0.2 && ReadingLogic.sunAt(m.beams, a.x, a.z) === 0) { const c = m.beamColour(); if (c) for (let j = 0; j < 3; j++) a.L[j] = Math.min(1.7, a.L[j] + c[j] * 0.55); a.sunny = true; } else a.sunny = false;
         a.air = (1 - Math.exp(-(z - 1) / 26)) * 0.9;
-        a.hz = l.haze0;
+        a.haze = l.haze0;
         a.tints = null;
     }
     tone(a, c, k = 1) {
-        const L = a.L, t = a.air || 0, h = a.hz || [0, 0, 0];
+        const L = a.L, t = a.air || 0, h = a.haze || [0, 0, 0];
         const r = Math.min(1, c[0] * L[0] * k) * (1 - t) + h[0] * t, g = Math.min(1, c[1] * L[1] * k) * (1 - t) + h[1] * t, b = Math.min(1, c[2] * L[2] * k) * (1 - t) + h[2] * t;
         return `rgb(${r * 255 | 0},${g * 255 | 0},${b * 255 | 0})`;
     }
@@ -404,6 +469,7 @@ class ReadingCast {
         const m = this.m, cam = this.cam, dt = 1 / 60, list = [];
         for (const c of this.cats) list.push(c);
         for (const s of this.students) list.push(s);
+        for (const b of this.browsers) list.push(b);
         if (this.librarian) list.push(this.librarian);
         if (this.mouseA) list.push({ kind: 'mouse', a: this.mouseA, z: this.mouseA.z, x: this.mouseA.x });
         for (const p of this.planes) list.push({ kind: 'plane', p, z: p.z, x: p.x });
@@ -420,6 +486,7 @@ class ReadingCast {
             if (a.kind === 'cat') { this.drawCat(ctx, a, s, dt); continue; }
             if (a.kind === 'student') { this.drawStudent(ctx, a, s, dt); continue; }
             if (a.kind === 'librarian') { this.drawLibrarian(ctx, a, s, dt); continue; }
+            if (a.kind === 'browser') { this.drawBrowser(ctx, a, s, dt); continue; }
             if (a.kind === 'mouse') { const q = a.a, [px, py] = cam.p(q.x, q.y || 0, q.z), k = s * 0.09; ctx.fillStyle = '#6a5a50'; ctx.beginPath(); ctx.ellipse(px, py - k, k * 1.2, k * 0.7, 0, 0, 6.2832); ctx.fill(); ctx.strokeStyle = '#6a5a50'; ctx.lineWidth = Math.max(0.6, k * 0.25); ctx.beginPath(); ctx.moveTo(px - q.dir * k, py - k); ctx.quadraticCurveTo(px - q.dir * k * 2.4, py - k * 1.6, px - q.dir * k * 3, py - k * 0.6); ctx.stroke(); continue; }
             if (a.kind === 'plane') { this.drawPlane(ctx, a.p, s); continue; }
             if (a.kind === 'flybook' || a.kind === 'book') { this.drawBook(ctx, a.kind === 'book' ? a.c.book : a.b, s, a.kind === 'flybook'); continue; }
@@ -462,9 +529,14 @@ class ReadingCast {
             ctx.fillStyle = 'rgba(214,130,140,0.9)'; ctx.beginPath(); ctx.arc(hx + r * 0.92, hy - r * 0.2, r * 0.1, 0, 6.2832); ctx.fill();
         };
         if (pose === 'walk') {
-            const st = Math.sin(c.phase * 1.4) * 0.09;
+            // A walk in four beats, each paw planted while the body goes over it (so it does not slide), then
+            // lifted and carried forward: the stride is what she has walked, not the clock.
+            const A = ReadingLogic.CAT_STRIDE * 0.3, gp = c.gp || 0;
             ctx.strokeStyle = dk; ctx.lineWidth = 0.05; ctx.beginPath();
-            for (const [x, kk] of [[0.18, 1], [0.12, -1], [-0.15, -1], [-0.21, 1]]) { ctx.moveTo(x, 0.19); ctx.lineTo(x + st * kk, 0.01); }
+            for (const [x, off] of [[0.18, 0.5], [0.12, 0], [-0.15, 0.25], [-0.21, 0.75]]) {
+                const q = ((gp + off) % 1 + 1) % 1, stance = q < 0.6, rel = stance ? A - 2 * A * q / 0.6 : -A + 2 * A * (q - 0.6) / 0.4, lift = stance ? 0 : Math.sin(Math.PI * (q - 0.6) / 0.4) * 0.05;
+                ctx.moveTo(x, 0.19); ctx.lineTo(x + rel, 0.01 + lift);
+            }
             ctx.stroke();
             tail(-0.24, 0.24, -0.4, 0.34, -0.33, 0.56 + Math.sin(t * 2) * 0.03);
             body(0, 0.24, 0.26, 0.095);
@@ -526,8 +598,13 @@ class ReadingCast {
         if (px < -80 || px > this.m.W + 80 || k < 1.5) return;
         this.relight(a, dt, 1.1);
         const coat = this.tint(a, 'coat', a.coat), skin = this.tint(a, 'skin', [0.9, 0.72, 0.6]), hair = this.tint(a, 'hair', a.hair), legs = this.tint(a, 'legs', [0.15, 0.13, 0.17]);
+        if (a.state !== 'seat') {
+            const box = this.drawWalker(ctx, a, a.coat, ReadingCast.SKIN, a.hair, ReadingCast.LEGS, this.behindSpine(a));
+            if (box) this.restore(ctx, a.z, ...box);
+            return;
+        }
         ctx.save(); ctx.translate(px, py); ctx.scale(k * a.dir, -k);
-        if (a.state === 'seat') {
+        {
             const doze = a.act === 'doze', lean = doze ? 0.32 : a.act === 'write' ? 0.16 : 0.1, bob = Math.sin(a.phase * 0.15) * 0.01;
             ctx.strokeStyle = legs; ctx.lineWidth = 0.14; ctx.beginPath(); ctx.moveTo(-0.08, 0.5); ctx.lineTo(0.3, 0.5); ctx.lineTo(0.32, 0.04); ctx.stroke();
             ctx.strokeStyle = coat; ctx.lineWidth = 0.38; ctx.beginPath(); ctx.moveTo(-0.08, 0.6); ctx.lineTo(-0.08 + lean, 1.15 + bob - (doze ? 0.14 : 0)); ctx.stroke();
@@ -540,40 +617,116 @@ class ReadingCast {
             ctx.fillStyle = skin; ctx.beginPath(); ctx.arc(hx, hy, 0.11, 0, 6.2832); ctx.fill();
             ctx.fillStyle = hair; ctx.beginPath(); ctx.arc(hx - 0.03, hy + 0.04, 0.115, Math.PI * 0.1, Math.PI * 1.15); ctx.fill();
             if (a.flip > 0) { ctx.fillStyle = this.tint(a, 'page', [0.96, 0.93, 0.84], 1.2); ctx.beginPath(); ctx.moveTo(0.5, 0.82); ctx.lineTo(0.5 + Math.cos(a.flip * 7) * 0.18, 0.82 + Math.abs(Math.sin(a.flip * 7)) * 0.16); ctx.lineTo(0.5, 0.86); ctx.fill(); }
-        } else {
-            this.walker(ctx, a, coat, skin, hair, legs);
         }
         ctx.restore();
         this.restore(ctx, a.z, px - 0.9 * k, py - 1.9 * k, 1.8 * k, 2 * k);
     }
-    walker(ctx, a, coat, skin, hair, legs) {
-        const st = Math.sin(a.phase * 1.1) * 0.22;
-        ctx.strokeStyle = legs; ctx.lineWidth = 0.14; ctx.beginPath(); ctx.moveTo(-0.02, 0.8); ctx.lineTo(st, 0.04); ctx.moveTo(0.02, 0.8); ctx.lineTo(-st, 0.04); ctx.stroke();
-        ctx.strokeStyle = coat; ctx.lineWidth = 0.42; ctx.beginPath(); ctx.moveTo(0, 0.84); ctx.lineTo(0.03, 1.32); ctx.stroke();
-        ctx.lineWidth = 0.12; ctx.beginPath(); ctx.moveTo(0.1, 1.36); ctx.lineTo(0.18 - st * 0.8, 0.92); ctx.moveTo(-0.1, 1.36); ctx.lineTo(-0.16 + st * 0.8, 0.92); ctx.stroke();
-        ctx.fillStyle = skin; ctx.beginPath(); ctx.arc(0.05, 1.56, 0.115, 0, 6.2832); ctx.fill();
-        ctx.fillStyle = hair; ctx.beginPath(); ctx.arc(0.02, 1.6, 0.12, Math.PI * 0.05, Math.PI * 1.1); ctx.fill();
-        // An armful of books.
-        ctx.fillStyle = this.tint(a, 'books', [0.5, 0.14, 0.12]); ctx.fillRect(0.12, 1.02, 0.16, 0.18);
+    // Where the spine's case stands between us and someone walking beside it, the screen row below which it
+    // hides them (its top edge, where our line of sight to them crosses it); else null.
+    behindSpine(a) {
+        const R = ReadingLogic.ROOM, ax = Math.abs(a.x), xo = R.spineX + R.spineW;
+        if (ax <= xo || ax > xo + 1.6) return null;
+        const zf = a.z * xo / ax;
+        if (!(this.L.spine || []).some(c => Math.sign(c.x) === Math.sign(a.x) && zf > c.z0 && zf < c.z1)) return null;
+        return this.cam.p(Math.sign(a.x) * xo, R.spineH, zf)[1];
+    }
+
+    // Someone standing or walking, drawn in the hall's own perspective from where their feet and joints are
+    // in metres (ReadingLogic.pose): each foot where it is planted (or swinging through, lifted), the knees
+    // bending forward, the body riding up over each step, the arms swinging against the legs, the shoulders
+    // broad seen from in front or behind and narrow from the side, the far arm and leg in shadow, the face
+    // or the back of the head as they face; below `clipY` (a screen row) hidden by whatever stands nearer.
+    // The box drawn in (CSS px), or null.
+    drawWalker(ctx, a, coat, skin, hair, legs, clipY = null) {
+        const cam = this.cam, RL = ReadingLogic, k = a.k || 1, y0 = a.y || 0, P = RL.pose(a), h = a.h ?? Math.PI / 2;
+        const fx = Math.cos(h), fz = Math.sin(h), rx = fz, rz = -fx, vl = Math.hypot(a.x, a.z) || 1, away = (fx * a.x + fz * a.z) / vl, rightFar = (rx * a.x + rz * a.z) > 0;
+        const W = (x, y, z) => cam.p(x, y0 + y, Math.max(1, z)), s = cam.mpx(Math.max(1, a.z)) * k;
+        const [bx, by] = W(a.x, 0, a.z);
+        if (bx < -80 || bx > this.m.W + 80 || s < 1.5) return null;
+        this.relight(a, 1 / 60, y0 + 1.1);
+        // (Each colour's tones kept on the walker until the light on them changes: relight clears a.tints.)
+        const tints = a.tints || (a.tints = {}), tone = (c, kk) => { const row = tints[c.key || (c.key = `w${ReadingCast.keys++}`)] || (tints[c.key] = {}); return row[kk] || (row[kk] = this.tone(a, c, kk)); };
+        const hipY = 0.92 * k + P.bob, shY = 1.42 * k + P.bob, headY = 1.6 * k + P.bob;
+        const across = (side, w, y) => [a.x + rx * side * w * k, y, a.z + rz * side * w * k];
+        if (clipY != null) { ctx.save(); ctx.beginPath(); ctx.rect(-10, -1e4, this.m.W + 20, clipY + 1e4); ctx.clip(); }
+        ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+        const stroke = (col, w, pts) => { ctx.strokeStyle = col; ctx.lineWidth = Math.max(0.8, w * s); ctx.beginPath(); pts.forEach((q, i) => { const [x, y] = W(...q); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }); ctx.stroke(); };
+        // A leg: hip to knee to foot, the knee bent forward by as much as the leg is shorter than its reach; a shoe along the way they face.
+        const leg = (i, col) => {
+            const side = i ? 1 : -1, hip = across(side, 0.1, hipY), f = P.feet[i], foot = [f.x, f.y + 0.06 * k, f.z];
+            const d = Math.hypot(hip[0] - foot[0], hip[1] - foot[1], hip[2] - foot[2]), half = 0.47 * k, bend = Math.sqrt(Math.max(0, half * half - d * d / 4));
+            const knee = [(hip[0] + foot[0]) / 2 + fx * bend, (hip[1] + foot[1]) / 2, (hip[2] + foot[2]) / 2 + fz * bend];
+            stroke(col, 0.13, [hip, knee, foot]);
+            stroke(col, 0.1, [[foot[0] - fx * 0.03 * k, f.y + 0.03 * k, foot[2] - fz * 0.03 * k], [foot[0] + fx * 0.13 * k, f.y + 0.03 * k, foot[2] + fz * 0.13 * k]]);
+        };
+        // An arm: swinging forward as the leg on its side goes back; or, reaching for a shelf, up.
+        const arm = (i, col) => {
+            const side = i ? 1 : -1, sh = across(side, 0.2, shY - 0.05 * k), f = P.feet[i], rel = (f.x - a.x) * fx + (f.z - a.z) * fz;
+            if (a.reach > 0 && i === 1) { const hand = [sh[0] + fx * 0.25 * k, sh[1] + 0.45 * k * a.reach - 0.55 * k * (1 - a.reach), sh[2] + fz * 0.25 * k]; stroke(col, 0.1, [sh, hand]); return hand; }
+            const swing = RL.clamp(-rel * 0.6, -0.3 * k, 0.3 * k), hand = [sh[0] + fx * swing, sh[1] - 0.6 * k, sh[2] + fz * swing], elbow = [(sh[0] + hand[0]) / 2 + fx * (0.04 * k + Math.max(0, swing) * 0.2), (sh[1] + hand[1]) / 2, (sh[2] + hand[2]) / 2 + fz * (0.04 * k + Math.max(0, swing) * 0.2)];
+            stroke(col, 0.1, [sh, elbow, hand]);
+            return hand;
+        };
+        const far = rightFar ? 1 : 0, near = 1 - far, dark = 0.72;
+        arm(far, tone(coat, dark));
+        leg(far, tone(legs, dark));
+        leg(near, tone(legs, 1));
+        // The body: broad from in front or behind, narrow from the side; lit along its top.
+        const width = 0.24 + 0.12 * Math.abs(away), hipC = [a.x, hipY - 0.1 * k, a.z], shC = [a.x, shY - 0.07 * k, a.z], lit = rightFar ? -1 : 1;
+        ctx.lineCap = 'butt'; stroke(tone(coat, 1), width, [hipC, shC]); ctx.lineCap = 'round';
+        stroke(tone(coat, 1), 0.15, [across(-1, 0.12, shY - 0.06 * k), across(1, 0.12, shY - 0.06 * k)]);
+        stroke(tone(coat, 1.12), 0.07, [across(lit, 0.06, shY - 0.3 * k), across(lit, 0.1, shY - 0.05 * k)]);
+        if (a.scarf) stroke(tone(a.scarf, 1), 0.09, [across(-1, 0.12, shY + 0.02 * k), across(1, 0.12, shY + 0.02 * k)]);
+        // An armful of books, held in front of them (hidden when they walk away from us).
+        const hand = arm(near, tone(coat, 1));
+        if (a.books && !a.reach && away < 0.5) { const [cx, cy] = W(a.x + fx * 0.2 * k + rx * (near ? 1 : -1) * 0.08 * k, 1.12 * k + P.bob, a.z + fz * 0.2 * k + rz * (near ? 1 : -1) * 0.08 * k); ctx.fillStyle = tone(ReadingCast.BOOK_A, 1); ctx.fillRect(cx - 0.09 * s, cy - 0.1 * s, 0.18 * s, 0.2 * s); ctx.fillStyle = tone(ReadingCast.BOOK_B, 1); ctx.fillRect(cx - 0.08 * s, cy - 0.13 * s, 0.16 * s, 0.04 * s); }
+        if (a.reach > 0.5) { const [cx, cy] = W(...hand); ctx.fillStyle = tone(ReadingCast.BOOK_C, 1); ctx.fillRect(cx - 0.05 * s, cy - 0.12 * s, 0.1 * s, 0.14 * s); }
+        // The head: the face toward us, or the back of the head; from the side, the hair behind.
+        const [hx, hy] = W(a.x + fx * 0.02 * k, headY, a.z + fz * 0.02 * k), r = 0.115 * s, [qx] = W(a.x + fx * 0.3, headY, a.z + fz * 0.3), back = qx > hx ? -1 : 1;
+        ctx.fillStyle = tone(skin, 1); ctx.beginPath(); ctx.arc(hx, hy, r, 0, 6.2832); ctx.fill();
+        ctx.fillStyle = tone(hair, 1); ctx.beginPath();
+        if (away > 0.45) ctx.arc(hx, hy - r * 0.05, r * 1.05, 0, 6.2832);
+        else if (away < -0.45) ctx.arc(hx, hy - r * 0.2, r * 1.02, Math.PI * 1.02, Math.PI * 1.98);
+        else ctx.arc(hx + back * r * 0.12, hy - r * 0.12, r * 1.02, back > 0 ? -Math.PI * 0.62 : Math.PI * 0.62, back > 0 ? Math.PI * 0.42 : Math.PI * 1.58, back < 0);
+        ctx.fill();
+        if (a.kind === 'librarian') { ctx.beginPath(); ctx.arc(hx - (away > 0.45 || away < -0.45 ? 0 : back * -r * 0.6), hy - r * 1.05, r * 0.5, 0, 6.2832); ctx.fill(); }
+        if (clipY != null) ctx.restore();
+        return [bx - 0.6 * s, by - 1.9 * s, 1.2 * s, 2 * s];
     }
     drawLibrarian(ctx, l, s, dt) {
-        const cam = this.cam, k = s;
+        const cam = this.cam, k = s, d = this.L.desk;
         const [px, py] = cam.p(l.x, 0, l.z);
         if (px < -80 || px > this.m.W + 80) return;
         this.relight(l, dt, 1.2);
-        const coat = this.tint(l, 'coat', l.coat), skin = this.tint(l, 'skin', [0.92, 0.76, 0.66]), hair = this.tint(l, 'hair', [0.78, 0.78, 0.8]), legs = this.tint(l, 'legs', [0.14, 0.12, 0.16]);
         if (l.lantern) this.glow(ctx, px + l.dir * 0.45 * k, py - 0.5 * k, 3.4 * k, [1, 0.7, 0.34], 0.38);
-        ctx.save(); ctx.translate(px, py); ctx.scale(k * l.dir, -k);
-        if (l.state === 'desk') { ctx.strokeStyle = coat; ctx.lineWidth = 0.44; ctx.beginPath(); ctx.moveTo(0, 0.8); ctx.lineTo(0, 1.32); ctx.stroke(); ctx.strokeStyle = legs; ctx.lineWidth = 0.14; ctx.beginPath(); ctx.moveTo(0, 0.8); ctx.lineTo(0.02, 0.04); ctx.stroke(); ctx.fillStyle = skin; ctx.beginPath(); ctx.arc(0.04, 1.55, 0.115, 0, 6.2832); ctx.fill(); ctx.fillStyle = hair; ctx.beginPath(); ctx.arc(0.0, 1.62, 0.1, 0, 6.2832); ctx.fill(); ctx.beginPath(); ctx.arc(-0.07, 1.68, 0.06, 0, 6.2832); ctx.fill(); }
-        else {
-            this.walker(ctx, l, coat, skin, hair, legs);
-            ctx.fillStyle = hair; ctx.beginPath(); ctx.arc(-0.06, 1.69, 0.06, 0, 6.2832); ctx.fill();
-            if (l.lantern) { ctx.strokeStyle = '#2a2222'; ctx.lineWidth = 0.03; ctx.beginPath(); ctx.moveTo(0.3, 1.0); ctx.lineTo(0.42, 1.0); ctx.lineTo(0.42, 0.88); ctx.stroke(); ctx.fillStyle = '#ffe2a0'; ctx.fillRect(0.36, 0.66, 0.13, 0.2); }
-            else if (l.state === 'light') { ctx.strokeStyle = this.tint(l, 'pole', [0.3, 0.24, 0.2]); ctx.lineWidth = 0.035; ctx.beginPath(); ctx.moveTo(0.18, 0.92); ctx.lineTo(0.5, 1.9); ctx.stroke(); }
+        // Behind her desk, the desk hides her below its top.
+        const behind = d && l.x > d.x - 0.45 && Math.abs(l.z - d.z) < 1.5 ? cam.p(d.x - 0.45, 0.95, l.z * (d.x - 0.45) / l.x)[1] : null;
+        const box = this.drawWalker(ctx, l, l.coat, ReadingCast.SKIN_L, ReadingCast.HAIR_L, ReadingCast.LEGS, behind);
+        const P = ReadingLogic.pose(l), fx = Math.cos(l.h), fz = Math.sin(l.h), sideX = -fz * 0.28, sideZ = fx * 0.28;
+        if (l.lantern) {
+            const [lx, ly] = cam.p(l.x + sideX + fx * 0.15, 0.72 + P.bob, l.z + sideZ + fz * 0.15);
+            ctx.fillStyle = '#ffe2a0'; ctx.fillRect(lx - 0.06 * k, ly - 0.1 * k, 0.12 * k, 0.18 * k);
+            ctx.strokeStyle = '#2a2222'; ctx.lineWidth = Math.max(0.6, 0.02 * k); ctx.strokeRect(lx - 0.06 * k, ly - 0.1 * k, 0.12 * k, 0.18 * k);
+            this.glow(ctx, lx, ly, 0.6 * k, [1, 0.85, 0.5], 0.8);
+        } else if (l.state === 'light') {
+            // The taper on its long pole, held up before her.
+            const a = cam.p(l.x + sideX + fx * 0.2, 0.95 + P.bob, l.z + sideZ + fz * 0.2), b = cam.p(l.x + sideX + fx * 0.55, 2.0 + P.bob, l.z + sideZ + fz * 0.55);
+            ctx.strokeStyle = this.tint(l, 'pole', [0.3, 0.24, 0.2]); ctx.lineWidth = Math.max(0.7, 0.035 * k); ctx.beginPath(); ctx.moveTo(...a); ctx.lineTo(...b); ctx.stroke();
+            this.glow(ctx, b[0], b[1], 0.25 * k, [1, 0.8, 0.4], 0.9);
         }
-        ctx.restore();
-        if (l.lantern) this.glow(ctx, px + l.dir * 0.42 * k, py - 0.78 * k, 0.6 * k, [1, 0.85, 0.5], 0.8);
-        this.restore(ctx, l.z, px - 0.9 * k, py - 2 * k, 1.8 * k, 2.1 * k);
+        if (box) this.restore(ctx, l.z, ...box);
+    }
+    // A reader up on a gallery: behind the gallery's rail (drawn again over them), the front of the gallery hiding their feet.
+    drawBrowser(ctx, b, s, dt) {
+        const cam = this.cam, R = ReadingLogic.ROOM, G = R.gal[b.gal], xr = b.side * (G.gx + 0.06), zf = b.z * Math.abs(xr / b.x);
+        const clipY = cam.p(b.side * G.gx, G.y1, b.z * G.gx / Math.abs(b.x))[1];
+        const box = this.drawWalker(ctx, b, b.coat, ReadingCast.SKIN, b.hair, ReadingCast.LEGS, clipY);
+        if (!box) return;
+        const [x0, , w] = box, ms = cam.mpx(zf);
+        ctx.strokeStyle = this.tint(b, 'iron', [0.09, 0.08, 0.08]); ctx.lineWidth = Math.max(0.6, 0.028 * ms); ctx.beginPath();
+        for (let z = Math.round(zf / 0.24) * 0.24 - 1.2; z < zf + 1.2; z += 0.24) { const [ax, ay] = cam.p(xr, G.y1, z), [, ty] = cam.p(xr, G.y1 + R.rail, z); if (ax > x0 - 4 && ax < x0 + w + 4) { ctx.moveTo(ax, ay); ctx.lineTo(ax, ty); } }
+        ctx.stroke();
+        ctx.strokeStyle = this.tint(b, 'gilt', [0.88, 0.67, 0.27]); ctx.lineWidth = Math.max(0.7, 0.07 * ms); ctx.beginPath(); ctx.moveTo(...cam.p(xr, G.y1 + R.rail, zf - 1.2)); ctx.lineTo(...cam.p(xr, G.y1 + R.rail, zf + 1.2)); ctx.stroke();
     }
 
     drawPlane(ctx, p, s) {
@@ -667,6 +820,9 @@ class ReadingCast {
     }
 }
 // The library's cats: their names, and coats (c), darker markings and tails (d), and a white bib for some (w).
+ReadingCast.keys = 0;
+ReadingCast.SKIN = [0.9, 0.72, 0.6]; ReadingCast.SKIN_L = [0.92, 0.76, 0.66]; ReadingCast.HAIR_L = [0.78, 0.78, 0.8]; ReadingCast.LEGS = [0.15, 0.13, 0.17];
+ReadingCast.BOOK_A = [0.5, 0.14, 0.12]; ReadingCast.BOOK_B = [0.2, 0.3, 0.5]; ReadingCast.BOOK_C = [0.24, 0.3, 0.14];
 ReadingCast.NAMES = ['Footnote', 'Marginalia', 'Quarto', 'Ibid', 'Vellum', 'Dewey', 'Colophon', 'Errata', 'Folio', 'Octavo', 'Codex', 'Index'];
 ReadingCast.COATS = [{ c: [0.86, 0.52, 0.22], d: [0.6, 0.3, 0.1], s: true }, { c: [0.12, 0.11, 0.13], d: [0.07, 0.07, 0.09], w: [0.94, 0.93, 0.9] }, { c: [0.56, 0.5, 0.44], d: [0.3, 0.25, 0.22], s: true },
     { c: [0.9, 0.88, 0.84], d: [0.62, 0.58, 0.55] }, { c: [0.34, 0.3, 0.3], d: [0.18, 0.16, 0.16], w: [0.9, 0.88, 0.84] }, { c: [0.78, 0.66, 0.5], d: [0.4, 0.3, 0.22], s: true },
