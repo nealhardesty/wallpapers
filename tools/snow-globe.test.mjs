@@ -102,6 +102,7 @@ test('snow lies on the roofs too, turns with the turntable, and comes off them f
         assert.ok(things.length >= 6, `${scene}: ${things.length} things`);
         for (const t of things) assert.ok(Math.hypot(t.x, t.z) + t.r * 0.6 < G.FLOOR_R && t.top < G.WALL, `${scene}: the ${t.kind} fits in the glass`);
         G.shake(sim, 0, -1, 2, rand);
+        assert.ok(sim.water.turb > 0.5, `${scene}: the water turbulent after a shake`);
         run(sim, 50, 30, things);
         const { on } = balanced(sim), c = G.cover(sim, things);
         assert.ok(on > 4, `${scene}: ${on} flakes on the roofs`);
@@ -191,20 +192,89 @@ test('the cat: watches moving snow, taps the glass, shakes it itself when it has
     assert.notEqual(c.state, 'purr');
 });
 
+test('at rest: frames keep coming for as long as anything should move, at the pace it needs, however long it rests', () => {
+    // A fake clock: each frame asks restWait how long until the next; thirty simulated minutes of a calm globe.
+    for (const [catOn, ambient] of [[true, true], [true, false], [false, true], [false, false]]) {
+        const c = G.makeCat(), rand = seeded(9);
+        let t = 0, frames = 0, longest = 0, asleep = 0;
+        while (t < 30 * 60 * 1000) {
+            const cat = !catOn ? 'none' : c.state === 'sleep' ? 'asleep' : 'awake';
+            const wait = G.restWait({ busy: false, cat, ambient });
+            assert.ok(Number.isFinite(wait) && wait > 0 && wait <= 1500, `a wait, not a deadline: ${wait} at ${(t / 1000).toFixed(0)} s`);
+            const dt = Math.min(0.1, wait / 1000);
+            if (catOn) G.catStep(c, dt, { rand, swirl: 0, calmFor: t / 1000, mischief: 0, byCat: false });
+            if (cat === 'asleep') asleep++;
+            longest = Math.max(longest, wait);
+            t += wait; frames++;
+        }
+        const tag = `cat ${catOn}, ambient ${ambient}`;
+        if (ambient) assert.ok(longest < 80 && frames > 30 * 60 * 13, `${tag}: 14 a second all along (${frames} frames, longest wait ${longest.toFixed(0)} ms)`);
+        else if (catOn) assert.ok(longest <= 250 && asleep > 0, `${tag}: at least 4 a second while it sleeps (longest wait ${longest} ms)`);
+        else assert.equal(longest, 1500, `${tag}: almost none with nothing to move`);
+    }
+    assert.equal(G.restWait({ busy: true, cat: 'awake', ambient: true }), 0, 'busy: every frame');
+});
+
 test('by the date: the scene and the cat', () => {
     const d = s => new Date(s);
     assert.equal(G.sceneFor('auto', d('2026-12-24T20:00')), 'tree');
     assert.equal(G.sceneFor('auto', d('2026-12-26T09:00')), 'tree');
-    assert.equal(G.sceneFor('auto', d('2026-12-10T20:00')), 'village');
+    const advent = new Set(); for (let day = 1; day <= 23; day++) advent.add(G.sceneFor('auto', d(`2026-12-${String(day).padStart(2, '0')}T20:00`)));
+    assert.deepEqual([...advent].sort(), Array.from(G.ADVENT).sort(), 'through Advent, each of the Christmas ones');
+    assert.equal(G.sceneFor('auto', d('2026-12-01T20:00')), 'village', 'the village first');
     assert.equal(G.sceneFor('pond', d('2026-12-24T20:00')), 'pond', 'a chosen scene stays chosen');
-    const year = new Set(); for (let day = 1; day <= 6; day++) year.add(G.sceneFor('auto', d(`2026-03-0${day}T12:00`)));
-    assert.equal(year.size, 3, 'the rest of the year, a different one each day');
+    const year = new Set(); let last = null;
+    for (let day = 1; day <= 28; day++) { const sc = G.sceneFor('auto', d(`2026-03-${String(day).padStart(2, '0')}T12:00`)); assert.notEqual(sc, last, 'never the same two days running'); last = sc; year.add(sc); }
+    assert.equal(year.size, G.YEAR.length, 'the rest of the year, a different one each day, every one of them in turn');
+    for (const sc of ['lighthouse', 'gingerbread', 'polar', 'carousel', 'penguins', 'cabin']) assert.ok(G.YEAR.includes(sc) && G.SCENE_ORDER.includes(sc) && G.SCENE_NAMES[sc] && G.GROUND[sc], `${sc} is in the rotation, named, with its ground`);
     assert.ok(G.festive(d('2026-12-24T20:00')) && G.festive(d('2026-12-25T08:00')) && !G.festive(d('2026-12-26T08:00')));
     assert.equal(G.catFor('none', d('2026-12-01')), null);
     assert.equal(G.catFor('turkey', d('2026-12-01')), 'turkey');
     const cats = new Set(); for (let day = 1; day <= 9; day++) cats.add(G.catFor('random', d(`2026-11-${String(day).padStart(2, '0')}T12:00`)));
     assert.equal(cats.size, 9, `nine days, nine cats: ${[...cats]}`);
     assert.equal(G.catFor('random', d('2026-11-03T01:00')), G.catFor('random', d('2026-11-03T23:00')), 'the same cat all day');
+});
+
+test('the turntable is solid: faces turn by their cosine, things pass behind, the light stays put', () => {
+    const p = { x: 0, z: 0, s: 1, face: 0 };
+    const width = face => { const v = G.view({ ...p, face }); return Math.abs(G.at(v, 0.2, 0, 0.1)[0] - G.at(v, -0.2, 0, 0.1)[0]) / v.k; };
+    for (const face of [0, 0.5, 1, 1.3, 2, 3]) assert.ok(Math.abs(width(face) - 0.4 * Math.abs(Math.cos(face))) < 1e-9, `a face 0.4 across shows ${width(face).toFixed(3)} at a turn of ${face}`);
+    let v = G.view(p);
+    assert.ok(G.facing(v, 0, 0, 1) > 0 && G.facing(v, 0, 0, -1) < 0, 'facing us: its front seen, its back not');
+    v = G.view({ ...p, face: Math.PI });
+    assert.ok(G.facing(v, 0, 0, 1) < 0 && G.facing(v, 0, 0, -1) > 0, 'turned half round: its back seen');
+    assert.ok(G.facing(G.view({ ...p, face: 1 }), 0, 1, 0) > 0, 'a roof seen from above, whatever the turn');
+    assert.ok(G.at(G.view(p), 0, 0, 0.2)[2] > G.at(G.view(p), 0, 0, -0.2)[2], 'its front nearer than its back');
+    assert.deepEqual(Array.from(G.world(G.view({ ...p, face: Math.PI / 2 }), 0, 0, 1)).map(x => Math.round(x * 1e9) / 1e9 + 0), [1, 0, 0], 'a quarter turn: its front faces the side (where the light comes from)');
+    // Round the turntable: what was in front goes behind (it is drawn earlier, and the things in front over it).
+    const a = G.placed('cottage', 0, 0), b = G.placed('cottage', Math.PI, 0), i = a.findIndex(t => t.kind === 'deer');
+    assert.ok(Math.sign(a[i].depth) === -Math.sign(b[i].depth), 'half a turn: the deer passes from one side of the middle to the other');
+    // An ellipsoid's outline: a ball is a circle whatever the turn; a long body foreshortens end on.
+    for (const face of [0, 1, 2.5]) { const v1 = G.view({ ...p, face }), B = G.ellipseOf(v1, [0.1, 0, 0], [0, 0.1, 0], [0, 0, 0.1]); assert.ok(Math.abs(B[0] / v1.k - 0.1) < 1e-6 && Math.abs(B[1]) < 1e-6, `a ball at ${face}: ${B.map(x => x.toFixed(3))}`); }
+    const side = G.ellipseOf(G.view(p), [0.3, 0, 0], [0, 0.1, 0], [0, 0, 0.1]), end = G.ellipseOf(G.view({ ...p, face: Math.PI / 2 }), [0.3, 0, 0], [0, 0.1, 0], [0, 0, 0.1]);
+    assert.ok(side[0] > 0.28 && end[0] < 0.11, `a deer's body: ${side[0].toFixed(2)} wide side on, ${end[0].toFixed(2)} end on`);
+    // Movers head where they go.
+    const t0 = G.placed('tree', 0, 1).find(t => t.kind === 'train'), t1 = G.placed('tree', 0, 1.01).find(t => t.kind === 'train'), heading = [Math.cos(t0.face), -Math.sin(t0.face)];
+    const dir = [t1.x - t0.x, t1.z - t0.z], l = Math.hypot(...dir);
+    assert.ok((heading[0] * dir[0] + heading[1] * dir[1]) / l > 0.99, 'the train runs along its own length');
+});
+
+test('the cat: its head is whole and its tail goes round it, not through it', () => {
+    // The head is one path filled nonzero: every ear must wind the way its ellipses do, or it cuts a hole.
+    for (const s of [-1, 1]) for (const e of [-1, 1]) {
+        const ear = G.earAt(e, s, 1, 0.22), fixed = G.area(ear) < 0 ? ear.slice().reverse() : ear;
+        assert.ok(G.area(fixed) > 0, 'counter-clockwise, as ellipse() goes');
+    }
+    assert.ok(Math.sign(G.area(G.earAt(-1, 1, 1, 0.22))) !== Math.sign(G.area(G.earAt(1, 1, 1, 0.22))), '(as traced, the two ears wind opposite ways: the hole)');
+    for (const s of [-1, 1]) for (const [sway, lift] of [[0, 0.01], [0.07, 0.08], [-0.07, 0.05]]) {
+        const { pts, front } = G.tailLine(s, 1, sway, lift);
+        const inside = (x, y) => ((x + s * 0.13) / 0.25) ** 2 + ((y - 0.2) / 0.21) ** 2 < 0.9 || (x / 0.2) ** 2 + ((y - 0.36) / 0.3) ** 2 < 0.9;
+        // Behind the body only at its root, out from behind the haunch; then down round its back and along the floor before the paws.
+        assert.ok(inside(pts[0][0], pts[0][1]) || Math.abs(pts[0][0]) < 0.36, 'its root at the haunch');
+        for (let i = front; i < pts.length; i++) assert.ok(!inside(pts[i][0], pts[i][1]), `in front of the body, never over it (point ${i})`);
+        for (let i = pts.length >> 1; i < pts.length - 4; i++) assert.ok(pts[i][1] < 0.02, `lying on the floor before the paws (point ${i}: ${pts[i][1].toFixed(3)})`);
+        for (let i = 1; i < pts.length; i++) { assert.ok(pts[i][2] <= pts[i - 1][2] + 1e-9, 'tapering'); assert.ok(Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]) < 0.06, 'one smooth stroke'); }
+    }
 });
 
 test('brushwork: a stroke runs until the colour changes or the shape ends', () => {

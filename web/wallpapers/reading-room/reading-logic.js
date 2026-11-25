@@ -22,16 +22,26 @@ const ReadingLogic = (() => {
 
     // ---- The hall ---------------------------------------------------------------
     // hw: half the width between the bookcases' faces. Nine bays of nine
-    // metres from z0, then the north wall. Two galleries, their floors at g1
-    // and g2, standing out from the walls to g1x and g2x; their rails rise
-    // `rail` over them. The windows sit above the second gallery, one to a
-    // bay each side, win0 to win1 high and winW wide; then the cornice at
-    // `spring`, where the vault starts: half an ellipse `vault` high, with a
-    // round skylight (an oculus) at its crown in every bay.
+    // metres from z0, then the north wall. Three tiers of bookcases, each
+    // with a gallery in front of the next: `gal` gives each gallery's slab
+    // (its underside y0 and its floor y1) and how far out from the wall it
+    // stands (gx); g1, g2 and g3 are their floors; their rails rise `rail`
+    // over them. A low case stands on the top gallery; the windows sit above
+    // it, one to a bay each side, win0 to win1 high and winW wide; then the
+    // cornice at `spring`, where the vault starts: half an ellipse `vault`
+    // high, with a round skylight (an oculus) at its crown in every bay.
+    // Down the middle of the hall, in every bay but the first and the last,
+    // a low bookcase either side of the runner (the `spine`), its books
+    // facing the middle aisle, a gap at every pier; the aisles people walk
+    // are the middle one, between the spine and the tables (aisleIn), and
+    // between the tables and the walls (aisleOut).
     const ROOM = {
-        hw: 12, z0: 3, bay: 9, bays: 9, g1: 5.8, g1x: 10.5, g2: 11.4, g2x: 11.1, rail: 1.05,
-        win0: 12.6, win1: 16.9, winW: 3.8, spring: 17.3, vault: 7.6, oculus: 1.35,
-        tableX: 5.2, tableLen: 7.0, tableW: 1.6, tableH: 0.78, shade: 0.4,
+        hw: 12, z0: 3, bay: 9, bays: 9, g1: 5.8, g1x: 10.5, g2: 11.5, g2x: 10.5, g3: 17.0, g3x: 11.0, rail: 1.05,
+        gal: [{ y0: 5.35, y1: 6.0, gx: 10.5 }, { y0: 10.9, y1: 11.5, gx: 10.5 }, { y0: 16.4, y1: 17.0, gx: 11.0 }],
+        tiers: [[0.15, 5.35], [6.0, 10.9], [11.5, 16.4], [17.0, 17.9]],
+        win0: 18.5, win1: 22.8, winW: 3.8, spring: 23.2, vault: 7.6, oculus: 1.35,
+        tableX: 5.5, tableLen: 7.0, tableW: 1.6, tableH: 0.78, shade: 0.4,
+        spineX: 1.9, spineW: 0.25, spineH: 1.3, aisleIn: 3.1, aisleOut: 7.9, personR: 0.26,
     };
     ROOM.len = ROOM.z0 + ROOM.bay * ROOM.bays;                       // the north wall
     ROOM.apex = ROOM.spring + ROOM.vault;
@@ -39,6 +49,13 @@ const ReadingLogic = (() => {
     const pierZ = k => ROOM.z0 + ROOM.bay * k;                       // the pier before bay k
     // The vault's height at x (metres from the middle), and its slope there.
     const vaultY = x => ROOM.spring + ROOM.vault * Math.sqrt(Math.max(0, 1 - (x / ROOM.hw) ** 2));
+    // The spine down the middle: a low case each side of the runner in each of bays 1 to 7, and in the
+    // middle aisle, at the piers, a lectern with the great dictionary, the big globe, an armillary sphere
+    // and a glass case of treasures.
+    // (The first starts a little way down its bay, leaving the runner the foreground.)
+    const SPINE = [0, 1, 2, 3, 4, 5, 6, 7].flatMap(k => [-1, 1].map(side => { const z0 = pierZ(k) + (k ? 1.1 : 4.2), z1 = pierZ(k + 1) - 1.1; return { k, side, x: side * ROOM.spineX, z: (z0 + z1) / 2, z0, z1 }; }));
+    const CENTRE = [{ kind: 'lectern', k: 1, hx: 0.45, hz: 0.5 }, { kind: 'globe', k: 3, hx: 0.75, hz: 0.75, big: true }, { kind: 'armillary', k: 5, hx: 0.6, hz: 0.6 }, { kind: 'vitrine', k: 7, hx: 0.75, hz: 0.5 }]
+        .map(t => ({ ...t, x: 0, z: pierZ(t.k) }));
 
     // ---- Where we stand ---------------------------------------------------------
     // The eye 4 m up at the south end, looking level down the middle. Depth
@@ -49,7 +66,7 @@ const ReadingLogic = (() => {
     function camera(W, H, bottom = 0) {
         const Hu = H - bottom, aspect = W / Hu;
         const kind = aspect < 0.9 ? 'upright' : aspect > 2.15 ? 'panorama' : 'wide';
-        const u = Hu / 900, hor = Hu * (kind === 'upright' ? 0.5 : 0.43), f = Hu - hor;
+        const u = Hu / 900, hor = Hu * (kind === 'upright' ? 0.47 : 0.385), f = Hu - hor;
         const eye = 4.0, foc = 720 * u * clamp(aspect / 1.78, kind === 'upright' ? 0.62 : 0.74, 1.08);
         const ppm = f / eye, zm = eye * foc / f;
         const cam = { W, H, Hu, aspect, kind, hor, f, u, eye, ppm, zm, foc };
@@ -108,7 +125,9 @@ const ReadingLogic = (() => {
     let WINDOWS = null;
     // The glass of a side window, as the art draws it: two lights under one arch.
     const sideLights = zc => { const R = ROOM, h = R.winW / 2, m = 0.14, w = (h - m) / 2; return [arch(zc - m - w, R.win0, R.win1 - 0.5, w, 6), arch(zc + m + w, R.win0, R.win1 - 0.5, w, 6)]; };
-    const SOUTH = { x0: -9.2, x1: 9.2, y0: 1.8, y1: 19.8, cols: 5, rows: 6, bar: 0.32, z: 0.6 };
+    const SOUTH = { x0: -9.2, x1: 9.2, y0: 1.8, y1: 25.4, cols: 5, rows: 7, bar: 0.32, z: 0.6 };
+    // The great window in the north wall: its sill, the top of its arch, and half its width.
+    const NORTH = { y0: 18.3, y1: 29.6, half: 5.6 };
     function windows() {
         if (WINDOWS) return WINDOWS;
         const R = ROOM, out = [];
@@ -119,7 +138,7 @@ const ReadingLogic = (() => {
             for (let i = 0; i < 12; i++) { const a = i / 12 * Math.PI * 2; pts.push([Math.cos(a) * R.oculus, R.apex, zc + Math.sin(a) * R.oculus]); }
             out.push({ kind: 'oculus', k, side: 0, n: [0, 1, 0], pts });
         }
-        out.push({ kind: 'north', k: R.bays, side: 0, n: [0, 0, 1], pts: arch(0, 11.6, 23.6, 5.6, 12).map(([x, y]) => [x, y, R.len]) });
+        out.push({ kind: 'north', k: R.bays, side: 0, n: [0, 0, 1], pts: arch(0, NORTH.y0, NORTH.y1, NORTH.half, 12).map(([x, y]) => [x, y, R.len]) });
         const S = SOUTH, pw = (S.x1 - S.x0 - (S.cols - 1) * S.bar) / S.cols, ph = (S.y1 - S.y0 - (S.rows - 1) * S.bar) / S.rows;
         for (let i = 0; i < S.cols; i++) for (let j = 0; j < S.rows; j++) {
             const x0 = S.x0 + i * (pw + S.bar), y0 = S.y0 + j * (ph + S.bar);
@@ -189,10 +208,10 @@ const ReadingLogic = (() => {
             if (w.kind === 'side' && Math.abs(s.x) > 0.02) {
                 const xw = -w.side * R.hw;
                 wall = w.pts.map(p => { const t = (p[0] - xw) / s.x; return [xw, p[1] - s.y * t, p[2] - s.z * t]; });
-                wall = clipBox(clipBox(wall, 1, 0, R.g2 + 1.2), 2, R.z0, R.len);
+                wall = clipBox(clipBox(wall, 1, 0, R.tiers[3][1]), 2, R.z0, R.len);
             } else if (w.kind === 'south' && s.z < -0.02) {
                 wall = w.pts.map(p => { const t = (p[2] - R.len) / s.z; return [p[0] - s.x * t, p[1] - s.y * t, R.len]; });
-                wall = clipBox(clipBox(wall, 1, 0, 11), 0, -R.hw, R.hw);
+                wall = clipBox(clipBox(wall, 1, 0, NORTH.y0 - 0.4), 0, -R.hw, R.hw);
             }
             const k = smooth(0.5, 9, s.alt) * clamp(0.35 + facing * 1.2);
             const okFloor = floor.length >= 3 && Math.abs(area2(floor)) > 0.05, okWall = wall && wall.length >= 3 && Math.abs(area2(wall, w.kind === 'side' ? 2 : 0, 1)) > 0.05;
@@ -216,8 +235,9 @@ const ReadingLogic = (() => {
         }
         return out;
     }
-    // Floor a cat can lie on: not under a table, not inside a bookcase, not in the hearth.
-    const aisle = (x, z) => Math.abs(x) < ROOM.hw - 1.6 && z > ROOM.z0 + 1 && z < ROOM.len - 1.5 && !tableAt(x, z, 0.35);
+    // Floor a cat can lie on: clear of the tables, the spine and everything else that stands on the floor,
+    // and not just behind a case of the spine (where it would hide her).
+    const aisle = (x, z) => z > ROOM.z0 + 1 && z < ROOM.len - 1.5 && !blocked(x, z, 0.35) && !SPINE.some(c => Math.abs(x) > ROOM.spineX && Math.abs(x) < 3.0 && z > c.z0 - 0.3 && z < c.z1 + 0.3);
     const tableAt = (x, z, pad = 0) => { const R = ROOM; if (Math.abs(Math.abs(x) - R.tableX) > R.tableW / 2 + pad) return null; for (let k = 0; k < R.bays - 1; k++) { const zc = bayZ(k); if (Math.abs(z - zc) < R.tableLen / 2 + pad) return { k, side: Math.sign(x), zc }; } return null; };
     // How near (x, z) is to being in a patch of sun: 0 inside, else metres from the nearest patch's middle.
     function sunAt(list, x, z) {
@@ -284,7 +304,7 @@ const ReadingLogic = (() => {
     // librarian's desk at the near end; the rolling ladders; a chandelier
     // in the middle of each bay. A few are left out on a narrow screen.
     function layout(cam, config) {
-        const R = ROOM, L = { kind: cam.kind, tables: [], seats: [], things: [], lamps: [], ladders: [], chandeliers: [], nodes: {} };
+        const R = ROOM, L = { kind: cam.kind, tables: [], seats: [], things: [], lamps: [], ladders: [], chandeliers: [], spine: [], nodes: {} };
         const on = k => config[k] !== false;
         const rows = Math.max(1, Math.min(R.bays - 1, Math.round(config.tables ?? 8)));
         for (let k = 0; k < rows; k++) for (const side of [-1, 1]) {
@@ -294,25 +314,29 @@ const ReadingLogic = (() => {
             // Chairs both sides, three a side; who faces which way.
             for (const across of [-1, 1]) for (const dz of [-2.3, 0, 2.3]) L.seats.push({ table: t.id, x: t.x + across * 1.18, z: zc + dz, face: -across, near: across === -side });
         }
+        // The spine: a low case in each middle bay, two reading lamps on each, and its curiosities between.
+        for (const c of SPINE) L.spine.push({ id: L.spine.length, ...c });
+        for (const t of CENTRE) L.things.push({ ...t, centre: true });
         if (on('fireplace')) L.fire = { x: -R.hw, z: bayZ(1), y: 0.55 };
-        const tree = christmas(config.decorations, config.date) && on('tree');
-        L.tree = tree ? { x: 0, z: bayZ(Math.min(rows, R.bays - 1)) - 0.5, h: 8.2 } : null;
-        if (!tree && rows < R.bays) L.things.push({ kind: 'globe', x: 0, z: bayZ(rows) - 1, big: true });
+        // The last bay, past the tables and the spine: the tree in December, else the great globe.
+        const tree = christmas(config.decorations, config.date) && on('tree'), last = bayZ(R.bays - 1);
+        L.tree = tree ? { x: 0, z: last - 0.5, h: 8.2 } : null;
+        if (!tree) L.things.push({ kind: 'globe', x: 0, z: last - 1, big: true });
         for (let k = 1; k < R.bays; k++) for (const side of [-1, 1]) {
             if (side < 0 && L.fire && Math.abs(pierZ(k) - L.fire.z) < 5) continue;
             L.things.push({ kind: (k + (side > 0 ? 1 : 0)) % 3 === 0 ? 'globe' : 'bust', x: side * 9.6, z: pierZ(k), seed: k * 2 + (side > 0 ? 1 : 0) });
         }
-        if (on('desk')) L.desk = { x: 8.4, z: 9.2 };
+        if (on('desk')) L.desk = { x: 8.85, z: 9.2 };
         L.things.push({ kind: 'catalogue', x: -8.6, z: 6.6 });
         if (L.fire) { L.things.push({ kind: 'armchair', x: -9.2, z: L.fire.z - 1.6, face: 1 }, { kind: 'armchair', x: -9.2, z: L.fire.z + 1.6, face: -1 }); L.rug = { x: -9.6, z: L.fire.z }; }
         for (const [side, k, at] of [[1, 1, 0.3], [-1, 3, 0.6], [1, 4, 0.2], [-1, 6, 0.4], [1, 7, 0.7]]) if (!(side < 0 && L.fire && k === 1)) L.ladders.push({ side, k, z: pierZ(k) + R.bay * at });
-        if (on('chandeliers')) for (let k = 0; k < R.bays; k++) L.chandeliers.push({ k, x: 0, y: 10.2, z: bayZ(k) });
-        // Where people and cats walk: the middle aisle and the two side aisles, crossing at the piers.
+        if (on('chandeliers')) for (let k = 0; k < R.bays; k++) L.chandeliers.push({ k, x: 0, y: 12.4, z: bayZ(k) });
+        // Where cats wander to: the four aisles, at every pier.
         for (let k = 0; k <= R.bays; k++) {
-            const z = Math.min(R.len - 1.2, pierZ(k) + (k === 0 ? 1.5 : 0));
-            for (const [name, x] of [['L', -8.2], ['M', 0], ['R', 8.2]]) L.nodes[name + k] = { name: name + k, x, z };
+            const z = Math.min(R.len - 1.8, pierZ(k) + (k === 0 ? 1.5 : 0));
+            for (const [name, x] of [['L', -R.aisleOut], ['l', -R.aisleIn], ['r', R.aisleIn], ['R', R.aisleOut]]) if (!blocked(x, z, 0.4)) L.nodes[name + k] = { name: name + k, x, z };
         }
-        L.glow = { D: R.len, y: 17.5 };
+        L.glow = { D: R.len, y: (NORTH.y0 + NORTH.y1) / 2 };
         // The depths (metres) the picture is cut at for whoever moves: just beyond each row of tables, so that a cat
         // behind a table is hidden by it.
         L.bandsD = [];
@@ -331,7 +355,8 @@ const ReadingLogic = (() => {
         const nearest = (list, x = cat.hx, z = cat.hz) => { let best = null, d = Infinity; for (const p of list) { const e = Math.hypot(p.x - x, p.z - z); if (e < d) { d = e; best = p; } } return best; };
         const hearth = () => L.fire ? { x: L.fire.x + 1.6, y: 0, z: L.fire.z + (cat.i % 2 ? 0.7 : -0.7), pose: 'curl' } : null;
         const onTable = t => t ? { x: t.x, y: R.tableH, z: t.z + (cat.i % 3 - 1) * 1.15, pose: 'loaf', perch: 'table' } : null;
-        const underLamp = () => onTable(nearest(ctx.lamps));
+        const onCase = c => c ? { x: c.x, y: R.spineH, z: c.z + (cat.i % 2 ? 0.6 : -0.6), pose: 'loaf', perch: 'case' } : null;
+        const underLamp = () => { const t = nearest(ctx.lamps); return t && (L.spine || []).includes(t) ? onCase(t) : onTable(t); };
         switch (cat.role) {
             case 'sunbeam': {
                 // In the sun while there is any; by the fire, or under a lamp, after dark.
@@ -339,32 +364,245 @@ const ReadingLogic = (() => {
                 return (ctx.fire && hearth()) || underLamp() || { x: cat.hx, y: 0, z: cat.hz, pose: 'curl' };
             }
             // By a lit lamp for its warmth; by day, on the nearest table anyway, among the books.
-            case 'lamp': return underLamp() || onTable(nearest(L.tables)) || { x: cat.hx, y: 0, z: cat.hz, pose: 'curl' };
+            // By day, on top of the nearest case of the spine, between its lamps.
+            case 'lamp': return underLamp() || onCase(nearest(L.spine || [])) || onTable(nearest(L.tables)) || { x: cat.hx, y: 0, z: cat.hz, pose: 'curl' };
             case 'hearth': return hearth() || { x: cat.hx, y: 0, z: cat.hz, pose: 'curl' };
             case 'desk': return L.desk ? { x: L.desk.x - 0.4, y: 0.95, z: L.desk.z + 0.2, pose: 'loaf', perch: 'desk' } : { x: cat.hx, y: 0, z: cat.hz, pose: 'sit' };
             default: return { x: cat.hx, y: cat.hy || 0, z: cat.hz, pose: cat.pose || 'sit', perch: cat.perch };
         }
     }
-    // Where to make for next on the way from (x, z) to (tx, tz) on the floor:
-    // straight there if no table is in the way, else first along the aisle
-    // to the gap between tables at the nearest pier, and across there.
-    function waypoint(x, z, tx, tz) {
-        let blocked = false;
-        const n = Math.max(2, Math.ceil(Math.hypot(tx - x, tz - z) / 0.25));
-        for (let i = 1; i <= n && !blocked; i++) { const t = i / n; if (tableAt(x + (tx - x) * t, z + (tz - z) * t, 0.3)) blocked = true; }
-        if (!blocked) return [tx, tz];
-        const k = clamp(Math.round((z - ROOM.z0) / ROOM.bay), 0, ROOM.bays), gz = pierZ(k) + (k === 0 ? 0.6 : 0);
-        return Math.abs(z - gz) > 0.25 ? [x, gz] : [tx, gz];
+    // ---- Getting about ----------------------------------------------------------------
+    // Everything that stands on the floor, as boxes in metres (x0..x1 across, z0..z1 along): the tables,
+    // the spine and what stands between its cases, the tree (or the big globe) in the last bay, the card
+    // catalogue, the desk, the armchairs by the fire, the busts and globes at the piers.
+    let OBST = null;
+    function obstacles() {
+        if (OBST) return OBST;
+        const R = ROOM, out = [], box = (x0, x1, z0, z1, kind) => out.push({ x0: Math.min(x0, x1), x1: Math.max(x0, x1), z0, z1, kind });
+        for (let k = 0; k < R.bays - 1; k++) for (const side of [-1, 1]) box(side * (R.tableX - R.tableW / 2), side * (R.tableX + R.tableW / 2), bayZ(k) - R.tableLen / 2, bayZ(k) + R.tableLen / 2, 'table');
+        for (const c of SPINE) box(c.x - R.spineW, c.x + R.spineW, c.z0, c.z1, 'spine');
+        for (const t of CENTRE) box(-t.hx, t.hx, t.z - t.hz, t.z + t.hz, t.kind);
+        box(-2.2, 2.2, bayZ(R.bays - 1) - 1.7, bayZ(R.bays - 1) + 0.7, 'tree');
+        box(-8.95, -8.25, 5.65, 7.55, 'catalogue');
+        box(8.4, 9.3, 7.85, 10.55, 'desk');
+        box(-9.7, -8.7, bayZ(1) - 2.1, bayZ(1) + 2.1, 'armchairs');
+        for (let k = 1; k < R.bays; k++) for (const side of [-1, 1]) box(side * 9.25, side * 9.95, pierZ(k) - 0.35, pierZ(k) + 0.35, 'pedestal');
+        return (OBST = out);
     }
-    // A step toward a place on the floor at `v` m/s, by way of the aisles; what is left to go.
+    // Whether a body of radius `pad` at (x, z) would stand in something (or in the bookcases, or past the ends of the hall).
+    function blocked(x, z, pad = 0) {
+        const R = ROOM;
+        if (Math.abs(x) > R.hw - 1.4 - pad || z < -1 || z > R.len - 0.8 - pad) return true;
+        for (const o of obstacles()) if (x > o.x0 - pad && x < o.x1 + pad && z > o.z0 - pad && z < o.z1 + pad) return true;
+        return false;
+    }
+    // Whether a body of radius `pad` can go straight from one place to another.
+    function segClear(ax, az, bx, bz, pad = 0) {
+        if (blocked(ax, az, pad) || blocked(bx, bz, pad)) return false;          // (the hall is a box: both ends in it, all of it is)
+        const dx = bx - ax, dz = bz - az;
+        for (const o of obstacles()) {
+            let t0 = 0, t1 = 1, hit = true;
+            for (const [p, d, lo, hi] of [[ax, dx, o.x0 - pad, o.x1 + pad], [az, dz, o.z0 - pad, o.z1 + pad]]) {
+                if (Math.abs(d) < 1e-9) { if (p <= lo || p >= hi) { hit = false; break; } continue; }
+                let u = (lo - p) / d, v = (hi - p) / d;
+                if (u > v) [u, v] = [v, u];
+                t0 = Math.max(t0, u); t1 = Math.min(t1, v);
+                if (t0 >= t1) { hit = false; break; }
+            }
+            if (hit) return false;
+        }
+        return true;
+    }
+    // The ways about the hall: points in the aisles at every pier and in the middle of every bay, and which
+    // of them can see which. A route is the shortest way through them (so it hugs the corners, as people do).
+    let NAV = null;
+    function nav() {
+        if (NAV) return NAV;
+        const R = ROOM, pts = [], rows = [1.2, 4.4];
+        for (let k = 1; k < R.bays; k++) rows.push(pierZ(k));
+        for (let k = 0; k < R.bays; k++) rows.push(bayZ(k));
+        rows.push(R.len - 1.8);
+        for (const z of rows) for (const x of [-R.aisleOut, -R.aisleIn, 0, R.aisleIn, R.aisleOut]) if (!blocked(x, z, 0.4)) pts.push([x, z]);
+        // and round the corners of the things that stand on their own (the desk, the catalogue, the chairs by the fire, the curiosities).
+        for (const o of obstacles()) if (!/table|spine|pedestal/.test(o.kind)) for (const [x, z] of [[o.x0 - 0.42, o.z0 - 0.42], [o.x1 + 0.42, o.z0 - 0.42], [o.x0 - 0.42, o.z1 + 0.42], [o.x1 + 0.42, o.z1 + 0.42]]) if (!blocked(x, z, 0.4)) pts.push([x, z]);
+        const edges = pts.map(() => []);
+        for (let i = 0; i < pts.length; i++) for (let j = i + 1; j < pts.length; j++) {
+            const d = Math.hypot(pts[i][0] - pts[j][0], pts[i][1] - pts[j][1]);
+            if (d < 40 && segClear(pts[i][0], pts[i][1], pts[j][0], pts[j][1], 0.3)) { edges[i].push([j, d]); edges[j].push([i, d]); }
+        }
+        return (NAV = { pts, edges });
+    }
+    // The way from (sx, sz) to (tx, tz) for a body of radius pad (at most 0.3), as the places to make for in turn.
+    function route(sx, sz, tx, tz, pad = ROOM.personR) {
+        // (From somewhere tight, against a case say, the first leg may be squeezed out of it.)
+        const sp = blocked(sx, sz, pad) ? Math.min(pad, 0.04) : pad;
+        if (segClear(sx, sz, tx, tz, sp) && segClear((sx + tx) / 2, (sz + tz) / 2, tx, tz, pad)) return [[tx, tz]];
+        const { pts, edges } = nav(), n = pts.length, dist = new Float64Array(n + 1).fill(Infinity), prev = new Int32Array(n + 1).fill(-1), done = new Uint8Array(n + 1);
+        const goal = [];
+        for (let i = 0; i < n; i++) {
+            if (segClear(sx, sz, pts[i][0], pts[i][1], sp)) dist[i] = Math.hypot(pts[i][0] - sx, pts[i][1] - sz);
+            if (segClear(pts[i][0], pts[i][1], tx, tz, pad)) goal.push(i);
+        }
+        if (!goal.length) return [[tx, tz]];
+        for (;;) {
+            let u = -1;
+            for (let i = 0; i <= n; i++) if (!done[i] && dist[i] < Infinity && (u < 0 || dist[i] < dist[u])) u = i;
+            if (u < 0 || u === n) break;
+            done[u] = 1;
+            for (const [v, d] of edges[u]) if (dist[u] + d < dist[v]) { dist[v] = dist[u] + d; prev[v] = u; }
+            for (const i of goal) if (i === u) { const d = dist[u] + Math.hypot(tx - pts[u][0], tz - pts[u][1]); if (d < dist[n]) { dist[n] = d; prev[n] = u; } }
+        }
+        if (prev[n] < 0) return [[tx, tz]];
+        const out = [[tx, tz]];
+        for (let u = prev[n]; u >= 0; u = prev[u]) out.unshift(pts[u].slice());
+        return out;
+    }
+    // A step toward a place on the floor at `v` m/s, by way of the aisles (for the cats and the mouse, who
+    // dart about as cats do, and whom people step round); what is left to go.
+    // (A cat's stride, in metres at life size; a.gp counts strides walked, for her legs.)
+    const CAT_STRIDE = 0.32;
     function stepToward(a, tx, tz, v, dt) {
-        const [wx, wz] = waypoint(a.x, a.z, tx, tz), dx = wx - a.x, dz = wz - a.z, d = Math.hypot(dx, dz);
-        if (d < 1e-3) return Math.hypot(tx - a.x, tz - a.z);
-        const step = Math.min(d, v * dt);
-        a.x += dx / d * step; a.z += dz / d * step;
-        if (Math.abs(dx) > d * 0.25) a.dir = Math.sign(dx);
+        if (!a.route || !a.rt || Math.hypot(a.rt[0] - tx, a.rt[1] - tz) > 0.4) { a.rt = [tx, tz]; a.route = route(a.x, a.z, tx, tz, 0.2); }
+        a.route[a.route.length - 1] = [tx, tz];
+        while (a.route.length > 1 && Math.hypot(a.route[0][0] - a.x, a.route[0][1] - a.z) < 0.12) a.route.shift();
+        const [wx, wz] = a.route[0], dx = wx - a.x, dz = wz - a.z, d = Math.hypot(dx, dz);
+        a.moved = 0;
+        if (d > 1e-3) {
+            const step = Math.min(d, v * dt);
+            a.x += dx / d * step; a.z += dz / d * step; a.moved = step;
+            a.gp = (a.gp || 0) + step / (CAT_STRIDE * (a.k || 1));
+            if (Math.abs(dx) > d * 0.25) a.dir = Math.sign(dx);
+        }
         return Math.hypot(tx - a.x, tz - a.z);
     }
 
-    return { clamp, lerp, smooth, mix, ROOM, bayZ, pierZ, vaultY, camera, sunDir, moonDir, windows, sideLights, SOUTH, shaft, clip, clipBox, area2, centroid, inside, hull, beams, sunSpots, sunAt, aisle, tableAt, roomLight, lightKey, seasonOf, seasonDate, christmas, strikes, layout, ROLES, want, waypoint, stepToward };
+    // ---- Walking ------------------------------------------------------------------------
+    // A person walking (a: x, z; h, the way they face, radians in the floor's plane, x across and z along;
+    // v, their speed; vmax; r, their radius; path, the places to make for). Each step: turn toward the next
+    // place as a person turns (quickly, but not at once, slowing right down to turn round); speed up gently
+    // and slow to a stop at the end; keep to the right of whoever comes the other way or stands in the
+    // way; fall in behind whoever is going the same way more slowly; and never step into anyone. others:
+    // everyone else on the floor ({ x, z, r, vx, vz }). What is left of the way, or 0 when there.
+    const wrap = a => Math.atan2(Math.sin(a), Math.cos(a));
+    function clearOf(a, others, x, z) {
+        for (const o of others) {
+            if (o === a) continue;
+            const d = Math.hypot(x - o.x, z - o.z);
+            if (d < a.r + o.r && d < Math.hypot(a.x - o.x, a.z - o.z) - 1e-9) return false;
+        }
+        return true;
+    }
+    function walk(a, others, dt) {
+        const hit = a.free ? () => false : blocked, body = a.r * 0.7;
+        a.vx = a.vz = 0; a.moved = 0;
+        if (a.h == null) a.h = Math.PI / 2;
+        if (!a.path || !a.path.length) { a.v = Math.max(0, (a.v || 0) - 3 * dt); return 0; }
+        let [tx, tz] = a.path[0], d = Math.hypot(tx - a.x, tz - a.z);
+        while (a.path.length > 1 && d < 0.55) { a.path.shift(); [tx, tz] = a.path[0]; d = Math.hypot(tx - a.x, tz - a.z); }
+        // Put off the way by somebody, so that the straight line on is through a corner: find the way again.
+        if (!a.free && ((a.chk = (a.chk || 0) - dt) <= 0)) {
+            a.chk = 0.4;
+            if (!segClear(a.x, a.z, tx, tz, body)) { const [ex, ez] = a.path[a.path.length - 1]; a.path = route(a.x, a.z, ex, ez, body); [tx, tz] = a.path[0]; d = Math.hypot(tx - a.x, tz - a.z); }
+        }
+        let togo = d;
+        for (let i = 1; i < a.path.length; i++) togo += Math.hypot(a.path[i][0] - a.path[i - 1][0], a.path[i][1] - a.path[i - 1][1]);
+        if (a.path.length === 1 && d < 0.06) { a.v = 0; a.path = []; return 0; }
+        const want = Math.atan2(tz - a.z, tx - a.x), dx = Math.cos(want), dz = Math.sin(want), rx = dz, rz = -dx;
+        let cap = Math.min(a.vmax, 0.12 + Math.sqrt(2 * 1.1 * togo)), turn = 0;
+        for (const o of others) {
+            if (o === a) continue;
+            const ox = o.x - a.x, oz = o.z - a.z, gap = a.r + o.r + 0.2;
+            if (Math.abs(ox) > 4 || Math.abs(oz) > 4) continue;
+            const ahead = ox * dx + oz * dz, side = ox * rx + oz * rz;
+            if (ahead < -0.1 || ahead > 3.2 || Math.abs(side) > gap) continue;
+            const along = (o.vx || 0) * dx + (o.vz || 0) * dz;
+            // Going my way: fall in behind, at their pace.
+            if (along > 0.3) { cap = Math.min(cap, Math.max(0, along + (ahead - gap) * 0.9)); continue; }
+            // Coming the other way, or standing there: go round, passing them on my left if it is all the same.
+            const pass = side > 0.04 ? -1 : side < -0.04 ? 1 : 1;
+            turn += pass * ((1 - ahead / 3.2) * (1 - Math.abs(side) / gap) + 0.15);
+            if (ahead < gap + 0.3 && Math.hypot(o.vx || 0, o.vz || 0) < 0.1) cap = Math.min(cap, 0.35);
+        }
+        turn = clamp(turn, -1, 1);
+        // Swerve, but not into the furniture.
+        const open = h => !hit(a.x + Math.cos(h) * 0.55, a.z + Math.sin(h) * 0.55, body);
+        let head = want - turn * 0.9;
+        if (turn && !open(head)) head = open(want + turn * 0.9) ? want + turn * 0.9 : want;
+        const diff = wrap(head - a.h);
+        a.h = wrap(a.h + clamp(diff, -4.2 * dt, 4.2 * dt));
+        cap *= clamp(Math.cos(diff) * 1.3, 0.12, 1);
+        a.v = Math.max(0, (a.v || 0) + clamp(cap - (a.v || 0), -2.6 * dt, 1.3 * dt));
+        let nx = a.x + Math.cos(a.h) * a.v * dt, nz = a.z + Math.sin(a.h) * a.v * dt;
+        if (hit(nx, nz, body) && !hit(a.x, a.z, body)) { nx = a.x + dx * a.v * dt; nz = a.z + dz * a.v * dt; if (hit(nx, nz, body)) { nx = a.x; nz = a.z; } }
+        // Shoulder to shoulder with somebody: slide round them rather than into them.
+        let sx = nx - a.x, sz = nz - a.z;
+        for (const o of others) {
+            if (o === a) continue;
+            const ox = o.x - a.x, oz = o.z - a.z, d = Math.hypot(ox, oz);
+            if (d > a.r + o.r + 0.05 || d < 1e-6) continue;
+            const along = (sx * ox + sz * oz) / d;
+            if (along > 0) { sx -= along * ox / d; sz -= along * oz / d; }
+        }
+        nx = a.x + sx; nz = a.z + sz;
+        if (hit(nx, nz, body) && !hit(a.x, a.z, body)) { nx = a.x; nz = a.z; }
+        if (!clearOf(a, others, nx, nz)) { nx = a.x; nz = a.z; a.v = 0; }
+        if (nx === a.x && nz === a.z) {
+            // Held up: after a moment, a step aside (to the right first), or back.
+            a.wait = (a.wait || 0) + dt;
+            if (a.wait > 0.6) for (const [qx, qz] of [[rx, rz], [-rx, -rz], [-dx, -dz]]) {
+                const px = a.x + qx * 0.45 * dt, pz = a.z + qz * 0.45 * dt;
+                if (!hit(px, pz, body) && clearOf(a, others, px, pz)) { nx = px; nz = pz; break; }
+            }
+        } else if (a.moved == null || Math.hypot(nx - a.x, nz - a.z) > a.v * dt * 0.5) a.wait = 0;
+        a.moved = Math.hypot(nx - a.x, nz - a.z);
+        a.vx = (nx - a.x) / Math.max(dt, 1e-6); a.vz = (nz - a.z) / Math.max(dt, 1e-6);
+        a.x = nx; a.z = nz;
+        return Math.max(1e-3, togo - a.moved);
+    }
+
+    // The feet: each step plants a foot half a step ahead of the body, where it stays (it does not slide)
+    // while the body goes over it, and then swings through to land half a step ahead again. So a step's
+    // length times the steps a second is the speed, whatever it is; steps are shorter when slow; and when
+    // the walker stops, a last little step brings the feet together. a.g keeps the feet (in metres, on the
+    // floor); moved is how far the body went this frame.
+    const STEP = 0.74;
+    const stepLen = (v, k = 1) => k * STEP * (0.42 + 0.58 * clamp(v / 1.3));
+    function stepTarget(a, g, p) {
+        const k = a.k || 1, fx = Math.cos(a.h), fz = Math.sin(a.h), side = g.sw ? 1 : -1, st = g.feet[1 - g.sw];
+        const ahead = g.moving ? g.L * (1.5 - p) : (st.x - a.x) * fx + (st.z - a.z) * fz;          // (stopping: beside the other foot)
+        return { x: a.x + fx * ahead + fz * side * 0.09 * k, z: a.z + fz * ahead - fx * side * 0.09 * k };
+    }
+    function gait(a, moved, dt) {
+        const k = a.k || 1;
+        if (a.h == null) a.h = Math.PI / 2;
+        let g = a.g;
+        if (!g) {
+            const fx = Math.cos(a.h), fz = Math.sin(a.h);
+            g = a.g = { feet: [{ x: a.x - fz * 0.09 * k, z: a.z + fx * 0.09 * k }, { x: a.x + fz * 0.09 * k, z: a.z - fx * 0.09 * k }], p: 0, sw: 0, from: null, rest: true, moving: false, L: stepLen(0, k) };
+        }
+        g.moving = moved > 1e-5;
+        if (g.moving) {
+            g.L = stepLen(a.v || 0, k);
+            if (g.rest) { g.rest = false; g.p = 0; g.from = { ...g.feet[g.sw] }; }
+            g.p += moved / g.L;
+        } else if (!g.rest) g.p += dt * 2.6;
+        while (!g.rest && g.p >= 1) {
+            g.feet[g.sw] = stepTarget(a, g, 1);
+            g.sw ^= 1; g.p -= 1; g.from = { ...g.feet[g.sw] };
+            if (!g.moving) { g.rest = true; g.p = 0; }
+        }
+        return g;
+    }
+    // Where the feet are now (the swinging one lifted), how far the body rides up over each step, and how much of a walk it is.
+    function pose(a) {
+        const g = a.g, k = a.k || 1;
+        if (!g) return { feet: [{ x: a.x, z: a.z, y: 0 }, { x: a.x, z: a.z, y: 0 }], bob: 0, pace: 0, p: 0, sw: 0 };
+        const p = g.p, e = p * p * (3 - 2 * p), t = stepTarget(a, g, p), f = g.from || g.feet[g.sw];
+        const lift = Math.sin(Math.PI * p) * 0.1 * k * clamp(g.L / (0.5 * k));
+        const feet = g.feet.map((q, i) => (i === g.sw && !g.rest ? { x: f.x + (t.x - f.x) * e, z: f.z + (t.z - f.z) * e, y: lift } : { x: q.x, z: q.z, y: 0 }));
+        const pace = g.rest ? 0 : clamp((a.v || 0) / 0.8);
+        return { feet, bob: -Math.cos(2 * Math.PI * p) * 0.024 * k * pace, pace, p, sw: g.sw };
+    }
+
+    return { clamp, lerp, smooth, mix, ROOM, bayZ, pierZ, vaultY, camera, sunDir, moonDir, windows, sideLights, SOUTH, shaft, clip, clipBox, area2, centroid, inside, hull, beams, sunSpots, sunAt, aisle, tableAt, roomLight, lightKey, seasonOf, seasonDate, christmas, strikes, layout, ROLES, want, SPINE, CENTRE, NORTH, obstacles, blocked, segClear, route, stepToward, CAT_STRIDE, walk, clearOf, gait, pose, stepLen };
 })();

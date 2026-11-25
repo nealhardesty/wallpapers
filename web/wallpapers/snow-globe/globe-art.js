@@ -173,19 +173,8 @@ const SnowGlobeArt = (() => {
             for (let x = 0; x < L.W; x += L.R * 0.5) { g.fillStyle = css([150, 96, 70]); g.fillRect(x, 0, L.R * 0.08, back); for (let y = L.R * 0.2; y < back; y += L.R * 0.45) { blob(g, x + L.R * 0.25, y, L.R * 0.06, L.R * 0.1, [170, 120, 80]); } }
             g.restore();
         }
-        if (kind === 'desk') {                     // shelves of books along the wall
-            const sh = L.R * 0.62;
-            for (let y = L.top + L.R * 0.25; y < back - sh * 0.4; y += sh) {
-                for (let x = 0; x < L.W;) {
-                    if (x > win.x - 10 && x < win.x + win.w + 10) { x = win.x + win.w + 10; continue; }
-                    const bw = L.R * (0.06 + R() * 0.07), bh = sh * (0.62 + R() * 0.3), col = [[120, 40, 36], [40, 70, 60], [150, 110, 60], [44, 50, 90], [110, 80, 60], [90, 30, 50]][Math.floor(R() * 6)];
-                    g.fillStyle = css(col); g.fillRect(x, y + sh - bh - sh * 0.1, bw, bh);
-                    g.fillStyle = css([220, 180, 100], 0.6); g.fillRect(x, y + sh - bh * 0.8 - sh * 0.1, bw, bh * 0.04);
-                    x += bw + 1;
-                }
-                g.fillStyle = css([70, 46, 30]); g.fillRect(0, y + sh * 0.9, L.W, sh * 0.1);
-            }
-        }
+        const crisp = [];          // touches the brush mustn't blur (gold titles, a string of lights' wire), drawn after it
+        if (kind === 'desk') shelves(g, L, win, L.R, crisp);
         // Candlelight on the wall.
         if (o.candle) {
             const gr = g.createRadialGradient(cand.x, cand.y - cand.h, 0, cand.x, cand.y - cand.h, L.R * 4);
@@ -226,11 +215,23 @@ const SnowGlobeArt = (() => {
                 }
                 g.restore();
             }
-            // A garland along the top of the window, with its bulbs.
+            // A garland along the top of the window, with its berries.
+            const gy = t => win.y - fw * 0.5 + Math.sin(t * Math.PI * 3) * fw * 1.2 + Math.abs(Math.sin(t * Math.PI * 3)) * fw * 0.8;
             for (let i = 0; i < 70; i++) {
-                const t = i / 69, x = win.x - fw + t * (win.w + fw * 2), y = win.y - fw * 0.5 + Math.sin(t * Math.PI * 3) * fw * 1.2 + Math.abs(Math.sin(t * Math.PI * 3)) * fw * 0.8;
+                const t = i / 69, x = win.x - fw + t * (win.w + fw * 2), y = gy(t);
                 blob(g, x, y, fw * 1.1, fw * 0.6, [30 + R() * 20, 70 + R() * 30, 46], 0.95, R() * TAU);
                 if (i % 5 === 0) blob(g, x, y + fw * 0.4, fw * 0.28, fw * 0.28, [200, 40, 40]);
+            }
+            // Where a string of lights goes, if it's wanted: through the garland, then down both sides of the
+            // frame in swags (the manager lights them; the wire is painted).
+            if (o.windowLights) {
+                const wire = [], swag = (x0, y0, x1, y1, n, sag) => { for (let i = 0; i <= n; i++) { const t = i / n, x = x0 + (x1 - x0) * t, y = y0 + (y1 - y0) * t; wire.push([x + sag * Math.sin(t * Math.PI) * (y1 !== y0 ? 1 : 0), y + sag * Math.sin(t * Math.PI) * (y1 === y0 ? 1 : 0)]); } };
+                const xl = win.x - fw * 1.2, xr = win.x + win.w + fw * 1.2, yb = win.y + win.h - fw;
+                for (let k = 0; k < 4; k++) swag(xl, yb - (yb - win.y) * k / 4, xl, yb - (yb - win.y) * (k + 1) / 4, 6, -fw * 0.9);
+                for (let i = 0; i <= 40; i++) { const t = i / 40; wire.push([win.x - fw + t * (win.w + fw * 2), gy(t) + fw * 0.7]); }
+                for (let k = 0; k < 4; k++) swag(xr, win.y + (yb - win.y) * k / 4, xr, win.y + (yb - win.y) * (k + 1) / 4, 6, fw * 0.9);
+                c.bulbs = wire.filter((_, i) => i % 2 === 0).map(([x, y], i) => ({ x, y: y + fw * 0.25, i }));
+                crisp.push(gg => { gg.strokeStyle = 'rgba(20,40,26,0.9)'; gg.lineWidth = Math.max(1, fw * 0.12); gg.beginPath(); wire.forEach(([x, y], i) => i ? gg.lineTo(x, y) : gg.moveTo(x, y)); gg.stroke(); });
             }
             // Curtains, heavy and dark, at each side.
             for (const s of [-1, 1]) {
@@ -262,6 +263,7 @@ const SnowGlobeArt = (() => {
         if (edge < L.H - 4) { const eg = g.createLinearGradient(0, edge, 0, L.H); eg.addColorStop(0, css(shade(surf, 0.55))); eg.addColorStop(0.1, css(shade(surf, 0.75))); eg.addColorStop(1, css(shade(surf, 0.3))); g.fillStyle = eg; g.fillRect(0, edge, L.W, L.H - edge); }
         if (kind === 'mantel') {                    // garland along the shelf's front edge, and stockings
             for (let i = 0; i < 80; i++) { const t = i / 79, x = t * L.W, y = edge + Math.abs(Math.sin(t * Math.PI * 5)) * L.R * 0.18; blob(g, x, y, L.R * 0.1, L.R * 0.06, [30 + R() * 20, 76 + R() * 30, 50], 0.95, R() * TAU); if (i % 6 === 0) blob(g, x, y + L.R * 0.04, L.R * 0.03, L.R * 0.03, [210, 40, 40]); }
+            if (o.windowLights) c.bulbs = Array.from({ length: 36 }, (_, i) => { const t = (i + 0.5) / 36; return { x: t * L.W, y: edge + Math.abs(Math.sin(t * Math.PI * 5)) * L.R * 0.18 + L.R * 0.05, i }; });
             for (const sx of [0.14, 0.86]) {
                 const x = L.W * sx, y = edge + L.R * 0.12, s = Math.min(L.R * 0.5, (L.bottom - edge) * 0.62), col = sx < 0.5 ? [180, 30, 36] : [40, 110, 70];
                 g.fillStyle = css(col); g.beginPath(); g.moveTo(x - s * 0.3, y); g.lineTo(x + s * 0.3, y); g.lineTo(x + s * 0.3, y + s * 0.9); g.quadraticCurveTo(x + s * 0.3, y + s * 1.25, x - s * 0.1, y + s * 1.2); g.lineTo(x - s * 0.55, y + s * 1.2); g.quadraticCurveTo(x - s * 0.8, y + s * 1.0, x - s * 0.5, y + s * 0.85); g.lineTo(x - s * 0.3, y + s * 0.7); g.closePath(); g.fill();
@@ -285,6 +287,8 @@ const SnowGlobeArt = (() => {
         g.restore();
         // The light the water focuses: a warm bright spot on the far side of the globe from the candle.
         if (o.candle) { const x = L.base.x - side * L.R * 1.05, y = L.foot + L.R * 0.06; g.save(); g.translate(x, y); g.scale(1, 0.3); g.drawImage(glow(L.R * 0.5, [255, 210, 140], 0.3), -L.R * 0.5, -L.R * 0.5); g.restore(); }
+        // A little Christmas tree, if it's wanted (its lights are the manager's).
+        if (o.deskTree) deskTree(g, L, o, c, side);
         // The candle itself (its flame is the manager's): a pillar, a little melted, in a holly ring.
         if (o.candle) {
             const ch = cand.h, cw = ch * 0.34, x = cand.x, y = cand.y;
@@ -295,7 +299,148 @@ const SnowGlobeArt = (() => {
             for (let i = 0; i < 16; i++) { const a = i / 16 * TAU, hx = x + Math.cos(a) * cw * 0.75, hy = y - ch * 0.04 + Math.sin(a) * cw * 0.18; blob(g, hx, hy, cw * 0.22, cw * 0.1, [30, 80, 46], 1, a); if (i % 3 === 0) blob(g, hx, hy - cw * 0.06, cw * 0.06, cw * 0.06, [210, 30, 40]); }
             c.flame = { x, y: y - ch * 1.07, h: ch * 0.22 };
         }
+        c.crisp = gg => { gg.save(); gg.scale(ps, ps); for (const f of crisp) f(gg); gg.restore(); };
         return c;
+    }
+    // Nothing but black (the Background setting): the globe alone.
+    function black(L, ps) { const c = canvas(L.W * ps, L.H * ps), g = c.getContext('2d'); g.fillStyle = '#000'; g.fillRect(0, 0, c.width, c.height); c.crisp = () => {}; return c; }
+
+    // Bookshelves on the wall by the desk: each shelf a dark recess with its
+    // board, and on it books as they stand on a real shelf, every one its own
+    // width, height and colour, rounded at the spine, banded and titled in gold;
+    // some leaning, a stack lying flat here and there, a bookend, an ornament.
+    function shelves(g, L, win, R, crisp) {
+        const Rr = rng(911), sh = R * 0.62, inR = R * 0.04;
+        const leather = [[120, 40, 36], [40, 70, 60], [150, 110, 60], [44, 50, 90], [110, 80, 60], [90, 30, 50], [60, 90, 110], [170, 140, 90], [70, 40, 30], [130, 120, 100], [30, 50, 40], [160, 70, 40]];
+        const spans = [[0, win.x - R * 0.62 - 10], [win.x + win.w + R * 0.62 + 10, L.W]].filter(([a, b]) => b - a > R * 0.2);
+        for (let y = L.top + R * 0.25; y + sh * 1.01 <= L.back; y += sh) {
+            const floor = y + sh * 0.9;
+            for (const [x0, x1] of spans) {
+                // The recess, dark at its back and top; the uprights; the board.
+                const rg = g.createLinearGradient(0, y, 0, floor); rg.addColorStop(0, 'rgb(18,12,10)'); rg.addColorStop(1, 'rgb(46,32,24)');
+                g.fillStyle = rg; g.fillRect(x0, y, x1 - x0, floor - y);
+                let x = x0 + inR;
+                while (x < x1 - inR - R * 0.05) {
+                    const r = Rr();
+                    if (r < 0.07) {
+                        // A stack lying flat, the biggest at the bottom.
+                        let yy = floor, wmax = R * (0.28 + Rr() * 0.12);
+                        for (let k = 0, n = 2 + (Rr() * 3 | 0); k < n; k++) {
+                            const bw = wmax * (1 - k * 0.1 - Rr() * 0.06), bh = R * (0.035 + Rr() * 0.03), col = leather[(Rr() * leather.length) | 0];
+                            spine(g, x + (wmax - bw) * Rr(), yy - bh, bw, bh, col, true, Rr, crisp);
+                            yy -= bh;
+                        }
+                        x += wmax + R * 0.02;
+                    } else if (r < 0.14) {
+                        // One leaning on the last, at a slant.
+                        const bh = sh * (0.6 + Rr() * 0.22), bw = R * (0.05 + Rr() * 0.05), a = 0.18 + Rr() * 0.22, col = leather[(Rr() * leather.length) | 0];
+                        g.save(); g.translate(x + Math.sin(a) * bh, floor); g.rotate(-a); spine(g, -bw, -bh, bw, bh, col, false, Rr, crisp, { x: x + Math.sin(a) * bh, y: floor, a: -a }); g.restore();
+                        x += Math.sin(a) * bh + bw * Math.cos(a) + R * 0.01;
+                    } else if (r < 0.17) {
+                        // A bookend, a little brass globe, or a sleeping china cat.
+                        const which = Rr();
+                        if (which < 0.4) { g.fillStyle = css([60, 56, 60]); g.fillRect(x, floor - sh * 0.4, R * 0.03, sh * 0.4); g.fillRect(x, floor - R * 0.02, R * 0.09, R * 0.02); x += R * 0.1; }
+                        else if (which < 0.7) { blob(g, x + R * 0.06, floor - R * 0.1, R * 0.06, R * 0.06, [60, 100, 130]); blob(g, x + R * 0.05, floor - R * 0.11, R * 0.025, R * 0.03, [110, 140, 90]); g.strokeStyle = css([200, 160, 70]); g.lineWidth = R * 0.008; g.beginPath(); g.arc(x + R * 0.06, floor - R * 0.1, R * 0.07, -2.2, 0.9); g.stroke(); g.fillStyle = css([200, 160, 70]); g.fillRect(x + R * 0.04, floor - R * 0.03, R * 0.04, R * 0.03); x += R * 0.14; }
+                        else { blob(g, x + R * 0.07, floor - R * 0.035, R * 0.07, R * 0.035, [236, 232, 226]); blob(g, x + R * 0.11, floor - R * 0.06, R * 0.03, R * 0.028, [236, 232, 226]); g.fillStyle = css([236, 232, 226]); poly(g, [x + R * 0.09, floor - R * 0.08, x + R * 0.1, floor - R * 0.1, x + R * 0.11, floor - R * 0.08]); g.fill(); poly(g, [x + R * 0.12, floor - R * 0.08, x + R * 0.13, floor - R * 0.1, x + R * 0.135, floor - R * 0.075]); g.fill(); x += R * 0.17; }
+                    } else {
+                        const bw = R * (0.042 + Math.pow(Rr(), 1.5) * 0.08), bh = sh * (0.56 + Rr() * 0.32), col = leather[(Rr() * leather.length) | 0];
+                        if (x + bw > x1 - inR) break;
+                        spine(g, x, floor - bh, bw, bh, col, false, Rr, crisp);
+                        x += bw + (Rr() < 0.85 ? 0.5 : R * 0.01);
+                    }
+                }
+                // Shadow under the shelf above; the board, its top lit and its front edge.
+                const sg = g.createLinearGradient(0, y, 0, y + sh * 0.25); sg.addColorStop(0, 'rgba(0,0,0,0.55)'); sg.addColorStop(1, 'rgba(0,0,0,0)');
+                g.fillStyle = sg; g.fillRect(x0, y, x1 - x0, sh * 0.25);
+                g.fillStyle = css([92, 62, 40]); g.fillRect(x0, floor, x1 - x0, sh * 0.035);
+                g.fillStyle = css([66, 42, 26]); g.fillRect(x0, floor + sh * 0.035, x1 - x0, sh * 0.075);
+                g.fillStyle = 'rgba(255,220,170,0.12)'; g.fillRect(x0, floor + sh * 0.035, x1 - x0, sh * 0.012);
+                for (const ux of [x0, x1 - inR]) { g.fillStyle = css([70, 46, 30]); g.fillRect(ux, y, inR, floor - y + sh * 0.11); }
+            }
+        }
+    }
+    // One book's spine (or, lying flat, its edge): rounded with light, bands at
+    // its head and foot, a title label; the gold of its title is crisp (after the brush).
+    function spine(g, x, y, w, h, col, flat, Rr, crisp, at = null) {
+        const gr = flat ? g.createLinearGradient(0, y, 0, y + h) : g.createLinearGradient(x, 0, x + w, 0);
+        gr.addColorStop(0, css(shade(col, 0.55))); gr.addColorStop(0.35, css(lerp(col, [255, 240, 220], 0.12))); gr.addColorStop(0.7, css(col)); gr.addColorStop(1, css(shade(col, 0.5)));
+        g.fillStyle = gr; g.fillRect(x, y, w, h);
+        if (flat) { g.fillStyle = css([226, 218, 196]); g.fillRect(x + w * 0.02, y + h * 0.12, w * 0.03, h * 0.76); return; }
+        const band = Rr() < 0.6, label = Rr() < 0.45, gold = Rr() < 0.8 ? [214, 176, 92] : [230, 226, 214];
+        if (label) { g.fillStyle = css(Rr() < 0.5 ? shade(col, 0.6) : [40, 30, 26]); g.fillRect(x + w * 0.12, y + h * 0.2, w * 0.76, h * 0.16); }
+        const ticks = [];
+        if (band) for (const v of [0.08, 0.12, 0.86, 0.9]) ticks.push(['band', v]);
+        const lines = 1 + (Rr() * 3 | 0);
+        for (let k = 0; k < lines; k++) ticks.push(['title', 0.23 + k * 0.045, 0.3 + Rr() * 0.5]);
+        crisp.push(gg => {
+            gg.save();
+            if (at) { gg.translate(at.x, at.y); gg.rotate(at.a); }
+            gg.fillStyle = css(gold, 0.72);
+            for (const t of ticks) {
+                if (t[0] === 'band') gg.fillRect(x + w * 0.06, y + h * t[1], w * 0.88, Math.max(0.6, h * 0.008));
+                else gg.fillRect(x + w * (0.5 - t[2] / 2), y + h * t[1], w * t[2], Math.max(0.6, h * 0.012));
+            }
+            gg.restore();
+        });
+    }
+
+    // A little Christmas tree on the desk or the sill: a pot, boughs in layers
+    // painted dab by dab, baubles and tinsel, its topper. Where its lights hang
+    // goes in c.treeBulbs (a spiral round it, the far side's hidden).
+    function deskTree(g, L, o, c, side) {
+        const T = L.tree, h = T.h, x = T.x, y = T.y, ph = h * 0.16, th = h - ph, tw = th * 0.62, Rr = rng(41);
+        // Its shadow, away from the candle.
+        g.save(); g.globalCompositeOperation = 'multiply'; const sg = g.createRadialGradient(x - side * tw * 0.2, y, 0, x - side * tw * 0.2, y, tw * 0.7); sg.addColorStop(0, 'rgba(40,30,40,0.6)'); sg.addColorStop(1, 'rgba(40,30,40,0)'); g.translate(0, y); g.scale(1, 0.25); g.fillStyle = sg; g.fillRect(x - tw, -tw, tw * 2, tw * 2); g.restore();
+        // The pot: terracotta, a band, a red ribbon.
+        g.fillStyle = css([150, 72, 48]); poly(g, [x - ph * 0.5, y - ph, x + ph * 0.5, y - ph, x + ph * 0.38, y, x - ph * 0.38, y]); g.fill();
+        g.fillStyle = css([170, 86, 58]); g.fillRect(x - ph * 0.56, y - ph * 1.05, ph * 1.12, ph * 0.22);
+        g.fillStyle = css([190, 30, 40]); g.fillRect(x - ph * 0.5, y - ph * 0.6, ph, ph * 0.12);
+        light(g, x - ph * 0.6, y - ph * 1.1, x + ph * 0.6, y, side, { warm: 0.4, dark: 0.4 });
+        g.fillStyle = css([70, 46, 34]); g.fillRect(x - tw * 0.04, y - ph - th * 0.08, tw * 0.08, th * 0.1);
+        // Boughs, tier on tier: each tier a dark skirt first, then dabs of needles over it, lighter at the tips and
+        // toward the candle, darker underneath.
+        const top = y - ph - th, tiers = 7;
+        for (let k = 0; k < tiers; k++) {
+            const u0 = k / tiers, yb = y - ph - th * 0.03 - u0 * th * 0.84, half = tw * 0.5 * (1 - u0 * 0.84), yt = yb - th * 0.24;
+            g.fillStyle = css([16, 46, 32]);
+            g.beginPath(); g.moveTo(x, yt);
+            for (let i = 0; i <= 8; i++) { const t = i / 8 * 2 - 1; g.lineTo(x + t * half, yb + (i % 2 ? -th * 0.02 : th * 0.012) - Math.abs(t) * th * 0.01); }
+            g.closePath(); g.fill();
+            for (let i = 0; i < 70; i++) {
+                const t = Rr() * 2 - 1, v = Rr(), bx = x + t * half * (1 - v * 0.75), by = yb - v * th * 0.2 - th * 0.01;
+                const lk = 0.7 + 0.45 * Math.max(0, t * side) + (1 - v) * 0.25 + Rr() * 0.2;
+                blob(g, bx, by, tw * 0.045, tw * 0.02, [22 * lk, 72 * lk, 46 * lk], 0.9, Math.PI / 2 + t * 0.9);
+            }
+            g.fillStyle = 'rgba(6,16,12,0.3)'; poly(g, [x - half, yb, x + half, yb, x + half * 0.75, yb + th * 0.03, x - half * 0.75, yb + th * 0.03]); g.fill();
+            // A little snow on the tips (it's a sill by a cold window), from a flocking can.
+            for (let i = 0; i < 6; i++) { const t = Rr() * 2 - 1; blob(g, x + t * half * 0.9, yb - th * 0.01, tw * 0.03, tw * 0.01, [236, 242, 250], 0.7); }
+        }
+        g.fillStyle = css([24, 70, 46]); poly(g, [x, top - th * 0.02, x - tw * 0.08, top + th * 0.14, x + tw * 0.08, top + th * 0.14]); g.fill();
+        light(g, x - tw * 0.55, top - th * 0.05, x + tw * 0.55, y - ph, side, { warm: 0.3, dark: 0.45 });
+        // Tinsel in swags, baubles.
+        g.strokeStyle = 'rgba(230,210,140,0.55)'; g.lineWidth = Math.max(1, tw * 0.012);
+        for (let k = 1; k < 5; k++) { const u = k / 5.2, yy = y - ph - th * (0.1 + u * 0.75), half = tw * 0.5 * (1 - u * 0.9); g.beginPath(); g.moveTo(x - half, yy); g.quadraticCurveTo(x, yy + th * 0.06, x + half, yy - th * 0.04); g.stroke(); }
+        const bcol = [[200, 30, 40], [230, 190, 80], [60, 100, 190], [190, 190, 210], [150, 40, 120]];
+        for (let i = 0; i < 16; i++) { const u = 0.08 + Rr() * 0.78, half = tw * 0.46 * (1 - u * 0.86), bx = x + (Rr() * 2 - 1) * half, by = y - ph - th * (0.06 + u * 0.86), r = tw * 0.032, col = bcol[i % 5]; blob(g, bx, by, r, r, col); blob(g, bx + side * r * 0.35, by - r * 0.35, r * 0.3, r * 0.3, lerp(col, [255, 255, 255], 0.6), 0.8); }
+        // The topper.
+        const ty = top - th * 0.03, s = tw * 0.12;
+        if (o.topper === 'star') { g.fillStyle = css([250, 214, 100]); g.beginPath(); for (let k = 0; k < 10; k++) { const a = -Math.PI / 2 + k * Math.PI / 5, r = k % 2 ? s * 0.45 : s; g.lineTo(x + Math.cos(a) * r, ty + Math.sin(a) * r); } g.closePath(); g.fill(); }
+        else if (o.topper === 'bow') { g.fillStyle = css([200, 30, 40]); for (const e of [-1, 1]) { g.beginPath(); g.ellipse(x + e * s * 0.55, ty, s * 0.55, s * 0.32, e * 0.4, 0, TAU); g.fill(); } poly(g, [x - s * 0.1, ty, x - s * 0.45, ty + s * 0.9, x - s * 0.2, ty + s * 0.85]); g.fill(); poly(g, [x + s * 0.1, ty, x + s * 0.45, ty + s * 0.9, x + s * 0.2, ty + s * 0.85]); g.fill(); blob(g, x, ty, s * 0.2, s * 0.2, [160, 20, 30]); }
+        else if (o.topper === 'cat') {
+            // A gold cat's head, ears and all.
+            g.fillStyle = css([240, 200, 90]); blob(g, x, ty, s * 0.7, s * 0.6, [240, 200, 90]);
+            for (const e of [-1, 1]) { poly(g, [x + e * s * 0.62, ty - s * 0.1, x + e * s * 0.55, ty - s * 0.95, x + e * s * 0.1, ty - s * 0.5]); g.fill(); }
+            g.fillStyle = css([150, 100, 30]); for (const e of [-1, 1]) blob(g, x + e * s * 0.25, ty - s * 0.05, s * 0.08, s * 0.12, [150, 100, 30]); blob(g, x, ty + s * 0.18, s * 0.08, s * 0.05, [150, 100, 30]);
+        }
+        c.treeTop = o.topper && o.topper !== 'none' ? { x, y: ty, r: s * (o.topper === 'star' ? 3.4 : 2.2) } : null;
+        // Where its lights hang: a spiral from the bottom up, each with how far round it is (the back ones hidden).
+        c.treeBulbs = [];
+        const n = Math.round(46 * (0.7 + 0.3 * (o.treeSize || 1)));
+        for (let i = 0; i < n; i++) {
+            const u = 0.04 + (i / n) * 0.84, a = u * TAU * 4.6, half = tw * 0.47 * (1 - u * 0.86);
+            if (Math.cos(a) < -0.25) continue;
+            c.treeBulbs.push({ x: x + Math.sin(a) * half, y: y - ph - th * (0.05 + u * 0.86) + Math.cos(a) * th * 0.02, u, front: Math.cos(a), i });
+        }
     }
 
     // ---- The base ----------------------------------------------------------------------------------
@@ -351,15 +496,34 @@ const SnowGlobeArt = (() => {
         const opts = { widths: [R * 0.09 * ps, R * 0.045 * ps, R * 0.022 * ps], seed: 21, len: 3, tol: 50, jit: 0.05, dir: (u, v) => (v > 0.12 ? 0.02 : null) };
         return { back: bc, front: fc, frontOpts: opts, x: ox, y: oy, w: W / ps, h: H / ps, key: { x: x + (side > 0 ? -1 : 1) * (bw / 2 * 0.95), y: yt + bh * 0.55 } };
     }
-    // The wind-up key, seen from its side, at a turn of `a`: a bow that turns edge-on and back.
+    // The wind-up key in the base's side, turned `a` about its own axis
+    // (which points out of the base, level, toward the viewer's side): its
+    // stem, a collar, and its bow, a flat butterfly of brass. As it turns the
+    // bow's wings swing up and over: each foreshortens with the cosine of the
+    // turn (seen edge on, only its thickness), the near one passes in front of
+    // the stem and the far one behind, and it flashes when it faces the light.
     function key(g, x, y, s, a, side) {
-        const k = Math.cos(a), dir = side > 0 ? -1 : 1;
-        g.fillStyle = css([200, 160, 70]); g.fillRect(x + (dir > 0 ? 0 : -s * 0.5), y - s * 0.06, s * 0.5, s * 0.12);
-        const bx = x + dir * s * 0.62;
-        g.save(); g.translate(bx, y); g.scale(Math.max(0.15, Math.abs(k)), 1);
-        g.fillStyle = css(lerp([180, 140, 60], [250, 220, 140], Math.abs(k) * 0.6)); for (const sy of [-1, 1]) { g.beginPath(); g.ellipse(0, sy * s * 0.22, s * 0.18, s * 0.2, 0, 0, TAU); g.fill(); }
-        g.fillStyle = 'rgba(20,14,10,0.7)'; for (const sy of [-1, 1]) { g.beginPath(); g.ellipse(0, sy * s * 0.22, s * 0.07, s * 0.08, 0, 0, TAU); g.fill(); }
-        g.restore();
+        const dir = side > 0 ? -1 : 1, bx = x + dir * s * 0.6, c = Math.cos(a), sn = Math.sin(a), thick = s * 0.07;
+        const brass = (k, al = 1) => css(lerp([120, 86, 34], [255, 226, 150], clamp(k)), al);
+        // A wing, its middle `d` out from the axis toward angle `an`: an ellipse squashed by the cosine, its edge, its finger hole.
+        const wing = an => {
+            const ca = Math.cos(an), sa = Math.sin(an), cy = y - ca * s * 0.25, ry = Math.max(thick * 0.5 * Math.abs(sa), s * 0.21 * Math.abs(ca)), rx = s * 0.17;
+            const lam = 0.35 + 0.65 * Math.abs(sa * 0.2 + ca * 0.98);
+            g.fillStyle = brass(lam * 0.85 - 0.2); g.beginPath(); g.ellipse(bx, cy + thick * 0.5 * Math.sign(sa || 1), rx, ry, 0, 0, TAU); g.fill();       // its edge, a little behind
+            g.fillStyle = brass(lam); g.beginPath(); g.ellipse(bx, cy, rx, ry, 0, 0, TAU); g.fill();
+            if (Math.abs(ca) > 0.25) { g.fillStyle = 'rgba(30,20,12,0.75)'; g.beginPath(); g.ellipse(bx, cy - ca * s * 0.02, rx * 0.4, ry * 0.42, 0, 0, TAU); g.fill(); }
+            // A glint as it comes face on to the light.
+            const glint = Math.pow(Math.max(0, ca), 12);
+            if (glint > 0.05) { g.fillStyle = `rgba(255,250,225,${(glint * 0.85).toFixed(3)})`; g.beginPath(); g.ellipse(bx - dir * rx * 0.3, cy - ry * 0.35, rx * 0.35, ry * 0.25, 0, 0, TAU); g.fill(); }
+        };
+        // Back to front: the wing behind, the stem and collar, the bridge between the wings, the wing in front.
+        const far = sn >= 0 ? a + Math.PI : a, near = sn >= 0 ? a : a + Math.PI;
+        wing(far);
+        const sg = g.createLinearGradient(0, y - s * 0.07, 0, y + s * 0.07); sg.addColorStop(0, css([250, 220, 140])); sg.addColorStop(0.5, css([200, 158, 70])); sg.addColorStop(1, css([110, 78, 30]));
+        g.fillStyle = sg; g.fillRect(Math.min(x, bx), y - s * 0.06, Math.abs(bx - x), s * 0.12);
+        g.fillStyle = css([170, 130, 56]); g.beginPath(); g.ellipse(x + dir * s * 0.05, y, s * 0.04, s * 0.11, 0, 0, TAU); g.fill();
+        g.fillStyle = brass(0.55); g.beginPath(); g.ellipse(bx, y, s * 0.09, Math.max(thick * 0.6, s * 0.1 * Math.abs(c)), 0, 0, TAU); g.fill();
+        wing(near);
     }
 
     // ---- The glass ---------------------------------------------------------------------------------
@@ -373,6 +537,21 @@ const SnowGlobeArt = (() => {
         let gr = g.createRadialGradient(-R * 0.1, -R * 0.15, R * 0.55, 0, 0, R);
         gr.addColorStop(0, 'rgba(180,210,255,0)'); gr.addColorStop(0.75, 'rgba(170,200,240,0.08)'); gr.addColorStop(0.95, 'rgba(200,220,255,0.26)'); gr.addColorStop(1, 'rgba(230,240,255,0.5)');
         g.fillStyle = gr; g.fillRect(-R, -R, D, D);
+        if (o.black) {
+            // On black: a studio's soft boxes caught in the curve, a long sheen, a pin of light; nothing of a room.
+            g.save(); g.rotate(-0.35);
+            for (const [x, y, w, h, a] of [[-R * 0.42, -R * 0.5, R * 0.34, R * 0.2, 0.22], [R * 0.5, -R * 0.2, R * 0.12, R * 0.3, 0.12]]) {
+                const sg = g.createLinearGradient(x - w, 0, x + w, 0); sg.addColorStop(0, 'rgba(255,255,255,0)'); sg.addColorStop(0.5, `rgba(240,246,255,${a})`); sg.addColorStop(1, 'rgba(255,255,255,0)');
+                g.fillStyle = sg; g.beginPath(); g.ellipse(x, y, w, h, 0, 0, TAU); g.fill();
+            }
+            g.restore();
+            gr = g.createLinearGradient(0, R * 0.55, 0, R); gr.addColorStop(0, 'rgba(255,220,170,0)'); gr.addColorStop(1, 'rgba(255,220,170,0.12)');
+            g.fillStyle = gr; g.fillRect(-R, R * 0.55, D, R * 0.45);
+            g.restore();
+            g.drawImage(glow(R * 0.1, [255, 255, 255], 0.15), -R * 0.5 - R * 0.1, -R * 0.6 - R * 0.1);
+            g.lineWidth = Math.max(1, R * 0.012); g.strokeStyle = 'rgba(200,210,230,0.35)'; g.beginPath(); g.arc(0, 0, R * 0.995, 0, TAU); g.stroke();
+            return c;
+        }
         // The window, bent round the curve on the far side from the candle.
         const wx = -side * R * 0.42, wy = -R * 0.45;
         g.save(); g.translate(wx, wy); g.rotate(side * 0.35);
@@ -406,8 +585,16 @@ const SnowGlobeArt = (() => {
     // What is seen through the water behind the scene: the room behind the
     // globe, upside down and magnified (a sphere of water is a strong lens),
     // dark and soft. From the room and outside layers, once.
-    function behind(L, ps, layers) {
+    function behind(L, ps, layers, o = {}) {
         const R = L.R, D = R * 2, c = canvas(D * ps, D * ps), g = c.getContext('2d');
+        if (o.black) {
+            // Nothing behind it but the dark, and the scene's own light warm low in the water.
+            const gr = g.createRadialGradient(R * ps, R * 1.3 * ps, 0, R * ps, R * ps, R * ps);
+            gr.addColorStop(0, '#2a2434'); gr.addColorStop(0.6, '#0e0e18'); gr.addColorStop(1, '#05050a');
+            g.fillStyle = gr; g.fillRect(0, 0, c.width, c.height);
+            g.globalCompositeOperation = 'destination-in'; g.beginPath(); g.arc(R * ps, R * ps, R * ps, 0, TAU); g.fill();
+            return c;
+        }
         g.fillStyle = '#16203a'; g.fillRect(0, 0, c.width, c.height);
         g.save(); g.translate(R * ps, R * ps); g.scale(-1.25, -1.25); g.translate(-L.cx * ps, -(L.cy - R * 0.25) * ps);
         for (const l of layers) if (l) g.drawImage(l, 0, 0);
@@ -419,130 +606,119 @@ const SnowGlobeArt = (() => {
     }
 
     // ---- Inside: the ground ---------------------------------------------------------------------
-    // The snowy ground the scene stands on, filling the bottom of the globe;
-    // and fresh snow over it, shown as deep as the snow lies (the manager
-    // draws it with that alpha). The pond, if the scene has one, is part of it.
-    function ground(L, ps, side, scene) {
-        const R = L.R, D = R * 2, c = canvas(D * ps, D * ps), g = c.getContext('2d'), Rr = rng(77);
+    // The snowy mound the scene stands on: its front, falling away to the
+    // bottom of the globe (`skirt`, which looks the same however it turns),
+    // and its top, painted as seen from straight above (`top`, a disk of
+    // radius FLOOR_R × R at its middle), which the manager lays down squashed
+    // to the floor's ellipse and turned with the turntable, so the paths and
+    // the pond and the tracks go round with what stands on them; `fresh`, new
+    // snow over it (as deep as lies), the same way; `shade`, the light on it,
+    // which stays where the candle is. style: SnowGlobeLogic.GROUND's.
+    function ground(L, ps, side, style, o = {}) {
+        const R = L.R, D = R * 2, Rr = rng(77 + style.length);
+        const fy = project(0, FLOOR, 0).sy * R, fr = FLOOR_R * R, fry = fr * TILT * 0.98;
+        const sea = style === 'sea' || style === 'floe';
+        // The skirt.
+        const c = canvas(D * ps, D * ps), g = c.getContext('2d');
         g.scale(ps, ps); g.translate(R, R);
         g.save(); g.beginPath(); g.arc(0, 0, R * 0.985, 0, TAU); g.clip();
-        const fy = project(0, FLOOR, 0).sy * R, fr = FLOOR_R * R, fry = fr * TILT * 1.02;
-        // The ground's top, then its front falling away below.
         const gr = g.createLinearGradient(0, fy - fry, 0, R);
-        gr.addColorStop(0, '#c9d6ee'); gr.addColorStop(0.3, '#e9eef8'); gr.addColorStop(0.55, '#b9c6e0'); gr.addColorStop(1, '#6d7ca0');
+        if (sea) { gr.addColorStop(0, '#2c3c5c'); gr.addColorStop(0.35, '#3c5078'); gr.addColorStop(1, '#141c34'); }
+        else { gr.addColorStop(0, '#c9d6ee'); gr.addColorStop(0.3, '#e9eef8'); gr.addColorStop(0.55, '#b9c6e0'); gr.addColorStop(1, '#6d7ca0'); }
         g.fillStyle = gr; g.beginPath(); g.ellipse(0, fy, fr, fry, 0, Math.PI, 0); g.lineTo(R, R); g.lineTo(-R, R); g.closePath(); g.fill();
-        g.beginPath(); g.ellipse(0, fy, fr, fry, 0, 0, TAU); g.fill();
         light(g, -R, fy - fry, R, R, side, { warm: 0.32, dark: 0.3, foot: 0.4 });
-        for (let i = 0; i < 60; i++) { const a = Rr() * TAU, r = Math.sqrt(Rr()) * fr, x = Math.sin(a) * r, y = fy + Math.cos(a) * r * TILT; blob(g, x, y, R * (0.04 + Rr() * 0.06), R * 0.015, Rr() < 0.5 ? [250, 252, 255] : [170, 186, 220], 0.35, 0); }
-        if (scene === 'pond') {
-            const pr = fr * 0.42, pry = pr * TILT;
-            const pg = g.createLinearGradient(0, fy - pry, 0, fy + pry);
-            pg.addColorStop(0, '#5f7fb2'); pg.addColorStop(0.5, '#9fb8dc'); pg.addColorStop(1, '#6f8cbc');
-            g.fillStyle = pg; g.beginPath(); g.ellipse(0, fy, pr, pry, 0, 0, TAU); g.fill();
-            g.strokeStyle = 'rgba(240,246,255,0.7)'; g.lineWidth = R * 0.012; g.stroke();
-            for (let i = 0; i < 14; i++) { const a = Rr() * TAU, r = Rr() * pr * 0.8; g.strokeStyle = 'rgba(235,244,255,0.35)'; g.lineWidth = 0.7; g.beginPath(); g.ellipse(Math.sin(a) * r * 0.3, fy + Math.cos(a) * r * TILT * 0.3, pr * (0.2 + Rr() * 0.3), pry * (0.2 + Rr() * 0.3), 0, Rr() * TAU, Rr() * TAU + 1.5); g.stroke(); }
-        }
+        for (let i = 0; i < 40; i++) { const x = (Rr() - 0.5) * fr * 2, y = fy + fry * 0.6 + Rr() * (R - fy); blob(g, x, y, R * (0.04 + Rr() * 0.06), R * 0.012, sea ? [90, 120, 170] : (Rr() < 0.5 ? [250, 252, 255] : [170, 186, 220]), 0.3, 0); }
         g.restore();
-        const fresh = canvas(c.width, c.height), f = fresh.getContext('2d');
-        f.scale(ps, ps); f.translate(R, R);
-        f.save(); f.beginPath(); f.arc(0, 0, R * 0.985, 0, TAU); f.clip();
-        const fg = f.createRadialGradient(0, fy, fr * 0.2, 0, fy, fr * 1.1);
-        fg.addColorStop(0, 'rgba(252,253,255,0.9)'); fg.addColorStop(0.8, 'rgba(244,248,255,0.85)'); fg.addColorStop(1, 'rgba(240,246,255,0.95)');
-        f.fillStyle = fg; f.beginPath(); f.ellipse(0, fy, fr * 1.01, fry * 1.06, 0, 0, TAU); f.fill();
-        for (let i = 0; i < 40; i++) { const a = Rr() * TAU, r = (0.7 + Rr() * 0.3) * fr, x = Math.sin(a) * r, y = fy + Math.cos(a) * r * TILT; blob(f, x, y, R * (0.05 + Rr() * 0.08), R * (0.02 + Rr() * 0.02), [255, 255, 255], 0.5); }
-        f.restore();
-        return { canvas: c, fresh, opts: { widths: [R * 0.06 * ps, R * 0.03 * ps, R * 0.016 * ps], seed: 31, len: 3.5, tol: 40, jit: 0.04, dir: () => 0.04 } };
+        // The top, from above: x across, y toward us (the floor's z).
+        const T = canvas(fr * 2 * ps, fr * 2 * ps), t = T.getContext('2d');
+        t.scale(ps, ps); t.translate(fr, fr);
+        t.save(); t.beginPath(); t.arc(0, 0, fr, 0, TAU); t.clip();
+        t.fillStyle = sea ? '#24375a' : '#e4ebf8'; t.fillRect(-fr, -fr, fr * 2, fr * 2);
+        const pt = (a, r) => [Math.sin(a) * r * fr, Math.cos(a) * r * fr];       // a place on the floor: round from the front, out
+        const drifts = (n, cols, a = 0.35) => { for (let i = 0; i < n; i++) { const [x, y] = pt(Rr() * TAU, Math.sqrt(Rr()) * 0.98); blob(t, x, y, fr * (0.06 + Rr() * 0.1), fr * (0.03 + Rr() * 0.05), cols[i % cols.length], a, Rr() * TAU); } };
+        if (sea) {
+            // Dark water round an island (or a floe), ripples and bits of ice on it.
+            for (let i = 0; i < 40; i++) { const [x, y] = pt(Rr() * TAU, 0.75 + Rr() * 0.25); t.strokeStyle = 'rgba(150,180,220,0.25)'; t.lineWidth = fr * 0.006; t.beginPath(); t.ellipse(x, y, fr * 0.06, fr * 0.02, Rr() * 3, 0, Math.PI); t.stroke(); }
+            const island = new Path2D(), N = 28;
+            for (let i = 0; i <= N; i++) { const a = i / N * TAU, r = (style === 'floe' ? 0.8 : 0.74) + 0.07 * Math.sin(a * 3 + 1) + 0.04 * Math.sin(a * 7) + (style === 'floe' ? 0.03 * Math.sign(Math.sin(a * 5)) : 0); const [x, y] = pt(a, r); i ? island.lineTo(x, y) : island.moveTo(x, y); }
+            t.fillStyle = style === 'floe' ? '#cfe0f2' : '#5a5c66'; t.fill(island);
+            t.save(); t.clip(island);
+            if (style === 'sea') { drifts(50, [[110, 112, 122], [78, 80, 92]], 0.6); drifts(60, [[236, 242, 252], [214, 226, 244]], 0.85); }
+            else { t.fillStyle = '#c4d6ee'; t.fillRect(-fr, -fr, fr * 2, fr * 2); drifts(40, [[176, 200, 232], [236, 244, 252]], 0.6); t.strokeStyle = 'rgba(120,150,200,0.5)'; t.lineWidth = fr * 0.006; for (let i = 0; i < 8; i++) { let [x, y] = pt(Rr() * TAU, Rr() * 0.6); t.beginPath(); t.moveTo(x, y); for (let k = 0; k < 4; k++) { x += (Rr() - 0.5) * fr * 0.2; y += (Rr() - 0.5) * fr * 0.2; t.lineTo(x, y); } t.stroke(); } const [hx, hy] = pt(-1.9, 0.38); blob(t, hx, hy, fr * 0.07, fr * 0.06, [30, 52, 90]); t.strokeStyle = 'rgba(240,248,255,0.9)'; t.lineWidth = fr * 0.012; t.beginPath(); t.ellipse(hx, hy, fr * 0.075, fr * 0.065, 0, 0, TAU); t.stroke(); }
+            t.restore();
+            t.strokeStyle = 'rgba(240,246,255,0.8)'; t.lineWidth = fr * 0.012; t.stroke(island);
+            for (let i = 0; i < 9; i++) { const [x, y] = pt(Rr() * TAU, 0.9 + Rr() * 0.08); blob(t, x, y, fr * 0.03, fr * 0.02, [226, 236, 250], 0.9, Rr() * 3); }
+        } else {
+            drifts(60, [[250, 252, 255], [196, 210, 236]]);
+            if (style === 'ice' || style === 'pond') {
+                // Ice: the pond in the middle (or the whole floor glazed), scored by blades.
+                const pr = style === 'pond' ? 0.42 : 0.9;
+                const pg = t.createRadialGradient(-fr * 0.1, -fr * 0.1, 0, 0, 0, fr * pr);
+                pg.addColorStop(0, '#b4cae8'); pg.addColorStop(0.7, '#8eaad6'); pg.addColorStop(1, '#6f8cbc');
+                t.fillStyle = pg; t.beginPath(); t.arc(0, 0, fr * pr, 0, TAU); t.fill();
+                if (style === 'ice') drifts(30, [[240, 246, 255], [226, 236, 250]], 0.7);
+                t.strokeStyle = 'rgba(240,246,255,0.75)'; t.lineWidth = fr * 0.01; t.beginPath(); t.arc(0, 0, fr * pr, 0, TAU); t.stroke();
+                for (let i = 0; i < 18; i++) { t.strokeStyle = 'rgba(235,244,255,0.4)'; t.lineWidth = 0.8; const r0 = fr * pr * (0.15 + Rr() * 0.7), a0 = Rr() * TAU; t.beginPath(); t.arc(0, 0, r0, a0, a0 + 0.6 + Rr()); t.stroke(); }
+                if (style === 'ice') { t.strokeStyle = 'rgba(255,255,255,0.6)'; t.lineWidth = fr * 0.05; t.beginPath(); t.arc(0, 0, fr * 0.72 * 0.98, 0, TAU); t.stroke(); }
+            }
+            if (style === 'path' || style === 'lane' || style === 'candy') {
+                // A path trodden (or shovelled) from the front door out to the edge, footprints in it.
+                const a = o.door ?? 0, [x0, y0] = pt(o.doorAt ?? 0, o.doorR ?? 0.2), [x1, y1] = pt(a, 1.05), w = fr * (style === 'lane' ? 0.13 : 0.08);
+                t.strokeStyle = style === 'candy' ? '#f4f0ea' : '#c2cee6'; t.lineWidth = w; t.lineCap = 'round'; t.beginPath(); t.moveTo(x0, y0); t.quadraticCurveTo((x0 + x1) / 2 + w, (y0 + y1) / 2, x1, y1); t.stroke();
+                const n = 12;
+                for (let i = 1; i < n; i++) {
+                    const u = i / n, x = x0 + (x1 - x0) * u + w * Math.sin(u * Math.PI) * 0.5, y = y0 + (y1 - y0) * u;
+                    if (style === 'candy') { const cols = [[230, 50, 60], [60, 170, 90], [250, 200, 60], [90, 120, 230]]; blob(t, x, y, w * 0.32, w * 0.32, cols[i % 4]); blob(t, x - w * 0.08, y - w * 0.08, w * 0.1, w * 0.1, [255, 255, 255], 0.5); }
+                    else for (const e of [-1, 1]) blob(t, x + e * w * 0.18, y + e * w * 0.1, w * 0.09, w * 0.14, [150, 166, 200], 0.6, Math.atan2(y1 - y0, x1 - x0));
+                }
+                if (style === 'candy') for (let i = 0; i < 6; i++) { const [x, y] = pt(Rr() * TAU, 0.4 + Rr() * 0.5); const r = fr * 0.035; blob(t, x, y, r, r, [250, 250, 250]); for (let k = 0; k < 3; k++) { t.fillStyle = '#d8323a'; t.beginPath(); t.moveTo(x, y); t.arc(x, y, r, k * 2.1, k * 2.1 + 0.9); t.closePath(); t.fill(); } }
+            }
+            if (style === 'paws') for (let i = 0; i < 16; i++) { const u = i / 16, a = u * 4 - 1.4, r = 0.35 + u * 0.4, [x, y] = pt(a, r); for (const [dx, dy, rr] of [[0, 0, 0.012], [-0.012, -0.014, 0.005], [0, -0.019, 0.005], [0.012, -0.014, 0.005]]) blob(t, x + dx * fr * (i % 2 ? 1 : -1), y + dy * fr, rr * fr, rr * fr, [150, 166, 200], 0.7); }
+            if (style === 'track') {
+                // The toy train's track, round under where it runs: two rails on their sleepers.
+                const r = 0.62;
+                t.strokeStyle = '#6a4a34'; t.lineWidth = fr * 0.012;
+                for (let i = 0; i < 60; i++) { const a = i / 60 * TAU, [xa, ya] = pt(a, r - 0.05), [xb, yb] = pt(a, r + 0.05); t.beginPath(); t.moveTo(xa, ya); t.lineTo(xb, yb); t.stroke(); }
+                t.strokeStyle = '#9aa0ae'; t.lineWidth = fr * 0.008; for (const rr of [r - 0.032, r + 0.032]) { t.beginPath(); t.arc(0, 0, rr * fr, 0, TAU); t.stroke(); }
+            }
+            if (style === 'ring') {
+                // Cobbles cleared round the carousel.
+                t.fillStyle = '#9a96a0'; t.beginPath(); t.arc(0, 0, fr * 0.5, 0, TAU); t.fill();
+                for (let r = 0.08; r < 0.5; r += 0.05) for (let k = 0; k < Math.round(r * 90); k++) { const [x, y] = pt((k + r * 7) / Math.round(r * 90) * TAU, r); blob(t, x, y, fr * 0.02, fr * 0.016, Rr() < 0.5 ? [126, 120, 130] : [160, 156, 166], 0.9, Rr() * 3); }
+                drifts(16, [[240, 244, 252]], 0.5);
+            }
+        }
+        t.restore();
+        // Fresh snow, from above: whiter, deeper at the edges where it drifts.
+        const F = canvas(fr * 2 * ps, fr * 2 * ps), f = F.getContext('2d');
+        f.scale(ps, ps); f.translate(fr, fr);
+        const fg = f.createRadialGradient(0, 0, fr * 0.2, 0, 0, fr);
+        fg.addColorStop(0, 'rgba(252,253,255,0.85)'); fg.addColorStop(0.8, 'rgba(244,248,255,0.85)'); fg.addColorStop(1, 'rgba(240,246,255,0.95)');
+        f.fillStyle = fg; f.beginPath(); f.arc(0, 0, fr, 0, TAU); f.fill();
+        for (let i = 0; i < 40; i++) { const a = Rr() * TAU, r = (0.7 + Rr() * 0.3) * fr; blob(f, Math.sin(a) * r, Math.cos(a) * r, R * (0.05 + Rr() * 0.08), R * (0.04 + Rr() * 0.04), [255, 255, 255], 0.5); }
+        // The light on the floor (it stays where the candle is): warm toward it, darker away and at the back.
+        const S2 = canvas(D * ps, D * ps), sh = S2.getContext('2d');
+        sh.scale(ps, ps); sh.translate(R, R);
+        sh.save(); sh.beginPath(); sh.ellipse(0, fy, fr, fry, 0, 0, TAU); sh.clip();
+        light(sh, -fr, fy - fry, fr, fy + fry, side, { warm: 0.3, dark: 0.32, top: 0.0, foot: 0.12 });
+        const bg = sh.createLinearGradient(0, fy - fry, 0, fy + fry); bg.addColorStop(0, 'rgba(14,18,40,0.3)'); bg.addColorStop(0.5, 'rgba(14,18,40,0)');
+        sh.fillStyle = bg; sh.fillRect(-fr, fy - fry, fr * 2, fry * 2);
+        sh.restore();
+        return { canvas: c, top: T, fresh: F, shade: S2, fy, fr, fry, opts: { widths: [R * 0.06 * ps, R * 0.03 * ps, R * 0.016 * ps], seed: 31, len: 3.5, tol: 40, jit: 0.04, dir: () => 0.04 }, topOpts: { widths: [R * 0.05 * ps, R * 0.025 * ps, R * 0.013 * ps], seed: 33, len: 3, tol: 36, jit: 0.04 } };
     }
 
-    // ---- Inside: what stands on the turntable ------------------------------------------------------
-    // One sprite per kind and face. h: the sprite's height in globe units
-    // (its tallest), scaled by R to CSS px; anchored at its foot's middle.
-    // face: 'front', 'side', 'back'. Returns { canvas, ax, ay (anchor in its
-    // px), w, h (CSS px at depth 0), glows: [{ x, y, r, col }] (CSS px from the
-    // anchor), caps: where fresh snow lies on it ({ x, y, w } from the anchor) }.
-    function thing(kind, L, ps, side, face, o = {}) {
+    // ---- Inside: the things that look the same from every side -----------------------------------
+    // A fir, the big tree, a lamp: one painted sprite each (they turn on the
+    // turntable as solids do, with details that go round them: globe-models.js).
+    // Anchored at its foot's middle. Returns { canvas, ax, ay (the anchor, CSS
+    // px), w, h (CSS px at depth 0), opts (its brushwork) }.
+    function thing(kind, L, ps, side, face = 'front', o = {}) {
         const R = L.R, K = KINDS[kind], u = R, pad = R * 0.04;
-        const w = (K.box ? Math.max(K.w, K.d) : K.w) * u * 1.25 + pad * 2, h = ((K.h || 0.1) + (K.roof || 0) + (K.spire || 0)) * u * 1.12 + pad * 2;
+        const w = K.w * u * 1.25 + pad * 2, h = K.h * u * 1.12 + pad * 2;
         const c = canvas(w * ps, h * ps), g = c.getContext('2d'), ax = w / 2, ay = h - pad, Rr = rng(kind.length * 131 + (face === 'side' ? 7 : 0));
         g.scale(ps, ps); g.translate(ax, ay);
-        const out = { canvas: c, ax, ay, w, h, glows: [], caps: [] };
-        const warmWin = (x, y, ww, wh, bars = true, col = [255, 196, 110]) => {
-            g.fillStyle = css(shade(col, 0.95)); g.fillRect(x, y, ww, wh);
-            const gr = g.createRadialGradient(x + ww / 2, y + wh / 2, 0, x + ww / 2, y + wh / 2, Math.max(ww, wh)); gr.addColorStop(0, 'rgba(255,240,200,0.8)'); gr.addColorStop(1, 'rgba(255,170,80,0)');
-            g.fillStyle = gr; g.fillRect(x, y, ww, wh);
-            if (bars) { g.fillStyle = css([60, 40, 30]); g.fillRect(x + ww / 2 - ww * 0.06, y, ww * 0.12, wh); g.fillRect(x, y + wh / 2 - wh * 0.06, ww, wh * 0.12); }
-            g.fillStyle = css([250, 250, 255], 0.9); g.fillRect(x - ww * 0.1, y + wh, ww * 1.2, wh * 0.14);   // snow on its sill
-            out.glows.push({ x: x + ww / 2, y: y + wh / 2, r: Math.max(ww, wh) * 1.6, col });
-        };
-        const roofSnow = (pts) => { g.fillStyle = css(SNOW); poly(g, pts); g.fill(); };
-        if (K.box) {
-            const front = face !== 'side', ww = (front ? K.w : K.d) * u, wh = K.h * u, rh = (K.roof || 0.15) * u;
-            const wall = kind === 'church' ? [214, 206, 196] : kind === 'house' ? (o.v > 0.5 ? [150, 60, 50] : [92, 110, 150]) : kind === 'cathouse' ? [236, 196, 150] : [226, 214, 188];
-            const roof = kind === 'church' ? [80, 70, 76] : kind === 'cathouse' ? [150, 70, 60] : [96, 56, 44];
-            if (front) {
-                // A gable end: the wall and its triangle, a door, windows.
-                g.fillStyle = css(wall); g.beginPath(); g.moveTo(-ww / 2, 0); g.lineTo(-ww / 2, -wh); g.lineTo(0, -wh - rh); g.lineTo(ww / 2, -wh); g.lineTo(ww / 2, 0); g.closePath(); g.fill();
-                mottle(g, -ww / 2, -wh - rh, ww, wh + rh, [shade(wall, 0.9), lerp(wall, [255, 255, 255], 0.2)], 30, ww * 0.06, Rr, 0.4);
-                if (kind === 'cottage' || kind === 'cathouse') { g.strokeStyle = css(shade(wall, 0.45)); g.lineWidth = ww * 0.03; g.beginPath(); g.moveTo(-ww / 2, -wh * 0.55); g.lineTo(ww / 2, -wh * 0.55); g.moveTo(-ww * 0.3, 0); g.lineTo(-ww * 0.3, -wh); g.moveTo(ww * 0.3, 0); g.lineTo(ww * 0.3, -wh); g.stroke(); }
-                // The roof's edge over the gable, deep in snow.
-                g.lineWidth = ww * 0.07; g.strokeStyle = css(roof); g.beginPath(); g.moveTo(-ww * 0.56, -wh + rh * 0.04); g.lineTo(0, -wh - rh * 1.06); g.lineTo(ww * 0.56, -wh + rh * 0.04); g.stroke();
-                roofSnow([-ww * 0.6, -wh, 0, -wh - rh * 1.16, ww * 0.6, -wh, ww * 0.5, -wh + rh * 0.12, 0, -wh - rh * 0.92, -ww * 0.5, -wh + rh * 0.12]);
-                out.caps.push({ kind: 'gable', x: 0, y: -wh - rh * 1.08, w: ww * 0.57, h: rh * 1.08 });
-                if (kind === 'church') {
-                    // The steeple over the gable, and its spire.
-                    const sw = ww * 0.34, sh = K.spire * u;
-                    g.fillStyle = css(wall); g.fillRect(-sw / 2, -wh - rh - sh * 0.45, sw, sh * 0.45 + rh * 0.4);
-                    g.fillStyle = css(roof); poly(g, [-sw * 0.62, -wh - rh - sh * 0.45, 0, -wh - rh - sh, sw * 0.62, -wh - rh - sh * 0.45]); g.fill();
-                    roofSnow([-sw * 0.5, -wh - rh - sh * 0.5, 0, -wh - rh - sh * 0.98, sw * 0.1, -wh - rh - sh * 0.85, -sw * 0.3, -wh - rh - sh * 0.46]);
-                    g.fillStyle = css([226, 190, 90]); g.fillRect(-sw * 0.04, -wh - rh - sh * 1.12, sw * 0.08, sh * 0.14); g.fillRect(-sw * 0.16, -wh - rh - sh * 1.07, sw * 0.32, sh * 0.03);
-                    warmWin(-sw * 0.2, -wh - rh - sh * 0.36, sw * 0.4, sh * 0.16, false, [255, 210, 130]);
-                    blob(g, 0, -wh * 0.72, ww * 0.12, ww * 0.12, [255, 200, 120]); out.glows.push({ x: 0, y: -wh * 0.72, r: ww * 0.3, col: [255, 190, 110] });
-                    g.fillStyle = css([110, 40, 40]); g.beginPath(); g.moveTo(-ww * 0.12, 0); g.lineTo(-ww * 0.12, -wh * 0.3); g.arc(0, -wh * 0.3, ww * 0.12, Math.PI, 0); g.lineTo(ww * 0.12, 0); g.closePath(); g.fill();
-                } else {
-                    // A door with a wreath, and a window each side.
-                    const dw = ww * 0.22, dh = wh * 0.55;
-                    g.fillStyle = css(kind === 'cathouse' ? [60, 90, 140] : [130, 34, 36]); g.fillRect(-dw / 2, -dh, dw, dh);
-                    g.strokeStyle = css([40, 110, 60]); g.lineWidth = dw * 0.14; g.beginPath(); g.arc(0, -dh * 0.7, dw * 0.22, 0, TAU); g.stroke(); blob(g, 0, -dh * 0.55, dw * 0.07, dw * 0.05, [220, 40, 40]);
-                    warmWin(-ww * 0.42, -wh * 0.8, ww * 0.2, wh * 0.3);
-                    if (kind === 'cathouse') {
-                        // In this window, a cat, looking out.
-                        const wx = ww * 0.22, wy = -wh * 0.8, wwn = ww * 0.2, whn = wh * 0.3;
-                        warmWin(wx, wy, wwn, whn, false);
-                        g.fillStyle = css([40, 30, 34]); blob(g, wx + wwn / 2, wy + whn * 0.78, wwn * 0.3, whn * 0.26, [40, 30, 34]); blob(g, wx + wwn / 2, wy + whn * 0.42, wwn * 0.2, wwn * 0.2, [40, 30, 34]);
-                        poly(g, [wx + wwn * 0.33, wy + whn * 0.32, wx + wwn * 0.38, wy + whn * 0.1, wx + wwn * 0.47, wy + whn * 0.28]); g.fill(); poly(g, [wx + wwn * 0.67, wy + whn * 0.32, wx + wwn * 0.62, wy + whn * 0.1, wx + wwn * 0.53, wy + whn * 0.28]); g.fill();
-                        // and a round window in the gable shaped like a fish.
-                        g.fillStyle = css([255, 200, 110]); ell(g, 0, -wh - rh * 0.45, ww * 0.08, ww * 0.045); g.fill(); poly(g, [ww * 0.07, -wh - rh * 0.45, ww * 0.12, -wh - rh * 0.52, ww * 0.12, -wh - rh * 0.38]); g.fill();
-                        out.glows.push({ x: 0, y: -wh - rh * 0.45, r: ww * 0.2, col: [255, 190, 110] });
-                    } else warmWin(ww * 0.22, -wh * 0.8, ww * 0.2, wh * 0.3);
-                }
-                if (kind === 'cathouse') {
-                    // Cat ears on the roof's peak.
-                    for (const s of [-1, 1]) { g.fillStyle = css(roof); poly(g, [s * ww * 0.04, -wh - rh * 1.05, s * ww * 0.2, -wh - rh * 1.55, s * ww * 0.26, -wh - rh * 0.82]); g.fill(); g.fillStyle = css(SNOW); poly(g, [s * ww * 0.12, -wh - rh * 1.2, s * ww * 0.2, -wh - rh * 1.55, s * ww * 0.22, -wh - rh * 1.15]); g.fill(); }
-                }
-            } else {
-                // The long side: wall, eaves, a roof slope, a chimney.
-                g.fillStyle = css(shade(wall, 0.9)); g.fillRect(-ww / 2, -wh, ww, wh);
-                mottle(g, -ww / 2, -wh, ww, wh, [shade(wall, 0.8), lerp(wall, [255, 255, 255], 0.15)], 30, ww * 0.05, Rr, 0.4);
-                g.fillStyle = css(roof); poly(g, [-ww * 0.56, -wh + rh * 0.08, -ww * 0.5, -wh - rh, ww * 0.5, -wh - rh, ww * 0.56, -wh + rh * 0.08]); g.fill();
-                g.strokeStyle = css(shade(roof, 0.7)); g.lineWidth = Math.max(0.5, rh * 0.06); for (let k = 1; k < 5; k++) { const y = -wh + rh * 0.08 - k * rh * 0.22; g.beginPath(); g.moveTo(-ww * 0.55, y); g.lineTo(ww * 0.55, y); g.stroke(); }
-                roofSnow([-ww * 0.57, -wh - rh * 0.4, -ww * 0.52, -wh - rh * 1.08, ww * 0.52, -wh - rh * 1.08, ww * 0.57, -wh - rh * 0.4, ww * 0.4, -wh - rh * 0.3, ww * 0.1, -wh - rh * 0.45, -ww * 0.25, -wh - rh * 0.32]);
-                out.caps.push({ kind: 'band', x: 0, y: -wh - rh * 1.06, w: ww * 1.06, h: rh * 0.8 });
-                if (kind !== 'church') {
-                    g.fillStyle = css([120, 70, 56]); g.fillRect(ww * 0.22, -wh - rh * 1.45, ww * 0.1, rh * 0.6);
-                    g.fillStyle = css(SNOW); g.fillRect(ww * 0.21, -wh - rh * 1.5, ww * 0.12, rh * 0.1);
-                    out.chimney = { x: ww * 0.27, y: -wh - rh * 1.5 };
-                }
-                const nwin = kind === 'church' ? 3 : 2;
-                for (let k = 0; k < nwin; k++) {
-                    const x = -ww / 2 + ww * (k + 0.5) / nwin - ww * 0.07;
-                    if (kind === 'church') { const cw2 = ww * 0.13, ch2 = wh * 0.45; g.fillStyle = css([255, 196, 120]); g.beginPath(); g.moveTo(x, -wh * 0.25); g.lineTo(x, -wh * 0.25 - ch2 * 0.7); g.arc(x + cw2 / 2, -wh * 0.25 - ch2 * 0.7, cw2 / 2, Math.PI, 0); g.lineTo(x + cw2, -wh * 0.25); g.closePath(); g.fill(); for (const [cc, yy] of [[[220, 70, 60], 0.3], [[80, 140, 220], 0.55], [[90, 180, 110], 0.8]]) { g.fillStyle = css(cc, 0.5); g.fillRect(x, -wh * 0.25 - ch2 * yy, cw2, ch2 * 0.18); } out.glows.push({ x: x + cw2 / 2, y: -wh * 0.5, r: cw2 * 2.2, col: [255, 190, 120] }); }
-                    else warmWin(x, -wh * 0.72, ww * 0.14, wh * 0.32);
-                }
-            }
-            light(g, -ww * 0.6, -wh - rh * 1.6 - (K.spire || 0) * u, ww * 0.6, 0, side, { warm: 0.3, dark: front ? 0.32 : 0.45 });
-            // Snow drifted against its foot.
-            for (let i = 0; i < 9; i++) blob(g, -ww / 2 + Rr() * ww, -Rr() * wh * 0.06, ww * 0.1, wh * 0.06, SNOW, 0.9);
-        } else if (kind === 'fir' || kind === 'bigtree') {
+        const out = { canvas: c, ax, ay, w, h };
+        if (kind === 'fir' || kind === 'bigtree') {
             const th = K.h * u, tw = K.w * u, tiers = kind === 'bigtree' ? 6 : 4;
             g.fillStyle = css([70, 46, 34]); g.fillRect(-tw * 0.06, -th * 0.12, tw * 0.12, th * 0.12);
             for (let k = 0; k < tiers; k++) {
@@ -554,101 +730,15 @@ const SnowGlobeArt = (() => {
             }
             mottle(g, -tw / 2, -th, tw, th, [[20, 56, 40], [44, 96, 66], [16, 40, 32]], 70, tw * 0.05, Rr, 0.5);
             light(g, -tw / 2, -th, tw / 2, 0, side, { warm: 0.25, dark: 0.45 });
-            out.caps.push({ kind: 'mound', x: 0, y: -th * 0.93, w: tw * 0.16, h: th * 0.05 });
             if (kind === 'bigtree') {
                 g.fillStyle = css([250, 220, 110]); const sy = -th * 1.02, sr = tw * 0.07; g.beginPath(); for (let k = 0; k < 10; k++) { const a = -Math.PI / 2 + k * Math.PI / 5, r = k % 2 ? sr * 0.45 : sr; g.lineTo(Math.cos(a) * r, sy + Math.sin(a) * r); } g.closePath(); g.fill();
-                out.glows.push({ x: 0, y: sy, r: sr * 4, col: [255, 220, 120] });
-                out.cone = { h: th, w: tw };
             }
-        } else if (kind === 'snowman' || kind === 'catsnowman') {
-            const sh = K.h * u, cat = kind === 'catsnowman', back = face === 'back';
-            const balls = cat ? [[0, -sh * 0.25, sh * 0.27], [0, -sh * 0.66, sh * 0.2]] : [[0, -sh * 0.2, sh * 0.21], [0, -sh * 0.52, sh * 0.16], [0, -sh * 0.8, sh * 0.12]];
-            for (const [x, y, r] of balls) { blob(g, x, y, r, r * 0.95, [240, 244, 252]); }
-            if (cat) { for (const s of [-1, 1]) { g.fillStyle = css([240, 244, 252]); poly(g, [s * sh * 0.05, -sh * 0.8, s * sh * 0.16, -sh * 0.98, s * sh * 0.19, -sh * 0.72]); g.fill(); } g.strokeStyle = css([236, 240, 250]); g.lineWidth = sh * 0.06; g.lineCap = 'round'; g.beginPath(); g.moveTo(sh * 0.22, -sh * 0.15); g.quadraticCurveTo(sh * 0.42, -sh * 0.2, sh * 0.36, -sh * 0.48); g.stroke(); }
-            light(g, -sh * 0.45, -sh, sh * 0.45, 0, side, { warm: 0.28, dark: 0.36 });
-            if (!back) {
-                const hy = cat ? -sh * 0.68 : -sh * 0.8, hr = cat ? sh * 0.2 : sh * 0.12;
-                for (const s of [-1, 1]) blob(g, s * hr * 0.38, hy - hr * 0.15, hr * 0.1, hr * 0.12, [24, 22, 26]);
-                if (cat) { blob(g, 0, hy + hr * 0.12, hr * 0.1, hr * 0.07, [230, 130, 140]); g.strokeStyle = 'rgba(40,36,40,0.7)'; g.lineWidth = Math.max(0.5, hr * 0.03); for (const s of [-1, 1]) for (const d of [-0.08, 0.06]) { g.beginPath(); g.moveTo(s * hr * 0.2, hy + hr * 0.2); g.lineTo(s * hr * 0.9, hy + hr * (0.15 + d)); g.stroke(); } blob(g, 0, -sh * 0.5, sh * 0.035, sh * 0.035, [230, 190, 70]); }
-                else { g.fillStyle = css([236, 120, 40]); poly(g, [0, hy, hr * 0.9, hy + hr * 0.12, 0, hy + hr * 0.25]); g.fill(); for (let k = 0; k < 3; k++) blob(g, 0, -sh * (0.46 - k * 0.07), sh * 0.016, sh * 0.016, [30, 28, 30]); }
-            }
-            if (!cat) {
-                g.fillStyle = css([30, 28, 32]); g.fillRect(-sh * 0.09, -sh * 0.99, sh * 0.18, sh * 0.13); g.fillRect(-sh * 0.14, -sh * 0.87, sh * 0.28, sh * 0.03);
-                g.fillStyle = css([190, 36, 40]); g.fillRect(-sh * 0.13, -sh * 0.69, sh * 0.26, sh * 0.05); g.fillRect(back ? -sh * 0.05 : sh * 0.04, -sh * 0.67, sh * 0.06, sh * 0.16);
-            } else { g.fillStyle = css([190, 36, 40]); g.fillRect(-sh * 0.17, -sh * 0.5, sh * 0.34, sh * 0.04); }
-            out.caps.push({ kind: 'mound', x: 0, y: cat ? -sh * 0.84 : -sh * 0.99, w: sh * 0.13, h: sh * 0.04 });
         } else if (kind === 'lamp') {
             const lh = K.h * u, lw = lh * 0.12;
             g.fillStyle = css([30, 32, 40]); g.fillRect(-lw * 0.12, -lh * 0.85, lw * 0.24, lh * 0.85); g.fillRect(-lw * 0.5, -lh * 0.06, lw, lh * 0.06);
             g.fillStyle = css([255, 214, 140]); g.fillRect(-lw * 0.45, -lh, lw * 0.9, lh * 0.15);
             g.fillStyle = css([30, 32, 40]); poly(g, [-lw * 0.65, -lh, 0, -lh * 1.1, lw * 0.65, -lh]); g.fill();
             g.fillStyle = css(SNOW); poly(g, [-lw * 0.55, -lh * 1.01, 0, -lh * 1.1, lw * 0.55, -lh * 1.01]); g.fill();
-            out.glows.push({ x: 0, y: -lh * 0.93, r: lh * 0.5, col: [255, 200, 120], lamp: true });
-            out.caps.push({ kind: 'mound', x: 0, y: -lh * 1.09, w: lw * 0.55, h: lh * 0.035 });
-        } else if (kind === 'fence') {
-            const fw = K.w * u, fh = K.h * u;
-            g.fillStyle = css([110, 76, 52]); g.fillRect(-fw / 2, -fh * 0.7, fw, fh * 0.12); g.fillRect(-fw / 2, -fh * 0.35, fw, fh * 0.12);
-            for (let k = 0; k < 6; k++) { const x = -fw / 2 + k * fw / 5 - fw * 0.02; g.fillStyle = css([130, 90, 60]); g.fillRect(x, -fh, fw * 0.04, fh); blob(g, x + fw * 0.02, -fh, fw * 0.035, fh * 0.12, SNOW); }
-            g.fillStyle = css(SNOW); g.fillRect(-fw / 2, -fh * 0.76, fw, fh * 0.07);
-            light(g, -fw / 2, -fh * 1.2, fw / 2, 0, side, {});
-        } else if (kind === 'bench') {
-            const bw2 = K.w * u, bh2 = K.h * u * 1.6;
-            g.fillStyle = css([120, 76, 46]); g.fillRect(-bw2 / 2, -bh2 * 0.5, bw2, bh2 * 0.12); g.fillRect(-bw2 / 2, -bh2, bw2, bh2 * 0.1); g.fillRect(-bw2 / 2, -bh2 * 0.82, bw2, bh2 * 0.1);
-            g.fillStyle = css([40, 36, 40]); for (const s of [-0.42, 0.38]) g.fillRect(s * bw2, -bh2 * 1.02, bw2 * 0.05, bh2 * 1.02);
-            g.fillStyle = css(SNOW); g.fillRect(-bw2 / 2, -bh2 * 0.56, bw2, bh2 * 0.07); g.fillRect(-bw2 / 2, -bh2 * 1.05, bw2, bh2 * 0.05);
-            light(g, -bw2 / 2, -bh2 * 1.1, bw2 / 2, 0, side, {});
-        } else if (kind === 'skaters') {
-            const sh = K.h * u, back = face === 'back';
-            for (const [s, coat, hat] of [[-1, [170, 40, 44], [240, 236, 228]], [1, [50, 80, 140], [200, 50, 60]]]) {
-                const x = s * sh * 0.17;
-                g.fillStyle = css([40, 36, 44]); g.fillRect(x - sh * 0.05, -sh * 0.3, sh * 0.04, sh * 0.3); g.fillRect(x + sh * 0.01, -sh * 0.3, sh * 0.04, sh * 0.3);
-                g.fillStyle = css([210, 214, 224]); g.fillRect(x - sh * 0.08, -sh * 0.015, sh * 0.16, sh * 0.015);
-                g.fillStyle = css(coat); g.beginPath(); g.moveTo(x - sh * 0.1, -sh * 0.28); g.lineTo(x - sh * 0.07, -sh * 0.7); g.lineTo(x + sh * 0.07, -sh * 0.7); g.lineTo(x + sh * 0.1, -sh * 0.28); g.closePath(); g.fill();
-                blob(g, x, -sh * 0.8, sh * 0.075, sh * 0.085, back ? [90, 60, 44] : [236, 196, 168]);
-                g.fillStyle = css(hat); g.beginPath(); g.arc(x, -sh * 0.83, sh * 0.08, Math.PI, 0); g.fill(); blob(g, x, -sh * 0.92, sh * 0.03, sh * 0.03, [250, 250, 250]);
-                g.fillStyle = css([240, 220, 100]); g.fillRect(x - sh * 0.08, -sh * 0.7, sh * 0.16, sh * 0.04);
-            }
-            g.strokeStyle = css([60, 70, 120]); g.lineWidth = sh * 0.04; g.beginPath(); g.moveTo(-sh * 0.1, -sh * 0.5); g.lineTo(sh * 0.1, -sh * 0.5); g.stroke();
-            light(g, -sh * 0.35, -sh, sh * 0.35, 0, side, { warm: 0.25 });
-        } else if (kind === 'presents') {
-            const pw = K.w * u;
-            for (const [x, y, w2, h2, col, rib] of [[-0.22, 0, 0.5, 0.42, [180, 30, 40], [240, 210, 100]], [0.2, 0, 0.42, 0.36, [40, 110, 70], [240, 236, 228]], [-0.02, -0.4, 0.36, 0.3, [60, 90, 170], [230, 60, 70]]]) {
-                const X = x * pw, Y = y * pw, Ww = w2 * pw, Hh = h2 * pw;
-                g.fillStyle = css(col); g.fillRect(X - Ww / 2, Y - Hh, Ww, Hh);
-                g.fillStyle = css(rib); g.fillRect(X - Ww * 0.06, Y - Hh, Ww * 0.12, Hh); g.fillRect(X - Ww / 2, Y - Hh * 0.55, Ww, Hh * 0.1);
-                blob(g, X - Ww * 0.1, Y - Hh, Ww * 0.12, Hh * 0.1, rib, 1, 0.4); blob(g, X + Ww * 0.1, Y - Hh, Ww * 0.12, Hh * 0.1, rib, 1, -0.4);
-                g.fillStyle = css(SNOW, 0.9); g.fillRect(X - Ww / 2, Y - Hh - pw * 0.02, Ww, pw * 0.03);
-            }
-            light(g, -pw / 2, -pw, pw / 2, 0, side, {});
-        } else if (kind === 'sledcat') {
-            const sw = K.w * u, back = face === 'back';
-            g.fillStyle = css([180, 36, 40]); g.fillRect(-sw * 0.45, -sw * 0.2, sw * 0.9, sw * 0.08);
-            g.strokeStyle = css([200, 170, 90]); g.lineWidth = sw * 0.03; g.beginPath(); g.moveTo(-sw * 0.5, -sw * 0.03); g.lineTo(sw * 0.4, -sw * 0.03); g.quadraticCurveTo(sw * 0.55, -sw * 0.03, sw * 0.52, -sw * 0.15); g.stroke();
-            blob(g, -sw * 0.05, -sw * 0.36, sw * 0.18, sw * 0.17, [226, 140, 60]); blob(g, sw * 0.06, -sw * 0.56, sw * 0.12, sw * 0.11, [226, 140, 60]);
-            for (const s of [-1, 1]) { g.fillStyle = css([226, 140, 60]); poly(g, [sw * 0.06 + s * sw * 0.04, -sw * 0.62, sw * 0.06 + s * sw * 0.1, -sw * 0.75, sw * 0.06 + s * sw * 0.12, -sw * 0.56]); g.fill(); }
-            if (!back) { blob(g, sw * 0.02, -sw * 0.57, sw * 0.02, sw * 0.025, [40, 50, 30]); blob(g, sw * 0.1, -sw * 0.57, sw * 0.02, sw * 0.025, [40, 50, 30]); g.fillStyle = css([40, 110, 70]); g.fillRect(-sw * 0.06, -sw * 0.46, sw * 0.24, sw * 0.04); }
-            g.strokeStyle = css([226, 140, 60]); g.lineWidth = sw * 0.06; g.beginPath(); g.moveTo(-sw * 0.2, -sw * 0.3); g.quadraticCurveTo(-sw * 0.42, -sw * 0.4, -sw * 0.36, -sw * 0.6); g.stroke();
-            light(g, -sw / 2, -sw * 0.8, sw / 2, 0, side, {});
-        } else if (kind === 'deer') {
-            const dw = K.w * u, back = face === 'back';
-            g.fillStyle = css([150, 104, 66]); ell(g, 0, -dw * 0.55, dw * 0.32, dw * 0.14); g.fill();
-            for (const x of [-0.22, -0.12, 0.14, 0.24]) g.fillRect(x * dw - dw * 0.025, -dw * 0.5, dw * 0.05, dw * 0.5);
-            g.beginPath(); g.moveTo(dw * 0.22, -dw * 0.6); g.lineTo(dw * 0.34, -dw * 0.9); g.lineTo(dw * 0.42, -dw * 0.86); g.lineTo(dw * 0.34, -dw * 0.55); g.closePath(); g.fill();
-            blob(g, dw * 0.42, -dw * 0.9, dw * 0.08, dw * 0.055, [150, 104, 66], 1, 0.3);
-            g.strokeStyle = css([110, 80, 56]); g.lineWidth = dw * 0.02; for (const s of [-1, 1]) { g.beginPath(); g.moveTo(dw * 0.38, -dw * 0.95); g.lineTo(dw * (0.36 + s * 0.05), -dw * 1.12); g.lineTo(dw * (0.32 + s * 0.09), -dw * 1.18); g.moveTo(dw * (0.37 + s * 0.03), -dw * 1.05); g.lineTo(dw * (0.43 + s * 0.06), -dw * 1.1); g.stroke(); }
-            blob(g, -dw * 0.3, -dw * 0.6, dw * 0.05, dw * 0.04, [240, 232, 220]);
-            if (!back) blob(g, dw * 0.48, -dw * 0.9, dw * 0.02, dw * 0.02, [30, 24, 26]);
-            g.fillStyle = css(SNOW, 0.9); ell(g, -dw * 0.02, -dw * 0.68, dw * 0.24, dw * 0.03); g.fill();
-            light(g, -dw / 2, -dw * 1.2, dw / 2, 0, side, {});
-        } else if (kind === 'train') {
-            const tw = K.w * u, th = K.h * u;
-            g.fillStyle = css([40, 44, 56]); g.fillRect(-tw * 0.45, -th * 0.65, tw * 0.6, th * 0.4); g.fillRect(tw * 0.05, -th * 1.0, tw * 0.36, th * 0.75);
-            g.fillStyle = css([180, 36, 40]); g.fillRect(-tw * 0.45, -th * 0.42, tw * 0.9, th * 0.1); g.fillRect(-tw * 0.38, -th * 0.95, tw * 0.1, th * 0.32);
-            g.fillStyle = css([226, 190, 90]); g.fillRect(-tw * 0.5, -th * 0.6, tw * 0.05, th * 0.12);
-            warmWin(tw * 0.12, -th * 0.9, tw * 0.2, th * 0.25, false);
-            for (const x of [-0.32, -0.08, 0.25]) { blob(g, x * tw, -th * 0.12, th * 0.14, th * 0.14, [30, 30, 36]); blob(g, x * tw, -th * 0.12, th * 0.05, th * 0.05, [200, 40, 40]); }
-            out.chimney = { x: -tw * 0.33, y: -th * 0.98 };
-            light(g, -tw / 2, -th, tw / 2, 0, side, {});
         }
         out.opts = { widths: [R * 0.035 * ps, R * 0.018 * ps, R * 0.009 * ps], seed: kind.length * 13 + (face === 'side' ? 3 : 0), len: 2.4, tol: 46, jit: 0.06, fine: 0.55 };
         return out;
@@ -684,8 +774,11 @@ const SnowGlobeArt = (() => {
             if (P.chest && part === 'body' && x * s > 0.02 && y > 0.36 && y < 0.58) col = P.chest;
             return col;
         };
-        // An ellipse as its own closed piece of a path.
+        // An ellipse as its own closed piece of a path. Every piece of a part's path winds the same way (counter-
+        // clockwise in cat units, as ellipse() does), so overlapping pieces add up under the nonzero rule instead of
+        // cancelling: an ear traced the other way round once left a hole in the head.
         const E = (p, x, y, rx, ry, rot = 0) => { p.moveTo(x + rx * Math.cos(rot), y + rx * Math.sin(rot)); p.ellipse(x, y, rx, ry, rot, 0, TAU); p.closePath(); };
+        const T = (p, pts) => { if (SnowGlobeLogic.area(pts) < 0) pts = pts.slice().reverse(); p.moveTo(pts[0][0], pts[0][1]); for (const q of pts.slice(1)) p.lineTo(q[0], q[1]); p.closePath(); };
         // Paint a part: its silhouette (`shape(path)`, cat units, y up, from
         // its pivot), dabs of its coat over it, fur breaking the edge, lit.
         const make = (w, hh, ax, ay, shape, part, dirFn, extra) => {
@@ -742,20 +835,46 @@ const SnowGlobeArt = (() => {
         const head = make(0.5 * puff, 0.5, 0.25 * puff, 0.3, p => {
             E(p, 0, 0, 0.165 * puff, 0.145 * puff);
             E(p, s * 0.03, -0.045, 0.1, 0.07 * flat);                        // muzzle
-            for (const e of [-1, 1]) { p.moveTo(e * 0.15 * puff, 0.03); p.lineTo(e * 0.12 * puff + s * 0.02, earH); p.lineTo(e * 0.03, 0.12); p.closePath(); }
+            for (const e of [-1, 1]) T(p, SnowGlobeLogic.earAt(e, s, puff, earH));
         }, 'head', (x, y) => Math.atan2(y, x), g => {
             // Inner ears, the muzzle, a nose.
             for (const e of [-1, 1]) { g.fillStyle = css([226, 150, 150], 0.85); g.beginPath(); g.moveTo(e * 0.125 * puff, 0.06); g.lineTo(e * 0.115 * puff + s * 0.016, earH - 0.035); g.lineTo(e * 0.06, 0.11); g.closePath(); g.fill(); }
             const mz = colAt(0, 0, 'muzzle'); blob(g, s * 0.03, -0.05, 0.085, 0.055 * flat, lerp(mz, [255, 250, 240], P.bib ? 0 : 0.25), 0.85);
             g.fillStyle = css(C.coat === 'black-fluffy' || C.coat === 'tuxedo' ? [70, 50, 56] : [210, 120, 126]); g.beginPath(); g.moveTo(s * 0.03 - 0.022, -0.018); g.lineTo(s * 0.03 + 0.022, -0.018); g.lineTo(s * 0.03, -0.042); g.closePath(); g.fill();
         });
-        const tail = [P.base, P.light, P.stripe || P.base, P.mottle ? P.mottle[0] : P.base];
-        return { id, C, P, body, head, leg, tail, eyes: hex(C.eyes), s, headAt: { x: s * 0.06, y: 0.74 }, shoulder: { x: s * 0.1, y: 0.46 }, tailRoot: { x: -s * 0.3, y: 0.06 }, puff };
+        return { id, C, P, body, head, leg, eyes: hex(C.eyes), s, headAt: { x: s * 0.06, y: 0.74 }, shoulder: { x: s * 0.1, y: 0.46 }, tailRoot: { x: -s * 0.3, y: 0.06 }, puff };
     }
 
     // ---- Little things -----------------------------------------------------------------------------
-    // Flakes: a soft round one, and glitter in a few colours (a four-point glint).
-    function flake(r, ps) { return glow(r * ps, [244, 248, 255], 0.55); }
+    // Flakes: a soft round one (and a softer, bigger one for those near the
+    // glass, out of focus), a six-armed star in six turns, a clump; glitter
+    // as flat sequins (hexagons and squares) that the manager squashes as they
+    // tumble, and the four-point glint they flash with face on to the light.
+    function flake(r, ps, core = 0.55) { return glow(r * ps, [244, 248, 255], core); }
+    function star(r, ps, turn) {
+        const R = r * ps, c = canvas(R * 2, R * 2), g = c.getContext('2d');
+        g.translate(R, R); g.rotate(turn); g.drawImage(glow(R * 0.55, [240, 246, 255], 0.4), -R * 0.55, -R * 0.55);
+        g.strokeStyle = 'rgba(248,251,255,0.95)'; g.lineCap = 'round'; g.lineWidth = Math.max(0.7, R * 0.11);
+        for (let k = 0; k < 6; k++) {
+            const a = k * Math.PI / 3, ca = Math.cos(a), sa = Math.sin(a);
+            g.beginPath(); g.moveTo(0, 0); g.lineTo(ca * R * 0.9, sa * R * 0.9); g.stroke();
+            for (const [u, l] of [[0.45, 0.28], [0.7, 0.18]]) for (const e of [-1, 1]) { const b = a + e * 0.9; g.beginPath(); g.moveTo(ca * R * u, sa * R * u); g.lineTo(ca * R * u + Math.cos(b) * R * l, sa * R * u + Math.sin(b) * R * l); g.stroke(); }
+        }
+        return c;
+    }
+    function clump(r, ps) {
+        const R = r * ps, c = canvas(R * 2, R * 2), g = c.getContext('2d'), Rr = rng(5);
+        for (let k = 0; k < 6; k++) { const a = Rr() * TAU, d = Rr() * R * 0.45, s = R * (0.3 + Rr() * 0.25); g.drawImage(glow(s, [242, 247, 255], 0.5), R + Math.cos(a) * d - s, R + Math.sin(a) * d - s); }
+        return c;
+    }
+    function sequin(r, ps, col, sides) {
+        const R = r * ps, c = canvas(R * 2, R * 2), g = c.getContext('2d');
+        g.translate(R, R);
+        g.beginPath(); for (let k = 0; k < sides; k++) { const a = k / sides * TAU + (sides === 4 ? Math.PI / 4 : 0); g.lineTo(Math.cos(a) * R * 0.92, Math.sin(a) * R * 0.92); } g.closePath();
+        const gr = g.createLinearGradient(-R, -R, R, R); gr.addColorStop(0, css(lerp(col, [255, 255, 255], 0.55))); gr.addColorStop(0.5, css(col)); gr.addColorStop(1, css(shade(col, 0.55)));
+        g.fillStyle = gr; g.fill(); g.strokeStyle = css(lerp(col, [255, 255, 255], 0.7), 0.9); g.lineWidth = Math.max(0.6, R * 0.12); g.stroke();
+        return c;
+    }
     function glint(r, ps, col) {
         const R = r * ps, c = canvas(R * 2, R * 2), g = c.getContext('2d');
         g.translate(R, R); g.drawImage(glow(R * 0.6, col, 0.3), -R * 0.6, -R * 0.6);
@@ -775,5 +894,5 @@ const SnowGlobeArt = (() => {
         return c;
     }
 
-    return { canvas, css, shade, lerp, hex, glow, soften, strokes, paint, weave, outside, room, base, key, glass, behind, ground, thing, cat, flake, glint, note, COATS, BASES, WARM, COOL };
+    return { canvas, css, shade, lerp, hex, ell, blob, poly, light, mottle, glow, soften, strokes, paint, weave, outside, room, black, base, key, glass, behind, ground, thing, cat, flake, star, clump, sequin, glint, note, COATS, BASES, WARM, COOL };
 })();

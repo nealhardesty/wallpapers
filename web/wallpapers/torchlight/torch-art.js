@@ -17,117 +17,243 @@ const TorchArt = (() => {
     const lerp = (a, b, t) => a + (b - a) * t;
     const TIMBER = [0.34, 0.22, 0.15], TIMBER2 = [0.42, 0.28, 0.18], PLASTER = [0.93, 0.90, 0.83], SHINGLE = [0.30, 0.24, 0.24];
 
+    // ---- A massif, cell by cell -------------------------------------------------------
+    // A mountain is too big and too varied to be filled a shape at a time, so
+    // it is worked out in cells of two plate pixels: a relief first (the big
+    // flanks under the skyline, ribs and gullies running down from the
+    // summits), then for each cell its local colour, which way it faces, its
+    // material, the way the brush runs and the air in front, all laid into the
+    // plates at once through the skyline as a clip. A cell faces left (SIDEL,
+    // in the light) where the relief rises to the right across it, right
+    // (SIDER, in its own shade) where it falls, and square on otherwise; so
+    // every rib has a lit side and a shaded one, and the strokes painted over
+    // them (which stop where the colour or the facing changes) follow the
+    // terrain. No pixel is read: the cells are worked out, not looked at.
+    const { footByte, angByte } = PaintedLogic;
+    const { noise, fbm, smooth, RUNOUT } = TorchLogic;
+    function massif(P, o) {
+        const { cam, ps } = P, cs = 2 / ps, [X0, Y0, X1, Y1] = o.box;
+        const gw = Math.max(1, Math.ceil((X1 - X0) / cs)), gh = Math.max(1, Math.ceil((Y1 - Y0) / cs)), n = gw * gh;
+        const D = new Float32Array(n), sky = new Float32Array(gw);
+        for (let i = 0; i < gw; i++) sky[i] = o.sky(X0 + (i + 0.5) * cs);
+        // The relief, in pixels toward us, wherever there is mountain (and a cell either side).
+        // (Not where something nearer will be painted over it: o.under, the next ridge's skyline.)
+        const under = new Float32Array(gw).fill(1e9);
+        if (o.under) for (let i = 0; i < gw; i++) under[i] = o.under(X0 + (i + 0.5) * cs) + 4 * cs;
+        for (let j = 0; j < gh; j++) { const y = Y0 + (j + 0.5) * cs; for (let i = 0; i < gw; i++) if (y > sky[i] - 3 * cs && y < under[i] + 2 * cs) D[j * gw + i] = o.relief(X0 + (i + 0.5) * cs, y, i, j); }
+        const A = new Uint8ClampedArray(n * 4), G = new Uint8ClampedArray(n * 4), Mt = new Uint8ClampedArray(n * 4), c = {};
+        for (let j = 0; j < gh; j++) {
+            const y = Y0 + (j + 0.5) * cs;
+            for (let i = 0; i < gw; i++) {
+                if (y <= sky[i] - 2 * cs || y > under[i]) continue;
+                const q = j * gw + i, g = (D[q + (i < gw - 1 ? 1 : 0)] - D[q - (i > 0 ? 1 : 0)]) / (cs * ((i > 0) + (i < gw - 1)));
+                o.paint(X0 + (i + 0.5) * cs, y, D[q], g, c, i, j);
+                const k = q * 4;
+                A[k] = c.col[0] * 255; A[k + 1] = c.col[1] * 255; A[k + 2] = c.col[2] * 255; A[k + 3] = 255;
+                G[k] = footByte(c.foot, cam); G[k + 1] = c.cls; G[k + 2] = 0; G[k + 3] = 255;
+                Mt[k] = angByte(c.ang); Mt[k + 1] = clamp(Math.round(c.size * 4), 4, 255); Mt[k + 2] = c.m * 20; Mt[k + 3] = 255;
+            }
+        }
+        const lay = (plate, data, smooth) => {
+            const cv = PaintedPlates.canvas(gw, gh); cv.getContext('2d').putImageData(new ImageData(data, gw, gh), 0, 0);
+            plate.save(); plate.beginPath(); poly(plate, o.clip); plate.clip(); plate.imageSmoothingEnabled = smooth;
+            plate.drawImage(cv, X0, Y0, gw * cs, gh * cs); plate.restore();
+        };
+        lay(P.alb, A, true); lay(P.geo, G, false); lay(P.mat, Mt, false);
+        return { gw, gh, cs, X0, Y0, D, sky, at: (x, y) => { const i = Math.floor((x - X0) / cs), j = Math.floor((y - Y0) / cs); return i < 0 || j < 0 || i >= gw || j >= gh ? -1 : j * gw + i; } };
+    }
+    // Which way a cell faces, from how the relief leans across it.
+    const facing = (g, t) => g > t ? CLS.SIDEL : g < -t ? CLS.SIDER : CLS.UP;
+    const lying = (g, t) => g > t ? CLS.TOPL : g < -t ? CLS.TOPR : CLS.TOP;
+    // The skyline, blurred: the wider the deeper under it, so the big flanks lean the way the ridges above them do.
+    function flanks(sky) {
+        const pre = new Float64Array(sky.length + 1);
+        for (let i = 0; i < sky.length; i++) pre[i + 1] = pre[i] + sky[i];
+        return (i, r) => { const a = Math.max(0, i - r), b = Math.min(sky.length - 1, i + r); return (pre[b + 1] - pre[a]) / (b - a + 1); };
+    }
+    const mixc = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+    const SNOW_LIT = [0.96, 0.96, 1], SNOW_FACE = [0.92, 0.93, 0.99], SNOW_SHADE = [0.83, 0.86, 0.97], ROCK = [0.35, 0.33, 0.37], ROCK_WARM = [0.44, 0.38, 0.34], FOREST = [0.12, 0.19, 0.2], FOREST_SNOW = [0.38, 0.44, 0.5], GROOMED = [0.985, 0.985, 1];
+
     // ---- The far peaks ------------------------------------------------------------
-    // A range across the whole width behind the mountain. The faces that look
-    // left are frost to the plates, so they take the low light whatever way
-    // they face: the alpenglow at dusk, the moon at night.
+    // A range across the whole width behind the mountain: summits of rock and
+    // snow, ribs and couloirs down from each, the last of the forest low down,
+    // all far enough to be blue with the air. Their snow that faces the light
+    // is frost to the plates, so it takes the low light whichever way it
+    // faces: the alpenglow at dusk, the moon at night.
     function peaks(P, L) {
-        const { W, hor, u } = P.cam, foot = farFoot(P.cam, 16), base = hor + 6 * u;
-        const h = x => { const t = x / W; return hor * (0.36 * Math.exp(-(((t - 0.06) / 0.09) ** 2)) + 0.62 * Math.exp(-(((t - 0.8) / 0.075) ** 2)) + 0.44 * Math.exp(-(((t - 0.66) / 0.06) ** 2)) + 0.5 * Math.exp(-(((t - 0.95) / 0.07) ** 2)) + 0.3 * Math.exp(-(((t - 0.22) / 0.08) ** 2)) + 0.18) + (9 * Math.sin(t * 37) + 5 * Math.sin(t * 91 + 1)) * u; };
-        const ridge = [];
-        for (let x = -30 * u; x <= W + 30 * u; x += 11 * u) ridge.push([x, hor - h(x) + P.rr(-4, 4) * u]);
+        const { W, hor, u } = P.cam, foot = farFoot(P.cam, 16), base = hor + 6 * u, M = L.mountain;
+        const h = x => { const t = x / W; return hor * (0.36 * Math.exp(-(((t - 0.06) / 0.09) ** 2)) + 0.62 * Math.exp(-(((t - 0.8) / 0.075) ** 2)) + 0.44 * Math.exp(-(((t - 0.66) / 0.06) ** 2)) + 0.5 * Math.exp(-(((t - 0.95) / 0.07) ** 2)) + 0.3 * Math.exp(-(((t - 0.22) / 0.08) ** 2)) + 0.18); };
+        let ridge = [];
+        for (let x = -40 * u; x <= W + 40 * u; x += 34 * u) ridge.push([x, hor - h(x)]);
+        for (let lev = 0; lev < 4; lev++) {
+            const out = [ridge[0]];
+            for (let i = 0; i < ridge.length - 1; i++) { const a = ridge[i], b = ridge[i + 1], len = Math.hypot(b[0] - a[0], b[1] - a[1]), k = clamp((base - Math.min(a[1], b[1])) / hor); out.push([(a[0] + b[0]) / 2, Math.min(base, (a[1] + b[1]) / 2 + P.rr(-1, 1) * len * (0.1 + 0.22 * k))], b); }
+            ridge = out;
+        }
+        // The summits: where the skyline is highest for a while around.
+        const tops = [];
+        for (let i = 3; i < ridge.length - 3; i++) if (ridge.slice(i - 6, i + 7).every(p => p[1] >= ridge[i][1])) tops.push(ridge[i]);
+        if (!tops.length) tops.push(ridge[ridge.length >> 1]);
+        const skyAt = x => { for (let i = 1; i < ridge.length; i++) if (x <= ridge[i][0]) return lerp(ridge[i - 1][1], ridge[i][1], (x - ridge[i - 1][0]) / (ridge[i][0] - ridge[i - 1][0])); return base; };
+        const clip = [[-40 * u, base], ...ridge, [W + 40 * u, base]];
         P.set({ cls: CLS.UP, foot, haze: 0, m: MAT.SNOW, size: 6, ang: 1.1 });
-        P.fill([0.86, 0.88, 0.98], g => poly(g, [[-30 * u, base], ...ridge, [W + 30 * u, base]]));
-        for (let i = 0; i < ridge.length - 1; i++) {
-            const [x0, y0] = ridge[i], [x1, y1] = ridge[i + 1], left = y1 < y0, lean = (left ? 1 : -1) * P.rr(14, 50) * u, drop = P.rr(0.35, 0.8);
-            P.set({ cls: left ? CLS.SIDEL : CLS.SIDER, m: left ? MAT.FROST : MAT.SNOW, size: 6, ang: left ? 1.05 : 2.1 });
-            P.fill(P.vary(left ? [0.97, 0.96, 1] : [0.74, 0.78, 0.94], 0.03), g => poly(g, [[x0, y0], [x1 + 1, y1], [x1 + lean, y1 + (base - y1) * drop], [x0 + lean, y0 + (base - y0) * drop]]));
-        }
-        // Rock where it is too steep to hold snow.
-        P.set({ cls: CLS.UP, m: MAT.STONE, size: 4, ang: 1.25 });
-        for (let i = 1; i < ridge.length - 1; i += 2) {
-            const [x, y] = ridge[i], d = base - y;
-            if (d < 50 * u) continue;
-            for (let n = 0; n < 2; n++) { const px = x + P.rr(-8, 20) * u, py = y + d * P.rr(0.06, 0.4), tri = [[px, py], [px + P.rr(10, 30) * u, py + d * P.rr(0.12, 0.3)], [px + P.rr(2, 8) * u, py + d * P.rr(0.16, 0.36)]]; P.fill(P.vary([0.42, 0.42, 0.56], 0.12), g => poly(g, tri)); }
-        }
+        P.fill([0.86, 0.88, 0.98], g => poly(g, clip));
+        const top = Math.min(...ridge.map(p => p[1]));
+        const gw0 = Math.ceil(W / (2 / P.ps)), ribs = new Float32Array(gw0 * (Math.ceil((base - top + 2) / (2 / P.ps)) + 1));
+        const near = x => { let b = tops[0]; for (const t of tops) if (Math.abs(t[0] - x) < Math.abs(b[0] - x)) b = t; return b; };
+        massif(P, {
+            box: [0, top - 2, W, base], clip, sky: skyAt, under: M.skyAt,
+            relief: (x, y, i, j) => {
+                const p = near(x), d = y - skyAt(x), a = (x - p[0]) / (y - p[1] + 0.22 * (base - p[1])), n = fbm(a * 3.1 + p[0] * 0.013, (y - p[1]) / (base - p[1]) * 1.5, 23, 2), rib = 1 - Math.abs(n);
+                ribs[j * gw0 + i] = rib;
+                return -(skyAt(x - 30 * u - d) + skyAt(x + 30 * u + d)) * 0.5 * 0.75 + rib * rib * (base - p[1]) * 0.09;
+            },
+            paint: (x, y, D, g, c, i, j) => {
+                const p = near(x), hf = clamp((base - y) / (base - p[1])), rib = ribs[j * gw0 + i];
+                const steep = Math.abs(g), cls = facing(g, 0.3), band = Math.sin((y + rib * 14 * u) / (9 * u)) > 0.55 && noise(x / (40 * u), y / (30 * u), 29) > -0.1;
+                const rock = hf > 0.2 && (steep > 1.1 - 0.35 * hf || (rib > 0.8 && hf > 0.35) || (band && rib > 0.4 && hf > 0.3)) && noise(x / (7 * u), y / (7 * u), 31) > -0.55;
+                c.foot = foot; c.ang = Math.atan2(y - p[1] + 0.22 * (base - p[1]), x - p[0]); c.cls = cls;
+                if (hf < 0.16 + 0.05 * noise(x / (50 * u), 0, 33)) { c.col = P.vary(noise(x / (3 * u), y / (3 * u), 35) > 0.3 ? FOREST_SNOW : FOREST, 0.06); c.m = MAT.FIR; c.size = 3.6; c.ang = Math.PI / 2; return; }
+                if (rock) { c.col = mixc(ROCK, ROCK_WARM, clamp(0.5 + noise(x / (12 * u), y / (20 * u), 37))); c.m = MAT.STONE; c.size = 3.4; return; }
+                c.col = cls === CLS.SIDEL ? SNOW_LIT : cls === CLS.SIDER ? SNOW_SHADE : SNOW_FACE;
+                c.m = cls !== CLS.SIDER && hf > 0.3 ? MAT.FROST : MAT.SNOW; c.size = 5;
+            },
+        });
     }
 
     // ---- The mountain -------------------------------------------------------------
-    // Its outline, its faces, rock bands near the top, firs thick on the lower
-    // slopes and thinning out, and the piste and the lift's line cut through them.
+    // The resort's own: the skyline (TorchLogic.mountainOf), the summit's
+    // pyramid of rock bands and couloirs, snowfields that follow its ribs, the
+    // open bowl under the summit, the tree line with its glades and the
+    // avalanche paths that come down through it, and the forest below with the
+    // runs cut through it: the torch run's broad corridor, a red down the
+    // lift's line, a blue off the left ridge; groomed, with corduroy; the lift's
+    // line cleared under it. The trees are a mass where they stand thick, and
+    // stand one by one at its edges, in the glades and along the runs.
     function mountain(P, L) {
-        const { cam } = P, { W, u } = cam, M = L.mountain, T = L.track;
-        const top = M.top, foot = M.footY + 10 * u, x0 = M.cx - M.half * 1.5, x1 = M.cx + M.half * 1.45;
-        const hazeOf = y => farFoot(cam, lerp(7.5, 12, clamp((M.footY - y) / (M.footY - top))));
-        const outline = [];
-        for (let i = 0; i <= 40; i++) {
-            const t = i / 40, x = lerp(x0, x1, t), k = (x - M.cx) / (x < M.cx ? M.cx - x0 : x1 - M.cx);
-            const shoulder = Math.exp(-(((t - 0.72) / 0.1) ** 2)) * 0.16 + Math.exp(-(((t - 0.26) / 0.12) ** 2)) * 0.1;
-            const y = lerp(top, foot, clamp(Math.abs(k) ** 1.35 - shoulder * (1 - Math.abs(k)))) + (i > 0 && i < 40 ? P.rr(-3, 3) * u : 0);
-            outline.push([x, y]);
-        }
-        // The face, in long facets down its gullies: some catch the sun, some are in their own shade.
+        const { cam } = P, { u } = cam, M = L.mountain, C = L.corridor, Y = L.year, S = M.cx;
+        const top = M.top, foot = M.base, FH = foot - top, x0 = M.cx - M.half * 1.5, x1 = M.cx + M.half * 1.45;
+        const hazeOf = y => farFoot(cam, lerp(6.8, 11, clamp((M.footY - y) / (M.footY - top))));
+        const clip = [[x0, foot], ...M.outline, [x1, foot]];
         P.set({ cls: CLS.UP, foot: hazeOf(lerp(top, foot, 0.5)), haze: 0, m: MAT.SNOW, size: 5, ang: 1.4 });
-        P.fill([0.93, 0.94, 1], g => poly(g, [[x0, foot], ...outline, [x1, foot]]));
-        for (let i = 0; i < outline.length - 1; i++) {
-            const [ax, ay] = outline[i], [bx, by] = outline[i + 1], left = by < ay, steep = (foot - Math.min(ay, by)) / (foot - top);
-            const lean = (left ? 1 : -1) * P.rr(10, 40) * u, drop = P.rr(0.3, 0.7), high = steep > 0.55;
-            P.set({ cls: left ? CLS.SIDEL : CLS.SIDER, foot: hazeOf(Math.min(ay, by)), m: left && high ? MAT.FROST : MAT.SNOW, size: 5, ang: left ? 1.15 : 2.0 });
-            P.fill(P.vary(left ? [0.97, 0.96, 1] : [0.80, 0.83, 0.96], 0.025), g => poly(g, [[ax, ay], [bx + 1, by], [bx + lean, by + (foot - by) * drop], [ax + lean, ay + (foot - ay) * drop]]));
+        P.fill([0.92, 0.93, 0.99], g => poly(g, clip));
+        // Where the runs are: a share of the half-width from the middle of a run (under 1 is on it), and the way it runs.
+        const box = [Math.max(0, x0), top - 2, Math.min(cam.W, x1), foot], cs = 2 / P.ps, gw = Math.ceil((box[2] - box[0]) / cs), gh = Math.ceil((box[3] - box[1]) / cs);
+        const pd = new Float32Array(gw * gh).fill(9), pang = new Float32Array(gw * gh), cut = new Uint8Array(gw * gh), cell = (x, y) => { const i = Math.floor((x - box[0]) / cs), j = Math.floor((y - box[1]) / cs); return i < 0 || j < 0 || i >= gw || j >= gh ? -1 : j * gw + i; };
+        for (let j = 0; j < gh; j++) {
+            const y = box[1] + (j + 0.5) * cs;
+            if (y < C.y0 - 6 * u || y > M.footY + 12 * u) continue;
+            const t = C.tOf(y), cx = C.cx(t), H = C.edge(t, cam.sc(M.faceZ(y))), lean = C.cx(C.tOf(y + 6 * u)) - C.cx(C.tOf(y - 6 * u));
+            for (let i = Math.max(0, Math.floor((cx - H * 1.3 - box[0]) / cs)); i < gw && box[0] + i * cs < cx + H * 1.3; i++) { const q = j * gw + i, d = Math.abs(box[0] + (i + 0.5) * cs - cx) / H * (y < C.y0 ? 1 + (C.y0 - y) / (3 * u) : 1); if (d < pd[q]) { pd[q] = d; pang[q] = Math.atan2(12 * u, lean); } }
         }
-        // Rock showing through under the summit: streaks down the fall line, snow lying between.
-        P.set({ cls: CLS.SIDER, m: MAT.STONE, size: 2.6, ang: 1.45 });
-        for (let i = 0; i < 70; i++) {
-            const y = lerp(top + 10 * u, lerp(top, foot, 0.36), P.R() ** 1.3), hw = widthAt(outline, y) * 0.85, x = M.cx + P.rr(-hw, hw), len = P.rr(8, 26) * u, w = P.rr(1.2, 3.2) * u, lean = P.rr(-0.25, 0.25) * len;
-            if (nearPiste(T, x, y, 10 * u) || hw <= 0) continue;
-            P.set({ foot: hazeOf(y) }); P.fill(P.vary([0.46, 0.45, 0.56], 0.14), g => poly(g, [[x - w, y], [x + w, y], [x + lean + w * 0.4, y + len], [x + lean - w * 0.4, y + len]]));
+        for (const R of L.runs.slice(1)) for (let k = 0; k < R.pts.length; k += 2) {
+            const p = R.pts[k]; if (p.ground) break;
+            const q0 = R.pts[Math.min(R.pts.length - 1, k + 2)], ang = Math.atan2(q0.y - p.y, q0.x - p.x), r = p.hw * 1.3;
+            for (let y = p.y - r; y <= p.y + r; y += cs) for (let x = p.x - r; x <= p.x + r; x += cs) { const q = cell(x, y); if (q < 0) continue; const d = Math.hypot(x - p.x, y - p.y) / p.hw; if (d < pd[q]) { pd[q] = d; pang[q] = ang; } }
         }
-        // The piste: groomed snow down the switchbacks, a little whiter than the rest; corduroy where it is near.
-        const faceEnd = T.faceEnd > 0 ? T.faceEnd : T.pts.length;
-        P.set({ cls: CLS.TOP, m: MAT.SNOW, size: 3, ang: 0 });
-        for (let i = 0; i < faceEnd; i += 2) {
-            const p = T.pts[i], w = 9 * cam.sc(p.z);
-            P.set({ foot: hazeOf(p.y) }); P.fill(P.vary([0.985, 0.985, 1], 0.012), g => ell(g, p.x, p.y, w * 1.1, w * 0.55));
+        const lf = L.lift;
+        if (lf) for (let y = lf.y1; y <= lf.y0; y += cs) { const x = lerp(lf.x1, lf.x0, (y - lf.y1) / (lf.y0 - lf.y1)), w = Math.max(2 * u, 3.5 * cam.sc(M.faceZ(y))); for (let xx = x - w; xx <= x + w; xx += cs) { const q = cell(xx, y); if (q >= 0) cut[q] = 1; } }
+        const hutAt = (x, y) => Math.hypot(x - L.hut.x - 8 * u, (y - L.hut.y) * 1.4) < 22 * u;
+        const inBowl = (x, y) => ((x - Y.cx) / (Y.h * 1.7)) ** 2 + ((y - Y.cy) / (Y.h * 0.62)) ** 2 < 1;
+        const forest = new Float32Array(gw * gh);
+        // The ribs, fanning out from the summit and wandering as they come down.
+        const ribAt = (x, y) => { const a = (x - S) / (y - top + 0.3 * FH), n = fbm(a * 6, (y - top) / FH * 2.4, 5, 3); return [1 - Math.abs(n), a]; };
+        let F = null;
+        const ribs = new Float32Array(gw * gh), spokes = new Float32Array(gw * gh);
+        const R = massif(P, {
+            box, clip, sky: M.skyAt,
+            relief: (x, y, i, j) => {
+                F ||= flanks(Array.from({ length: gw }, (_, k) => M.skyAt(box[0] + (k + 0.5) * cs)));
+                const d = Math.max(0, y - M.skyAt(x)), hf = clamp((foot - y) / FH), [rib, a] = ribAt(x, y), q = j * gw + i;
+                ribs[q] = rib; spokes[q] = a;
+                return -F(i, Math.round((0.03 * cam.W + 0.5 * d) / cs)) * 0.45 + rib * rib * FH * (0.025 + 0.05 * hf);
+            },
+            paint: (x, y, D, g, c, i, j) => {
+                const q = j * gw + i, hf = clamp((foot - y) / FH), rib = ribs[q], a = spokes[q], steep = Math.abs(g);
+                c.foot = hazeOf(y); c.ang = Math.atan2(y - top + 0.3 * FH, x - S);
+                // The runs: groomed snow, brushed along the way they run.
+                if (pd[q] < 1) { const cut = hf < 0.5, edge = pd[q] > 0.84; c.col = P.vary(cut && edge ? SNOW_SHADE : GROOMED, 0.008); c.cls = cut && !edge ? lying(g, 0.6) : facing(g, 0.5); c.m = hf > 0.5 && g > -0.5 ? MAT.FROST : MAT.SNOW; c.size = 3.2; c.ang = pang[q]; return; }
+                const open = cut[q] || hutAt(x, y) || inBowl(x, y);
+                // The tree line: lower in the bowl under the summit, higher up the ribs; glades, and the avalanche paths down the gullies.
+                const tl = 0.6 + 0.08 * fbm(x / (0.25 * FH), 0.5, 7, 2) + 0.06 * (rib - 0.5) - 0.16 * Math.exp(-(((x - Y.cx) / (0.3 * M.half)) ** 2));
+                let f = smooth(tl + 0.04, tl - 0.06, hf);
+                f *= smooth(-0.62, -0.34, fbm(x / (26 * u), y / (18 * u), 9, 2));
+                f *= 1 - smooth(0.26, 0.1, rib) * smooth(0.1, 0.4, noise(a * 1.7, 2.2, 11)) * smooth(0.16, 0.3, hf);
+                if (pd[q] < 1.25) f *= smooth(1, 1.25, pd[q]);
+                forest[q] = open ? 0 : f;
+                const speck = noise(x / (2.2 * u), y / (2.2 * u), 13);
+                if (!open && f + 0.2 * noise(x / (5 * u), y / (5 * u), 15) > 0.55) {
+                    c.col = P.vary(speck > 0.35 - 0.3 * hf ? FOREST_SNOW : FOREST, 0.08); c.cls = g < -0.6 ? CLS.SIDER : g > 0.7 ? CLS.SIDEL : CLS.UP; c.m = MAT.FIR; c.size = 3.4; c.ang = Math.PI / 2; return;
+                }
+                // Rock: too steep to hold snow, the crests of the ribs, and cliff bands that the couloirs cut through.
+                const rz = smooth(0.38, 0.64, hf + 0.08 * fbm(x / (60 * u), y / (60 * u), 17, 2));
+                const band = Math.sin((y - rib * rib * 10 * u) / (FH * 0.022)) > 0.62 && noise(x / (70 * u), y / (40 * u), 19) > -0.2 && rib > 0.38;
+                const crag = rz * (0.45 + 0.55 * rib) + 0.3 * fbm(x / (16 * u), y / (24 * u), 27, 3);
+                const rock = !open && rz > 0 && (crag > 0.5 || steep > 1.2 - 0.5 * rz || (band && rz > 0.3)) && noise(x / (5 * u), y / (5 * u), 21) > -0.55 + 0.3 * (1 - rz);
+                const cls = facing(g, 0.35);
+                if (rock) { c.col = P.vary(mixc(ROCK, ROCK_WARM, clamp(0.5 + 0.8 * noise(x / (14 * u), y / (26 * u), 25))), 0.07); c.cls = cls; c.m = MAT.STONE; c.size = 3; return; }
+                // Snow: lit, square on or in shade; the high snow that faces the light takes the alpenglow and the moon (frost).
+                c.col = P.vary(cls === CLS.SIDEL ? SNOW_LIT : cls === CLS.SIDER ? SNOW_SHADE : SNOW_FACE, 0.012);
+                c.cls = inBowl(x, y) && steep < 0.3 ? lying(g, 0.2) : cls;
+                c.m = cls !== CLS.SIDER && hf > 0.42 ? MAT.FROST : MAT.SNOW; c.size = open ? 4 : 5;
+            },
+        });
+        // Groomed: corduroy along the runs, faint lines a few metres apart.
+        const g = P.alb; g.save(); g.strokeStyle = 'rgba(200,206,234,0.4)'; g.lineCap = 'round';
+        for (const run of L.runs) {
+            const pts = run.pts.filter(p => !p.ground && p.y > lerp(top, M.footY, 0.55)), lanes = run.kind === 'torch' ? 7 : 3;
+            for (let l = -lanes; l <= lanes; l++) {
+                g.beginPath();
+                for (let k = 0; k < pts.length; k += 2) { const p = pts[k], w = run.kind === 'torch' ? C.edge(C.tOf(p.y), cam.sc(p.z)) : p.hw; g.lineTo(p.x + l / (lanes + 1) * w * 0.92, p.y); }
+                g.lineWidth = Math.max(0.5, 0.5 * u); g.stroke();
+            }
         }
-        // Firs: thick on the lower slopes, thinning toward the rock, none on the piste or under the lift.
-        const lift = L.lift;
-        for (let i = 0; i < 2600; i++) {
-            const t = P.R() ** 0.7, y = lerp(top + (foot - top) * 0.32, foot, t), hw = widthAt(outline, y);
-            if (hw <= 0) continue;
-            const x = M.cx + P.rr(-hw, hw) * 0.98, z = M.faceZ(y), r = clamp(5.5 * cam.sc(z), 1.6 * u, 6 * u);
-            if (P.R() > 0.25 + 0.75 * t) continue;
-            if (nearPiste(T, x, y, 8 * cam.sc(z) + r)) continue;
-            if (lift && Math.abs(x - lerp(lift.x0, lift.x1, (y - lift.y0) / (lift.y1 - lift.y0))) < r * 1.6 && y < lift.y0 && y > lift.y1) continue;
-            const snowy = P.R() < 0.4;
-            P.set({ cls: CLS.UP, foot: hazeOf(y), m: MAT.FIR, size: 2.2, ang: Math.PI / 2, haze: 0 });
-            P.fill(P.vary(snowy ? [0.36, 0.44, 0.52] : [0.15, 0.24, 0.27], 0.18), g => poly(g, [[x - r * 0.55, y + r * 0.6], [x, y - r * 1.9], [x + r * 0.55, y + r * 0.6]]));
-            if (snowy) { P.set({ cls: CLS.TOP, m: MAT.ROOF }); P.fill([0.88, 0.9, 0.99], g => poly(g, [[x - r * 0.22, y - r * 0.8], [x, y - r * 1.9], [x + r * 0.22, y - r * 0.8]])); }
+        g.restore();
+        // The trees one by one: along the forest's edges, in the glades, along the runs and up to the tree line.
+        let trees = 0;
+        for (let y = top + 0.2 * FH; y < M.footY; y += 4.2 * u) for (let x = box[0]; x < box[2]; x += 4.4 * u) {
+            const px = x + P.rr(0, 4.4) * u, py = y + P.rr(0, 4.2) * u, q = R.at(px, py);
+            if (q < 0 || py < M.skyAt(px) + 6 * u || pd[q] < 1.05 || cut[q]) continue;
+            const f = forest[q], edge = f > 0.2 && f < 0.75, lone = f > 0.03 && f <= 0.2;
+            if (!(edge && P.R() < 0.75) && !(lone && P.R() < 0.18) && !(f >= 0.75 && P.R() < 0.07)) continue;
+            const z = M.faceZ(py), r = clamp(3.4 * cam.sc(z), 1.5 * u, 5 * u), snowy = P.R() < 0.45;
+            P.set({ cls: CLS.UP, foot: hazeOf(py), m: MAT.FIR, size: 2, ang: Math.PI / 2, haze: 0 });
+            P.fill(P.vary(snowy ? [0.3, 0.38, 0.45] : [0.12, 0.2, 0.22], 0.16), gg => poly(gg, [[px - r * 0.55, py + r * 0.6], [px, py - r * 2.1], [px + r * 0.55, py + r * 0.6]]));
+            if (snowy) { P.set({ cls: CLS.TOP, m: MAT.ROOF }); P.fill([0.88, 0.9, 0.99], gg => poly(gg, [[px - r * 0.24, py - r * 0.9], [px, py - r * 2.1], [px + r * 0.24, py - r * 0.9]])); }
+            trees++;
         }
-        L.outline = outline;
         P.spots.slope = [x0, top, x1, foot];
-    }
-    function widthAt(outline, y) {
-        let xl = null, xr = null;
-        for (let i = 0; i < outline.length - 1; i++) {
-            const [ax, ay] = outline[i], [bx, by] = outline[i + 1];
-            if ((ay - y) * (by - y) <= 0 && ay !== by) { const x = ax + (bx - ax) * (y - ay) / (by - ay); if (xl === null || x < xl) xl = x; if (xr === null || x > xr) xr = x; }
-        }
-        return xl === null ? 0 : (xr - xl) / 2;
-    }
-    function nearPiste(T, x, y, d) {
-        const end = T.faceEnd > 0 ? T.faceEnd : T.pts.length;
-        for (let i = 0; i < end; i += 3) { const p = T.pts[i]; if (Math.abs(p.x - x) < d && Math.abs(p.y - y) < d * 0.7) return true; }
-        return false;
+        P.spots.mountainTrees = trees;
     }
 
-    // The hut at the top, where the torches are lit, and the lift's top station beside it.
+    // The summit station, where the torches are lit: a long low restaurant with
+    // a lit row of windows and a terrace, the lift's top station beside it; and
+    // the cross on the summit above.
     function summit(P, L, groups) {
-        const { cam } = P, u = cam.u, h = L.hut, s = cam.sc(L.mountain.faceZ(h.y)) * 1.4, foot = farFoot(cam, 11);
+        const { cam } = P, u = cam.u, h = L.hut, M = L.mountain, s = cam.sc(M.faceZ(h.y)) * 1.4, foot = farFoot(cam, 11);
         const grp = groups.hut = P.group('hut', { kind: 'hut', far: true });
         P.set({ cls: CLS.UP, foot, m: MAT.WOOD, size: 1.6, ang: 0, haze: 0 });
-        P.fill(TIMBER, g => g.rect(h.x - 4 * s, h.y - 3 * s, 8 * s, 3 * s));
-        P.set({ cls: CLS.TOP, m: MAT.ROOF, size: 1.6 }); P.fill(SNOW, g => poly(g, [[h.x - 5 * s, h.y - 2.8 * s], [h.x, h.y - 5.6 * s], [h.x + 5 * s, h.y - 2.8 * s]]));
+        P.fill(TIMBER, g => g.rect(h.x - 7 * s, h.y - 3.2 * s, 11 * s, 3.2 * s));
+        P.fill([0.5, 0.48, 0.5], g => g.rect(h.x - 7 * s, h.y - 1 * s, 11 * s, 1 * s));
+        P.set({ cls: CLS.TOP, m: MAT.ROOF, size: 1.6 }); P.fill(SNOW, g => poly(g, [[h.x - 7.8 * s, h.y - 3 * s], [h.x - 6 * s, h.y - 4.6 * s], [h.x + 3 * s, h.y - 4.6 * s], [h.x + 4.8 * s, h.y - 3 * s]]));
+        // The terrace, its rail.
+        P.set({ cls: CLS.UP, m: MAT.WOOD, size: 1.4 }); P.line([0.25, 0.2, 0.18], Math.max(0.6, 0.18 * s), g => { g.moveTo(h.x - 11 * s, h.y - 0.9 * s); g.lineTo(h.x - 7 * s, h.y - 0.9 * s); });
         P.set({ cls: CLS.SELF, m: MAT.GLASS, size: 1.4 });
-        for (const dx of [-2, 1.2]) { P.fill('#ffd27a', g => g.rect(h.x + dx * s, h.y - 2.2 * s, 1.1 * s, 1 * s)); P.glowRect(grp, 'rgba(255,200,110,0.95)', h.x + dx * s, h.y - 2.2 * s, 1.1 * s, 1 * s); }
-        P.halo(grp, h.x, h.y - 1.7 * s, 4 * s);
-        // The lift's top station: a wheel house on posts.
+        for (let i = 0; i < 5; i++) { const x = h.x + (-6.2 + i * 2) * s; P.fill('#ffd27a', g => g.rect(x, h.y - 2.6 * s, 1.2 * s, 1.1 * s)); P.glowRect(grp, 'rgba(255,200,110,0.95)', x, h.y - 2.6 * s, 1.2 * s, 1.1 * s); }
+        P.halo(grp, h.x - 2 * s, h.y - 1.8 * s, 7 * s);
+        // The lift's top station: a grey house over the bullwheel, on its posts.
         const l = L.lift;
         if (l) {
-            P.set({ cls: CLS.UP, m: MAT.WOOD, size: 1.4, ang: Math.PI / 2 });
-            P.fill([0.22, 0.22, 0.26], g => { g.rect(l.x1 - 2.2 * s, l.y1 - 2 * s, 4.4 * s, 2.4 * s); g.rect(l.x1 - 0.3 * s, l.y1 - 2 * s, 0.6 * s, 2 * s); });
-            P.set({ cls: CLS.TOP, m: MAT.ROOF }); P.fill(SNOW, g => g.rect(l.x1 - 2.4 * s, l.y1 - 2.5 * s, 4.8 * s, 0.6 * s));
+            P.set({ cls: CLS.UP, m: MAT.WALL, size: 1.4, ang: Math.PI / 2 });
+            P.fill([0.56, 0.56, 0.6], g => g.rect(l.x1 - 2.6 * s, l.y1 - 2.4 * s, 5.2 * s, 2.6 * s));
+            P.fill([0.22, 0.22, 0.26], g => { g.rect(l.x1 - 0.3 * s, l.y1 - 0.2 * s, 0.6 * s, 1.6 * s); g.rect(l.x1 - 2.2 * s, l.y1 + 0.2 * s, 4.4 * s, 0.4 * s); });
+            P.set({ cls: CLS.TOP, m: MAT.ROOF }); P.fill(SNOW, g => g.rect(l.x1 - 2.9 * s, l.y1 - 3 * s, 5.8 * s, 0.7 * s));
         }
-        P.hit('hut', h.x - 6 * s, h.y - 6 * s, h.x + 6 * s, h.y + 1 * s, { group: grp });
+        // The summit cross.
+        const cs = cam.sc(M.faceZ(M.top)) * 1.6, cx = M.cx, cy = M.top + 1.5 * u;
+        P.set({ cls: CLS.UP, foot: farFoot(cam, 12), m: MAT.WOOD, size: 1.2, ang: Math.PI / 2 });
+        P.line([0.2, 0.17, 0.16], Math.max(0.7 * u, 0.35 * cs), g => { g.moveTo(cx, cy); g.lineTo(cx, cy - 5 * cs); g.moveTo(cx - 1.6 * cs, cy - 3.6 * cs); g.lineTo(cx + 1.6 * cs, cy - 3.6 * cs); });
+        P.hit('hut', h.x - 12 * s, h.y - 6 * s, h.x + 6 * s, h.y + 1 * s, { group: grp });
         P.spots.hut = { x: h.x, y: h.y, s };
     }
 
@@ -167,10 +293,21 @@ const TorchArt = (() => {
             set();
             // The dark under the trees, broken where something stands open.
             P.fill(P.vary([0.17, 0.24, 0.29], 0.05), g => poly(g, [...edge, ...edge.slice().reverse().map(([x, y]) => [x, y + 16 * u + r * 0.4])]));
-            for (const c of holes) { P.set({ cls: CLS.GROUND, m: MAT.SNOW, size: 4, ang: 0, foot: cam.H }); P.fill([0.94, 0.95, 1], g => ell(g, c.x, y0 + r, c.rx * (1 + 0.15 * i), 9 * u + r)); set(); }
+            // Where a run comes out of the trees: a lane cut through the rank, as wide as the run, the way the run goes.
+            // At the woods' own depth and in their air, so it takes the same light as the snow about it; groomed down
+            // the middle, in the trees' shade along ragged edges, opening toward us.
+            for (const c of holes) {
+                const ya = y0 - r * 1.2, yb = y0 + 16 * u + r * 0.4, w = c.rx * (0.5 + 0.6 * t), L = [], R = [];
+                for (let k = 0; k <= 6; k++) { const y = lerp(ya, yb, k / 6), x = c.xAt(y), e = w * (0.9 + 0.12 * k / 6); L.push([x - e - P.rr(0, 0.7) * r, y]); R.push([x + e + P.rr(0, 0.7) * r, y]); }
+                P.set({ cls: CLS.UP, m: MAT.SNOW, size: 3, ang: Math.PI / 2, foot: farFoot(cam, z), haze: 0 });
+                P.fill(P.vary([0.8, 0.83, 0.94], 0.02), g => poly(g, [...L, ...R.slice().reverse()]));
+                P.set({ cls: CLS.TOP });
+                P.fill(P.vary([0.93, 0.94, 1], 0.015), g => poly(g, [...L.map(([x, y], k) => [lerp(x, R[k][0], 0.22), y]), ...R.map(([x, y], k) => [lerp(L[k][0], x, 0.78), y]).reverse()]));
+                set();
+            }
             for (let x = -10 * u + P.rr(0, r); x < W + 10 * u; x += r * P.rr(0.5, 1.0)) {
                 const y = y0 + wave(x) + P.rr(-0.3, 0.5) * r, h = r * P.rr(1.8, 2.7), snowy = P.R() < 0.38;
-                if (holes.some(c => Math.abs(x - c.x) < c.rx * (0.9 + 0.15 * i))) continue;
+                if (holes.some(c => Math.abs(x - c.xAt(y)) < c.rx * (0.5 + 0.6 * t) * 0.95)) continue;
                 P.fill(P.vary(snowy ? [0.44, 0.52, 0.62] : [0.15, 0.24, 0.27], 0.16), g => poly(g, [[x - r * 0.5, y + r], [x, y - h], [x + r * 0.5, y + r]]));
                 if (snowy) P.fill([0.86, 0.89, 0.98], g => poly(g, [[x - r * 0.2, y - h * 0.45], [x, y - h], [x + r * 0.2, y - h * 0.45]]));
             }
@@ -204,11 +341,11 @@ const TorchArt = (() => {
         P.set({ cls: CLS.GROUND, m: MAT.SNOW, size: 5, ang: 0.02 });
         for (let i = Math.max(0, T.faceEnd); i < T.pts.length; i++) {
             const p = T.pts[i], s = sc(p.z);
-            P.fill(P.vary([0.975, 0.975, 1], 0.012), g => ell(g, p.x, p.y, 5.5 * s, 1.1 * s));
-            if (i % 3 === 0) { P.hump(p.x - 6 * s, p.y, 2.4 * s, 0.5 * s, 0.3); P.hump(p.x + 6 * s, p.y, 2.4 * s, 0.5 * s, 0.3); }
+            P.fill(P.vary([0.975, 0.975, 1], 0.012), g => ell(g, p.x, p.y, 8.2 * s, 1.3 * s));
+            if (i % 3 === 0) { P.hump(p.x - 8.8 * s, p.y, 2.4 * s, 0.5 * s, 0.3); P.hump(p.x + 8.8 * s, p.y, 2.4 * s, 0.5 * s, 0.3); }
         }
         const g = P.alb; g.save(); g.strokeStyle = 'rgba(200,206,236,0.6)';
-        for (let i = Math.max(0, T.faceEnd); i < T.pts.length - 1; i += 1) { const p = T.pts[i], q = T.pts[i + 1], s = sc(p.z); g.lineWidth = Math.max(0.5, 0.06 * s); for (let k = -2; k <= 2; k++) { g.beginPath(); g.moveTo(p.x + k * 1.6 * s, p.y); g.lineTo(q.x + k * 1.6 * s, q.y); g.stroke(); } }
+        for (let i = Math.max(0, T.faceEnd); i < T.pts.length - 1; i += 1) { const p = T.pts[i], q = T.pts[i + 1], s = sc(p.z); g.lineWidth = Math.max(0.5, 0.06 * s); for (let k = -4; k <= 4; k++) { g.beginPath(); g.moveTo(p.x + k * 1.7 * s, p.y); g.lineTo(q.x + k * 1.7 * s, q.y); g.stroke(); } }
         g.restore();
         // Trodden snow from the finish to the inn's door.
         if (L.inn) {
@@ -484,8 +621,9 @@ const TorchArt = (() => {
         mountain(P, L);
         summit(P, L, groups);
         liftLine(P, L, groups);
-        const foot = L.track.pts[Math.max(0, L.track.faceEnd)];
-        woods(P, L, [{ x: foot.x, y: L.mountain.footY, rx: 34 * u, ry: 12 * u }, ...(L.lift ? [{ x: L.lift.x0, y: L.lift.y0, rx: 26 * u, ry: 10 * u }] : [])]);
+        // The runs come out of the woods: the torch run's way across the meadow, and the red's to the lift's station.
+        const T = L.track, xAt = y => { const P = T.pts; let i = Math.max(1, T.faceEnd - 1); while (i < P.length - 1 && P[i].y < y) i++; return P[i].x; }, foot = T.pts[Math.max(0, T.faceEnd)];
+        woods(P, L, [{ x: foot.x, y: L.mountain.footY, rx: RUNOUT * cam.sc(TorchLogic.Z_FOOT) * 1.1, ry: 40 * u, xAt }, ...(L.lift ? [{ x: L.lift.x0 + 10 * u, y: L.lift.y0, rx: 18 * u, ry: 40 * u, xAt: () => L.lift.x0 + 10 * u }] : [])]);
         // What stands in the valley, far to near.
         if (L.chapel) P.add(L.chapel.z, () => chapel(P, L.chapel, config, groups));
         for (const c of L.chalets) P.add(c.z, () => chalet(P, c, config));

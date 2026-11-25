@@ -12,6 +12,7 @@ const L = new Function(`${read('torch-logic.js')}; return TorchLogic;`)();
 let defaults = null;
 new Function('WP', read('defaults.js'))({ defaults: (id, values) => { assert.equal(id, 'torchlight'); defaults = values; } });
 
+const TAU = Math.PI * 2;
 const seeded = seed => { let a = seed >>> 0; return () => { a = (a + 0x6d2b79f5) >>> 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; };
 const SCREENS = [[1600, 900, 0], [1920, 1080, 0], [2560, 1080, 0], [412, 915, 48], [820, 1180, 0], [1280, 600, 0], [360, 640, 48], [1366, 768, 0]];
 const scene = (W, H, bottom, config = {}) => { const cam = L.camera(W, H, bottom, defaults.horizon); return { cam, V: L.layout(cam, { ...defaults, ...config }) }; };
@@ -88,7 +89,7 @@ test('the track: from the hut down the switchbacks and across the meadow to the 
 });
 
 test('the procession: they light up at the hut, come down in order and spaced, plant their torches, go in; the same at 10 fps as at 120', () => {
-    const { cam, V } = scene(1600, 900, 0), T = V.track, spots = L.formation('heart', 20, V, cam);
+    const { cam, V } = scene(1600, 900, 0), T = V.track, spots = L.planFinish(T, L.formation('heart', 20, V, cam));
     const run = (fps, tumbles) => {
         const R = seeded(5), P = L.procession(20, { random: R, gap: 8, tumbles, gather: 20 }), dt = 1 / fps, log = { off: 0, fall: 0, up: 0, plant: 0, gone: 0, planted: -1, done: -1 };
         for (let i = 0; i < fps * 900 && !P.done; i++) {
@@ -105,20 +106,173 @@ test('the procession: they light up at the hut, come down in order and spaced, p
         assert.ok(P.done, 'they all went in');
         assert.equal(log.off, 20); assert.equal(log.plant, 20); assert.equal(log.gone, 20);
         assert.ok(log.done > 0);
+        for (const k of P.sk) assert.ok(Math.abs(k.planted.x - spots[k.i].x) < 1e-9 && Math.abs(k.planted.z - spots[k.i].z) < 1e-9, 'each planted their own place');
     }
     assert.ok(Math.abs(slow.log.done - fast.log.done) < 3, `the same descent at 10 and 120 fps: ${slow.log.done.toFixed(1)} s against ${fast.log.done.toFixed(1)} s`);
     // With tumbles, some sit down and every one of them gets up again; still they all come down.
     const tumbling = run(30, 1);
     assert.ok(tumbling.log.fall > 0 && tumbling.log.up === tumbling.log.fall && tumbling.P.done, `tumbles: ${JSON.stringify(tumbling.log)}`);
-    // A hold stops the line where it is (the year on New Year's Eve).
+    // A hold eases the line to a stop where it is (the year on New Year's Eve), and away again after.
     const R = seeded(9), P = L.procession(10, { random: R, gather: 0 });
     for (let i = 0; i < 300; i++) L.stepProcession(P, 0.1, T, spots, V.door, R);
-    const before = P.sk.map(k => k.s);
     P.hold = { t: 20 };
-    for (let i = 0; i < 100; i++) L.stepProcession(P, 0.1, T, spots, V.door, R);
-    assert.deepEqual(P.sk.map(k => +k.s.toFixed(6)), before.map(s => +s.toFixed(6)), 'held');
+    const before = P.sk.map(k => k.s);
+    for (let i = 0; i < 40; i++) L.stepProcession(P, 0.1, T, spots, V.door, R);
+    const stopped = P.sk.map(k => k.s);
+    assert.ok(stopped.every((s, i) => s - before[i] < 3.5), `stopped within a few metres: ${stopped.map((s, i) => (s - before[i]).toFixed(1))}`);
+    for (let i = 0; i < 60; i++) L.stepProcession(P, 0.1, T, spots, V.door, R);
+    assert.deepEqual(P.sk.map(k => +k.s.toFixed(6)), stopped.map(s => +s.toFixed(6)), 'held');
     for (let i = 0; i < 200; i++) L.stepProcession(P, 0.1, T, spots, V.door, R);
-    assert.ok(P.sk[0].s > before[0] + 10, 'and on again after');
+    assert.ok(P.sk[0].s > stopped[0] + 10, 'and on again after');
+});
+
+// Every skier of a descent, watched on the screen at every step, as the cast
+// draws them (TorchLogic.place): the bugs the owner saw were skiers jutting
+// about, skiing off into the woods, in circles and back up the mountain.
+const watch = (W, H, bottom, fps, o = {}) => {
+    const { cam, V } = scene(W, H, bottom), T = V.track, shape = o.shape || 'heart', spots = L.planFinish(T, L.formation(shape, o.n || 24, V, cam));
+    const R = seeded(o.seed || 11), P = L.procession(o.n || 24, { random: R, gap: 8, tumbles: o.tumbles ?? 1, gather: 10, shape }), dt = 1 / fps;
+    const was = P.sk.map(() => null), worst = { up: 0, jump: 0, off: 0, back: 0, turn: 0 }, out = {}, seen = { fall: 0, glide: 0 };
+    for (let i = 0; i < fps * 1200 && !P.done; i++) {
+        const lastS = P.sk.map(k => k.s);
+        for (const [what] of L.stepProcession(P, dt, T, spots, V.door, R)) if (what === 'fall') seen.fall++;
+        for (const k of P.sk) {
+            if (k.state === 'wait' || k.state === 'gone') { was[k.i] = null; continue; }
+            if (k.state === 'glide') seen.glide++;
+            const p = L.place(k, T, cam, out), prev = was[k.i];
+            if (k.state === 'ski') {
+                worst.back = Math.max(worst.back, lastS[k.i] - k.s);
+                // On the piste: within the room either side, a metre of slack.
+                const here = L.at(T, k.s, cam, {});
+                worst.off = Math.max(worst.off, Math.abs(k.off) - here.room - 0.01);
+            }
+            if (prev && k.state !== 'leave' && prev.state !== 'leave') {
+                worst.up = Math.max(worst.up, prev.y - p.y);
+                // Never further in a step than the fastest anyone goes (5.5 m/s) at this scale, and a pixel.
+                worst.jump = Math.max(worst.jump, Math.hypot(p.x - prev.x, p.y - prev.y) - (5.5 * dt * Math.max(p.sc, prev.sc) * 1.6 + 1));
+            }
+            was[k.i] = { x: p.x, y: p.y, sc: p.sc, state: k.state };
+        }
+    }
+    return { P, worst, seen, T };
+};
+
+test('the procession on the screen: nobody climbs, jumps, goes backwards or leaves the piste, at 10, 30 and 120 fps, on any screen', () => {
+    for (const [W, H, bottom] of SCREENS) for (const fps of [10, 30, 120]) {
+        if (fps === 30 && W !== 1600) continue;
+        const { P, worst, seen } = watch(W, H, bottom, fps, { shape: L.SHAPES[(W + fps) % L.SHAPES.length] });
+        const at = `${W}×${H} at ${fps} fps`;
+        assert.ok(P.done, `${at}: they all came down and went in`);
+        assert.ok(worst.up < 0.05, `${at}: somebody went ${worst.up.toFixed(2)} px back up the picture`);
+        assert.ok(worst.back < 1e-9, `${at}: somebody went ${worst.back.toFixed(3)} m back up the track`);
+        assert.ok(worst.jump < 0.01, `${at}: a jump of ${worst.jump.toFixed(2)} px beyond anyone's pace`);
+        assert.ok(worst.off < 1e-9, `${at}: somebody ${worst.off.toFixed(2)} m off the piste`);
+        assert.ok(seen.fall > 0 && seen.glide > 0, `${at}: ${JSON.stringify(seen)}`);
+    }
+});
+
+test('the track stays inside its corridor, and tumbles only happen where it is steep', () => {
+    for (const [W, H, bottom] of SCREENS) {
+        const { cam, V } = scene(W, H, bottom), T = V.track, C = V.corridor;
+        for (const p of T.pts) if (!p.ground) {
+            const t = C.tOf(p.y), edge = C.edge(t, cam.sc(p.z));
+            assert.ok(Math.abs(p.x - C.cx(t)) <= edge, `${W}×${H}: the track leaves its corridor at y ${p.y.toFixed(0)}`);
+            assert.ok(p.room >= 2, 'room to step aside');
+        }
+        assert.ok(T.pts.filter(p => p.steep > 0.5).length > 20, `${W}×${H}: steep stretches to fall on`);
+    }
+    const { cam, V } = scene(1600, 900, 0), T = V.track, spots = L.planFinish(T, L.formation('ring', 16, V, cam));
+    const R = seeded(3), P = L.procession(16, { random: R, tumbles: 1, gather: 0 });
+    let falls = 0;
+    for (let i = 0; i < 30 * 700 && !P.done; i++) for (const [what, k] of L.stepProcession(P, 1 / 30, T, spots, V.door, R)) if (what === 'fall') { falls++; assert.ok(L.near(T, P.sk[k].s).steep > 0.5, 'a fall on a traverse'); }
+    assert.ok(falls > 2);
+});
+
+test('the finish: each peels off the run-out where it passes their place and glides there, only ever toward us, slowing to a stop', () => {
+    for (const [W, H, bottom] of SCREENS) {
+        const { cam, V } = scene(W, H, bottom), T = V.track;
+        for (const shape of L.SHAPES) {
+            const spots = L.planFinish(T, L.formation(shape, 30, V, cam));
+            for (let i = 1; i < spots.length; i++) assert.ok(spots[i].peel >= spots[i - 1].peel, 'the first down peels off first');
+            for (const sp of spots) {
+                assert.ok(sp.peel > T.pts[T.faceEnd].m && sp.peel <= T.length, `${W}×${H}: a ${shape}'s peel off the meadow`);
+                const G = L.glide(T, sp.peel, 0.7, sp, 3.4), start = L.near(T, sp.peel);
+                assert.ok(Math.abs(G.B[0][0] - (start.xm + 0.7)) < 1e-9 && Math.abs(G.B[0][1] - start.z) < 1e-9, 'it starts where the skier is');
+                let prev = L.glideAt(G, 0, T.zm), lastStep = 0.1 * 3.4 + 1e-6;
+                for (let t = 0.1; t <= G.T + 0.2; t += 0.1) {
+                    const q = L.glideAt(G, t, T.zm), step = Math.hypot(q[0] - prev[0], (q[1] - prev[1]) * T.zm);
+                    assert.ok(q[1] <= prev[1] + 1e-9, `${W}×${H}: a ${shape}'s glide goes away from us`);
+                    assert.ok(step <= lastStep + 0.03, `${W}×${H}: a glide that speeds up (${step.toFixed(3)} after ${lastStep.toFixed(3)})`);
+                    lastStep = step; prev = q;
+                }
+                assert.ok(Math.abs(prev[0] - sp.x) < 1e-6 && Math.abs(prev[1] - sp.z) < 1e-6, 'and it stops on its place');
+            }
+        }
+    }
+});
+
+test('the runs: the torch run, a red and a blue, each from under the summit to the bottom, down the picture only, on the mountain', () => {
+    for (const [W, H, bottom] of SCREENS) {
+        const { cam, V } = scene(W, H, bottom), M = V.mountain;
+        assert.deepEqual(V.runs.map(r => r.kind), ['torch', 'red', 'blue']);
+        for (const R of V.runs) {
+            const P = R.pts;
+            assert.ok(P[0].y < M.top + (M.footY - M.top) * 0.25, `${W}×${H}: the ${R.kind} starts high`);
+            for (let i = 1; i < P.length; i++) {
+                assert.ok(P[i].m > P[i - 1].m && P[i].y >= P[i - 1].y - 1e-9, `${W}×${H}: the ${R.kind} goes back up at ${i}`);
+                assert.ok(Math.hypot(P[i].x - P[i - 1].x, P[i].y - P[i - 1].y) < 30 * cam.u, `${W}×${H}: a jump in the ${R.kind}`);
+                if (!P[i].ground) assert.ok(P[i].y > M.skyAt(P[i].x) + 4 * cam.u && P[i].y <= M.footY + 2, `${W}×${H}: the ${R.kind} off the mountain at ${i}`);
+            }
+            const end = P[P.length - 1];
+            if (R.exit === 'lift') assert.ok(Math.hypot(end.x - V.lift.x0, end.y - V.lift.y0) < 40 * cam.u, `${W}×${H}: the red ends at the lift`);
+            else assert.ok(Math.abs(end.xm - V.track.pts[V.track.pts.length - 1].xm) < 1e-6, `${W}×${H}: the ${R.kind} ends at the finish`);
+        }
+    }
+});
+
+test('skiers by day: on every run, at any pace and frame rate, they turn smoothly, stay on the piste and never climb', () => {
+    for (const [W, H, bottom] of SCREENS) {
+        const { cam, V } = scene(W, H, bottom);
+        for (const R of V.runs) for (const fps of [10, 120]) for (const [amp, wave, phase, v] of [[3, 40, 0, 5], [7, 60, 2, 9], [7, 40, 4.4, 7]]) {
+            let prev = null, prevDir = null, chord = null, worstUp = 0, worstOff = 0, worstTurn = 0, worstJump = 0;
+            for (let s = 0; s < R.length; s += v / fps) {
+                const p = L.lane(R, s, phase, amp, wave, cam, {}), centre = L.at(R, s, cam, {});
+                worstOff = Math.max(worstOff, Math.abs(p.x - centre.x) - (centre.ground ? 8 : centre.room + 3) * centre.sc);
+                // Turns are measured in metres: on the face on the screen (a metre is FACE_M pixels by the scale), on the meadow across and in depth.
+                if (prev && prev.ground !== p.ground) { prevDir = null; prev = null; chord = null; }
+                if (prev) {
+                    // And no jumps: never further in a step than going down it and swinging across at full tilt.
+                    worstJump = Math.max(worstJump, Math.hypot(p.x - prev.x, p.y - prev.y) - (v / fps) * p.sc * 1.4 * (1 + TAU * amp / wave) - 0.5);
+                    worstUp = Math.max(worstUp, prev.y - p.y);
+                    const c = chord, dx = p.ground ? p.xm + p.off - c.xm : p.x - c.x, dy = p.ground ? (p.z - c.z) * cam.zm : p.y - c.y, d = p.ground ? Math.hypot(dx, dy) : Math.hypot(dx, dy) / p.sc * L.FACE_M;
+                    // The heading over a metre's chord, against the last metre's.
+                    if (d >= 1) { const dir = Math.atan2(dy, dx); if (prevDir != null) { let a = Math.abs(dir - prevDir); a = Math.min(a, 2 * Math.PI - a); worstTurn = Math.max(worstTurn, a / d); } prevDir = dir; chord = null; }
+                }
+                if (!chord || !prev) chord = { x: p.x, y: p.y, xm: p.ground ? p.xm + p.off : 0, z: p.z, ground: p.ground };
+                prev = { x: p.x, y: p.y, ground: p.ground };
+            }
+            const at = `${W}×${H}: the ${R.kind} at ${fps} fps`;
+            assert.ok(worstUp < 1e-6, `${at}: a skier climbed ${worstUp.toFixed(3)} px`);
+            assert.ok(worstOff < 1e-6, `${at}: a skier ${worstOff.toFixed(2)} px off the piste`);
+            assert.ok(worstTurn < 1.2, `${at}: a turn of ${worstTurn.toFixed(2)} rad a metre`);
+            assert.ok(worstJump < 1e-6, `${at}: a jump of ${worstJump.toFixed(2)} px`);
+        }
+    }
+});
+
+test('the year on the mountain: everyone gets a place, none above where they stopped; and back to the track below it after', () => {
+    const { cam, V } = scene(1600, 900, 0), T = V.track, Y = V.year;
+    const points = L.yearFigure(2027, 48, Y.cx, Y.cy, Y.h);
+    for (const p of points) assert.ok(p.y > V.mountain.skyAt(p.x) && p.y < V.mountain.footY, 'the year is on the mountain');
+    // The line, stopped with its leader below the figure, everyone on the face.
+    const below = T.pts.find(p => p.y >= Y.cy + Y.h / 2 - 4 * cam.u), gap = (below.m - 25) / 47;
+    const skiers = Array.from({ length: 48 }, (_, i) => { const p = L.near(T, below.m - i * gap); return { i, x: p.x, y: p.y, s: below.m - i * gap }; });
+    const places = L.assignFigure(points, skiers);
+    assert.equal(places.size, 48);
+    let lifted = 0;
+    for (const k of skiers) { const f = places.get(k.i); assert.ok(f.y >= k.y, 'nobody climbs to their place'); if (f.lifted) lifted++; }
+    assert.ok(lifted <= 4, `${lifted} places moved down to keep anyone from climbing`);
+    for (const k of skiers) { const f = places.get(k.i), s = L.rejoin(T, k.s, f.y); assert.ok(s >= k.s && L.near(T, s).y >= f.y - 1e-6, 'back onto the track below'); }
 });
 
 test('the year in torches: every place on a stroke of a digit, inside the figure, for any year', () => {
