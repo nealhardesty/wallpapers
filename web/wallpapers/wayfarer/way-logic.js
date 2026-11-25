@@ -1052,9 +1052,9 @@ const WayLogic = (() => {
         wildpony: { tall: 1.3, rig: 'wildpony', far: 'wildpony', n: [3, 6], keep: 8, range: 6, pace: 0.6, shy: 8, run: 6, act: 'graze', big: 1, stays: true },
         ibex: { tall: 1.05, rig: 'ibex', far: 'ibex', n: [3, 5], keep: 7, range: 8, pace: 0.5, act: 'graze' },
         marmot: { tall: 0.35, rig: 'marmot', far: 'rabbit', farSize: 1.3, farCoat: [176, 144, 98], n: [1, 3], keep: 6.5, range: 3, pace: 0.9, shy: 12, run: 4, act: 'sentry', see: 50 },
-        moonhare: { tall: 0.45, rig: 'hare', far: 'rabbit', farSize: 1.4, n: [1, 2], keep: 7, range: 6, pace: 1.6, shy: 13, run: 7, act: 'graze', glow: [0.5, 0.7, 1], see: 90 },
+        moonhare: { tall: 0.45, rig: 'hare', far: 'rabbit', farSize: 1.4, n: [1, 2], keep: 7, range: 6, pace: 1.6, shy: 13, run: 7, act: 'graze', glow: [0.5, 0.7, 1], glowR: 0.35, see: 90 },
         // A white stag of the grove, that glows after dark.
-        moonstag: { tall: 1.7, rig: 'moonstag', far: 'stag', farCoat: [236, 240, 250], n: [1, 3], keep: 7, range: 6, pace: 0.5, shy: 8, run: 7, act: 'graze', big: 1, glow: [0.5, 0.7, 1] },
+        moonstag: { tall: 1.7, rig: 'moonstag', far: 'stag', farCoat: [236, 240, 250], n: [1, 3], keep: 7, range: 6, pace: 0.5, shy: 8, run: 7, act: 'graze', big: 1, glow: [0.5, 0.7, 1], glowR: 1.0 },
         mushling: { tall: 0.5, rig: 'mushling', n: [2, 3], keep: 7, range: 5, pace: 0.5, act: 'amble', see: 50 },
         pheasant: { tall: 0.4, rig: 'pheasant', far: 'pheasant', bird: true, n: [1, 2], keep: 7, range: 6, pace: 0.7, shy: 13, wing: true, act: 'graze', see: 80 },
         heron: { tall: 1.0, rig: 'heron', far: 'heron', bird: true, n: [1, 1], where: 'shore', keep: 8, shy: 12, wing: true, act: 'stand' },
