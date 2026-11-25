@@ -1,6 +1,6 @@
 ---
 name: releaseme
-description: Cut a Wallpapers release from what is already merged on master, the way this repo does it. Bump the version in its four places on a version-X.Y.Z branch, open the "Version X.Y.Z" PR, wait for its CI and fix anything that broke until it is green, then merge, tag vX.Y.Z on the merge commit, and watch the tag's CI run publish the GitHub Release (APK, extension, Mac and Windows zips), fixing new breakage the same way. Start it when the user types /releaseme or asks for a release as part of a larger request ("merge it, then /releaseme", "…and cut a release"), optionally with patch|minor|major|X.Y.Z and a one-line summary. Never start a release on your own initiative.
+description: Cut a Wallpapers release the way this repo does it. First merge every open PR that is ready (green, mergeable, not a draft, no changes requested), then release what is on master. Bump the version in its four places on a version-X.Y.Z branch, open the "Version X.Y.Z" PR, wait for its CI and fix anything that broke until it is green, then merge, tag vX.Y.Z on the merge commit, and watch the tag's CI run publish the GitHub Release (APK, extension, Mac and Windows zips), fixing new breakage the same way. Start it when the user types /releaseme or asks for a release as part of a larger request ("merge it, then /releaseme", "…and cut a release"), optionally with patch|minor|major|X.Y.Z and a one-line summary. Never start a release on your own initiative.
 context: fork
 allowed-tools: Bash(git *) Bash(gh *) Bash(make *) Bash(shasum *) Read Edit Write Grep Glob
 ---
@@ -17,7 +17,8 @@ default: see §0) and/or a one-line summary for the PR body.
 
 The user asked for a release (typed `/releaseme`, or asked for one in a larger request that an
 agent is carrying out), which authorizes every step below. Run them without stopping to
-ask. **Follow the repo's rules: never `--admin`, never merge a red or pending PR, never push
+ask. That includes merging open PRs that are ready (§0, "Ready PRs"): a release request means
+"ship what's done", and a green PR waiting for its merge is done. **Follow the repo's rules: never `--admin`, never merge a red or pending PR, never push
 to `master` directly, never move or delete a tag, never commit a secret.** Stop and report when
 a rule below says to, or when a step fails in a way this file doesn't cover.
 
@@ -47,8 +48,19 @@ agent's background or async shell, or `cmd &` then `wait`. Never poll in a tight
   it at the end. If they look like work meant for this release, say so and stop (it goes
   through its own PR first).
 - Be on master at `origin/master`: `git checkout master && git pull --ff-only` (in the fresh worktree, you already are).
+- **Ready PRs: merge them first.** `gh pr list --state open --json
+  number,title,isDraft,mergeStateStatus,reviewDecision,headRefName`. Merge each PR that is
+  **ready**: not a draft, not a `Version …` PR, `mergeStateStatus` `CLEAN`, `reviewDecision`
+  not `CHANGES_REQUESTED` or `REVIEW_REQUIRED`, and `gh pr checks <n>` all pass or skip (none
+  failing or pending). Merge with `gh pr merge <n> --merge --delete-branch` (a merge commit, as
+  every PR here). Oldest first; re-check the next one's state after each merge, because master
+  moved. A PR that is `BEHIND`, `DIRTY`, red, pending or a draft isn't ready: don't rebase,
+  fix or wait for someone else's PR; leave it and list it in the report. Then `git fetch
+  origin` again. These merges ship in this release (they count when picking the version
+  below), and their titles land in the generated notes.
 - Latest tag: `git describe --tags --abbrev=0`. If `git log --oneline <tag>..origin/master` is
-  empty, there is nothing to release. Say so and stop.
+  still empty after the ready PRs, there is nothing to release. Say so, list the open PRs that
+  weren't ready and why, and stop.
 - `gh auth status` must pass.
 - Hooks: if `git config core.hooksPath` isn't `.githooks`, run `make hooks` (it audits every
   commit, commit message and push for anything private; the repo is public).
@@ -247,6 +259,7 @@ has six files: `wallpapers-X.Y.Z.apk`, `wallpapers-extension-X.Y.Z.zip`,
 ## 6. Report
 
 Keep it short:
+- the ready PRs merged in preflight, and open PRs left alone (and why)
 - the PR URL, and how many fix rounds it took (what CI caught, if anything)
 - rebases onto a moving master, any conflicts resolved, and a release abandoned to another
   agent's
