@@ -4385,7 +4385,8 @@ const STAGE_CHECKS = {
                     await fresh(`${WEB}/stage.html?w=jellyfin&tier=${tier}&date=2026-12-24T20:00:00`, jellyfinSignedIn(mock, { order: 'inOrder', subtitles: 'off', showTitle: false, frame }));
                     if (!await waitFor(() => counts(`m.state === 'playing' && m.video.currentTime > 0.2`), 10000)) return record(`${frame} ${tier}: never played`);
                     await sleep(4600);   // past the 🔇 badge's fade
-                    const drawn = await framesIn(2000);
+                    // Medium: what it draws (the stage also ticks for early wakes it lets pass); Low: any tick at all.
+                    const drawn = tier === 'low' ? await framesIn(2000) : await (async () => { const d = await counts('m.draws'); await sleep(2000); return await counts('m.draws') - d; })();
                     if (drawn < low || drawn > high) record(`${frame} ${tier}: ${drawn} frames in 2 s`);
                     if (tier === 'medium') await shoot(`jellyfin-${frame}-lit`);
                 }

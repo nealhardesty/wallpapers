@@ -35,6 +35,7 @@ class JellyfinAnimationManager {
         this.muted = true;
         this.cue = '';
         this.paints = 0;
+        this.draws = 0;   // frames actually drawn (the stage also ticks for wakes that come early)
         this.frame = this.frame.bind(this);
         this.onResize = () => this.resize();
         this.onStorage = event => this.claimed(event);
@@ -237,6 +238,7 @@ class JellyfinAnimationManager {
             wait = Math.min(wait, this.chrome(ctx, now, L));
             if (now < this.busyUntil) wait = Math.min(wait, 33);
             this.wakeAt = now + wait;
+            this.draws++;
         }
         const wait = this.wakeAt - performance.now();
         if (wait > 0) this.host.idleUntil(wait);
