@@ -2201,7 +2201,8 @@ const STAGE_CHECKS = {
             const s = await state();
             if (!(s.distance > first.distance)) record(`it has not walked: ${first.distance} then ${s.distance}`);
             if (s.drawn.squares < 20 || s.drawn.triangles < 20000) record(`drawn: ${JSON.stringify(s.drawn)}`);
-            if (await evaluate(DRAWN) < 30) record('barely drawn');
+            // A WebGL canvas sampled between frames can read near blank on a loaded runner: look again, as the table's checks do.
+            if (!await waitFor(async () => await evaluate(DRAWN) >= 30, 8000)) record('barely drawn');
             if (await evaluate("Object.keys(localStorage).filter(k => k.startsWith('wp:wayfarer')).length")) record('it saved something by itself');
             await shoot('wayfarer-road');
             return true;
