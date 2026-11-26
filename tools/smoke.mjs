@@ -1272,11 +1272,18 @@ const STAGE_CHECKS = {
         if (s.lights < 6 || s.presents !== 3 || s.track !== 1) record(`frame one: ${JSON.stringify(s)}`);
         await sleep(500);
         // Timed by the page's clock: a slow runner's round trips stretch our two seconds, not its frame rate.
-        const before = await evaluate('[WP.host.frames.count, performance.now()]');
+        // Its own frames: the stage may tick for other reasons (a wake, a quality step) it lets pass.
+        const before = await evaluate('[WP.stage.manager.stats.frames, performance.now()]');
         await sleep(2000);
-        const after = await evaluate('[WP.host.frames.count, performance.now()]');
+        const after = await evaluate('[WP.stage.manager.stats.frames, performance.now()]');
         const fps = (after[0] - before[0]) / ((after[1] - before[1]) / 1000);
         if (fps > 15 || fps < 6) record(`${fps.toFixed(1)} frames a second (want about 12)`);
+        // Still twelve while the stage is woken every 10 ms (input, resizes, Auto stepping quality).
+        const woken = await evaluate('[WP.stage.manager.stats.frames, performance.now(), window.__wakes = setInterval(() => WP.host.idleUntil(0), 10)]');
+        await sleep(2000);
+        const settled = await evaluate('(clearInterval(window.__wakes), [WP.stage.manager.stats.frames, performance.now()])');
+        const busy = (settled[0] - woken[0]) / ((settled[1] - woken[1]) / 1000);
+        if (busy > 15 || busy < 6) record(`${busy.toFixed(1)} frames a second while woken every 10 ms (want about 12)`);
         // T: once round, and parked where it started.
         const parked = s.trainS;
         await press('t');
