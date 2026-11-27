@@ -240,6 +240,15 @@ class SmallChristmasAnimationManager {
 
     frame(now) {
         if (!this.running) return;
+        // The stage wakes early for input, a resize, new settings or an Auto quality step. A frame
+        // that comes before its time waits for it, so the retro rate holds whatever wakes us.
+        const fps = Math.min(this.config.fps, this.host.quality?.fps || 60);
+        const early = this.lastNow ? 1000 / fps - (now - this.lastNow) - 2 : 0;
+        if (early > 0) {
+            this.host.idleUntil(early);
+            this.frameId = requestAnimationFrame(t => this.frame(t));
+            return;
+        }
         const raw = this.lastNow ? (now - this.lastNow) / 1000 : 0;
         this.lastNow = now;
         const dt = Math.min(0.25, raw);
@@ -248,7 +257,6 @@ class SmallChristmasAnimationManager {
         this.update(dt);
         this.draw();
         this.stats.frames++;
-        const fps = Math.min(this.config.fps, this.host.quality?.fps || 60);
         this.host.idleUntil(Math.max(0, 1000 / fps - (performance.now() - now) - 2));
         this.frameId = requestAnimationFrame(t => this.frame(t));
     }

@@ -1272,11 +1272,18 @@ const STAGE_CHECKS = {
         if (s.lights < 6 || s.presents !== 3 || s.track !== 1) record(`frame one: ${JSON.stringify(s)}`);
         await sleep(500);
         // Timed by the page's clock: a slow runner's round trips stretch our two seconds, not its frame rate.
-        const before = await evaluate('[WP.host.frames.count, performance.now()]');
+        // Its own frames: the stage may tick for other reasons (a wake, a quality step) it lets pass.
+        const before = await evaluate('[WP.stage.manager.stats.frames, performance.now()]');
         await sleep(2000);
-        const after = await evaluate('[WP.host.frames.count, performance.now()]');
+        const after = await evaluate('[WP.stage.manager.stats.frames, performance.now()]');
         const fps = (after[0] - before[0]) / ((after[1] - before[1]) / 1000);
         if (fps > 15 || fps < 6) record(`${fps.toFixed(1)} frames a second (want about 12)`);
+        // Still twelve while the stage is woken every 10 ms (input, resizes, Auto stepping quality).
+        const woken = await evaluate('[WP.stage.manager.stats.frames, performance.now(), window.__wakes = setInterval(() => WP.host.idleUntil(0), 10)]');
+        await sleep(2000);
+        const settled = await evaluate('(clearInterval(window.__wakes), [WP.stage.manager.stats.frames, performance.now()])');
+        const busy = (settled[0] - woken[0]) / ((settled[1] - woken[1]) / 1000);
+        if (busy > 15 || busy < 6) record(`${busy.toFixed(1)} frames a second while woken every 10 ms (want about 12)`);
         // T: once round, and parked where it started.
         const parked = s.trainS;
         await press('t');
@@ -2194,7 +2201,8 @@ const STAGE_CHECKS = {
             const s = await state();
             if (!(s.distance > first.distance)) record(`it has not walked: ${first.distance} then ${s.distance}`);
             if (s.drawn.squares < 20 || s.drawn.triangles < 20000) record(`drawn: ${JSON.stringify(s.drawn)}`);
-            if (await evaluate(DRAWN) < 30) record('barely drawn');
+            // A WebGL canvas sampled between frames can read near blank on a loaded runner: look again, as the table's checks do.
+            if (!await waitFor(async () => await evaluate(DRAWN) >= 30, 8000)) record('barely drawn');
             if (await evaluate("Object.keys(localStorage).filter(k => k.startsWith('wp:wayfarer')).length")) record('it saved something by itself');
             await shoot('wayfarer-road');
             return true;
@@ -4378,7 +4386,8 @@ const STAGE_CHECKS = {
                     await fresh(`${WEB}/stage.html?w=jellyfin&tier=${tier}&date=2026-12-24T20:00:00`, jellyfinSignedIn(mock, { order: 'inOrder', subtitles: 'off', showTitle: false, frame }));
                     if (!await waitFor(() => counts(`m.state === 'playing' && m.video.currentTime > 0.2`), 10000)) return record(`${frame} ${tier}: never played`);
                     await sleep(4600);   // past the 🔇 badge's fade
-                    const drawn = await framesIn(2000);
+                    // Medium: what it draws (the stage also ticks for early wakes it lets pass); Low: any tick at all.
+                    const drawn = tier === 'low' ? await framesIn(2000) : await (async () => { const d = await counts('m.draws'); await sleep(2000); return await counts('m.draws') - d; })();
                     if (drawn < low || drawn > high) record(`${frame} ${tier}: ${drawn} frames in 2 s`);
                     if (tier === 'medium') await shoot(`jellyfin-${frame}-lit`);
                 }
